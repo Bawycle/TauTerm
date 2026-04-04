@@ -666,7 +666,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-I18N-003 | The active UI language MUST be selectable by the user in the Preferences UI. | Must |
 | FS-I18N-004 | A language change in Preferences MUST be applied immediately to all UI elements without requiring a restart. | Must |
 | FS-I18N-005 | The selected language MUST be persisted and restored on next launch. | Must |
-| FS-I18N-006 | If the persisted language is not available (e.g., catalogue missing), TauTerm MUST silently fall back to English. | Must |
+| FS-I18N-006 | If the persisted language preference contains an unknown locale code (e.g., a value not in the supported set), TauTerm MUST silently fall back to English. | Must |
 | FS-I18N-007 | TauTerm MUST NOT modify PTY session environment variables (`LANG`, `LC_*`, `LANGUAGE`) based on the UI language selection. The shell locale is fully determined by the user's login environment. | Must |
 
 **Acceptance criteria:**
@@ -675,7 +675,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-I18N-003: The Preferences UI includes a language selector listing at least English and French.
 - FS-I18N-004: Changing the language in Preferences immediately updates all visible UI strings without any page reload or restart.
 - FS-I18N-005: Setting the language to French, quitting, and relaunching shows the UI in French.
-- FS-I18N-006: Deleting or corrupting the French locale catalogue causes TauTerm to launch in English with no crash or error dialog.
+- FS-I18N-006: Setting `preferences.json` to contain an unknown locale code (e.g., `"language": "de"`) and launching TauTerm shows the UI in English with no crash or error dialog.
 - FS-I18N-007: Inspecting `$LANG` and `$LC_ALL` inside a new PTY session after changing the UI language shows the original system values, not TauTerm's UI language.
 
 ---
@@ -685,10 +685,11 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FS-DIST-001 | TauTerm v1 MUST be distributed as an AppImage. | Must |
-| FS-DIST-002 | The AppImage MUST be self-contained: it MUST bundle all application dependencies (Rust runtime, frontend assets, shared libraries not guaranteed to be present on a target system). It MUST NOT require the user to install external packages beyond a standard Linux desktop environment (display server, GTK or equivalent WebView runtime if unavoidable). | Must |
+| FS-DIST-002 | The AppImage MUST be self-contained: it MUST bundle all application dependencies (Rust runtime, frontend assets, shared libraries not guaranteed to be present on a target system). It MUST NOT require the user to install external packages beyond a standard Linux desktop environment (display server, `libwebkit2gtk-4.1` on Ubuntu 22.04+ or `libwebkit2gtk-4.0` on older distributions). | Must |
 | FS-DIST-003 | The AppImage MUST run on the following architectures: x86 (i686), x86_64, ARM32 (armhf), ARM64 (aarch64), RISC-V (riscv64). A separate AppImage binary MAY be produced per architecture. | Must |
 | FS-DIST-004 | The AppImage MUST be executable directly after download (no installation step required). A user who downloads and `chmod +x`es the AppImage MUST be able to run TauTerm immediately. | Must |
 | FS-DIST-005 | The AppImage SHOULD integrate with the host desktop environment: it SHOULD provide a `.desktop` entry and application icon accessible via the AppImage integration daemon (`appimaged`) or equivalent. | Should |
+| FS-DIST-006 | TauTerm release artefacts MUST be cryptographically signed. Each AppImage MUST be accompanied by a detached GPG signature (`.asc`) and a SHA-256 checksum file (`SHA256SUMS`). The `SHA256SUMS` file itself MUST also be GPG-signed. The public signing key MUST be published on a separate trusted channel (project website or a public keyserver). | Must |
 
 **Acceptance criteria:**
 - FS-DIST-001: The release artefact is an `.AppImage` file.
@@ -696,6 +697,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-DIST-003: The AppImage (or per-architecture variant) launches and passes a basic smoke test (`pnpm wdio`) on each of the five target architectures.
 - FS-DIST-004: `chmod +x TauTerm-x86_64.AppImage && ./TauTerm-x86_64.AppImage` opens the application on a clean x86_64 system.
 - FS-DIST-005: After running the AppImage with `appimaged` active, TauTerm appears in the desktop application launcher with its icon.
+- FS-DIST-006: Each release includes a `.asc` detached GPG signature and a signed `SHA256SUMS` file alongside every AppImage artefact. Running `gpg --verify TauTerm-x86_64.AppImage.asc TauTerm-x86_64.AppImage` succeeds with the published public key. Running `sha256sum --check SHA256SUMS` passes for every listed artefact.
 
 ---
 
@@ -808,6 +810,7 @@ This matrix maps every functional specification to its originating user requirem
 | FS-I18N-007 | UR 10 §10.2 (PTY locale env vars not modified) |
 | **FS-DIST: Distribution** | |
 | FS-DIST-001 – FS-DIST-005 | UR 11 §11.1 (AppImage, self-contained, multi-arch) |
+| FS-DIST-006 | UR 11 §11.1 (release artefact integrity); Security review |
 
 ---
 

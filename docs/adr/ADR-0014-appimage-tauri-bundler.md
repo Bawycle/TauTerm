@@ -55,10 +55,18 @@ Tauri also produces `.deb` and `.rpm` packages natively. These are appropriate f
 **Negative / risks:**
 - WebKitGTK is a runtime dependency. On a minimal Linux installation without a desktop environment (e.g., a headless server), TauTerm will not run. This is an inherent constraint of the Tauri/WebView architecture (ADR-0001) and is accepted.
 - Multi-architecture builds require separate CI jobs or QEMU emulation. ARM32 and RISC-V builds will be slower than x86_64 due to emulation overhead. This is a CI cost, not a user-facing issue.
-- Tauri's AppImage bundler does not support AppImage Type 2 update channels. This is acceptable for v1; update delivery is out of scope.
+- Tauri's AppImage bundler does not support the zsync-based delta update mechanism (the `#zsync:` field used by `AppImageUpdate`/`appimageupdatetool`). All modern AppImages are already Type 2; the limitation is specifically that incremental over-the-air updates are not supported. This is acceptable for v1; update delivery is out of scope.
 
 ## Notes
 
 The AppImage artefact naming convention is `TauTerm-{version}-{arch}.AppImage` (e.g., `TauTerm-1.0.0-x86_64.AppImage`). This matches the convention used by other Tauri-based applications and is recognizable to users.
 
-WebKitGTK version compatibility: `libwebkit2gtk-4.1` is the preferred variant (used by Tauri 2 on Ubuntu 22.04+). On older distributions, `libwebkit2gtk-4.0` may be required. The Tauri build system selects the appropriate variant based on the build environment. This is transparent to the user.
+**WebKitGTK minimum version:** `libwebkit2gtk-4.1 >= 2.38` (Ubuntu 22.04+) or `libwebkit2gtk-4.0 >= 2.38` (older distributions). Version 2.38 is the threshold that ensures post-2022 WebKit security patches are present. Older versions may carry unpatched CVE-class vulnerabilities and are not officially supported. The CI baseline (Ubuntu 22.04) enforces this minimum implicitly.
+
+**Artefact signing (FS-DIST-006):** Each CI job signs its AppImage artefact using `tauri signer sign` (Tauri 2 built-in signing support, invoked via `tauri signer generate` to produce the key pair). Published release assets include, for each AppImage:
+- `TauTerm-{version}-{arch}.AppImage` — the application binary
+- `TauTerm-{version}-{arch}.AppImage.asc` — detached GPG signature
+- `SHA256SUMS` — SHA-256 checksums for all artefacts in the release
+- `SHA256SUMS.asc` — detached GPG signature of the checksum file
+
+The public signing key is published on the project website and a public keyserver. Users can verify integrity with `gpg --verify TauTerm-x86_64.AppImage.asc TauTerm-x86_64.AppImage` and authenticity of the checksums with `gpg --verify SHA256SUMS.asc SHA256SUMS`.

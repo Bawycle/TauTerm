@@ -2,7 +2,7 @@
 
 # TauTerm — Architecture Document
 
-> **Version:** 1.4.0
+> **Version:** 1.5.0
 > **Date:** 2026-04-04
 > **Status:** Living document — update when architectural decisions change
 > **Author:** Software Architect — TauTerm team
@@ -835,7 +835,7 @@ Every `#[tauri::command]` that accepts user-provided data applies validation at 
 
 | Sub-key | Type | Description |
 |---------|------|-------------|
-| `appearance` | `AppearancePrefs` | Font, font size, cursor style, theme name, opacity |
+| `appearance` | `AppearancePrefs` | Font, font size, cursor style, theme name, opacity, language |
 | `terminal` | `TerminalPrefs` | Scrollback size, `allow_osc52_write`, word delimiters, bell type |
 | `keyboard` | `KeyboardPrefs` | Shortcut bindings |
 | `connections` | `Vec<SshConnectionConfig>` | Saved SSH connections. **Authoritative source for connection configs** — `SshManager` reads and writes this list via `State<PreferencesStore>`; it holds no independent connection store. |
@@ -959,7 +959,21 @@ See [§14 — Testing Strategy](#14-testing-strategy) for the complete test orga
 
 **Tauri integration:** Locale files are static frontend assets bundled by Vite. No Rust-side i18n is required: all user-visible strings live in the frontend. The backend emits string keys (error codes, status codes) which the frontend maps to locale strings via its own message catalogue. This keeps the IPC contract locale-agnostic. The backend never reads or modifies PTY environment variables (`LANG`, `LC_*`) based on the UI language selection (FS-I18N-007).
 
-**Persistence:** The active locale is saved to `preferences.json` under `appearance.language` (a `String` field on `AppearancePrefs`, `#[serde(default)]` defaulting to `"en"`) via the standard `update_preferences` command. On next launch, `get_preferences` returns the saved locale; the frontend restores it before first render.
+**Persistence:** The active locale is saved to `preferences.json` under `appearance.language` via the standard `update_preferences` command. On next launch, `get_preferences` returns the saved locale; the frontend restores it before first render.
+
+**IPC safety — `language` field:** The `language` field on `AppearancePrefs` MUST NOT be a free `String` across the IPC boundary. It MUST be deserialised on the Rust side to an enum validated against the known allowlist:
+
+```rust
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    #[default]
+    En,
+    Fr,
+}
+```
+
+With `#[serde(default)]`, any unknown locale code in `preferences.json` (e.g., `"de"`) deserialises to `Language::En` instead of propagating an arbitrary string through the IPC layer and into the frontend (FS-I18N-006). The serialised form remains the lowercase string (`"en"` / `"fr"`) for JSON compatibility.
 
 **Module map additions:**
 
@@ -996,6 +1010,8 @@ src/
 
 Each CI job produces a single AppImage artefact. Release artefacts are published as a set of five files.
 
+**Minimum supported WebKitGTK version:** `libwebkit2gtk-4.1 >= 2.38` (Ubuntu 22.04+) or `libwebkit2gtk-4.0 >= 2.38` (older distributions). Version 2.38 is the threshold that introduced post-2022 WebKit security patches addressing multiple CVE-class vulnerabilities. Distributions shipping an older WebKitGTK release are not officially supported; TauTerm may run but security properties are not guaranteed. The CI build environment enforces this minimum by targeting Ubuntu 22.04 as the baseline.
+
 ---
 
 ## 11. Frontend Architecture
@@ -1027,6 +1043,8 @@ src/
       notifications.svelte.ts — notification badges per pane/tab; cleared on activation
       preferences.svelte.ts   — Preferences replica; optimistic update
       scroll.svelte.ts    — scroll position per PaneId
+      locale.svelte.ts    — reactive locale state; setLocale(lang) writes to preferences;
+                            getLocale() returns current locale (FS-I18N-003, FS-I18N-004, FS-I18N-005)
 
     terminal/
       grid.ts             — ScreenGrid: applyDiff(), applySnapshot(), getAttributeRuns()
@@ -1411,6 +1429,7 @@ Pure TypeScript, no Svelte components, no DOM.
 | `lib/preferences/shortcuts.ts` | Conflict detection, key combo normalization |
 | `lib/layout/split-tree.ts` | `buildFromPaneNode()`, `updateRatio()`, `findLeaf()` |
 | `lib/state/session.svelte.ts` | Delta merge, `getPane()` traversal |
+| `lib/state/locale.svelte.ts` | `setLocale()` writes to preferences via IPC; `getLocale()` returns current locale; unknown locale code from backend defaults to `"en"` (FS-I18N-006) |
 | `lib/ipc/commands.ts` | Correct command name and parameter shape passed to `invoke()`; `TauTermError` propagated as thrown value; each wrapper calls the right command string |
 
 #### `lib/terminal/grid.ts` detail
@@ -1718,6 +1737,8 @@ src/lib/
   state/
     session.svelte.ts
     session.svelte.test.ts
+    locale.svelte.ts
+    locale.svelte.test.ts
   ipc/
     commands.ts
     commands.test.ts

@@ -2,7 +2,7 @@
 
 # UX/UI Design Document — TauTerm
 
-> **Version:** 1.3.0
+> **Version:** 1.4.0
 > **Date:** 2026-04-04
 > **Status:** Draft
 > **Author:** UX/UI Designer — TauTerm team
@@ -927,6 +927,8 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 +-----------------+------------------------------------------+
 ```
 
+**Section navigation order rationale:** Language is not a separate nav section. It is a subsection within Appearance (after Themes quick-select, font, and line height controls). This placement ensures that a user opening Preferences for the first time to change the display language finds it in the first content-heavy section they encounter, without scrolling past Terminal Behavior, Connections, and Themes. Language is a display preference (how the UI looks to the user) — grouping it with font, size, and theme is semantically consistent.
+
 - **Header:** `--font-size-ui-lg` (16px), `--font-weight-semibold`, `--color-text-primary`. Close button (Lucide `X`) top-right.
 - **Section navigation:** Left column, width `--size-preferences-nav-width` (180px). Vertical list of section labels. Active section: `--color-accent-text` (`#7ab3d3`), left border 2px solid `--color-accent`. Inactive: `--color-text-secondary`. Hover: `--color-hover-bg` background.
 - **Section content:** Right area, scrollable independently if content exceeds height.
@@ -945,7 +947,17 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - Font family input (text input with monospace preview).
 - Font size input (number input, range 8-32).
 - Line height input (number input, range 1.0-2.0, step 0.1).
+- **Language subsection** — see below.
 - Section heading: "APPEARANCE" in Caption level.
+
+**Language subsection (within Appearance):**
+- A dropdown (§7.16) listing available locales. v1 options: "English" and "Français" (each option displays the language name in its own language).
+- Selecting a locale applies it immediately to all visible UI strings without any page reload or application restart (FS-I18N-004). When the locale changes, all text elements transition smoothly using `opacity` at `--duration-fast` (150ms) — a brief fade that confirms the change happened intentionally without being distracting. This transition applies to all elements bound to the i18n catalogue; terminal content (which is not locale-resolved) is unaffected.
+- The selected locale is persisted to `preferences.json` and restored on next launch (FS-I18N-005).
+- If `preferences.json` contains an unknown locale code on launch, the application silently falls back to English (FS-I18N-006); no error dialog is shown.
+- The dropdown uses standard keyboard navigation (arrow keys to cycle options, Enter to confirm, Escape to cancel).
+- Subsection heading: "LANGUAGE" in Caption level, rendered as a minor heading within the Appearance section (visually subordinate to the "APPEARANCE" section heading).
+- **Placement rationale:** Language is a display preference — it controls how the UI appears to the user, analogous to font and theme. Placing it within Appearance ensures it is visible immediately when a user opens Preferences without scrolling past multiple sections. This directly addresses discoverability for Sam (UR §2.3 — occasional user, not expected to know the settings structure).
 
 **Terminal Behavior section:**
 - Cursor shape selector (dropdown: Block, Underline, Bar).
@@ -969,14 +981,6 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - Per-theme actions (visible on hover): Edit (opens theme editor, §7.20), Duplicate, Delete (with confirmation; disabled for the default Umbra theme).
 - Section heading: "THEMES" in Caption level.
 
-**Language section:**
-- A dropdown (§7.16) listing available locales. v1 options: "English" and "Français" (each option displays the language name in its own language).
-- Selecting a locale applies it immediately to all visible UI strings without any page reload or application restart (FS-I18N-004).
-- The selected locale is persisted to `preferences.json` and restored on next launch (FS-I18N-005).
-- If the persisted locale catalogue is missing or corrupted on launch, the application silently falls back to English (FS-I18N-006); no error dialog is shown.
-- The dropdown uses standard keyboard navigation (arrow keys to cycle options, Enter to confirm, Escape to cancel).
-- Section heading: "LANGUAGE" in Caption level.
-- Placement in the section nav: last item, after Themes.
 
 ### 7.7 Connection Manager
 
@@ -2002,7 +2006,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | §13.5 | Contrast validation on user themes; editor chrome accessibility invariant (editor always renders with active system tokens, not work-in-progress theme) | UR §8.3 (visual consistency) | FS-THEME-008, FS-A11Y-001, FS-A11Y-005 (to be added), FS-PREF-003 |
 | §15 | IPC contract for frontend-backend communication | — | Cross-cutting (FS-SSH-010, FS-NOTIF, FS-VT, FS-SB) |
 | §2.7 | i18n as design constraint: all strings are locale-resolved keys, no hardcoded copy | UR 10 §10.1 (language support) | FS-I18N-001 |
-| §7.6.3 Language section | Language selector dropdown in Preferences; immediate apply, persisted | UR 10 §10.1 | FS-I18N-003, FS-I18N-004, FS-I18N-005, FS-I18N-006 |
+| §7.6.3 Language subsection (within Appearance) | Language selector dropdown in Appearance section of Preferences; immediate apply with `--duration-fast` opacity transition; persisted; discoverability for Sam (UR §2.3) | UR 10 §10.1; UR §2.3 (Sam — discoverability) | FS-I18N-003, FS-I18N-004, FS-I18N-005, FS-I18N-006 |
 
 ---
 

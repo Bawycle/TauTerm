@@ -57,6 +57,10 @@ A compile-time-first i18n library similar to Paraglide. It generates typed acces
 
 ## Notes
 
-The `src/lib/paraglide/` generated directory should be added to `.gitignore` if the team prefers not to commit generated code, or committed if reproducibility is preferred. Either approach is acceptable; the convention should be established at project setup time.
+**Static SPA / SSR-disabled mode:** `@inlang/paraglide-sveltekit` is used with SSR explicitly disabled (`export const ssr = false` in `src/routes/+layout.ts`) and the SvelteKit static adapter. The SSR-specific features of Paraglide — URL-based locale routing, server middleware, `Accept-Language` detection — are not used and not needed. Compile-time message generation works correctly in this configuration: Vite processes the locale JSON files at build time and produces the typed accessor module in `src/lib/paraglide/`. There is no server to serve locale data; the generated module is bundled as a regular frontend asset.
 
-The `language` field is added to `AppearancePrefs` in `preferences/schema.rs` with `#[serde(default)]` defaulting to `"en"`. Unknown values on load are treated as `"en"` (FS-I18N-006).
+**`src/lib/paraglide/` and version control:** The `src/lib/paraglide/` directory is a build artefact and MUST NOT be committed to git. It is listed in `.gitignore`. The CI pipeline regenerates it during each build and MUST fail if the output differs from what would be generated from the source JSON files (reproducible build check, e.g., `git diff --exit-code src/lib/paraglide/` after generation). This prevents tampering with generated accessor code without touching the source catalogue files, which would be undetectable in code review.
+
+**XSS constraint — no `{@html}` with message accessors:** Locale catalogue values MUST NOT contain HTML markup. Components MUST NOT use `{@html}` with the return value of any message accessor function (`m.some_key()`). The sole permitted rendering pattern is text interpolation: `{m.some_key()}`. An ESLint rule (or `svelte-check` custom rule) SHOULD be configured to statically enforce this constraint and prevent accidental introduction of HTML in catalogue values.
+
+The `language` field is added to `AppearancePrefs` in `preferences/schema.rs` as an `enum Language { En, Fr }` (not a free `String`) with `#[serde(default)]` and `#[serde(rename_all = "lowercase")]`. Unknown locale codes on load deserialise to `Language::En` (FS-I18N-006). See ARCHITECTURE.md §10.5.

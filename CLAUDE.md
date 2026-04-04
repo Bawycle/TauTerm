@@ -81,6 +81,16 @@ UI stack: **Tailwind 4** (utility classes), **Bits UI** (headless primitives), *
 - Frontend build output: `build/` (SvelteKit static adapter)
 - Dev URL: `http://localhost:1420`
 
+## License
+
+This project is licensed under **MPL-2.0**. Every new source file must include the SPDX identifier as its first line:
+
+- Rust, TypeScript, JavaScript: `// SPDX-License-Identifier: MPL-2.0`
+- Svelte, HTML: `<!-- SPDX-License-Identifier: MPL-2.0 -->`
+- CSS: `/* SPDX-License-Identifier: MPL-2.0 */`
+
+Do not add SPDX headers to JSON, lock files, or binary files.
+
 ## Constraints
 
 - No `unwrap()` on user-facing data in Rust — use `?` or explicit error handling

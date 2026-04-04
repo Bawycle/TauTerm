@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "wdio": "wdio run wdio.conf.ts"
   },
-  "license": "MIT",
+  "license": "MPL-2.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"

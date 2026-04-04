@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 import os from "os";
 import path from "path";
 import { spawn } from "child_process";

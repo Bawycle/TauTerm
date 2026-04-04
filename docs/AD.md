@@ -2,7 +2,7 @@
 
 # Artistic Direction — TauTerm
 
-> **Version:** 1.0.0
+> **Version:** 1.1.0
 > **Date:** 2026-04-04
 > **Status:** Draft
 > **Author:** UX/UI Designer — TauTerm team
@@ -90,6 +90,8 @@ Warm neutrals in the chrome. Cool, precise blues in the accent layer. Amber rese
 ### 3.1 Primitive Palette
 
 All semantic tokens reference these primitives. Components never use primitives directly — always through semantic tokens.
+
+> **Note on user theming:** The rule above applies to component implementation code. User-created themes are permitted to override primitive tokens (e.g., replacing the entire `--umbra-neutral-*` scale for a wholly different palette). This is valid and by design — a user theme that overrides primitives propagates those changes through all semantic tokens that map to them, without requiring the user to redefine every semantic token individually. The barrier between primitives and semantics is for component authors, not for theme authors.
 
 **Neutral scale (warm-shifted, base for backgrounds and surfaces)**
 
@@ -613,6 +615,24 @@ The UI uses very low border radius throughout. TauTerm is a precision tool; roun
 
 Durations and easings only. Animation triggers and behavioral rules belong in component specs, not in the artistic direction.
 
+**Duration tokens:**
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--duration-instant` | `0ms` | Focus rings, hover states |
+| `--duration-fast` | `80ms` | Dismissals, fade-outs |
+| `--duration-base` | `100ms` | Modal/popover appearance |
+| `--duration-slow` | `300ms` | Scrollbar fade, non-critical transitions |
+
+**Easing function tokens** (Material Design standard curves):
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--ease-linear` | `linear` | Progress bars, continuous transitions |
+| `--ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | Elements leaving the screen |
+| `--ease-out` | `cubic-bezier(0, 0, 0.2, 1)` | Elements entering the screen, expand/collapse |
+| `--ease-in-out` | `cubic-bezier(0.4, 0, 0.2, 1)` | Elements that both enter and leave (dialogs, panels) |
+
 ```css
 @theme {
   --duration-instant: 0ms;   /* focus rings, hover states */
@@ -620,9 +640,10 @@ Durations and easings only. Animation triggers and behavioral rules belong in co
   --duration-base:    100ms; /* modal/popover appearance */
   --duration-slow:    300ms; /* scrollbar fade, non-critical transitions */
 
-  --ease-in:     cubic-bezier(0.4, 0, 1, 1); /* dismissals */
-  --ease-out:    cubic-bezier(0, 0, 0.6, 1); /* appearances */
-  --ease-linear: linear;                      /* spinners, continuous rotation */
+  --ease-linear:  linear;                       /* progress bars, continuous transitions */
+  --ease-in:      cubic-bezier(0.4, 0, 1, 1);  /* elements leaving the screen */
+  --ease-out:     cubic-bezier(0, 0, 0.2, 1);  /* elements entering the screen, expand/collapse */
+  --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1); /* dialogs, panels — enter and leave */
 }
 ```
 

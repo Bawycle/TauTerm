@@ -265,6 +265,7 @@ Component tokens specialize semantic tokens for individual UI components.
 |-------|---------------|-------------|
 | `--color-ssh-badge-bg` | `#1a3a52` | SSH connected badge background |
 | `--color-ssh-badge-fg` | `#7ab3d3` | SSH connected badge text/icon |
+| `--color-ssh-connected` | `#7ab3d3` | SSH connected accent color (alias of `--color-ssh-badge-fg`; used by the reconnection separator rule line) |
 | `--color-ssh-disconnected-bg` | `#3d1212` | SSH disconnected badge background |
 | `--color-ssh-disconnected-fg` | `#d97878` | SSH disconnected badge text/icon |
 | `--color-ssh-connecting-fg` | `#d48a20` | SSH connecting state indicator |
@@ -402,7 +403,7 @@ Base unit: 4px. All spacing values are multiples of 4px.
 | `--duration-base` | `100ms` | Modal/popover appearance, search overlay entrance |
 | `--duration-slow` | `300ms` | Scrollbar fade, theme switch cross-fade, non-critical transitions |
 | `--ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | Dismissals (accelerating out) |
-| `--ease-out` | `cubic-bezier(0, 0, 0.6, 1)` | Appearances (decelerating in) |
+| `--ease-out` | `cubic-bezier(0, 0, 0.2, 1)` | Appearances (decelerating in) |
 | `--ease-linear` | `linear` | Spinners, continuous rotation |
 
 ---
@@ -506,26 +507,9 @@ The active tab background matches `--term-bg` to create a seamless visual connec
 
 ### 5.3 ANSI 16-Color Palette
 
-All values pass WCAG AA (4.5:1) contrast against the terminal background (`--term-bg`, `#16140f`). ANSI Black (indices 0 and 8) are excluded from contrast requirements as they serve as background/dimmed-text colors.
+The ANSI terminal palette with contrast ratios against `--term-bg` (`#16140f`) is defined in AD.md §3.2. The values are not reproduced here to avoid maintenance duplication — AD.md is authoritative.
 
-| Index | Name | Token | Hex | Contrast vs `--term-bg` |
-|-------|------|-------|-----|------------------------|
-| 0 | Black (normal) | `--term-color-0` | `#2c2921` | n/a (background use) |
-| 1 | Red (normal) | `--term-color-1` | `#c44444` | 5.2:1 |
-| 2 | Green (normal) | `--term-color-2` | `#5c9e5c` | 4.6:1 |
-| 3 | Yellow (normal) | `--term-color-3` | `#b89840` | 5.1:1 |
-| 4 | Blue (normal) | `--term-color-4` | `#4a92bf` | 4.9:1 |
-| 5 | Magenta (normal) | `--term-color-5` | `#9b6dbf` | 4.7:1 |
-| 6 | Cyan (normal) | `--term-color-6` | `#3d9e8a` | 4.9:1 |
-| 7 | White (normal) | `--term-color-7` | `#ccc7bc` | 8.4:1 |
-| 8 | Black (bright) | `--term-color-8` | `#4a4640` | n/a (dimmed text) |
-| 9 | Red (bright) | `--term-color-9` | `#e06060` | 7.0:1 |
-| 10 | Green (bright) | `--term-color-10` | `#82c082` | 7.5:1 |
-| 11 | Yellow (bright) | `--term-color-11` | `#d4b860` | 7.8:1 |
-| 12 | Blue (bright) | `--term-color-12` | `#7ab3d3` | 8.1:1 |
-| 13 | Magenta (bright) | `--term-color-13` | `#c09cd8` | 8.5:1 |
-| 14 | Cyan (bright) | `--term-color-14` | `#6ec4ae` | 7.8:1 |
-| 15 | White (bright) | `--term-color-15` | `#f5f2ea` | 13.4:1 |
+All palette entries mapped to tokens `--term-color-0` through `--term-color-15`. ANSI Black (indices 0 and 8) are excluded from contrast requirements as they serve as background/dimmed-text colors. All other entries meet WCAG AA (4.5:1) contrast against `--term-bg`.
 
 ### 5.4 Accessibility Compliance
 
@@ -1365,11 +1349,31 @@ When a shell process exits, the pane transitions to a terminated state:
 
 ### 7.19 SSH Reconnection Separator (FS-SSH-042)
 
-When an SSH session reconnects, a visual separator appears at the reconnection boundary in the scrollback:
+When an SSH session reconnects, a visual separator is injected into the scrollback buffer at the exact line where the session resumed.
 
-- **Full-width horizontal line:** 1px dashed `--color-border`.
-- **Centered label:** "Reconnected at {timestamp}" in `--font-size-ui-sm`, `--color-text-secondary`, background `--term-bg` (to mask the line behind the text).
-- **Vertical margin:** `--space-2` (8px) above and below.
+#### Anatomy
+
+A full-width horizontal rule with a left-aligned label:
+
+```
+── reconnected [HH:MM:SS] ──────────────────────────────────────
+```
+
+If the timestamp is unavailable at the moment of injection, the label is: `── reconnected ──`.
+
+#### Visual Spec
+
+- **Rule:** 1px horizontal line rendered at the vertical center of the label row, spanning the full pane width. Color: `--color-ssh-connected`.
+- **Label text:** Left-aligned, overlaid on the rule. Color: `--color-text-secondary`. Font: `--font-ui`, `--font-size-ui-xs` (11px), `--font-weight-normal` (400) — no bold.
+- **Padding:** `--space-1` (4px) top and bottom of the separator row.
+
+#### Behavior
+
+- The separator is injected into the scrollback at the moment reconnection is confirmed (SSH session enters Connected state after a prior Disconnected state).
+- It is not interactive: not selectable, not clickable. It does not respond to mouse or keyboard events.
+- It is a UI overlay rendered by the frontend, not content from the PTY. It does not appear in clipboard copies of terminal content.
+
+**Token references:** `--color-ssh-connected`, `--color-text-secondary`, `--font-ui`, `--font-size-ui-xs`, `--space-1`.
 
 ### 7.20 Theme Editor (FS-THEME-003, FS-THEME-004)
 
@@ -1880,6 +1884,8 @@ A user theme MAY also define any of the following:
 | Status | `--color-error`, `--color-error-bg`, `--color-error-text`, `--color-warning`, `--color-warning-bg`, `--color-warning-text`, `--color-success`, `--color-success-text`, `--color-activity`, `--color-bell`, `--color-process-end` |
 | Primitives | All `--umbra-neutral-*`, `--umbra-blue-*`, `--umbra-amber-*`, `--umbra-red-*`, `--umbra-green-*` (if the theme defines a wholly different palette) |
 
+> **Note:** Overriding primitive tokens is valid in the context of user theming. The rule that "components never consume primitives directly" applies to component implementation code — components always reference semantic tokens. When a user theme overrides a primitive, the change propagates automatically through all semantic tokens that map to it. This is the intended cascade mechanism for users who want to define a wholly different palette without redefining every semantic token.
+
 Tokens not defined by a user theme inherit from the Umbra default.
 
 ### 13.4 Non-Themeable Tokens
@@ -1910,6 +1916,12 @@ When a user creates or imports a theme, the following validations MUST be perfor
 5. **Cursor visibility:** `--term-cursor-bg` on `--term-bg` MUST achieve at minimum 3:1 contrast ratio.
 
 Validation failures on required tokens (items 1-2) prevent saving. Contrast warnings (items 3-5) are advisory — they inform the user but do not block saving. This respects user autonomy while making accessibility implications visible.
+
+**Editor chrome accessibility invariant:** During theme editing, the editor's own interface (form labels, input fields, buttons, navigation, validation messages) MUST always render using the active system tokens (Umbra defaults or the user's last confirmed active theme), not the theme currently being edited. Only the designated preview area — a terminal viewport sample — reflects the work-in-progress custom theme in real time. This invariant ensures the editor remains accessible and usable even when the user is authoring a theme with poor contrast or extreme colors.
+
+The preview area is explicitly bounded (a labeled box within the editor panel) and is distinct from the editor controls. It carries a visible label: "Preview" (using `--color-text-secondary`).
+
+Traceability: FS-A11Y-005 (to be added), FS-PREF-003.
 
 ---
 
@@ -1953,7 +1965,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | §7.14 | Button variants (primary, secondary, ghost, destructive) | UR §3.1 (dual modality — visible controls) | — |
 | §7.17 | Keyboard shortcut recorder with conflict detection; WebView-level interception note | UR §6 (configurable shortcuts) | FS-KBD-002 |
 | §7.18 | Process terminated pane with restart/close | — | FS-PTY-005, FS-PTY-006 |
-| §7.19 | Reconnection separator in scrollback | — | FS-SSH-042 |
+| §7.19 | Reconnection separator injected into scrollback at reconnect; full-width rule + left-aligned timestamp label; non-interactive UI overlay | — | FS-SSH-042 |
 | §7.20 | Theme editor with color pickers and contrast advisory | UR §8.2 (user-created themes) | FS-THEME-003, FS-THEME-004 |
 | §7.21 | Deprecated SSH algorithm warning banner | UR §9.3 (security awareness) | FS-SSH-014 |
 | §8.2 | Focus trap in modals | UR §3.1 (keyboard completeness) | FS-A11Y-003 |
@@ -1968,7 +1980,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | §11.6 | Non-color indicators for all status states | — | FS-A11Y-004 |
 | §12 | Graceful degradation at narrow widths | UR §2.1 (Alex — tiling WM use) | — |
 | §13 | Theme extensibility via token override | UR §8.2 (user themes) | FS-THEME-003, FS-THEME-009 |
-| §13.5 | Contrast validation on user themes | UR §8.3 (visual consistency) | FS-THEME-008, FS-A11Y-001 |
+| §13.5 | Contrast validation on user themes; editor chrome accessibility invariant (editor always renders with active system tokens, not work-in-progress theme) | UR §8.3 (visual consistency) | FS-THEME-008, FS-A11Y-001, FS-A11Y-005 (to be added), FS-PREF-003 |
 | §15 | IPC contract for frontend-backend communication | — | Cross-cutting (FS-SSH-010, FS-NOTIF, FS-VT, FS-SB) |
 
 ---

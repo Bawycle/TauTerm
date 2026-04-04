@@ -350,7 +350,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 |----|-------------|----------|
 | FS-KBD-001 | Application shortcuts MUST be intercepted before any input reaches the PTY. A matched shortcut MUST be consumed by TauTerm and not transmitted to the PTY. An unmatched key combination MUST be encoded and written to the PTY master. | Must |
 | FS-KBD-002 | All application shortcuts MUST be user-configurable in the preferences UI. Removing a shortcut MUST make that key combination available to the PTY. | Must |
-| FS-KBD-003 | Default application shortcuts MUST use Ctrl+Shift prefix to avoid conflict with standard terminal Ctrl+key sequences. The following default shortcuts MUST be provided (all user-configurable per FS-KBD-002): New tab (Ctrl+Shift+T), Close tab (Ctrl+Shift+W), Paste (Ctrl+Shift+V), Search (Ctrl+Shift+F), Open preferences (Ctrl+,), Next tab (Ctrl+Tab), Previous tab (Ctrl+Shift+Tab). Application shortcuts MUST also exist for: split horizontal, split vertical, next pane, previous pane — default key bindings for these actions are deferred to the UX design phase. | Must |
+| FS-KBD-003 | Default application shortcuts MUST use Ctrl+Shift prefix to avoid conflict with standard terminal Ctrl+key sequences. The following default shortcuts MUST be provided (all user-configurable per FS-KBD-002): New tab (Ctrl+Shift+T), Close tab (Ctrl+Shift+W), Paste (Ctrl+Shift+V), Search (Ctrl+Shift+F), Open preferences (Ctrl+,), Next tab (Ctrl+Tab), Previous tab (Ctrl+Shift+Tab), Rename active tab (F2). Application shortcuts MUST also exist for pane management; defaults are defined in UXD.md §11.2: split horizontal left/right (Ctrl+Shift+D), split vertical top/bottom (Ctrl+Shift+E), navigate to next/previous pane (Ctrl+Shift+Right / Ctrl+Shift+Left / Ctrl+Shift+Up / Ctrl+Shift+Down), close active pane (Ctrl+Shift+Q). | Must |
 | FS-KBD-004 | Ctrl+letter MUST encode as the corresponding C0 control character (Ctrl+A = 0x01 through Ctrl+Z = 0x1A, Ctrl+[ = 0x1B, Ctrl+\ = 0x1C, Ctrl+] = 0x1D, Ctrl+^ = 0x1E, Ctrl+_ = 0x1F). | Must |
 | FS-KBD-005 | Alt+key MUST encode as ESC prefix followed by the key (e.g., Alt+A = 0x1B 0x61). 8-bit encoding MUST NOT be used (it breaks UTF-8). | Must |
 | FS-KBD-006 | Function keys F1–F12 MUST emit the standard xterm sequences (F1 = ESC OP through F12 = ESC [24~). | Must |
@@ -365,6 +365,8 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 **Acceptance criteria:**
 - FS-KBD-001: Pressing Ctrl+Shift+T opens a new tab; Ctrl+C sends 0x03 to the PTY.
 - FS-KBD-002: Removing the Ctrl+Shift+T binding in preferences causes that key combination to be sent to the PTY.
+- FS-KBD-003 (F2): Pressing F2 while a tab is active activates inline rename mode on that tab's title.
+- FS-KBD-003 (pane shortcuts): Ctrl+Shift+D splits the active pane horizontally (left/right); Ctrl+Shift+E splits vertically (top/bottom); Ctrl+Shift+Right/Left/Up/Down navigates between panes; Ctrl+Shift+Q closes the active pane. All defaults match UXD.md §11.2.
 - FS-KBD-005: Alt+A in bash triggers the expected readline shortcut (e.g., `Meta-a`).
 - FS-KBD-007: In vim, arrow keys navigate; after `set t_ku=\eOA` (application mode), arrows still work.
 - FS-KBD-011: Typing Chinese characters via an IME produces correct input in the terminal; the composition window tracks the cursor.
@@ -448,11 +450,13 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-NOTIF-002 | When a process terminates in a non-active tab or pane, its tab header MUST display a distinct visual indicator (different from the output activity indicator). | Must |
 | FS-NOTIF-003 | The activity indicator MUST be cleared when the user switches to that tab or pane. | Must |
 | FS-NOTIF-004 | Bell events (FS-VT-093) in non-active tabs or panes MUST produce a visual indicator on the corresponding tab or pane. | Must |
+| FS-NOTIF-005 | When the tab bar is in scrolled state (tabs overflow the available width), scroll navigation arrows MUST display a dot badge if one or more scrolled-out tabs have pending notifications (output activity or bell). Bell takes visual priority over output activity. Navigating to the scrolled-out tabs clears the badge. | Should |
 
 **Acceptance criteria:**
 - FS-NOTIF-001: Running a long command in a background tab causes the tab to show an activity indicator.
 - FS-NOTIF-002: A shell exiting in a background tab shows a distinct "process ended" indicator.
 - FS-NOTIF-003: Switching to a tab with an activity indicator clears the indicator.
+- FS-NOTIF-005: When a tab with unread activity is outside the visible tab bar viewport, the scroll arrow pointing toward it displays a dot badge. If multiple notification types exist, bell badge takes priority. The badge clears when the user scrolls to reveal the tab.
 
 ---
 
@@ -474,14 +478,14 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FS-SSH-010 | SSH sessions MUST have distinct lifecycle states with visual representation: Connecting, Authenticating, Connected, Disconnected, Closed. | Must |
+| FS-SSH-010 | SSH sessions MUST have distinct lifecycle states with visual representation: Connecting, Authenticating, Connected, Disconnected, Closed. State definitions: **Connecting** — TCP connection in progress. **Authenticating** — TCP established, SSH handshake and credential exchange in progress. **Connected** — session fully established and interactive. **Disconnected** — the session was interrupted unexpectedly (network drop, keepalive timeout, or remote process exit with non-zero code); reconnection is possible. **Closed** — the user has explicitly closed the pane or tab hosting the session, or the remote process exited normally (exit code 0 with no unexpected disconnect); the session is no longer active and no reconnection is possible — a new session must be opened to reconnect. | Must |
 | FS-SSH-011 | Host key verification MUST follow the TOFU model. **First connection:** the prompt MUST display (a) a human-readable explanation in plain language (e.g., "TauTerm is connecting to `<host>` for the first time. To confirm you are connecting to the right server, verify the fingerprint below with your server administrator. If you are unsure, click Reject."), (b) the host key fingerprint in SHA-256 format, and (c) the key type (e.g., ED25519, RSA). **Key change:** the connection MUST be blocked immediately. A prominent warning dialog MUST be shown displaying: the stored fingerprint, the new fingerprint, a clear warning that a key change may indicate a man-in-the-middle attack, and an explanation of what to do (e.g., "Contact your server administrator to verify this change before accepting."). The default action MUST be rejection. Acceptance MUST require a deliberate non-default action. Accepted keys MUST be stored in TauTerm's own known-hosts file (`~/.config/tauterm/known_hosts`), in OpenSSH-compatible format. TauTerm MUST NOT read from or write to `~/.ssh/known_hosts`. The preferences UI MUST offer an import action to copy entries from `~/.ssh/known_hosts` into TauTerm's known-hosts file. | Must |
 | FS-SSH-012 | Authentication MUST be attempted in this order: publickey, keyboard-interactive, password. A saved connection MAY specify a preferred method. | Must |
 | FS-SSH-013 | The SSH PTY request MUST include: `TERM=xterm-256color`, terminal dimensions (cols, rows, xpixel, ypixel), and standard terminal modes (VINTR=3, VQUIT=28, VERASE=127, VKILL=21, VEOF=4, VSUSP=26, ECHO=1, ISIG=1, ICANON=1). | Must |
 | FS-SSH-014 | If the negotiated host key algorithm is deprecated (specifically: `ssh-rsa` with SHA-1, or `ssh-dss`), TauTerm MUST display a non-blocking warning in the pane after connection is established. The warning MUST name the deprecated algorithm and state that the server should be updated. The connection MUST NOT be refused. The warning MUST be dismissible by the user. | Must |
 
 **Acceptance criteria:**
-- FS-SSH-010: Each lifecycle state is reflected in the pane UI (e.g., status bar, overlay, or icon change).
+- FS-SSH-010: Each lifecycle state is reflected in the pane UI (e.g., status bar, overlay, or icon change). When the user closes an SSH pane or the remote shell exits cleanly (exit code 0), the pane or tab enters the Closed state: no reconnection control is shown and no error indicator is shown. When the connection drops unexpectedly (network interruption, keepalive timeout, or non-zero exit), the pane enters the Disconnected state and displays a reconnection control.
 - FS-SSH-011: Connecting to a new host shows a plain-language prompt with the SHA-256 fingerprint and key type. Connecting to a host whose key has changed: connection is blocked, both fingerprints are shown side by side, a MITM warning and actionable instructions are displayed, default action is Reject, acceptance requires a non-default deliberate action.
 - FS-SSH-012: A connection using a key file authenticates without prompting for a password.
 - FS-SSH-014: Connecting to a server that only offers `ssh-rsa` (SHA-1) shows a visible, dismissible warning in the pane naming the algorithm. The connection is established and functional.
@@ -564,6 +568,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-THEME-007 | Themes MUST be stored persistently alongside other user preferences. | Must |
 | FS-THEME-008 | The theming system MUST be based on design tokens (colors, spacing, sizing, radius). No hardcoded visual values are allowed in the UI layer. | Must |
 | FS-THEME-009 | User-created themes MUST map to the same design tokens as the default theme, ensuring visual consistency across all UI surfaces. | Must |
+| FS-THEME-010 | A user theme MAY override the terminal line height. The configurable token is `--line-height-terminal` (default: 1.2). UI chrome line height (tab bar, status bar, panels) is not themeable and is fixed by the design system. | Should |
 
 **Acceptance criteria:**
 - FS-THEME-001: On first launch, TauTerm displays a polished default theme.
@@ -572,6 +577,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-THEME-004: A custom theme that changes only background and foreground colors applies correctly; ANSI palette is visible in `ls --color` output.
 - FS-THEME-006: Switching themes in preferences applies the new theme immediately.
 - FS-THEME-008: No UI component uses hardcoded color or spacing values; all reference tokens.
+- FS-THEME-010: A user theme that sets `--line-height-terminal: 1.5` causes the terminal to render lines with 1.5× line height. UI elements (tab bar, status bar, panels) are unaffected.
 
 ---
 
@@ -605,6 +611,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-A11Y-004 | Information MUST NOT be conveyed by color alone. A secondary indicator (shape, icon, text, pattern) MUST supplement color-based distinctions. | Must |
 | FS-A11Y-005 | All TauTerm UI features MUST be accessible via both keyboard and mouse, per the dual modality principle (UR 3.1). The terminal content area is excepted per UR 3.3. | Must |
 | FS-A11Y-006 | A context menu MUST be available in the terminal area (e.g., right-click). It MUST expose at minimum: Copy, Paste, Search, and pane/tab management actions. This is the primary discoverability mechanism for users who do not know keyboard shortcuts. | Must |
+| FS-A11Y-007 | During theme editing, the editor's own chrome (labels, controls, buttons, inputs) MUST always render using the current active Umbra system tokens, not the custom theme being edited. Only a designated preview area (terminal viewport sample) reflects the custom theme in real time. This ensures the editor remains accessible even when the user is authoring a non-compliant theme. | Must |
 
 **Acceptance criteria:**
 - FS-A11Y-001: The default theme passes WCAG AA contrast checks for all text and UI components.
@@ -613,6 +620,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-A11Y-004: Tab activity indicators use an icon or text badge in addition to color change.
 - FS-A11Y-005: Every feature reachable by mouse is also reachable by keyboard (and vice versa, excluding PTY input).
 - FS-A11Y-006: Right-clicking in the terminal area opens a context menu with Copy, Paste, Search, and split/close actions.
+- FS-A11Y-007: A user creating a theme with foreground color identical to background color: the editor controls and labels remain fully legible. Only the preview terminal sample reflects the low-contrast custom theme.
 
 ---
 
@@ -721,6 +729,7 @@ This matrix maps every functional specification to its originating user requirem
 | FS-SEARCH-001 – FS-SEARCH-007 | UR 7 §7.2 (search in output); Domain expert (search constraints) |
 | **FS-NOTIF: Notifications** | |
 | FS-NOTIF-001 – FS-NOTIF-004 | UR 4 §4.1 (activity notification); UR 2.2 (Jordan — notifications) |
+| FS-NOTIF-005 | UR 4 §4.1 (tab bar overflow, activity notification) |
 | **FS-SSH: SSH Sessions** | |
 | FS-SSH-001 – FS-SSH-003 | UR 9 §9.1 (SSH integration) |
 | FS-SSH-010 – FS-SSH-014 | UR 9 §9.1 (connection state, notification); Domain expert (lifecycle, PTY request); Security review (deprecated algorithms) |
@@ -733,6 +742,7 @@ This matrix maps every functional specification to its originating user requirem
 | FS-THEME-001 – FS-THEME-002 | UR 8 §8.1 (default theme) |
 | FS-THEME-003 – FS-THEME-007 | UR 8 §8.2 (user-created themes) |
 | FS-THEME-008 – FS-THEME-009 | UR 8 §8.3 (design tokens) |
+| FS-THEME-010 | UR 8 §8.2 (user-created themes, font/line height customisation) |
 | **FS-PREF: Preferences** | |
 | FS-PREF-001 | UR 5 §5.1 (persistence) |
 | FS-PREF-002 – FS-PREF-004 | UR 5 §5.2 (preferences UI, sections) |
@@ -742,6 +752,7 @@ This matrix maps every functional specification to its originating user requirem
 | FS-A11Y-001 – FS-A11Y-004 | CLAUDE.md (WCAG 2.1 AA, contrast, targets, keyboard, color-only) |
 | FS-A11Y-005 | UR 3.1 (dual modality); UR 3.3 (PTY exception) |
 | FS-A11Y-006 | UR 3.1 (dual modality); UR 3.2 (discoverable UI) |
+| FS-A11Y-007 | UR 8 §8.2 (theme editing); UR 5 §5.2 (preferences UI accessibility) |
 | **FS-UX: UX Cross-Cutting** | |
 | FS-UX-001 | UR 2 (personas, esp. Sam §2.3); UR 3.2 (discoverable UI) |
 | FS-UX-002 | UR 2 §2.3 (Sam — no config required for basic use); UR 3.2 (discoverable UI) |
@@ -786,7 +797,19 @@ UR.md fully renumbered: sections 4–9 corrected, all subsections aligned. Trace
 Interaction specified: double-click for inline editing (primary) + context menu "Rename" (discoverable). Enter confirms, Escape cancels. Clearing label reverts to process-driven title. Option C. Decision: accepted 2026-04-04.
 
 **RN-009: FS-KBD-003 — RESOLVED.**
-Ctrl+Tab / Ctrl+Shift+Tab retained as fixed defaults (universal convention). Split and pane navigation shortcuts: actions are required by the FS but default key bindings are deferred to the UX design phase. Option B. Decision: accepted 2026-04-04.
+Ctrl+Tab / Ctrl+Shift+Tab retained as fixed defaults (universal convention). Split and pane navigation shortcuts: defaults now resolved from UXD.md §11.2 (Ctrl+Shift+D, Ctrl+Shift+E, Ctrl+Shift+Right/Left/Up/Down, Ctrl+Shift+Q). F2 added as default shortcut for inline tab rename. Decision: accepted 2026-04-04, updated 2026-04-04.
+
+**RN-010: FS-SSH-010 Closed state — RESOLVED.**
+Added definition for the Closed state (intentional/clean termination) and clarified distinction from Disconnected (unexpected interruption). Decision: accepted 2026-04-04.
+
+**RN-011: FS-THEME-010 line height — RESOLVED.**
+Added FS-THEME-010 (Should): `--line-height-terminal` token is user-overridable; UI chrome line height is fixed. Decision: accepted 2026-04-04.
+
+**RN-012: FS-NOTIF-005 scroll arrow badges — RESOLVED.**
+Added FS-NOTIF-005 (Should): scroll arrows display a dot badge when scrolled-out tabs have pending notifications; bell takes priority over activity. Decision: accepted 2026-04-04.
+
+**RN-013: FS-A11Y-007 theme editor isolation — RESOLVED.**
+Added FS-A11Y-007 (Must): theme editor chrome renders with active Umbra system tokens; only the preview area reflects the custom theme. Decision: accepted 2026-04-04.
 
 ---
 

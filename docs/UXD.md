@@ -2,7 +2,7 @@
 
 # UX/UI Design Document — TauTerm
 
-> **Version:** 1.1.0
+> **Version:** 1.2.0
 > **Date:** 2026-04-04
 > **Status:** Draft
 > **Author:** UX/UI Designer — TauTerm team
@@ -2004,23 +2004,30 @@ interface SessionState {
   activeTabId: string;
 }
 
+// Recursive pane layout tree (ARCHITECTURE.md §4.5)
+type PaneId = string;
+type TabId = string;
+
+type PaneNode =
+  | { type: 'leaf'; paneId: PaneId; state: PaneState }
+  | { type: 'split'; direction: 'horizontal' | 'vertical'; ratio: number;
+      first: PaneNode; second: PaneNode };
+
 interface TabState {
-  id: string;
+  id: TabId;
   label: string | null; // user-defined label, null = use process title
-  panes: PaneState[];
-  activePaneId: string;
+  activePaneId: PaneId;
   order: number; // position in tab bar (0-indexed)
+  layout: PaneNode; // replaces panes: PaneState[] — supports arbitrary split depth
 }
 
 interface PaneState {
-  id: string;
+  id: PaneId;
   sessionType: 'local' | 'ssh';
   processTitle: string; // OSC-driven title or shell name
   cwd: string; // current working directory
   sshConnectionId: string | null; // reference to saved connection, null for local
   sshState: SshLifecycleState | null; // null for local sessions
-  splitDirection: 'horizontal' | 'vertical' | null; // null if single pane
-  splitRatio: number; // 0.0-1.0, position of this pane in its split
   notification: PaneNotification | null; // active notification indicator
 }
 
@@ -2036,15 +2043,20 @@ interface PaneNotification {
   exitCode?: number; // only for process-exit
 }
 
-// Delta event payload
+// Delta event payload.
+// Decision (ARCHITECTURE.md §4.5.2): carries the complete TabState of the affected
+// tab, not a free-form Partial<SessionState>. The frontend replaces its tab replica
+// atomically. Deep partial merge logic is explicitly rejected.
+// Note: not emitted for split_pane or close_pane — those return TabState directly.
 interface SessionStateChanged {
   changeType: 'tab-created' | 'tab-closed' | 'tab-reordered'
-    | 'pane-created' | 'pane-closed' | 'pane-resized'
     | 'active-tab-changed' | 'active-pane-changed'
-    | 'pane-metadata-changed' | 'notification-changed';
-  tabId: string;
-  paneId?: string;
-  state: Partial<SessionState>; // only the changed subtree
+    | 'pane-metadata-changed';
+  // Complete updated TabState of the affected tab.
+  // Absent when changeType is 'tab-closed' (tab no longer exists).
+  tab?: TabState;
+  // Present when changeType is 'active-tab-changed' or 'tab-closed'.
+  activeTabId?: string;
 }
 ```
 
@@ -2122,3 +2134,31 @@ interface ScrollPositionChangedEvent {
   viewportLines: number; // number of visible rows in the pane
 }
 ```
+
+### 15.5 Notification Changed Event
+
+Emitted when a per-pane notification is set or cleared (bell, output in background pane, process exit). This event is not bundled into `session-state-changed` because it is higher-frequency and carries a narrow slice of `PaneState`.
+
+**Event:** `listen('notification-changed', ...)`
+
+**Consumers:** Tab bar badge (§7.1), Pane border indicator.
+
+```typescript
+interface NotificationChangedEvent {
+  tabId: string;
+  paneId: string;
+  notification: PaneNotification | null; // null = notification cleared
+}
+```
+
+The frontend locates the `leaf` node for `paneId` in its `TabState.layout` replica and updates its `state.notification` field in place. No full tab replacement is needed for this event.
+
+### 15.6 IPC Decisions
+
+The following architectural decisions override or supersede type definitions in this section. ARCHITECTURE.md §4.5 is authoritative for rationale.
+
+| Superseded definition | Authoritative definition | Decision |
+|-----------------------|--------------------------|---------|
+| `TabState.panes: PaneState[]` | `TabState.layout: PaneNode` (§15.1, ARCHITECTURE.md §4.5.1) | Tree layout required for arbitrary split depth |
+| `SessionStateChanged.state: Partial<SessionState>` | `SessionStateChanged.tab?: TabState` + `activeTabId?` (§15.1) | Complete tab payload; no deep partial merge |
+| `close_pane → ()` | `close_pane → TabState \| null` | Synchronous layout update via command response (ARCHITECTURE.md §4.5.3) |

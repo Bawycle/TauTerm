@@ -81,6 +81,26 @@ UI stack: **Tailwind 4** (utility classes), **Bits UI** (headless primitives), *
 - Frontend build output: `build/` (SvelteKit static adapter)
 - Dev URL: `http://localhost:1420`
 
+## Agent Team
+
+Development is coordinated by a multi-agent team defined in `.claude/agents/`. Agent definitions are project-scoped and versioned with the codebase.
+
+| Agent file | Name | Role |
+|---|---|---|
+| `tauterm-moe.md` | `moe` | Maître d'Œuvre — orchestration, task decomposition, arbitration |
+| `tauterm-user-rep.md` | `user-rep` | User Representative — personas, acceptance criteria, UX validation |
+| `tauterm-domain-expert.md` | `domain-expert` | Terminal/PTY domain expert — VT standards, PTY Linux, SSH, app compatibility |
+| `tauterm-architect.md` | `architect` | Software Architect — IPC design, state machines, ADRs |
+| `tauterm-ux-designer.md` | `ux-designer` | UX/UI Designer — design tokens, themes, WCAG 2.1 AA, component specs |
+| `tauterm-security-expert.md` | `security-expert` | Security Expert & Tester — threat modeling, PTY/IPC/SSH review |
+| `tauterm-rust-dev.md` | `rust-dev` | Rust Developer — PTY, VT parser, screen buffer, Tauri commands |
+| `tauterm-frontend-dev.md` | `frontend-dev` | Frontend Developer — Svelte 5, terminal rendering, Tauri IPC |
+| `tauterm-test-engineer.md` | `test-engineer` | Test Engineer — nextest, vitest, WebdriverIO, no-regression policy |
+
+**Team name:** `tauterm-team` — runtime config at `~/.claude/teams/tauterm-team/config.json`
+
+**Typical feature flow:** `moe` decomposes → `domain-expert` + `architect` → `ux-designer` + `user-rep` → `rust-dev` + `frontend-dev` (parallel) → `test-engineer` + `security-expert` (review).
+
 ## License
 
 This project is licensed under **MPL-2.0**. Every new source file must include the SPDX identifier as its first line:

@@ -194,7 +194,33 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 
 ---
 
-## 10. Out of Scope (v1)
+## 10. Internationalisation (UI)
+
+### 10.1 Language Support
+
+- TauTerm's own UI (menus, preferences, labels, notifications, dialogs) is fully internationalised.
+- The v1 release supports two languages: **English** (default and fallback) and **French**.
+- The user can select their preferred language in the preferences UI; the change is applied immediately without requiring a restart.
+- The selected language is persisted across sessions alongside other user preferences.
+
+### 10.2 Scope of Internationalisation
+
+- Only TauTerm's own UI strings are subject to internationalisation. The content of terminal sessions (shell output, program output, locale settings of remote systems) is entirely outside TauTerm's control and is not affected by the UI language setting.
+- TauTerm does not modify or override the locale environment variables passed to spawned PTY sessions.
+
+---
+
+## 11. Distribution
+
+### 11.1 AppImage (v1)
+
+- For the v1 release, TauTerm is distributed as an **AppImage** for Linux.
+- The AppImage must be self-contained: the user must be able to run it without installing system dependencies beyond what a standard Linux desktop provides.
+- The AppImage must run on the supported architectures: x86, x86_64, ARM32, ARM64, RISC-V.
+
+---
+
+## 12. Out of Scope (v1)
 
 - Plugin or extension system.
 - Cloud sync of preferences, themes, or saved connections.

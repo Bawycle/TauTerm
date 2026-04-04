@@ -10,6 +10,7 @@ La plateforme cible, pour cette première version, est Linux (x86, x86_64, ARM32
 ## Documentation
 
 - [`docs/UR.md`](docs/UR.md) — User Requirements: personas, interaction model, feature requirements (source of truth for what users need)
+- [`docs/FS.md`](docs/FS.md) — Functional Specifications: numbered requirements with acceptance criteria, MoSCoW priorities, and traceability to UR (source of truth for what the system must do)
 
 ## Commands
 

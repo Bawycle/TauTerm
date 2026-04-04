@@ -56,7 +56,7 @@ Inside the terminal area itself, keyboard input is necessarily the primary modal
 
 ## 4. Terminal Multiplexing
 
-### 3.1 Multi-tab
+### 4.1 Multi-tab
 
 - The user can open multiple terminal tabs in a single window.
 - Each tab hosts an independent PTY session.
@@ -64,7 +64,7 @@ Inside the terminal area itself, keyboard input is necessarily the primary modal
 - Tabs display a configurable title (process name or user-defined label).
 - When a tab that is not currently active produces output or a process terminates within it, the user receives a visual indication on that tab (activity notification), without switching away from the current tab.
 
-### 3.2 Multi-screen (panes)
+### 4.2 Multi-screen (panes)
 
 - Within a tab, the user can split the view into multiple panes (horizontal and/or vertical splits).
 - Each pane hosts an independent PTY session.
@@ -72,14 +72,14 @@ Inside the terminal area itself, keyboard input is necessarily the primary modal
 
 ---
 
-## 4. User Preferences
+## 5. User Preferences
 
-### 4.1 Persistence
+### 5.1 Persistence
 
 - User preferences are persisted across sessions (stored locally on disk).
 - Preferences survive application restarts.
 
-### 4.2 Preferences UI
+### 5.2 Preferences UI
 
 - A dedicated UI panel (e.g., settings screen or modal) allows the user to view and edit all preferences.
 - Changes are applied immediately without requiring a restart, where technically feasible.
@@ -87,7 +87,7 @@ Inside the terminal area itself, keyboard input is necessarily the primary modal
 
 ---
 
-## 5. Keyboard Shortcuts
+## 6. Keyboard Shortcuts
 
 Keyboard input in a terminal emulator serves two distinct purposes that users experience differently, and which must not be conflated:
 
@@ -96,7 +96,7 @@ Keyboard input in a terminal emulator serves two distinct purposes that users ex
 
 All application shortcuts listed below are **default values**. Every application shortcut is user-configurable in the preferences UI.
 
-### 5.1 Application Shortcuts (intercepted by TauTerm)
+### 6.1 Application Shortcuts (intercepted by TauTerm)
 
 | Action | Default Shortcut |
 |---|---|
@@ -106,7 +106,7 @@ All application shortcuts listed below are **default values**. Every application
 | Search in terminal output | `Ctrl+Shift+F` |
 | Open preferences | `Ctrl+,` |
 
-### 5.2 PTY Passthrough Sequences (transmitted to the active PTY)
+### 6.2 PTY Passthrough Sequences (transmitted to the active PTY)
 
 These sequences are not intercepted by TauTerm. They are listed here for documentation purposes only — their behavior is defined by the shell or program running inside the PTY.
 
@@ -118,22 +118,22 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 | Arrow Up / Down | Navigate shell command history |
 | `Shift+Enter` | Line continuation (shell-dependent) |
 
-### 5.3 Clipboard
+### 6.3 Clipboard
 
 - **Copy**: selecting text with the mouse automatically copies it to the clipboard (standard terminal behavior).
 - **Paste**: the user can paste clipboard content into the active terminal using the application shortcut (default: `Ctrl+Shift+V`).
 
 ---
 
-## 6. Terminal Navigation
+## 7. Terminal Navigation
 
-### 6.1 Scrollback
+### 7.1 Scrollback
 
 - The user needs to scroll back through the terminal's output history beyond what is currently visible on screen.
 - The user can scroll using the mouse wheel, keyboard shortcuts, or the scrollbar.
 - The scrollback buffer retains a configurable amount of output history per pane.
 
-### 6.2 Search in Output
+### 7.2 Search in Output
 
 - The user needs to search for text within the terminal's output history (scrollback buffer).
 - The user can initiate a search from a keyboard shortcut (default application shortcut: `Ctrl+Shift+F`).
@@ -142,15 +142,15 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 
 ---
 
-## 7. Theming
+## 8. Theming
 
-### 7.1 Default Theme
+### 8.1 Default Theme
 
 - TauTerm ships with a **single, carefully designed default theme** produced by the UX/UI designer.
 - The default theme reflects a deliberate artistic direction (typography, color palette, spacing, iconography) and studied UX/UI decisions. It is not a generic placeholder.
 - The default theme cannot be deleted, but it can be overridden by a user-created theme set as active.
 
-### 7.2 User-Created Themes
+### 8.2 User-Created Themes
 
 - The user can create one or more custom themes.
 - A theme defines at minimum: background color, foreground color, cursor color, selection color, and the 16 ANSI palette colors.
@@ -158,23 +158,23 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 - The active theme can be switched at any time from the preferences UI.
 - Themes are stored persistently alongside other user preferences.
 
-### 7.3 Design Tokens
+### 8.3 Design Tokens
 
 - The theming system is based on design tokens (colors, spacing, sizing, radius). No hardcoded visual values are allowed in the UI layer.
 - User-created themes map to those same tokens, ensuring visual consistency across all UI surfaces.
 
 ---
 
-## 8. SSH Session Management
+## 9. SSH Session Management
 
-### 8.1 Opening SSH Sessions
+### 9.1 Opening SSH Sessions
 
 - The user can open a new tab or a new pane as an SSH session (rather than a local PTY).
 - The user needs the SSH session to be visually integrated within TauTerm's tab/pane model — not in a separate window.
 - The user needs to know at a glance that a given tab or pane hosts a remote SSH session (as opposed to a local session).
 - When an SSH connection is interrupted (network drop, server-side timeout, etc.), the user needs to be notified clearly — the session must not silently appear to still be running.
 
-### 8.2 Saved Connections
+### 9.2 Saved Connections
 
 - The user can configure and save SSH connections (host, port, username, identity file or password, optional label/group).
 - Saved connections are listed in a dedicated UI (e.g., connection manager panel or quick-open dialog).
@@ -182,19 +182,19 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 - Connections are stored persistently as part of user preferences.
 - The user can create, edit, duplicate, and delete saved connections.
 
-### 8.3 Security
+### 9.3 Security
 
 - Credentials (passwords, passphrases) are stored using the OS keychain or an equivalent secure store — never in plain text.
 - Identity files (private keys) are referenced by path; TauTerm does not copy or embed them.
 
-### 8.4 Reconnection
+### 9.4 Reconnection
 
 - When an SSH session is interrupted, the user needs to be able to reconnect to the same saved connection without reconfiguring it from scratch.
 - The reconnection action must be accessible directly from the affected tab or pane (not only from the connection manager).
 
 ---
 
-## 9. Out of Scope (v1)
+## 10. Out of Scope (v1)
 
 - Plugin or extension system.
 - Cloud sync of preferences, themes, or saved connections.

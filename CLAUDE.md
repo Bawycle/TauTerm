@@ -11,6 +11,8 @@ La plateforme cible, pour cette première version, est Linux (x86, x86_64, ARM32
 
 - [`docs/UR.md`](docs/UR.md) — User Requirements: personas, interaction model, feature requirements (source of truth for what users need)
 - [`docs/FS.md`](docs/FS.md) — Functional Specifications: numbered requirements with acceptance criteria, MoSCoW priorities, and traceability to UR (source of truth for what the system must do)
+- [`docs/AD.md`](docs/AD.md) — Artistic Direction: visual identity, Umbra theme design intent, typography and color philosophy (source of truth for aesthetic decisions)
+- [`docs/UXD.md`](docs/UXD.md) — UX/UI Design: complete design token system, component specifications, interaction patterns, IPC contract (source of truth for all visual and interactive decisions)
 
 ## Commands
 

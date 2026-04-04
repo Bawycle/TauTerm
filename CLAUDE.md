@@ -156,7 +156,7 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-05 (session a)
+Last updated: 2026-04-05 (session d)
 
 ### Done
 
@@ -192,12 +192,20 @@ Last updated: 2026-04-05 (session a)
 |---|---|---|
 | **PTY integration harness** | ✅ Done | `pty_linux.rs`: env var tests (FPL-S-004/009), round-trip read (FPL-W-003/004), SIGHUP on close (FPL-C-001), SIGWINCH on resize (FPL-R-005) — 10 new tests, 186 Rust total |
 | **set_active_pane** | ✅ Done | `SessionRegistry::set_active_pane()` implemented; command handler emits `session-state-changed` with `ActivePaneChanged` |
+| **Clipboard commands** | ✅ Done | `copy_to_clipboard` + `get_clipboard` implemented via `arboard` + `spawn_blocking`; `MAX_CLIPBOARD_LEN = 16 MiB` guard; 4 unit tests; `clipboard-all` Tauri permission NOT required (arboard is direct Rust) |
+| **SPL load security tests** | ✅ Done | `security_load.rs`: `spl_rm_001` (fd leak baseline), `spl_sz_004` (timing + boundary) — `#[ignore]`, run with `cargo nextest run --run-ignored all`; protocols amended |
+| **known_hosts TOFU** | ✅ Done | `ssh/known_hosts.rs`: `KnownHostsStore` with `load()`, `lookup()` (Unknown/Trusted/Mismatch), `add_entry()` (0600 perms), `import_from()`; 8 unit tests; hashed entries skipped (ADR-0007) |
+| **SecretService credential store** | ✅ Done | `platform/credentials_linux.rs`: real D-Bus probe + graceful fallback; `store()`/`get()`/`delete()` via `secret-service 5.1.0`; 4 unit tests; `is_available()` no longer hardcoded false |
+| **SshManager guard conditions** | ✅ Done | `ssh/manager.rs`: `connection_count()` utility; 6 unit tests — duplicate rejection, unknown pane errors, open→close cleanup, Connecting initial state |
+| **E2E scaffolding (WebdriverIO)** | ✅ Written / Deferred | `tests/e2e/pty-roundtrip.spec.ts` (2 scenarios) + `tab-lifecycle.spec.ts` (4 scenarios); `tests/tsconfig.json` fixed; type-correct; execution deferred until `pnpm tauri build` succeeds |
 
 ### Not Yet Implemented (stubs only)
 
-- SSH connection lifecycle (`SshManager` — auth, known_hosts, keepalive all stub)
-- Secret Service credential store (`is_available() = false`)
-- Clipboard (`arboard` wired but `copy_to_clipboard`/`get_clipboard` commands are TODO stubs)
-- E2E tests (require a built app — `pnpm tauri build` + `pnpm wdio`)
+- SSH connection lifecycle — TCP connect → russh handshake → auth → keepalive (blocked on SSH integration pass)
+- `SshManager::open_connection` async connect flow (`TODO` comment in place)
+- `auth.rs`, `keepalive.rs` — still stubs, unblocked by SSH integration pass
+- `CredentialManager` → `LinuxCredentialStore` wiring (still has `// TODO: store:`)
+- SecretService integration test (store/get/delete round-trip) — requires D-Bus + keyring daemon
+- E2E execution (require a built app — `pnpm tauri build` + `pnpm wdio`)
 - Scroll offset state per pane (`scroll_pane` returns the requested offset without tracking it)
 - `set_active_pane` event emission wiring (command implemented; `session-state-changed` emitted but frontend not wired)

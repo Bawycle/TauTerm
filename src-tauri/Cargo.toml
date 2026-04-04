@@ -64,3 +64,13 @@ uuid = { version = "1", features = ["v4"] }
 # Unicode / character width
 unicode-width = "0.2"
 
+# Base64 encoding (known_hosts key encoding)
+base64 = "0.22"
+
+# Platform directories (config, data, cache paths)
+dirs = "6"
+
+[dev-dependencies]
+# Temporary files and directories for tests
+tempfile = "3"
+

@@ -1,7 +1,17 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["node", "mocha"]
+    "allowJs": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "es2020",
+    "types": ["mocha", "@wdio/globals/types"]
   },
   "include": ["./**/*.ts"]
 }

@@ -131,6 +131,30 @@ These tests run in CI without a display server or D-Bus session.
 **Coverage targets:**
 - PTY session open/close lifecycle, tab and pane management, keyboard shortcuts, clipboard, search, preferences persistence, SSH connection flow, accessibility keyboard navigation.
 
+### 2.4.1 E2E Harness Validation — CI Readiness Checklist
+
+Before any E2E test results are considered authoritative, the following checklist must pass:
+
+| Check | How to verify | Required for |
+|---|---|---|
+| `pnpm tauri build` exits 0 | CI build job log | All E2E scenarios |
+| `tau-term` binary exists at `src-tauri/target/debug/tau-term` or `release/tau-term` | File exists check in CI | Tauri-driver startup |
+| `tauri-driver` is installed and callable | `~/.cargo/bin/tauri-driver --version` | WebdriverIO session |
+| WebKitWebDriver is installed | `WebKitWebDriver --version` | WebdriverIO capabilities |
+| X11 or Wayland display server is running | `echo $DISPLAY` or `echo $WAYLAND_DISPLAY` non-empty | App rendering |
+| D-Bus session is active | `echo $DBUS_SESSION_BUS_ADDRESS` non-empty | App launch |
+| `pnpm wdio` exits with all tests in `passing` or `pending` state | Exit code 0 | CI gate |
+
+**Pass-rate threshold:** ≥ 95% of non-pending E2E scenarios must pass in a qualifying CI run. A scenario marked `pending` due to a stub dependency does not count against the pass rate.
+
+**Timeout expectations:**
+- Single scenario timeout: 60 seconds (`mochaOpts.timeout = 60_000` in `wdio.conf.ts`).
+- Session connection retry: 3 attempts × 30 second timeout = 90 seconds maximum before hard failure.
+- Full suite timeout: no global limit per suite, but individual scenario timeouts prevent indefinite hangs.
+- A scenario that exceeds its 60-second timeout is counted as a failure and contributes to pass-rate calculation.
+
+**Deferred execution note:** E2E scenarios are written and reviewed in the test-protocols and `tests/e2e/` directory but are marked `[DEFERRED: build required]` until `pnpm tauri build` succeeds in CI. Written scenarios count toward coverage planning but not toward the pass-rate until the build gate is green.
+
 ---
 
 ## 3. Coverage Matrix
@@ -732,6 +756,104 @@ These tests run in CI without a display server or D-Bus session.
 ---
 
 ### 4.3 SSH Lifecycle
+
+---
+
+#### TEST-SSH-UNIT-001
+**FS requirements:** FS-SSH-010, FS-SSH-020
+**Layer:** Unit (Rust)
+**Priority:** Must
+**Location:** `src-tauri/src/ssh/connection.rs` and `src-tauri/src/ssh/manager.rs`
+
+**Steps:**
+1. Create an `SshConnection` — assert initial state is `Connecting`.
+2. Transition through: `Connecting → Authenticating → Connected → Disconnected → Closed`.
+3. Assert each state transition is reflected by `state()`.
+4. Serialize `SshLifecycleState::Connected` to JSON — assert `"type":"connected"` tag.
+5. Assert `SSH_KEEPALIVE_MAX_MISSES == 3` (FS-SSH-020).
+6. Assert `SshManager::open_connection` returns `Err` on duplicate pane_id.
+7. Assert `SshManager::close_connection` returns `Err` on unknown pane_id.
+8. Assert `SshManager::reconnect` returns `Err` on unknown pane_id.
+
+**Expected result:** All assertions pass. State machine is correct. Manager guards duplicate and unknown-pane errors.
+
+**Implementation:** Tests already present in `connection.rs` and `manager.rs`. Tests added in sprint 2 for manager error paths.
+
+---
+
+#### TEST-SSH-UNIT-002
+**FS requirements:** FS-SSH-011 (known_hosts TOFU)
+**Layer:** Unit (Rust)
+**Priority:** Must
+**Location:** `src-tauri/src/ssh/known_hosts.rs`
+
+**Steps:**
+1. Parse an OpenSSH-format known_hosts line (RSA key, ED25519 key).
+2. Look up a host — find existing entry and return it.
+3. Look up an unknown host — return `None` (TOFU: first time).
+4. Add a new host key — write to known_hosts file, read back and verify.
+5. Detect a key mismatch for a known host — return `Err(HostKeyMismatch)`.
+6. Parse a known_hosts file containing hashed entries (`|1|...`) — skip with count.
+
+**Expected result:** Parse, lookup, add, and mismatch detection all work correctly.
+
+**Status:** [BLOCKED: known_hosts.rs is a stub] — activated when SSH integration pass lands.
+
+---
+
+#### TEST-SSH-UNIT-003
+**FS requirements:** FS-SSH-012 (auth order: pubkey → keyboard-interactive → password)
+**Layer:** Unit (Rust) — mock transport
+**Priority:** Must
+**Location:** `src-tauri/src/ssh/auth.rs`
+
+**Steps:**
+1. Create a mock `russh` client handle that accepts a public key auth attempt.
+2. Run the auth sequence — assert `publickey` is tried first.
+3. Simulate public key auth failure — assert `keyboard-interactive` is tried next.
+4. Simulate keyboard-interactive failure — assert `password` is tried last.
+5. Assert the auth result carries the method used.
+
+**Expected result:** Auth order matches FS-SSH-012. No method is skipped or reordered.
+
+**Status:** [BLOCKED: auth.rs is a stub] — activated when SSH integration pass lands.
+
+---
+
+#### TEST-SSH-UNIT-004
+**FS requirements:** FS-SSH-020 (keepalive: 3 misses → Disconnected)
+**Layer:** Unit (Rust) — Tokio test with mock channel
+**Priority:** Must
+**Location:** `src-tauri/src/ssh/keepalive.rs`
+
+**Steps:**
+1. Create a keepalive task with a mock channel that drops all pings.
+2. Advance time by `3 × keepalive_interval + 1ms` using `tokio::time::advance`.
+3. Assert the `SshLifecycleState` transitions to `Disconnected`.
+4. Assert exactly 3 keepalive probes were sent before disconnection.
+
+**Expected result:** Connection is declared lost after exactly 3 consecutive missed keepalives.
+
+**Status:** [BLOCKED: keepalive.rs is a stub] — activated when SSH integration pass lands.
+
+---
+
+#### TEST-SSH-UNIT-005
+**FS requirements:** FS-CRED-001, FS-CRED-003 (Secret Service store/retrieve)
+**Layer:** Unit (Rust) — mock credential store
+**Priority:** Must
+**Location:** `src-tauri/src/credentials.rs` and `src-tauri/src/platform/credentials_linux.rs`
+
+**Steps:**
+1. Call `LinuxCredentialStore::is_available()` — assert it returns `false` when D-Bus is unavailable.
+2. Call `CredentialManager::store_password()` — assert it delegates to the credential store.
+3. Call `CredentialManager::get_password()` — assert it returns the stored value.
+4. Call `CredentialManager::delete_password()` — assert the key is removed.
+5. Confirm no password is ever written to `preferences.json`.
+
+**Expected result:** Credential store operations are correctly delegated. No credentials leak to disk.
+
+**Status:** [BLOCKED: credentials_linux.rs is a stub] — activated when SecretService integration lands.
 
 ---
 
@@ -1395,6 +1517,29 @@ These tests run in CI without a display server or D-Bus session.
 2. Observe what the shell receives.
 
 **Expected result:** Pasted text is wrapped with ESC [200~ and ESC [201~. Multi-line paste does not auto-execute commands. If the pasted text itself contains ESC [201~, it is stripped before wrapping.
+
+---
+
+#### TEST-IPC-CLIP-001
+**FS requirements:** FS-CLIP-001 (clipboard write via IPC)
+**Layer:** Unit (Rust)
+**Priority:** Must
+**Location:** `src-tauri/src/commands/system_cmds.rs` — `security_tests` module
+
+**Preconditions:** None (no clipboard hardware required — validation tested in isolation).
+
+**Steps:**
+1. Call `copy_to_clipboard` with a payload of `MAX_CLIPBOARD_LEN + 1` bytes.
+2. Call `copy_to_clipboard` with an empty string.
+3. Call `copy_to_clipboard` with exactly `MAX_CLIPBOARD_LEN` bytes.
+4. Call `get_clipboard` (may fail in headless CI — assert no panic and no `CLIPBOARD_TOO_LARGE` error code).
+
+**Expected result:**
+- Step 1: `Err` with code `CLIPBOARD_TOO_LARGE`.
+- Steps 2–3: Either `Ok` (if display available) or `Err` with a non-`CLIPBOARD_TOO_LARGE` code.
+- Step 4: `Ok(String)` or `Err` with code `CLIPBOARD_UNAVAILABLE` or `CLIPBOARD_READ_FAILED`. No panic.
+
+**Implementation:** Tests `ipc_clip_001` through `ipc_clip_004` are implemented and passing in `system_cmds.rs`.
 
 ---
 

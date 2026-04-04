@@ -202,7 +202,7 @@ impl SshManager {
         }
         let conn = SshConnection::new(pane_id.clone(), config.clone());
         self.connections.insert(pane_id, conn);
-        // TODO: initiate async connect flow.
+        // TODO: initiate async connect flow (TCP → russh handshake → auth).
         Ok(())
     }
 
@@ -227,5 +227,146 @@ impl SshManager {
     /// Get the current lifecycle state of an SSH session.
     pub fn get_state(&self, pane_id: &PaneId) -> Option<SshLifecycleState> {
         self.connections.get(pane_id).map(|c| c.state())
+    }
+
+    /// Number of active connections currently tracked.
+    pub fn connection_count(&self) -> usize {
+        self.connections.len()
+    }
+}
+
+#[cfg(test)]
+mod manager_tests {
+    use super::*;
+    use crate::session::ids::ConnectionId;
+
+    fn make_config(host: &str) -> SshConnectionConfig {
+        SshConnectionConfig {
+            id: ConnectionId::new(),
+            label: "test".to_string(),
+            host: host.to_string(),
+            port: 22,
+            username: "user".to_string(),
+            identity_file: None,
+            allow_osc52_write: false,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SSH-UNIT-001 steps 6-8 — SshManager guard conditions
+    // -----------------------------------------------------------------------
+
+    /// Duplicate open_connection for same pane_id must return an error.
+    #[tokio::test]
+    async fn ssh_manager_rejects_duplicate_pane_connection() {
+        let manager = SshManager::new();
+        let pane_id = PaneId::new();
+        let config = make_config("host-a.example.com");
+
+        // First open: succeeds.
+        let result = manager
+            .open_connection(pane_id.clone(), &config, None)
+            .await;
+        assert!(result.is_ok(), "First open must succeed");
+
+        // Second open for same pane: must fail.
+        let result2 = manager
+            .open_connection(pane_id.clone(), &config, None)
+            .await;
+        assert!(
+            result2.is_err(),
+            "Duplicate open for same pane must be rejected (TEST-SSH-UNIT-001 step 6)"
+        );
+        // The connection count must stay at 1 (not 2).
+        assert_eq!(manager.connection_count(), 1);
+    }
+
+    /// close_connection on unknown pane_id must return PaneNotFound.
+    #[tokio::test]
+    async fn ssh_manager_close_unknown_pane_returns_error() {
+        let manager = SshManager::new();
+        let unknown_pane = PaneId::new();
+
+        let result = manager.close_connection(unknown_pane).await;
+        assert!(
+            result.is_err(),
+            "close_connection on unknown pane must return error (TEST-SSH-UNIT-001 step 7)"
+        );
+        match result.unwrap_err() {
+            SshError::PaneNotFound(_) => {}
+            other => panic!("Expected PaneNotFound, got {other:?}"),
+        }
+    }
+
+    /// reconnect on unknown pane_id must return PaneNotFound.
+    #[tokio::test]
+    async fn ssh_manager_reconnect_unknown_pane_returns_error() {
+        let manager = SshManager::new();
+        let unknown_pane = PaneId::new();
+
+        let result = manager.reconnect(unknown_pane).await;
+        assert!(
+            result.is_err(),
+            "reconnect on unknown pane must return error (TEST-SSH-UNIT-001 step 8)"
+        );
+        match result.unwrap_err() {
+            SshError::PaneNotFound(_) => {}
+            other => panic!("Expected PaneNotFound, got {other:?}"),
+        }
+    }
+
+    /// open then close should result in zero connections.
+    #[tokio::test]
+    async fn ssh_manager_open_then_close_cleans_up() {
+        let manager = SshManager::new();
+        let pane_id = PaneId::new();
+        let config = make_config("host-b.example.com");
+
+        manager
+            .open_connection(pane_id.clone(), &config, None)
+            .await
+            .expect("open must succeed");
+        assert_eq!(manager.connection_count(), 1);
+
+        manager
+            .close_connection(pane_id)
+            .await
+            .expect("close must succeed");
+        assert_eq!(
+            manager.connection_count(),
+            0,
+            "connection map must be empty after close"
+        );
+    }
+
+    /// get_state returns Some for an active pane, None for unknown.
+    #[tokio::test]
+    async fn ssh_manager_get_state_returns_none_for_unknown_pane() {
+        let manager = SshManager::new();
+        let unknown_pane = PaneId::new();
+        assert!(
+            manager.get_state(&unknown_pane).is_none(),
+            "get_state for unknown pane must return None"
+        );
+    }
+
+    /// New connection starts in Connecting state.
+    #[tokio::test]
+    async fn ssh_manager_new_connection_in_connecting_state() {
+        let manager = SshManager::new();
+        let pane_id = PaneId::new();
+        let config = make_config("host-c.example.com");
+
+        manager
+            .open_connection(pane_id.clone(), &config, None)
+            .await
+            .expect("open must succeed");
+
+        let state = manager.get_state(&pane_id);
+        assert_eq!(
+            state,
+            Some(SshLifecycleState::Connecting),
+            "New connection must start in Connecting state (FS-SSH-010)"
+        );
     }
 }

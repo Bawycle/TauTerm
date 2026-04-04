@@ -419,6 +419,48 @@ Author role: security-expert
 | **Environment** | Requires a controlled D-Bus environment without a running Secret Service provider. |
 | **Stub dependency** | `credentials_linux.rs` availability probe is a stub. |
 
+#### SEC-CRED-006
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-CRED-006 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-SSH-011 (TOFU), FS-CRED-006 |
+| **Threat** | The `known_hosts` file at `~/.config/tauterm/known_hosts` is writable. A local attacker modifies it to add a rogue key for a target host. TauTerm accepts the rogue key silently on the next connection, bypassing TOFU. |
+| **Test method** | Unit test: write a known_hosts file with a known entry for `test.host`. Read it back. Modify the entry to a different key. Assert `known_hosts::lookup` returns `Err(HostKeyMismatch)` on the modified entry and does NOT silently accept it. |
+| **Expected mitigation** | `known_hosts.rs` always compares the offered key against the stored entry; a mismatch returns `HostKeyMismatch` regardless of file modification time. File permissions should be 0600 (enforced on write). |
+| **Priority** | Critical |
+| **Environment** | Unit test. No external dependencies. |
+| **Stub dependency** | `known_hosts.rs` is a stub. |
+
+#### SEC-CRED-007
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-CRED-007 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-CRED-004, SEC-CRED-003 (extension) |
+| **Threat** | After a successful authentication, the private key file is read into a `String` or `Vec<u8>` and remains in process memory. A memory snapshot of the TauTerm process could recover the key material. |
+| **Test method** | Code review: verify that private key bytes are never stored in `SshConnectionConfig`, `Credentials`, or any `#[derive(Debug)]` struct. Verify the file content is passed directly to `russh-keys::load_secret_key()` and not cloned into application state. |
+| **Expected mitigation** | Private key file content is read by `russh-keys` at authentication time; the return value is a `PrivateKey` handle owned by `russh`. The raw bytes are not copied into TauTerm state. |
+| **Priority** | High |
+| **Environment** | Code review. |
+| **Stub dependency** | SSH auth implementation. |
+
+#### SEC-CRED-008
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-CRED-008 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | SEC-CRED-003, FS-CRED-004 |
+| **Threat** | `LinuxCredentialStore::is_available()` returns `false` but the application still attempts to call `store()` or `get()` on it. The stub implementation either panics or silently succeeds (returning `Ok`), masking the unavailability to callers. |
+| **Test method** | Unit test: create a `LinuxCredentialStore` in an environment where D-Bus is unavailable. Call `is_available()` — assert `false`. Call `store()` — assert `Err(CredentialError::Unavailable)`. Call `get()` — assert `Ok(None)` (safe fallback). Call `delete()` — assert `Ok(())` (no-op when not found). |
+| **Expected mitigation** | `is_available()` probe is authoritative. Callers check it before `store()`. `get()` and `delete()` fail gracefully when the service is unavailable. |
+| **Priority** | High |
+| **Environment** | Unit test. |
+| **Stub dependency** | `credentials_linux.rs` fully implemented. |
+
 ---
 
 ### 2.5 WebView / CSP
@@ -518,6 +560,20 @@ Author role: security-expert
 | **Expected mitigation** | OSC 52 write payloads are subject to the general 4096-byte OSC sequence limit (FS-SEC-005). This effectively limits clipboard write content to approximately 3000 bytes (base64 overhead). |
 | **Priority** | Medium |
 | **Environment** | Standard unit test. |
+
+#### SEC-OSC-004
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-OSC-004 |
+| **STRIDE** | Denial of Service |
+| **FS requirement(s)** | FS-CLIP-001, ARCHITECTURE.md §8.1 |
+| **Threat** | The `copy_to_clipboard` IPC command is called directly by the WebView (not via OSC 52) with a multi-megabyte payload. This bypasses the 4096-byte OSC limit and writes an arbitrarily large string to the system clipboard, causing memory allocation pressure or downstream DoS for clipboard consumers. |
+| **Test method** | Unit test: call `copy_to_clipboard` with `MAX_CLIPBOARD_LEN + 1` bytes. Assert `Err` with code `CLIPBOARD_TOO_LARGE` is returned immediately — no clipboard write attempted. Implementation in `system_cmds.rs` (test `ipc_clip_001`). |
+| **Expected mitigation** | `copy_to_clipboard` validates `text.len() <= MAX_CLIPBOARD_LEN` (16 MiB) before invoking `arboard`. The limit is enforced at the IPC boundary before any heap allocation for the clipboard payload. |
+| **Priority** | Medium |
+| **Environment** | Standard unit test. No display server required (validation fires before arboard is called). |
+| **Status** | Implemented and tested — `ipc_clip_001` passing. |
 
 ---
 

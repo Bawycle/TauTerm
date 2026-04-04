@@ -47,7 +47,7 @@
 | SPL-SZ-001 | `send_input` with 65537 bytes (above 64 KiB limit) | `Err` with code `INPUT_TOO_LARGE`; no bytes written to PTY | Resource exhaustion |
 | SPL-SZ-002 | `send_input` with exactly 65536 bytes (64 KiB boundary) | `Ok(())` — boundary is inclusive | Boundary correctness |
 | SPL-SZ-003 | `send_input` with empty payload (`b""`) | `Ok(())` — no-op write | Edge case |
-| SPL-SZ-004 | Rapid sequence of 10 × 64 KiB `send_input` calls | All succeed; no fd exhaustion, no deadlock, no panic | Resource exhaustion |
+| SPL-SZ-004 | Rapid sequence of 10 × 64 KiB `send_input` calls | All succeed; no fd exhaustion, no deadlock, no panic. **Timeout: all 10 calls must complete within 5 seconds** (validated in test via `tokio::time::timeout`). | Resource exhaustion |
 
 ### 2.3 PTY Injection via Terminal Output
 
@@ -62,7 +62,7 @@
 
 | ID | Scenario | Expected result | Threat |
 |----|----------|-----------------|--------|
-| SPL-RM-001 | Create and immediately close 10 panes | No fd leak: `/proc/self/fd` count returns to baseline | fd exhaustion |
+| SPL-RM-001 | Create and immediately close 10 panes | No fd leak: `/proc/self/fd` count returns to baseline. **Baseline measurement procedure:** enumerate `/proc/self/fd` before the test loop; close all 10 panes; enumerate again; assert count ≤ baseline. Run as `#[ignore]` to prevent fd count noise from parallel nextest workers. | fd exhaustion |
 | SPL-RM-002 | `LinuxPtySession::close()` drops master fd before function returns | SIGHUP is delivered to child immediately on close | fd leak |
 | SPL-RM-003 | `PtyTaskHandle` drop aborts the read task | Tokio task is cancelled; no zombie task accumulation | Resource leak |
 | SPL-RM-004 | Open session then immediately drop `LinuxPtySession` (without calling `close()`) | `Drop` must close master fd (kernel guarantees SIGHUP via hangup on last fd close) | fd/process leak |

@@ -12,6 +12,12 @@ use tauri::State;
 use crate::error::TauTermError;
 use crate::session::{SessionRegistry, SessionState};
 
+/// Maximum clipboard text size: 16 MiB.
+///
+/// Protects against clipboard-based DoS where a process in a pane triggers
+/// a large clipboard write via OSC 52 or direct IPC call.
+const MAX_CLIPBOARD_LEN: usize = 16 * 1024 * 1024;
+
 #[tauri::command]
 pub async fn get_session_state(
     registry: State<'_, Arc<SessionRegistry>>,
@@ -21,15 +27,52 @@ pub async fn get_session_state(
 
 #[tauri::command]
 pub async fn copy_to_clipboard(text: String) -> Result<(), TauTermError> {
-    // TODO: forward to ClipboardBackend.
-    let _ = text;
-    Ok(())
+    if text.len() > MAX_CLIPBOARD_LEN {
+        return Err(TauTermError::new(
+            "CLIPBOARD_TOO_LARGE",
+            "Clipboard text exceeds maximum allowed size.",
+        ));
+    }
+    tokio::task::spawn_blocking(move || {
+        let mut cb = arboard::Clipboard::new().map_err(|e| {
+            TauTermError::with_detail(
+                "CLIPBOARD_UNAVAILABLE",
+                "Could not access the system clipboard.",
+                e.to_string(),
+            )
+        })?;
+        cb.set_text(&text).map_err(|e| {
+            TauTermError::with_detail(
+                "CLIPBOARD_WRITE_FAILED",
+                "Failed to write to clipboard.",
+                e.to_string(),
+            )
+        })
+    })
+    .await
+    .map_err(|e| TauTermError::with_detail("INTERNAL_ERROR", "Clipboard task failed.", e.to_string()))?
 }
 
 #[tauri::command]
 pub async fn get_clipboard() -> Result<String, TauTermError> {
-    // TODO: forward to ClipboardBackend.
-    Ok(String::new())
+    tokio::task::spawn_blocking(|| {
+        let mut cb = arboard::Clipboard::new().map_err(|e| {
+            TauTermError::with_detail(
+                "CLIPBOARD_UNAVAILABLE",
+                "Could not access the system clipboard.",
+                e.to_string(),
+            )
+        })?;
+        cb.get_text().map_err(|e| {
+            TauTermError::with_detail(
+                "CLIPBOARD_READ_FAILED",
+                "Failed to read from clipboard.",
+                e.to_string(),
+            )
+        })
+    })
+    .await
+    .map_err(|e| TauTermError::with_detail("INTERNAL_ERROR", "Clipboard task failed.", e.to_string()))?
 }
 
 /// Open a URL in the system browser. Scheme is validated (§8.1).
@@ -286,5 +329,75 @@ mod security_tests {
             result.is_err(),
             "SQL injection payload as language must be rejected (SEC-IPC-005)"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-IPC-CLIP-001 — copy_to_clipboard rejects oversized payloads
+    // -----------------------------------------------------------------------
+
+    /// TEST-IPC-CLIP-001: copy_to_clipboard with text exceeding MAX_CLIPBOARD_LEN
+    /// must return CLIPBOARD_TOO_LARGE without touching arboard.
+    #[tokio::test]
+    async fn ipc_clip_001_copy_to_clipboard_rejects_oversized_payload() {
+        let oversized = "x".repeat(MAX_CLIPBOARD_LEN + 1);
+        let result = copy_to_clipboard(oversized).await;
+        assert!(
+            result.is_err(),
+            "Oversized clipboard payload must be rejected (TEST-IPC-CLIP-001)"
+        );
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.code, "CLIPBOARD_TOO_LARGE",
+            "Error code must be CLIPBOARD_TOO_LARGE"
+        );
+    }
+
+    /// TEST-IPC-CLIP-002: copy_to_clipboard with empty text must be accepted
+    /// (validation layer only — actual clipboard write is environment-dependent).
+    #[tokio::test]
+    async fn ipc_clip_002_copy_to_clipboard_accepts_empty_string() {
+        // Empty string passes validation; arboard may fail in headless CI —
+        // we only assert the validation layer does not reject it.
+        let result = copy_to_clipboard(String::new()).await;
+        // In a headless CI without X11/Wayland, arboard returns an error —
+        // that is acceptable. We assert it is not a CLIPBOARD_TOO_LARGE error.
+        if let Err(ref err) = result {
+            assert_ne!(
+                err.code, "CLIPBOARD_TOO_LARGE",
+                "Empty string must not be rejected as too large (TEST-IPC-CLIP-002)"
+            );
+        }
+    }
+
+    /// TEST-IPC-CLIP-003: copy_to_clipboard at exactly MAX_CLIPBOARD_LEN must pass validation.
+    #[tokio::test]
+    async fn ipc_clip_003_copy_to_clipboard_accepts_at_limit() {
+        let at_limit = "x".repeat(MAX_CLIPBOARD_LEN);
+        let result = copy_to_clipboard(at_limit).await;
+        if let Err(ref err) = result {
+            assert_ne!(
+                err.code, "CLIPBOARD_TOO_LARGE",
+                "Text at exactly MAX_CLIPBOARD_LEN must pass size validation (TEST-IPC-CLIP-003)"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-IPC-CLIP-004 — get_clipboard returns Ok or a non-CLIPBOARD_TOO_LARGE error
+    // -----------------------------------------------------------------------
+
+    /// TEST-IPC-CLIP-004: get_clipboard must not panic. In headless CI it may
+    /// return an error, but it must never return a CLIPBOARD_TOO_LARGE code
+    /// (which applies only to writes).
+    #[tokio::test]
+    async fn ipc_clip_004_get_clipboard_does_not_panic() {
+        let result = get_clipboard().await;
+        if let Err(ref err) = result {
+            assert_ne!(
+                err.code, "CLIPBOARD_TOO_LARGE",
+                "get_clipboard must never return CLIPBOARD_TOO_LARGE (read-only operation)"
+            );
+        }
+        // If Ok, any string is acceptable.
     }
 }

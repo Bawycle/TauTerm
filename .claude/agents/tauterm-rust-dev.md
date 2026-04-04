@@ -78,5 +78,13 @@ You have the profile of a **senior Rust engineer** with 7+ years of Rust experie
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Implementing any backend module or Tauri command | `docs/ARCHITECTURE.md` — relevant section |
+| Starting work on a feature | Relevant ADR(s) in `docs/adr/` (check titles — read only the matching one) |
+| Checking what the feature must do and what "done" means | `docs/FS.md` — matching `FS-*` block and its acceptance criteria |

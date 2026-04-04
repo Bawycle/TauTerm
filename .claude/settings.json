@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -e 'if .file_path then (.file_path | test(\"src/lib/paraglide/\")) else false end' && echo 'BLOCKED: src/lib/paraglide/ is auto-generated — edit src/lib/i18n/messages/*.json instead.' >&2 && exit 2 || exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(jq -r '.file_path // empty'); case \"$FILE\" in *.ts|*.svelte|*.js|*.css) pnpm prettier --write \"$FILE\" 2>/dev/null ;; *.rs) cd /home/wsmi/Documents/dev_projects/tau-term/src-tauri && cargo fmt 2>/dev/null ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

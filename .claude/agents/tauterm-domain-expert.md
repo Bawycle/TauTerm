@@ -61,5 +61,13 @@ You have the profile of a **principal engineer specializing in terminal emulatio
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Advising on a terminal/PTY/SSH feature | `docs/FS.md` — matching `FS-VT-*`, `FS-SSH-*`, or `FS-PTY-*` block |
+| Reviewing an architectural proposal | `docs/ARCHITECTURE.md` — relevant section; `docs/adr/ADR-0002` (PTY), `ADR-0003` (VT parser), `ADR-0007` (SSH) |
+| Assessing user-facing behaviour | `docs/UR.md` — relevant section |

@@ -59,5 +59,14 @@ You have the profile of a **senior technical project lead** with 15+ years of ex
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Scoping or decomposing a feature | `docs/UR.md` — relevant section; `docs/FS.md` — matching `FS-*` block |
+| Evaluating technical constraints before assigning tasks | `docs/ARCHITECTURE.md` — relevant section + relevant ADRs in `docs/adr/` |
+| Arbitrating a design decision | `docs/UXD.md` and/or `docs/AD.md` — relevant section |
+| Checking whether a decision has already been made | `docs/adr/` — scan titles, read relevant ADR |

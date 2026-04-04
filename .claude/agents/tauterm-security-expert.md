@@ -80,5 +80,14 @@ You have the profile of a **senior application security engineer** with 10+ year
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Reviewing a backend or IPC feature | `docs/ARCHITECTURE.md` — relevant section (security strategy in §9, IPC in §7) |
+| Reviewing credential handling or SSH | `docs/FS.md` — `FS-CRED-*`, `FS-SSH-*` blocks; `docs/adr/ADR-0007` |
+| Reviewing distribution or artefact integrity | `docs/FS.md` — `FS-DIST-006`; `docs/adr/ADR-0014` |
+| Reviewing VT/escape sequence handling | `docs/FS.md` — `FS-VT-*` security-flagged entries; `docs/adr/ADR-0003` |

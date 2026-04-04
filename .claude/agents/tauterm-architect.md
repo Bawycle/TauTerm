@@ -67,5 +67,16 @@ You have the profile of a **staff-level software architect** with 12+ years of e
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Designing or reviewing any module, IPC contract, or state machine | `docs/ARCHITECTURE.md` — relevant section |
+| Writing or updating an ADR | `docs/adr/` — relevant existing ADRs first |
+| Grounding a design decision in functional requirements | `docs/FS.md` — matching `FS-*` block |
+| Understanding user context or personas | `docs/UR.md` — relevant section |
+
+**You own `docs/ARCHITECTURE.md` and `docs/adr/`.** Keep them up to date when decisions change. ADRs must be written before implementation begins.

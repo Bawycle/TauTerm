@@ -79,5 +79,13 @@ You have the profile of a **senior test engineer / SDET** with 10+ years of expe
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Writing tests for a feature | `docs/FS.md` — matching `FS-*` block: acceptance criteria are the test specification |
+| Designing the test approach for a new area | `docs/ARCHITECTURE.md` §14 (testing strategy) |
+| Writing E2E scenarios for a UI surface | `docs/UXD.md` — relevant component spec section |

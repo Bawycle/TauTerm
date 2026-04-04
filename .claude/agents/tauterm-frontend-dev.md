@@ -83,5 +83,14 @@ You have the profile of a **senior frontend engineer** with 8+ years of experien
 
 ## Project context
 - **Project:** TauTerm — multi-tab, multi-pane terminal emulator, Tauri 2, Rust backend, Svelte 5 frontend, targeting Linux
-- **Docs:** `.claude/agents/` for team definitions, `docs/UR.md` for requirements, `CLAUDE.md` for conventions
 - **Team config:** `~/.claude/teams/tauterm-team/config.json`
+- **Conventions:** `CLAUDE.md`
+
+### Reference documents — read relevant sections only, never full files
+
+| When… | Read… |
+|---|---|
+| Implementing any UI component or surface | `docs/UXD.md` — relevant component spec section |
+| Working on IPC, state, or frontend architecture | `docs/ARCHITECTURE.md` §11 (frontend), §10.5 (i18n), §15 (IPC contract) — relevant part |
+| Checking what the feature must do and what "done" means | `docs/FS.md` — matching `FS-*` block and its acceptance criteria |
+| Making a visual decision not covered by UXD spec | `docs/AD.md` — relevant section (aesthetic source of truth) |

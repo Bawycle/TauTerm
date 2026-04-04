@@ -198,7 +198,11 @@ mod tests {
 
     #[test]
     fn color_rgb_round_trips_through_clone() {
-        let color = Color::Rgb { r: 255, g: 128, b: 0 };
+        let color = Color::Rgb {
+            r: 255,
+            g: 128,
+            b: 0,
+        };
         assert_eq!(color, color.clone());
     }
 }

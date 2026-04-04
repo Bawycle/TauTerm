@@ -39,7 +39,10 @@ impl std::fmt::Debug for Credentials {
         f.debug_struct("Credentials")
             .field("username", &self.username)
             .field("password", &self.password.as_deref().map(|_| "<redacted>"))
-            .field("private_key_path", &self.private_key_path)
+            .field(
+                "private_key_path",
+                &self.private_key_path.as_deref().map(|_| "<redacted>"),
+            )
             .finish()
     }
 }
@@ -91,23 +94,25 @@ mod security_tests {
         );
     }
 
-    /// SEC-CRED-003: private_key_path is emitted in Debug (it is a path, not secret
-    /// material). The test confirms that the current impl exposes the path — this is
-    /// explicitly documented as the design intent (only password is redacted).
-    /// If policy changes to also redact paths, this test must be updated.
+    /// SEC-CRED-003: private_key_path must be redacted in Debug output (FINDING-001).
+    /// The path may reveal filesystem layout or SSH key names — treat as sensitive.
     #[test]
-    fn sec_cred_003_private_key_path_visible_in_debug() {
+    fn sec_cred_003_private_key_path_redacted_in_debug() {
         let creds = Credentials {
             username: "alice".to_string(),
             password: None,
             private_key_path: Some("/home/alice/.ssh/id_ed25519".to_string()),
         };
         let debug_str = format!("{:?}", creds);
-        // Current design: path is emitted (it is not secret material — it is a file path).
-        // This test documents and pins the current behaviour.
         assert!(
-            debug_str.contains("/home/alice/.ssh/id_ed25519"),
-            "private_key_path should be visible in Debug output (current design)"
+            !debug_str.contains("/home/alice/.ssh/id_ed25519"),
+            "private_key_path must NOT appear in Debug output (SEC-CRED-003 / FINDING-001). Got: {}",
+            debug_str
+        );
+        assert!(
+            debug_str.contains("<redacted>"),
+            "Debug output must contain '<redacted>' for private_key_path (SEC-CRED-003). Got: {}",
+            debug_str
         );
     }
 

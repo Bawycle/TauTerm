@@ -62,11 +62,13 @@ mod tests {
 
     #[test]
     fn terminated_state_is_not_active() {
-        assert!(!PaneLifecycleState::Terminated {
-            exit_code: Some(0),
-            error: None
-        }
-        .is_active());
+        assert!(
+            !PaneLifecycleState::Terminated {
+                exit_code: Some(0),
+                error: None
+            }
+            .is_active()
+        );
     }
 
     #[test]
@@ -101,7 +103,10 @@ mod tests {
             error: None,
         };
         let json = serde_json::to_string(&state).expect("serialize failed");
-        assert!(json.contains("\"exitCode\":1") || json.contains("\"exit_code\":1"), "got: {json}");
+        assert!(
+            json.contains("\"exitCode\":1") || json.contains("\"exit_code\":1"),
+            "got: {json}"
+        );
     }
 
     #[test]

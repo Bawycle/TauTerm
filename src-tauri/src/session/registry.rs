@@ -241,10 +241,10 @@ impl SessionRegistry {
         entry.state.layout = new_layout;
 
         // Update active pane if the closed pane was active.
-        if entry.state.active_pane_id == pane_id {
-            if let Some(first_id) = entry.panes.keys().next() {
-                entry.state.active_pane_id = first_id.clone();
-            }
+        if entry.state.active_pane_id == pane_id
+            && let Some(first_id) = entry.panes.keys().next()
+        {
+            entry.state.active_pane_id = first_id.clone();
         }
 
         Ok(Some(entry.state.clone()))

@@ -10,6 +10,7 @@ use parking_lot::RwLock;
 use tauri::State;
 
 use crate::error::TauTermError;
+use crate::platform::validation::validate_ssh_identity_path;
 use crate::preferences::PreferencesStore;
 use crate::session::ids::{ConnectionId, PaneId};
 use crate::ssh::SshManager;
@@ -35,6 +36,11 @@ pub async fn open_ssh_connection(
                 )
             })?
     };
+
+    // Validate identity file path before passing to SshManager (FINDING-004).
+    if let Some(ref identity_file) = config.identity_file {
+        validate_ssh_identity_path(identity_file)?;
+    }
 
     ssh_manager
         .open_connection(pane_id, &config, None)

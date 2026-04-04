@@ -32,6 +32,35 @@ impl PreferencesStore {
         })))
     }
 
+    /// Load preferences from the given path, falling back to `Preferences::default()`
+    /// on ANY error (file not found, parse error, unknown field, etc.).
+    ///
+    /// This is the entry point for preference loading at startup (FS-PREF-001,
+    /// FS-I18N-005). The `Language` serde deserializer remains strict (SEC-IPC-005);
+    /// the fallback occurs here, at the store level, not inside serde.
+    ///
+    /// Returns a ready-to-use `Arc<RwLock<PreferencesStore>>` — never fails.
+    pub fn load_or_default() -> Arc<RwLock<Self>> {
+        match preferences_path() {
+            Ok(path) => {
+                let prefs = load_from_disk(&path);
+                Arc::new(RwLock::new(Self {
+                    prefs: RwLock::new(prefs),
+                    path,
+                }))
+            }
+            Err(e) => {
+                tracing::warn!("Could not determine preferences path (using defaults): {e}");
+                // Use a fallback path that will never be written to in this state.
+                let fallback_path = PathBuf::from("/dev/null");
+                Arc::new(RwLock::new(Self {
+                    prefs: RwLock::new(Preferences::default()),
+                    path: fallback_path,
+                }))
+            }
+        }
+    }
+
     /// Get a clone of the current preferences.
     pub fn get(&self) -> Preferences {
         self.prefs.read().clone()

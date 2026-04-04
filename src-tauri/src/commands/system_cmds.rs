@@ -103,35 +103,50 @@ mod security_tests {
             "javascript: scheme must be rejected (SEC-PATH-003)"
         );
         let err = result.unwrap_err();
-        assert_eq!(err.code, "INVALID_URL_SCHEME", "Error code must be INVALID_URL_SCHEME");
+        assert_eq!(
+            err.code, "INVALID_URL_SCHEME",
+            "Error code must be INVALID_URL_SCHEME"
+        );
     }
 
     /// SEC-PATH-003: data: scheme must be rejected.
     #[test]
     fn sec_path_003_data_scheme_rejected() {
         let result = validate_url_scheme("data:text/html,<script>alert(1)</script>");
-        assert!(result.is_err(), "data: scheme must be rejected (SEC-PATH-003)");
+        assert!(
+            result.is_err(),
+            "data: scheme must be rejected (SEC-PATH-003)"
+        );
     }
 
     /// SEC-PATH-003: blob: scheme must be rejected.
     #[test]
     fn sec_path_003_blob_scheme_rejected() {
         let result = validate_url_scheme("blob:http://example.com/uuid");
-        assert!(result.is_err(), "blob: scheme must be rejected (SEC-PATH-003)");
+        assert!(
+            result.is_err(),
+            "blob: scheme must be rejected (SEC-PATH-003)"
+        );
     }
 
     /// SEC-PATH-003: vbscript: scheme must be rejected.
     #[test]
     fn sec_path_003_vbscript_scheme_rejected() {
         let result = validate_url_scheme("vbscript:msgbox(1)");
-        assert!(result.is_err(), "vbscript: scheme must be rejected (SEC-PATH-003)");
+        assert!(
+            result.is_err(),
+            "vbscript: scheme must be rejected (SEC-PATH-003)"
+        );
     }
 
     /// SEC-PATH-003: Unknown custom scheme must be rejected.
     #[test]
     fn sec_path_003_custom_scheme_rejected() {
         let result = validate_url_scheme("foobar:something");
-        assert!(result.is_err(), "Unknown custom scheme must be rejected (SEC-PATH-003)");
+        assert!(
+            result.is_err(),
+            "Unknown custom scheme must be rejected (SEC-PATH-003)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -142,7 +157,10 @@ mod security_tests {
     #[test]
     fn sec_path_004_file_scheme_rejected() {
         let result = validate_url_scheme("file:///etc/passwd");
-        assert!(result.is_err(), "file:// scheme must be rejected (SEC-PATH-004)");
+        assert!(
+            result.is_err(),
+            "file:// scheme must be rejected (SEC-PATH-004)"
+        );
     }
 
     /// SEC-PATH-004: file:// with traversal must also be rejected.
@@ -193,7 +211,10 @@ mod security_tests {
     fn sec_url_length_limit_enforced() {
         let long_url = format!("https://example.com/{}", "a".repeat(2049));
         let result = validate_url_scheme(&long_url);
-        assert!(result.is_err(), "URLs longer than 2048 chars must be rejected");
+        assert!(
+            result.is_err(),
+            "URLs longer than 2048 chars must be rejected"
+        );
         let err = result.unwrap_err();
         assert_eq!(err.code, "INVALID_URL", "Error code must be INVALID_URL");
     }
@@ -207,7 +228,11 @@ mod security_tests {
         let base = "https://x.com/";
         let path = "a".repeat(2048 - base.len());
         let url = format!("{}{}", base, path);
-        assert_eq!(url.len(), 2048, "Test construction error: URL must be exactly 2048 chars");
+        assert_eq!(
+            url.len(),
+            2048,
+            "Test construction error: URL must be exactly 2048 chars"
+        );
         let result = validate_url_scheme(&url);
         assert!(result.is_ok(), "URL of exactly 2048 chars must be accepted");
     }
@@ -220,14 +245,20 @@ mod security_tests {
     #[test]
     fn sec_url_control_chars_rejected() {
         let result = validate_url_scheme("https://ex\x01ample.com");
-        assert!(result.is_err(), "URL with C0 control chars must be rejected");
+        assert!(
+            result.is_err(),
+            "URL with C0 control chars must be rejected"
+        );
     }
 
     /// URL containing C1 control characters must be rejected.
     #[test]
     fn sec_url_c1_control_chars_rejected() {
         let result = validate_url_scheme("https://ex\u{0080}ample.com");
-        assert!(result.is_err(), "URL with C1 control chars must be rejected");
+        assert!(
+            result.is_err(),
+            "URL with C1 control chars must be rejected"
+        );
     }
 
     // -----------------------------------------------------------------------

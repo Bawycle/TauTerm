@@ -6,6 +6,7 @@
 
 use crate::platform::ClipboardBackend;
 
+#[derive(Default)]
 pub struct LinuxClipboard {}
 
 impl LinuxClipboard {

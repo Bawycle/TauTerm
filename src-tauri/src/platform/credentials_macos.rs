@@ -5,6 +5,7 @@
 use crate::error::CredentialError;
 use crate::platform::CredentialStore;
 
+#[derive(Default)]
 pub struct MacOsCredentialStore {}
 
 impl MacOsCredentialStore {

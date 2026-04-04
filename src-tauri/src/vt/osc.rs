@@ -52,7 +52,7 @@ pub fn parse_osc(params: &[u8]) -> OscAction {
 
     match cmd {
         // OSC 0 / 1 / 2 — window/icon title.
-        0 | 1 | 2 => {
+        0..=2 => {
             // Strip C0/C1 control characters and truncate to 256 chars (§8.1).
             let title: String = rest
                 .chars()
@@ -412,7 +412,10 @@ mod security_tests {
         let action = parse_osc(&payload);
         match action {
             OscAction::SetTitle(title) => {
-                assert!(title.len() <= 256, "Title must be truncated even with large input");
+                assert!(
+                    title.len() <= 256,
+                    "Title must be truncated even with large input"
+                );
             }
             OscAction::Ignore => {} // Also acceptable.
             other => panic!("Unexpected action: {:?}", other),
@@ -441,7 +444,7 @@ fn base64_decode(input: &[u8]) -> Option<Vec<u8>> {
         .copied()
         .filter(|&c| c != b'\n' && c != b'\r')
         .collect();
-    if input.len() % 4 != 0 {
+    if !input.len().is_multiple_of(4) {
         return None;
     }
 

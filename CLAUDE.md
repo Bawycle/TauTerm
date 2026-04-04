@@ -151,12 +151,12 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 - Rust tests use `nextest` exclusively (not `cargo test`)
 - Keep IPC commands serializable with `serde` — no raw pointers or OS handles across the boundary
 - Rust edition: **2024** (`Cargo.toml`) — prefer its idioms (precise capturing, `impl Trait` in closures, etc.)
-- CSP is currently `null` in `tauri.conf.json` — tighten it incrementally as features are added (allowed origins, `script-src`, `connect-src`)
+- CSP is configured in `tauri.conf.json` — `style-src 'unsafe-inline'` is retained for Tailwind 4 dev mode and must be reviewed when production build is validated
 - `language` field in `AppearancePrefs` MUST be `enum Language { En, Fr }` — never a free `String` across IPC (FS-I18N-006)
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-04
+Last updated: 2026-04-04 (session b)
 
 ### Done
 
@@ -168,9 +168,12 @@ Last updated: 2026-04-04
 | **i18n (Paraglide JS)** | ✅ Done | `project.inlang/settings.json`, `en.json` + `fr.json` catalogues, `locale.svelte.ts` reactive state |
 | **IPC types (TypeScript)** | ✅ Done | `src/lib/ipc/types.ts` — full contract mirroring Rust structs; 18 inconsistencies found and corrected |
 | **Svelte component stubs** | ✅ Done | `TerminalView`, `TerminalPane`, `TabBar`, `StatusBar` in `src/lib/components/` |
-| **Rust tests (nextest)** | ✅ Done | 50 tests pass — `vt::cell`, `vt::screen_buffer`, `preferences::schema`, `session::ids` |
-| **Frontend tests (vitest)** | ✅ Done | 24 tests pass — `ipc/types.test.ts`, `state/locale.svelte.test.ts` |
-| **npm packages** | ✅ Done | `vite 8`, `@sveltejs/vite-plugin-svelte 7`, `typescript 6`, `bits-ui 2.17` |
+| **Rust tests (nextest)** | ✅ Done | 167 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation |
+| **Frontend tests (vitest)** | ✅ Done | 110 tests pass — ipc/types, locale, keyboard, selection, split-tree, theming/validate |
+| **Security hardening (P0/P1)** | ✅ Done | CSP configured in `tauri.conf.json`; `private_key_path` redacted in Debug; `send_input` 64 KiB size limit; path traversal validation for SSH identity file |
+| **PreferencesStore::load_or_default()** | ✅ Done | Fallback to `Preferences::default()` on any disk/parse error — Language enum stays strict at serde boundary |
+| **Path traversal validation** | ✅ Done | `platform::validation`: `validate_ssh_identity_path()` (wired into `open_ssh_connection`) + `validate_shell_path()` (implemented, wiring deferred to PTY pass) |
+| **Frontend modules (P1)** | ✅ Done | `lib/terminal/keyboard.ts`, `lib/terminal/selection.ts`, `lib/layout/split-tree.ts`, `lib/theming/validate.ts` |
 
 ### Not Yet Implemented (stubs only)
 
@@ -178,6 +181,9 @@ Last updated: 2026-04-04
 - SSH connection lifecycle (`SshManager` — auth, known_hosts, keepalive all stub)
 - Secret Service credential store (`is_available() = false`)
 - Screen buffer → frontend event pipeline (no real event emission yet)
+- `PreferencesStore::save()` — load_or_default() done, save() pending
+- `EventEmitter` trait injection into `SessionRegistry` — prerequisite for IPC integration tests and PTY pipeline wiring
 - Clipboard (`arboard` wired but no command registered)
 - `set_active_tab`, `copy_selection`, `paste_to_pane`, `set_locale`, `get_locale` commands (IPC types removed pending Rust implementation)
+- `validate_shell_path()` wiring into `create_tab()` — deferred until `CreateTabConfig.shell` field is added
 - E2E tests (require a built app — `pnpm tauri build` + `pnpm wdio`)

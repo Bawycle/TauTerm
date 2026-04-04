@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::ssh::SshConnectionConfig;
 
 /// Top-level user preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Preferences {
     pub appearance: AppearancePrefs,
@@ -23,18 +23,6 @@ pub struct Preferences {
     pub connections: Vec<SshConnectionConfig>,
     /// User-defined themes.
     pub themes: Vec<UserTheme>,
-}
-
-impl Default for Preferences {
-    fn default() -> Self {
-        Self {
-            appearance: AppearancePrefs::default(),
-            terminal: TerminalPrefs::default(),
-            keyboard: KeyboardPrefs::default(),
-            connections: Vec::new(),
-            themes: Vec::new(),
-        }
-    }
 }
 
 /// Appearance-related preferences.
@@ -215,10 +203,16 @@ mod tests {
         let restored: Preferences = serde_json::from_str(&json).expect("deserialize failed");
 
         // Spot-check key fields across sections.
-        assert_eq!(restored.appearance.font_family, original.appearance.font_family);
+        assert_eq!(
+            restored.appearance.font_family,
+            original.appearance.font_family
+        );
         assert_eq!(restored.appearance.font_size, original.appearance.font_size);
         assert_eq!(restored.appearance.language, original.appearance.language);
-        assert_eq!(restored.terminal.scrollback_lines, original.terminal.scrollback_lines);
+        assert_eq!(
+            restored.terminal.scrollback_lines,
+            original.terminal.scrollback_lines
+        );
         assert_eq!(restored.terminal.bell_type, original.terminal.bell_type);
     }
 
@@ -339,13 +333,58 @@ mod tests {
     // until load_or_default() is implemented.
     // -----------------------------------------------------------------------
 
+    /// TEST-I18N-004 (FS-I18N-005, FS-I18N-006):
+    /// When preferences.json contains an unknown language variant, `load_or_default()`
+    /// must detect the deserialization error and fall back to `Language::En`.
+    ///
+    /// The `Language` serde deserializer stays strict (SEC-IPC-005) — the fallback
+    /// occurs at the store level, not inside serde.
     #[test]
-    #[ignore = "TEST-I18N-004: PreferencesStore::load_or_default() not yet implemented (BLOCKED)"]
     fn i18n_004_preferences_store_falls_back_to_en_for_unknown_language() {
-        // When preferences.json contains `"language": "de"`, load_or_default()
-        // must: (1) detect the deserialization error, (2) substitute Language::En,
-        // (3) return a valid Preferences struct without crashing.
-        // Unblocked when store::load_or_default() is implemented.
+        use crate::preferences::store::PreferencesStore;
+        use std::io::Write;
+
+        // Write a preferences file with an unknown language variant.
+        // preferences_path() resolves to: {XDG_CONFIG_HOME}/tauterm/preferences.json
+        let tmp_dir = std::env::temp_dir().join("tauterm_i18n_004_test");
+        let prefs_dir = tmp_dir.join("tauterm");
+        std::fs::create_dir_all(&prefs_dir).expect("create tmp dir");
+        let prefs_path = prefs_dir.join("preferences.json");
+        {
+            let mut f = std::fs::File::create(&prefs_path).expect("create tmp prefs");
+            f.write_all(br#"{"appearance":{"language":"de"}}"#)
+                .expect("write tmp prefs");
+        }
+
+        // Point the store at this file via XDG_CONFIG_HOME override.
+        // load_or_default() uses preferences_path() → dirs_or_home() which reads XDG_CONFIG_HOME.
+        // Temporarily override XDG_CONFIG_HOME so load_or_default picks up our file.
+        // NOTE: env mutation in tests is only safe in single-threaded context.
+        // This test is self-contained and does not run concurrently with other env tests.
+        let orig_xdg = std::env::var_os("XDG_CONFIG_HOME");
+        // SAFETY: this test runs in its own process (nextest isolation).
+        // No other thread reads XDG_CONFIG_HOME concurrently in this binary.
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", &tmp_dir) };
+
+        let store = PreferencesStore::load_or_default();
+        let prefs = store.read().get();
+
+        // Restore env.
+        // SAFETY: same as above.
+        unsafe {
+            match orig_xdg {
+                Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+                None => std::env::remove_var("XDG_CONFIG_HOME"),
+            }
+        }
+        // Cleanup.
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+
+        assert_eq!(
+            prefs.appearance.language,
+            Language::En,
+            "TEST-I18N-004: Unknown language in preferences.json must fall back to Language::En"
+        );
     }
 
     #[test]

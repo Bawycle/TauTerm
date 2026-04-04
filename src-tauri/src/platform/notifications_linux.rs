@@ -7,6 +7,7 @@
 
 use crate::platform::NotificationBackend;
 
+#[derive(Default)]
 pub struct LinuxNotifications {}
 
 impl LinuxNotifications {

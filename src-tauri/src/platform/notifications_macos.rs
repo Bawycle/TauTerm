@@ -4,6 +4,7 @@
 
 use crate::platform::NotificationBackend;
 
+#[derive(Default)]
 pub struct MacOsNotifications {}
 
 impl MacOsNotifications {

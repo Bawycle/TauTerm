@@ -23,6 +23,12 @@ pub struct CredentialManager {
     // TODO: store: Box<dyn crate::platform::CredentialStore>,
 }
 
+impl Default for CredentialManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CredentialManager {
     pub fn new() -> Self {
         Self {}

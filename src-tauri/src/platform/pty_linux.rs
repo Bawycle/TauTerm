@@ -9,6 +9,7 @@
 use crate::error::PtyError;
 use crate::platform::{PtyBackend, PtySession};
 
+#[derive(Default)]
 pub struct LinuxPtyBackend {}
 
 impl LinuxPtyBackend {

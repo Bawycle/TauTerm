@@ -15,6 +15,7 @@ pub mod clipboard_linux;
 pub mod credentials_linux;
 pub mod notifications_linux;
 pub mod pty_linux;
+pub mod validation;
 
 // Future platform stubs (currently unreachable in v1).
 pub mod clipboard_macos;

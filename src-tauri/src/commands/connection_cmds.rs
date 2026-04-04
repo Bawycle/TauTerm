@@ -42,8 +42,7 @@ fn validate_identity_file_path(path: &str) -> Result<(), TauTermError> {
             "Identity file path must not contain '..' components.",
         ));
     }
-    Ok(()
-    )
+    Ok(())
 }
 
 #[tauri::command]

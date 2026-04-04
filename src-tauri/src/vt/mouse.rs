@@ -178,6 +178,9 @@ mod tests {
         let bytes = ev.encode(MouseEncoding::Sgr);
         let s = String::from_utf8(bytes).expect("valid utf8");
         // cb = 0 | 4 (shift) = 4
-        assert!(s.contains("<4;"), "shift bit must be set in SGR cb (got: {s})");
+        assert!(
+            s.contains("<4;"),
+            "shift bit must be set in SGR cb (got: {s})"
+        );
     }
 }

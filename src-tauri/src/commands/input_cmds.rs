@@ -17,21 +17,27 @@ use crate::vt::{SearchMatch, SearchQuery, screen_buffer::ScreenSnapshot};
 /// Prevents DoS via oversized IPC payloads (FINDING-003 / SEC-IPC-002).
 const SEND_INPUT_MAX_BYTES: usize = 65_536;
 
+/// Validate that the input payload does not exceed the size limit.
+///
+/// Extracted as a pure function so it can be unit-tested without Tauri state
+/// (SEC-IPC-006 / FINDING-003).
+fn validate_input_size(data: &[u8]) -> Result<(), TauTermError> {
+    if data.len() > SEND_INPUT_MAX_BYTES {
+        return Err(TauTermError::new(
+            "INVALID_INPUT_SIZE",
+            "Input payload exceeds maximum allowed size of 64 KiB",
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn send_input(
     pane_id: PaneId,
     data: Vec<u8>,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<(), TauTermError> {
-    if data.len() > SEND_INPUT_MAX_BYTES {
-        return Err(TauTermError::new(
-            "INPUT_TOO_LARGE",
-            &format!(
-                "Input payload exceeds the maximum allowed size of {} bytes.",
-                SEND_INPUT_MAX_BYTES
-            ),
-        ));
-    }
+    validate_input_size(&data)?;
     registry
         .send_input(pane_id, data)
         .map_err(TauTermError::from)
@@ -96,4 +102,52 @@ pub async fn resize_pane(
     // TODO: forward to pane's resize debouncer.
     let _ = (pane_id, cols, rows, pixel_width, pixel_height);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // SEC-IPC-006 — send_input rejects oversized payloads (FINDING-003)
+    // -----------------------------------------------------------------------
+
+    /// SEC-IPC-006: Payload of exactly the limit must be accepted.
+    #[test]
+    fn sec_ipc_006_send_input_at_size_limit_accepted() {
+        let data = vec![0u8; SEND_INPUT_MAX_BYTES];
+        assert!(
+            validate_input_size(&data).is_ok(),
+            "Payload at exact limit ({} bytes) must be accepted",
+            SEND_INPUT_MAX_BYTES
+        );
+    }
+
+    /// SEC-IPC-006: Payload of 65537 bytes (limit + 1) must be rejected with INVALID_INPUT_SIZE.
+    #[test]
+    fn sec_ipc_006_send_input_oversized_payload_rejected() {
+        let data = vec![0u8; SEND_INPUT_MAX_BYTES + 1];
+        let result = validate_input_size(&data);
+        assert!(
+            result.is_err(),
+            "Oversized payload ({} bytes) must be rejected (SEC-IPC-006 / FINDING-003)",
+            data.len()
+        );
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.code, "INVALID_INPUT_SIZE",
+            "Error code must be INVALID_INPUT_SIZE. Got: {}",
+            err.code
+        );
+    }
+
+    /// SEC-IPC-006: Empty payload must be accepted.
+    #[test]
+    fn sec_ipc_006_empty_payload_accepted() {
+        let data: Vec<u8> = Vec::new();
+        assert!(
+            validate_input_size(&data).is_ok(),
+            "Empty payload must be accepted"
+        );
+    }
 }

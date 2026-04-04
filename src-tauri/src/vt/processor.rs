@@ -223,10 +223,11 @@ impl VtProcessor {
         }
 
         // Place phantom cell for wide characters.
-        if width == 2 && col + 1 < cols {
-            if let Some(cell) = self.active_buf_mut().get_mut(row, col + 1) {
-                *cell = Cell::phantom();
-            }
+        if width == 2
+            && col + 1 < cols
+            && let Some(cell) = self.active_buf_mut().get_mut(row, col + 1)
+        {
+            *cell = Cell::phantom();
         }
 
         // Advance cursor.
@@ -265,10 +266,8 @@ impl VtProcessor {
         if let Some(saved) = self.saved_normal_modes.take() {
             self.modes = saved;
         }
-        if restore_cursor {
-            if let Some(saved) = self.saved_normal_cursor.take() {
-                self.normal_cursor = saved;
-            }
+        if restore_cursor && let Some(saved) = self.saved_normal_cursor.take() {
+            self.normal_cursor = saved;
         }
         self.pending_dirty.mark_full_redraw();
     }
@@ -384,12 +383,14 @@ mod security_tests {
         let _dirty = vt.process(b"\xC0\xAF");
         let snapshot = vt.get_snapshot();
         // Cell (row=0, col=0) is at flat index 0.
-        let cell_content: &str = snapshot.cells.first().map(|c: &SnapshotCell| c.content.as_str()).unwrap_or("");
+        let cell_content: &str = snapshot
+            .cells
+            .first()
+            .map(|c: &SnapshotCell| c.content.as_str())
+            .unwrap_or("");
         // Acceptable: U+FFFD, space (default cell), or empty string.
         // Not acceptable: the raw byte '/' or any non-Unicode value.
-        let is_safe = cell_content == "\u{FFFD}"
-            || cell_content == " "
-            || cell_content.is_empty();
+        let is_safe = cell_content == "\u{FFFD}" || cell_content == " " || cell_content.is_empty();
         assert!(
             is_safe,
             "Invalid UTF-8 must produce U+FFFD or empty cell, not raw bytes (SEC-PTY-007). Got: {:?}",
@@ -406,13 +407,29 @@ mod security_tests {
         let _dirty = vt.process(b"ok\xC0\xAF!");
         let snapshot = vt.get_snapshot();
         // Flat row-major: cell(0,0)=index 0, cell(0,1)=index 1.
-        let cell0: &str = snapshot.cells.first().map(|c: &SnapshotCell| c.content.as_str()).unwrap_or("");
-        let cell1: &str = snapshot.cells.get(1).map(|c: &SnapshotCell| c.content.as_str()).unwrap_or("");
+        let cell0: &str = snapshot
+            .cells
+            .first()
+            .map(|c: &SnapshotCell| c.content.as_str())
+            .unwrap_or("");
+        let cell1: &str = snapshot
+            .cells
+            .get(1)
+            .map(|c: &SnapshotCell| c.content.as_str())
+            .unwrap_or("");
         assert_eq!(cell0, "o", "Cell(0,0) must be 'o'");
         assert_eq!(cell1, "k", "Cell(0,1) must be 'k'");
         // '!' must appear somewhere in row 0.
-        let row0_text: String = snapshot.cells.iter().take(80).map(|c: &SnapshotCell| c.content.as_str()).collect();
-        assert!(row0_text.contains('!'), "Valid char '!' must survive mixed input (SEC-PTY-007)");
+        let row0_text: String = snapshot
+            .cells
+            .iter()
+            .take(80)
+            .map(|c: &SnapshotCell| c.content.as_str())
+            .collect();
+        assert!(
+            row0_text.contains('!'),
+            "Valid char '!' must survive mixed input (SEC-PTY-007)"
+        );
     }
 }
 
@@ -466,7 +483,7 @@ impl Perform for VtPerformBridge<'_> {
                 p.active_cursor_mut().col = next_tab.min(p.cols - 1);
             }
             // LF / VT / FF (0x0A / 0x0B / 0x0C)
-            0x0A | 0x0B | 0x0C => {
+            0x0A..=0x0C => {
                 let (top, bottom) = p.modes.scroll_region;
                 let is_full = top == 0 && bottom == p.rows - 1;
                 if row == bottom {
@@ -554,30 +571,30 @@ impl Perform for VtPerformBridge<'_> {
             }
             // CUU — cursor up
             ([], 'A') => {
-                let n = param0.max(1) as u16;
+                let n = param0.max(1);
                 let (top, _) = p.modes.scroll_region;
                 p.active_cursor_mut().row = p.cursor_row().saturating_sub(n).max(top);
             }
             // CUD — cursor down
             ([], 'B') => {
-                let n = param0.max(1) as u16;
+                let n = param0.max(1);
                 let (_, bottom) = p.modes.scroll_region;
                 p.active_cursor_mut().row = (p.cursor_row() + n).min(bottom);
             }
             // CUF — cursor forward
             ([], 'C') => {
-                let n = param0.max(1) as u16;
+                let n = param0.max(1);
                 p.active_cursor_mut().col = (p.cursor_col() + n).min(p.cols - 1);
             }
             // CUB — cursor back
             ([], 'D') => {
-                let n = param0.max(1) as u16;
+                let n = param0.max(1);
                 p.active_cursor_mut().col = p.cursor_col().saturating_sub(n);
             }
             // CUP / HVP — cursor position
             ([], 'H') | ([], 'f') => {
-                let row = (param0.max(1) as u16).saturating_sub(1).min(p.rows - 1);
-                let col = (param1.max(1) as u16).saturating_sub(1).min(p.cols - 1);
+                let row = param0.max(1).saturating_sub(1).min(p.rows - 1);
+                let col = param1.max(1).saturating_sub(1).min(p.cols - 1);
                 p.active_cursor_mut().row = row;
                 p.active_cursor_mut().col = col;
             }
@@ -619,11 +636,11 @@ impl Perform for VtPerformBridge<'_> {
             }
             // DECSTBM — set scroll region
             ([], 'r') => {
-                let top = (param0.max(1) as u16).saturating_sub(1);
+                let top = param0.max(1).saturating_sub(1);
                 let bottom = if param1 == 0 {
                     p.rows - 1
                 } else {
-                    (param1 as u16).saturating_sub(1)
+                    param1.saturating_sub(1)
                 };
                 if top < bottom && bottom < p.rows {
                     p.modes.scroll_region = (top, bottom);
@@ -874,7 +891,10 @@ mod tests {
         vt.process(b"Z");
         // The cursor should have advanced and Z is somewhere on row 0.
         let snap = vt.get_snapshot();
-        assert_eq!(snap.cols, 80, "buffer dimensions must be intact after invalid UTF-8");
+        assert_eq!(
+            snap.cols, 80,
+            "buffer dimensions must be intact after invalid UTF-8"
+        );
     }
 
     // ---------------------------------------------------------------------------
@@ -897,7 +917,10 @@ mod tests {
         let mut vt = make_vt(80, 24);
         vt.process(b"\x1b[38;5;196mB");
         let attrs = attrs_at(&vt, 0, 0);
-        assert_eq!(attrs.fg, Some(crate::vt::cell::Color::Ansi256 { index: 196 }));
+        assert_eq!(
+            attrs.fg,
+            Some(crate::vt::cell::Color::Ansi256 { index: 196 })
+        );
     }
 
     #[test]
@@ -953,7 +976,10 @@ mod tests {
         let attrs = attrs_at(&vt, 0, 1);
         assert!(!attrs.bold, "bold must be cleared by SGR 22");
         assert!(attrs.italic, "italic must be unaffected by SGR 22");
-        assert!(attrs.underline > 0, "underline must be unaffected by SGR 22");
+        assert!(
+            attrs.underline > 0,
+            "underline must be unaffected by SGR 22"
+        );
 
         // SGR 0 clears all.
         vt.process(b"\x1b[0mC");
@@ -976,11 +1002,17 @@ mod tests {
 
         // Hide cursor.
         vt.process(b"\x1b[?25l");
-        assert!(!vt.modes.cursor_visible, "cursor must be hidden after DECTCEM hide");
+        assert!(
+            !vt.modes.cursor_visible,
+            "cursor must be hidden after DECTCEM hide"
+        );
 
         // Show cursor.
         vt.process(b"\x1b[?25h");
-        assert!(vt.modes.cursor_visible, "cursor must be visible after DECTCEM show");
+        assert!(
+            vt.modes.cursor_visible,
+            "cursor must be visible after DECTCEM show"
+        );
     }
 
     // ---------------------------------------------------------------------------
@@ -1129,7 +1161,10 @@ mod tests {
         // Feed 0x6A ('j' in ASCII; maps to '┘' in DEC Special Graphics).
         vt.process(b"\x6a");
         let g = grapheme_at(&vt, 0, 0);
-        assert_eq!(g, "┘", "0x6A with DEC Special Graphics active must map to '┘'");
+        assert_eq!(
+            g, "┘",
+            "0x6A with DEC Special Graphics active must map to '┘'"
+        );
         // SI (0x0F) — return to G0 (ASCII).
         vt.process(b"\x0f");
         vt.process(b"j");

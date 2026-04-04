@@ -112,8 +112,7 @@ mod tests {
 
     #[test]
     fn ssh_lifecycle_state_serializes_with_type_tag() {
-        let json =
-            serde_json::to_string(&SshLifecycleState::Connected).expect("serialize failed");
+        let json = serde_json::to_string(&SshLifecycleState::Connected).expect("serialize failed");
         assert!(json.contains("\"type\":\"connected\""), "got: {json}");
     }
 }

@@ -166,8 +166,8 @@ impl ScreenBuffer {
     pub fn erase_cells(&mut self, row: u16, col_start: u16, col_end: u16) {
         if let Some(r) = self.cells.get_mut(row as usize) {
             let end = (col_end as usize).min(r.len());
-            for col in (col_start as usize)..end {
-                r[col] = Cell::default();
+            for cell in r.iter_mut().take(end).skip(col_start as usize) {
+                *cell = Cell::default();
             }
             self.dirty.mark_row(row);
         }

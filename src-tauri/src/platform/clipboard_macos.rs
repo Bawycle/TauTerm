@@ -4,6 +4,7 @@
 
 use crate::platform::ClipboardBackend;
 
+#[derive(Default)]
 pub struct MacOsClipboard {}
 
 impl MacOsClipboard {

@@ -1,0 +1,233 @@
+// SPDX-License-Identifier: MPL-2.0
+
+/**
+ * VT escape sequence mapping for keyboard input.
+ *
+ * Implements xterm key encoding per FS-KBD-004 through FS-KBD-009.
+ * Only handles special keys — printable characters are returned as-is
+ * via the browser's normal text input pipeline.
+ *
+ * References:
+ *  - FS-KBD-004: Ctrl+letter → C0 control character
+ *  - FS-KBD-005: Alt+key → ESC prefix
+ *  - FS-KBD-006: F1–F12 → standard xterm sequences
+ *  - FS-KBD-007: Arrow keys mode-dependent (DECCKM)
+ *  - FS-KBD-008: Home/End/Insert/Delete/PageUp/PageDown
+ *  - FS-KBD-009: Modified keys → CSI 1;Mod X
+ */
+
+/** Modifier bitmask values per FS-KBD-009 (xterm convention: 1-based, so +1 to bitfield). */
+const MOD_SHIFT = 2;
+const MOD_ALT = 3;
+const MOD_SHIFT_ALT = 4;
+const MOD_CTRL = 5;
+const MOD_CTRL_SHIFT = 6;
+const MOD_CTRL_ALT = 7;
+const MOD_CTRL_SHIFT_ALT = 8;
+
+function modifierCode(event: KeyboardEvent): number {
+  const shift = event.shiftKey ? 1 : 0;
+  const alt = event.altKey ? 1 : 0;
+  const ctrl = event.ctrlKey ? 1 : 0;
+  // Table: (ctrl*4 + alt*2 + shift*1) + 1 → matches xterm's 1-based modifier encoding
+  const bits = ctrl * 4 + alt * 2 + shift;
+  // bits 0 = no modifier, 1 = Shift, 2 = Alt, 3 = Shift+Alt, 4 = Ctrl, 5 = Ctrl+Shift,
+  //      6 = Ctrl+Alt, 7 = Ctrl+Shift+Alt
+  const table = [
+    0,
+    MOD_SHIFT,
+    MOD_ALT,
+    MOD_SHIFT_ALT,
+    MOD_CTRL,
+    MOD_CTRL_SHIFT,
+    MOD_CTRL_ALT,
+    MOD_CTRL_SHIFT_ALT,
+  ];
+  return table[bits] ?? 0;
+}
+
+function encode(s: string): Uint8Array {
+  return new TextEncoder().encode(s);
+}
+
+/**
+ * Build a CSI sequence with optional modifier parameter.
+ * e.g. arrowWithMod('A', mod) → CSI 1;mod A when mod != 0, else CSI A.
+ */
+function csiArrow(letter: string, mod: number): Uint8Array {
+  if (mod === 0) return encode(`\x1b[${letter}`);
+  return encode(`\x1b[1;${mod}${letter}`);
+}
+
+/**
+ * Build a CSI tilde sequence with optional modifier parameter.
+ * e.g. tildeWithMod(5, mod) → CSI 5;mod ~ when mod != 0, else CSI 5~.
+ */
+function csiTilde(code: number, mod: number): Uint8Array {
+  if (mod === 0) return encode(`\x1b[${code}~`);
+  return encode(`\x1b[${code};${mod}~`);
+}
+
+/**
+ * Map a KeyboardEvent to its VT escape sequence bytes.
+ *
+ * @param event - The browser KeyboardEvent (keydown).
+ * @param appCursorKeys - Whether DECCKM (application cursor mode) is active.
+ * @returns The VT sequence bytes to send to the PTY, or `null` if the key
+ *          should not be consumed (printable characters, unhandled modifiers).
+ */
+export function keyEventToVtSequence(
+  event: KeyboardEvent,
+  appCursorKeys: boolean,
+): Uint8Array | null {
+  const { key, ctrlKey, altKey, shiftKey, metaKey } = event;
+
+  // Meta key combinations are OS-level shortcuts — never send to PTY
+  if (metaKey) return null;
+
+  const mod = modifierCode(event);
+
+  // -------------------------------------------------------------------------
+  // Arrow keys (FS-KBD-007)
+  // Normal mode: CSI A/B/C/D; Application mode (DECCKM): SS3 A/B/C/D
+  // With modifiers: always CSI 1;Mod A/B/C/D
+  // -------------------------------------------------------------------------
+  if (key === 'ArrowUp') {
+    if (mod !== 0) return csiArrow('A', mod);
+    return appCursorKeys ? encode('\x1bOA') : encode('\x1b[A');
+  }
+  if (key === 'ArrowDown') {
+    if (mod !== 0) return csiArrow('B', mod);
+    return appCursorKeys ? encode('\x1bOB') : encode('\x1b[B');
+  }
+  if (key === 'ArrowRight') {
+    if (mod !== 0) return csiArrow('C', mod);
+    return appCursorKeys ? encode('\x1bOC') : encode('\x1b[C');
+  }
+  if (key === 'ArrowLeft') {
+    if (mod !== 0) return csiArrow('D', mod);
+    return appCursorKeys ? encode('\x1bOD') : encode('\x1b[D');
+  }
+
+  // -------------------------------------------------------------------------
+  // Home / End (FS-KBD-008)
+  // -------------------------------------------------------------------------
+  if (key === 'Home') {
+    if (mod !== 0) return encode(`\x1b[1;${mod}H`);
+    return encode('\x1b[H');
+  }
+  if (key === 'End') {
+    if (mod !== 0) return encode(`\x1b[1;${mod}F`);
+    return encode('\x1b[F');
+  }
+
+  // -------------------------------------------------------------------------
+  // Insert / Delete / PageUp / PageDown (FS-KBD-008)
+  // -------------------------------------------------------------------------
+  if (key === 'Insert') return csiTilde(2, mod);
+  if (key === 'Delete') return csiTilde(3, mod);
+  if (key === 'PageUp') return csiTilde(5, mod);
+  if (key === 'PageDown') return csiTilde(6, mod);
+
+  // -------------------------------------------------------------------------
+  // Function keys F1–F12 (FS-KBD-006)
+  // F1–F4: SS3 P/Q/R/S (or CSI 1;Mod P/Q/R/S with modifiers)
+  // F5–F12: CSI tilde sequences
+  // -------------------------------------------------------------------------
+  if (key === 'F1') {
+    if (mod !== 0) return encode(`\x1b[1;${mod}P`);
+    return encode('\x1bOP');
+  }
+  if (key === 'F2') {
+    if (mod !== 0) return encode(`\x1b[1;${mod}Q`);
+    return encode('\x1bOQ');
+  }
+  if (key === 'F3') {
+    if (mod !== 0) return encode(`\x1b[1;${mod}R`);
+    return encode('\x1bOR');
+  }
+  if (key === 'F4') {
+    if (mod !== 0) return encode(`\x1b[1;${mod}S`);
+    return encode('\x1bOS');
+  }
+  if (key === 'F5') return csiTilde(15, mod);
+  if (key === 'F6') return csiTilde(17, mod);
+  if (key === 'F7') return csiTilde(18, mod);
+  if (key === 'F8') return csiTilde(19, mod);
+  if (key === 'F9') return csiTilde(20, mod);
+  if (key === 'F10') return csiTilde(21, mod);
+  if (key === 'F11') return csiTilde(23, mod);
+  if (key === 'F12') return csiTilde(24, mod);
+
+  // -------------------------------------------------------------------------
+  // Backspace: DEL (0x7f) — standard xterm behavior
+  // -------------------------------------------------------------------------
+  if (key === 'Backspace') {
+    if (ctrlKey) return encode('\x08'); // Ctrl+Backspace → BS
+    return encode('\x7f');
+  }
+
+  // -------------------------------------------------------------------------
+  // Tab
+  // -------------------------------------------------------------------------
+  if (key === 'Tab') {
+    if (shiftKey) return encode('\x1b[Z'); // Shift+Tab → CSI Z (backtab)
+    return encode('\t');
+  }
+
+  // -------------------------------------------------------------------------
+  // Enter: CR (0x0d)
+  // -------------------------------------------------------------------------
+  if (key === 'Enter') {
+    return encode('\r');
+  }
+
+  // -------------------------------------------------------------------------
+  // Escape
+  // -------------------------------------------------------------------------
+  if (key === 'Escape') {
+    return encode('\x1b');
+  }
+
+  // -------------------------------------------------------------------------
+  // Ctrl+letter → C0 control characters (FS-KBD-004)
+  // Ctrl+A (0x01) through Ctrl+Z (0x1A)
+  // Ctrl+[ (0x1B), Ctrl+\ (0x1C), Ctrl+] (0x1D), Ctrl+^ (0x1E), Ctrl+_ (0x1F)
+  // -------------------------------------------------------------------------
+  if (ctrlKey && !altKey) {
+    const code = key.toUpperCase().codePointAt(0);
+    // A–Z: codes 65–90 → control chars 0x01–0x1A
+    if (code !== undefined && code >= 65 && code <= 90) {
+      // Ctrl+C=3, Ctrl+D=4, Ctrl+Z=26, etc.
+      return new Uint8Array([code - 64]);
+    }
+    // Special control characters
+    if (key === '[') return encode('\x1b');
+    if (key === '\\') return encode('\x1c');
+    if (key === ']') return encode('\x1d');
+    if (key === '^') return encode('\x1e');
+    if (key === '_') return encode('\x1f');
+    if (key === '@') return encode('\x00'); // Ctrl+@ = NUL
+    if (key === ' ') return encode('\x00'); // Ctrl+Space = NUL
+  }
+
+  // -------------------------------------------------------------------------
+  // Alt+key → ESC prefix (FS-KBD-005)
+  // Only for single printable characters (no ctrl combos with alt here;
+  // those were handled above or are left to the platform).
+  // -------------------------------------------------------------------------
+  if (altKey && !ctrlKey && key.length === 1) {
+    return encode('\x1b' + key);
+  }
+
+  // -------------------------------------------------------------------------
+  // Printable single characters — NOT consumed here.
+  // The browser's compositionupdate / input events handle these.
+  // -------------------------------------------------------------------------
+  if (key.length === 1 && !ctrlKey && !altKey) {
+    return null;
+  }
+
+  // Unrecognised key — do not consume
+  return null;
+}

@@ -30,9 +30,8 @@ mod tests {
             .expect("CARGO_MANIFEST_DIR must be set by cargo nextest");
         let conf_path = std::path::Path::new(&manifest_dir).join("tauri.conf.json");
 
-        let content = std::fs::read_to_string(&conf_path).unwrap_or_else(|e| {
-            panic!("Failed to read tauri.conf.json at {:?}: {}", conf_path, e)
-        });
+        let content = std::fs::read_to_string(&conf_path)
+            .unwrap_or_else(|e| panic!("Failed to read tauri.conf.json at {:?}: {}", conf_path, e));
 
         assert!(
             !content.contains("unsafe-eval"),
@@ -53,19 +52,17 @@ mod tests {
             .expect("CARGO_MANIFEST_DIR must be set by cargo nextest");
         let conf_path = std::path::Path::new(&manifest_dir).join("tauri.conf.json");
 
-        let content = std::fs::read_to_string(&conf_path).unwrap_or_else(|e| {
-            panic!("Failed to read tauri.conf.json at {:?}: {}", conf_path, e)
-        });
+        let content = std::fs::read_to_string(&conf_path)
+            .unwrap_or_else(|e| panic!("Failed to read tauri.conf.json at {:?}: {}", conf_path, e));
 
-        let json: serde_json::Value = serde_json::from_str(&content)
-            .expect("tauri.conf.json must be valid JSON");
+        let json: serde_json::Value =
+            serde_json::from_str(&content).expect("tauri.conf.json must be valid JSON");
 
         let csp = &json["app"]["security"]["csp"];
 
-        // CSP is currently null (stub state) — check is vacuously satisfied.
+        // CSP is null only in unusual environments — check is vacuously satisfied.
+        // Since FINDING-002 was resolved, the production CSP is non-null.
         if csp.is_null() {
-            // Known stub state — note it but do not fail.
-            // When CSP is configured, this branch will no longer be taken.
             return;
         }
 
@@ -75,7 +72,9 @@ mod tests {
             if let Some(idx) = csp_str.find("script-src") {
                 let script_src_portion = &csp_str[idx..];
                 // Find the end of this directive (next semicolon or end of string).
-                let directive_end = script_src_portion.find(';').unwrap_or(script_src_portion.len());
+                let directive_end = script_src_portion
+                    .find(';')
+                    .unwrap_or(script_src_portion.len());
                 let directive = &script_src_portion[..directive_end];
                 assert!(
                     !directive.contains("unsafe-inline"),
@@ -210,8 +209,7 @@ mod tests {
                         || line.contains("warn!")
                         || line.contains("error!")
                         || line.contains("trace!");
-                    let has_creds =
-                        line.contains("credentials") || line.contains("Credentials");
+                    let has_creds = line.contains("credentials") || line.contains("Credentials");
                     if has_tracing && has_creds {
                         violations.push(format!(
                             "  {}:{}: {}",

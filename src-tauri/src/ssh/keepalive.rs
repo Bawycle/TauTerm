@@ -24,8 +24,7 @@ mod tests {
     fn keepalive_max_misses_is_three() {
         // TEST-SSH-007 step 1: FS-SSH-020 requires 3 consecutive missed keepalives.
         assert_eq!(
-            SSH_KEEPALIVE_MAX_MISSES,
-            3,
+            SSH_KEEPALIVE_MAX_MISSES, 3,
             "FS-SSH-020 requires exactly 3 consecutive missed keepalives before disconnect"
         );
     }

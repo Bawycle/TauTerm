@@ -156,7 +156,7 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-05 (session d)
+Last updated: 2026-04-05 (session e)
 
 ### Done
 
@@ -193,19 +193,26 @@ Last updated: 2026-04-05 (session d)
 | **PTY integration harness** | ✅ Done | `pty_linux.rs`: env var tests (FPL-S-004/009), round-trip read (FPL-W-003/004), SIGHUP on close (FPL-C-001), SIGWINCH on resize (FPL-R-005) — 10 new tests, 186 Rust total |
 | **set_active_pane** | ✅ Done | `SessionRegistry::set_active_pane()` implemented; command handler emits `session-state-changed` with `ActivePaneChanged` |
 | **Clipboard commands** | ✅ Done | `copy_to_clipboard` + `get_clipboard` implemented via `arboard` + `spawn_blocking`; `MAX_CLIPBOARD_LEN = 16 MiB` guard; 4 unit tests; `clipboard-all` Tauri permission NOT required (arboard is direct Rust) |
-| **SPL load security tests** | ✅ Done | `security_load.rs`: `spl_rm_001` (fd leak baseline), `spl_sz_004` (timing + boundary) — `#[ignore]`, run with `cargo nextest run --run-ignored all`; protocols amended |
+| **SPL load security tests** | ✅ Done | `security_load.rs`: `spl_rm_001` (fd leak baseline, `#[serial]`), `spl_sz_004` (timing + boundary) — all 3 tests run without `#[ignore]` as part of `cargo nextest run`; `serial_test 3` added to dev-dependencies |
 | **known_hosts TOFU** | ✅ Done | `ssh/known_hosts.rs`: `KnownHostsStore` with `load()`, `lookup()` (Unknown/Trusted/Mismatch), `add_entry()` (0600 perms), `import_from()`; 8 unit tests; hashed entries skipped (ADR-0007) |
 | **SecretService credential store** | ✅ Done | `platform/credentials_linux.rs`: real D-Bus probe + graceful fallback; `store()`/`get()`/`delete()` via `secret-service 5.1.0`; 4 unit tests; `is_available()` no longer hardcoded false |
 | **SshManager guard conditions** | ✅ Done | `ssh/manager.rs`: `connection_count()` utility; 6 unit tests — duplicate rejection, unknown pane errors, open→close cleanup, Connecting initial state |
-| **E2E scaffolding (WebdriverIO)** | ✅ Written / Deferred | `tests/e2e/pty-roundtrip.spec.ts` (2 scenarios) + `tab-lifecycle.spec.ts` (4 scenarios); `tests/tsconfig.json` fixed; type-correct; execution deferred until `pnpm tauri build` succeeds |
+| **E2E scaffolding (WebdriverIO)** | ✅ Executed | `pnpm tauri build` succeeded (1m38s); `pnpm wdio` ran 3 spec files — 2 passed (app.spec.ts: window title + main view), 6 failed (pty-roundtrip: `.terminal-grid` absent — PTY stub; tab-lifecycle: `create_tab` IPC not implemented). Failures are expected given current stub state. |
+
+### Done (added 2026-04-05 session e)
+
+| Area | Status | Details |
+|---|---|---|
+| **SSH connection lifecycle** | ✅ Done | `auth.rs`: `authenticate_password` + `authenticate_pubkey` against live `russh::client::Handle`; `keepalive.rs`: `make_client_config()` exposes `SSH_KEEPALIVE_INTERVAL` (30s) + `SSH_KEEPALIVE_MAX_MISSES` (3) via russh native keepalive (FS-SSH-020); `connection.rs`: `TauTermSshHandler` implements `russh::client::Handler` — TOFU `check_server_key` + `disconnected` event emission; `manager.rs`: full async connect task (TCP → russh handshake → auth order pubkey→password → Connected state) |
+| **CredentialManager wiring** | ✅ Done | `credentials.rs` now delegates to `platform::create_credential_store()` — `LinuxCredentialStore` on Linux; `is_available()` probes D-Bus; `store_password`/`get_password`/`delete_password` fully wired |
+| **SshError::Transport** | ✅ Done | Added `From<russh::Error> for SshError` — required by `russh::client::Handler::Error` bound |
 
 ### Not Yet Implemented (stubs only)
 
-- SSH connection lifecycle — TCP connect → russh handshake → auth → keepalive (blocked on SSH integration pass)
-- `SshManager::open_connection` async connect flow (`TODO` comment in place)
-- `auth.rs`, `keepalive.rs` — still stubs, unblocked by SSH integration pass
-- `CredentialManager` → `LinuxCredentialStore` wiring (still has `// TODO: store:`)
+- PTY I/O wiring to screen-update events — `LinuxPtySession::write` implemented but the output pipeline (read task → VtProcessor → emit) is not yet wired to a live frontend session
+- SSH PTY channel (FS-SSH-013) — `channel_open_session` + `request_pty` + `shell` deferred until PTY pipeline is wired
+- SSH reconnect (FS-SSH-040) — `reconnect_ssh` guard is present; full credential re-injection deferred
 - SecretService integration test (store/get/delete round-trip) — requires D-Bus + keyring daemon
-- E2E execution (require a built app — `pnpm tauri build` + `pnpm wdio`)
 - Scroll offset state per pane (`scroll_pane` returns the requested offset without tracking it)
 - `set_active_pane` event emission wiring (command implemented; `session-state-changed` emitted but frontend not wired)
+- E2E scenarios: `pty-roundtrip.spec.ts` (2 scenarios) + `tab-lifecycle.spec.ts` (4 scenarios) fail — blocked on PTY pipeline wiring and `create_tab` frontend integration

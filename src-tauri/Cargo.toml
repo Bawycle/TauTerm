@@ -73,4 +73,6 @@ dirs = "6"
 [dev-dependencies]
 # Temporary files and directories for tests
 tempfile = "3"
+# Serialize fd-sensitive tests to prevent /proc/self/fd count noise in parallel nextest runs
+serial_test = "3"
 

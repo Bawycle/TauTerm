@@ -158,6 +158,20 @@ pub enum SshError {
     Io(String),
     #[error("Pane not found: {0}")]
     PaneNotFound(String),
+    /// Transport-level russh error (keepalive timeout, protocol violation, etc.).
+    #[error("SSH transport error: {0}")]
+    Transport(String),
+}
+
+/// Required by `russh::client::Handler::Error` bound: `From<russh::Error>`.
+///
+/// russh calls this conversion when an internal transport error occurs during
+/// the handler callbacks (keepalive timeout, protocol violation). We map it to
+/// `SshError::Transport` so the error propagates through our state machine.
+impl From<russh::Error> for SshError {
+    fn from(e: russh::Error) -> Self {
+        SshError::Transport(e.to_string())
+    }
 }
 
 impl From<SshError> for TauTermError {
@@ -181,6 +195,9 @@ impl From<SshError> for TauTermError {
             }
             SshError::PaneNotFound(id) => {
                 TauTermError::with_detail("INVALID_PANE_ID", "Pane not found.", id)
+            }
+            SshError::Transport(msg) => {
+                TauTermError::with_detail("SSH_TRANSPORT_ERROR", "SSH transport error.", msg)
             }
         }
     }

@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Security load tests — isolated from normal nextest parallel execution.
-//!
-//! These tests are marked `#[ignore]` to prevent fd count noise when run in
-//! parallel with other tests. Execute explicitly:
-//!
-//! ```
-//! cargo nextest run --run-ignored security_load
-//! ```
+//! Security load tests.
 //!
 //! ## SPL-RM-001 — fd leak check
-//! Creates and closes 10 pane entries in `SessionRegistry` and verifies that
-//! no entries remain. The `/proc/self/fd` enumeration only has diagnostic value
-//! once `LinuxPtySession` is fully implemented (currently `todo!()`). Until
-//! then, this test validates the `SessionRegistry` map cleanup path.
+//! Creates and closes a PTY backend stub and verifies that no excess file
+//! descriptors accumulate. The `/proc/self/fd` enumeration is sensitive to
+//! parallel test execution, so `spl_rm_001_no_fd_leak_after_10_pane_open_close`
+//! is annotated with `#[serial]` (from the `serial_test` crate) to run in
+//! isolation within the nextest process. All other tests in this module have
+//! no shared state and run in parallel without restriction.
 //!
 //! ## SPL-SZ-004 — rapid input validation under load
 //! Runs 10 consecutive calls to the `send_input` size validation path with
@@ -23,6 +18,8 @@
 #[cfg(test)]
 mod security_load {
     use std::time::Duration;
+
+    use serial_test::serial;
 
     // -----------------------------------------------------------------------
     // SPL-RM-001 — fd leak: /proc/self/fd baseline + pane lifecycle
@@ -41,15 +38,17 @@ mod security_load {
     /// SPL-RM-001: Create 10 session registry entries and close them.
     /// Assert no entries remain (map-level leak check).
     /// Full /proc/self/fd validation requires real PTY sessions (currently stubs).
-    #[ignore]
+    ///
+    /// Runs serially to prevent fd count noise from parallel nextest threads.
+    #[serial]
     #[tokio::test]
     async fn spl_rm_001_no_fd_leak_after_10_pane_open_close() {
         use std::sync::Arc;
 
         use crate::platform;
 
-        // Measure baseline fd count before test. In parallel nextest, this count
-        // may be inflated — hence #[ignore] to ensure isolation.
+        // Measure baseline fd count before test. Serial execution ensures this
+        // count is not inflated by concurrent test threads.
         let baseline_fd_count = count_open_fds();
 
         // Create a registry with a stub PTY backend.
@@ -116,7 +115,6 @@ mod security_load {
     /// All 10 calls must complete within 5 seconds. This tests the validation
     /// layer only — actual PTY writes are stubs. The timeout guards against
     /// any accidental blocking introduced in the validation path.
-    #[ignore]
     #[tokio::test]
     async fn spl_sz_004_rapid_10x_64kib_validation_within_5_seconds() {
         let payload = vec![b'A'; SEND_INPUT_MAX_BYTES]; // exactly 64 KiB — must pass
@@ -142,7 +140,6 @@ mod security_load {
     /// SPL-SZ-004 (boundary): a payload of 65537 bytes must be rejected.
     ///
     /// This is the over-limit companion to SPL-SZ-004.
-    #[ignore]
     #[test]
     fn spl_sz_004_over_limit_rejected() {
         let oversized = vec![b'A'; SEND_INPUT_MAX_BYTES + 1];

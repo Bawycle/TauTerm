@@ -7,10 +7,9 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
-use crate::platform::validation::validate_ssh_identity_path;
 use crate::preferences::PreferencesStore;
 use crate::session::ids::{ConnectionId, PaneId};
 use crate::ssh::SshManager;
@@ -21,6 +20,7 @@ pub async fn open_ssh_connection(
     connection_id: ConnectionId,
     ssh_manager: State<'_, Arc<SshManager>>,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
+    app: AppHandle,
 ) -> Result<(), TauTermError> {
     let config = {
         let store = prefs.read();
@@ -37,13 +37,9 @@ pub async fn open_ssh_connection(
             })?
     };
 
-    // Validate identity file path before passing to SshManager (FINDING-004).
-    if let Some(ref identity_file) = config.identity_file {
-        validate_ssh_identity_path(identity_file)?;
-    }
-
+    // Path validation is performed inside SshManager::open_connection (FINDING-004).
     ssh_manager
-        .open_connection(pane_id, &config, None)
+        .open_connection(pane_id, &config, None, app)
         .await
         .map_err(TauTermError::from)
 }

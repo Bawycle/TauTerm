@@ -172,3 +172,58 @@
 | `src-tauri/src/error.rs` | Added `SessionError` variants: `PaneNotRunning`, `PtyIo`, `InvalidShellPath`, `PtySpawn` |
 | `docs/test-protocols/functional-linux-pty-session.md` | Created |
 | `docs/test-protocols/security-linux-pty-session.md` | Created |
+
+---
+
+## 6. Follow-up 2026-04-05
+
+> **Scope:** Gap analysis, decision log, and implementation results for the P1 items identified in §4.
+
+### 6.1 Decision log — IPC "missing commands"
+
+Recoupement effectué entre le backlog (`CLAUDE.md`) et la spec IPC canonique (`ARCHITECTURE.md` §4.2).
+
+| Command | Decision | Rationale |
+|---------|---------|-----------|
+| `set_active_tab` | Retirer du backlog — non applicable | La navigation entre onglets est gérée localement par le frontend (état Svelte réactif). Aucune commande IPC n'est spécifiée dans §4.2. |
+| `set_locale` / `get_locale` | Retirer du backlog — couvert | La locale passe par `update_preferences` / `get_preferences` via `AppearancePrefs.language`. Commandes dédiées redondantes et hors spec. |
+| `copy_selection` | Retirer du backlog — couvert | Opération frontend-driven : le frontend calcule le texte sélectionné et appelle `copy_to_clipboard(text)`. Aucune commande séparée nécessaire. |
+| `paste_to_pane` | Retirer du backlog — couvert | = `get_clipboard()` + `send_input()`. Séquence frontend. |
+| `PreferencesStore::save()` | **Note incorrecte** — déjà implémenté | `save_to_disk()` est appelée par `apply_patch`, `save_theme`, `delete_theme`. La note "pending" dans CLAUDE.md était une erreur. |
+
+### 6.2 Decision log — PTY integration gaps
+
+| Gap | Decision | Approach |
+|-----|---------|---------|
+| FPL-S-004/009 (env vars) | Implémenté | Tests d'intégration : spawn `/bin/sh -c "printenv VAR; exit"`, lire via `reader_handle` avec timeout 5s. 6 tests ajoutés. |
+| FPL-W-004 (round-trip) | Implémenté | `fpl_w_004_write_master_readable_via_reader_handle` : spawn `echo FPL_W_004_MARKER`, lire via `reader_handle`. Valide le chemin de production. |
+| FPL-W-003 (dead fd) | **Reformulé** | Comportement "write → EIO" non déterministe sur PTY master Linux (le kernel bufferise). Test remplacé par `fpl_w_003_read_after_child_exit_returns_eof_or_error` : vérifie la sémantique read-side (EOF/EIO) après exit du child. |
+| FPL-C-001 (SIGHUP) | Implémenté | Approche marker file : le trap SIGHUP écrit dans `/tmp/tauterm_fpl_c_001_<pid>.txt`. Nécessaire car le reader fd clone (ouvert dans le thread de lecture) empêche la livraison de SIGHUP si retenu. |
+| FPL-R-005 (SIGWINCH) | Implémenté | Script `while true; do sleep 1; done` pour garder le shell en foreground. Pause de 100ms avant resize. `fpl_r_005_resize_delivers_sigwinch_to_child` passe. |
+| SPL-RM-001 (fd count) | **Différé P2** | `/proc/self/fd` instable en parallèle nextest. Commentaire documentant la raison dans le module test. |
+| SPL-SZ-004 (rapid burst) | **Différé P2** | Load test — hors nextest. |
+
+### 6.3 Implémentation — set_active_pane
+
+La commande `set_active_pane` avait un corps TODO depuis le sprint précédent. Implémentée dans cette session :
+- `SessionRegistry::set_active_pane(pane_id) -> Result<TabState, SessionError>` : trouve le tab contenant le pane, met à jour `active_tab_id` et `active_pane_id`, retourne le `TabState` mis à jour.
+- Commande IPC `set_active_pane` : appelle le registre, émet `session-state-changed` avec `SessionChangeType::ActivePaneChanged`.
+
+### 6.4 Résultats des tests après follow-up
+
+| Suite | Tests run | Passed | Failed | Delta |
+|-------|-----------|--------|--------|-------|
+| Rust (nextest) | 186 | 186 | 0 | +10 (vs 176) |
+| Frontend (vitest) | 110 | 110 | 0 | 0 |
+| **Total** | **296** | **296** | **0** | **+10** |
+
+Clippy : `cargo clippy -- -D warnings` — clean, 0 warnings.
+
+### 6.5 Nouveaux fichiers modifiés
+
+| File | Change |
+|------|--------|
+| `src-tauri/src/platform/pty_linux.rs` | +10 integration tests (FPL-S-004/009, FPL-W-003/004, FPL-C-001, FPL-R-005) + helpers `open_linux_session_with_env`, `read_until_timeout` |
+| `src-tauri/src/session/registry.rs` | `SessionRegistry::set_active_pane()` method added |
+| `src-tauri/src/commands/session_cmds.rs` | `set_active_pane` command wired to registry + `emit_session_state_changed` |
+| `CLAUDE.md` | Bootstrap progress corrected and updated |

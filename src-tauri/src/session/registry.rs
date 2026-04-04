@@ -459,6 +459,31 @@ impl SessionRegistry {
         pane.resize(cols, rows, pixel_width, pixel_height)
     }
 
+    /// Set the active pane (and its containing tab) in the registry.
+    ///
+    /// Called by the `set_active_pane` command handler, which then emits
+    /// `session-state-changed` with `ActivePaneChanged` (ARCHITECTURE.md §4.2).
+    pub fn set_active_pane(&self, pane_id: PaneId) -> Result<TabState, SessionError> {
+        let mut inner = self.inner.write();
+
+        // Find the tab that contains this pane.
+        let tab_id = inner
+            .tabs
+            .iter()
+            .find(|(_, e)| e.panes.contains_key(&pane_id))
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+
+        // Update the registry's active_tab_id.
+        inner.active_tab_id = Some(tab_id.clone());
+
+        // Update the tab's active_pane_id.
+        let entry = inner.tabs.get_mut(&tab_id).unwrap();
+        entry.state.active_pane_id = pane_id;
+
+        Ok(entry.state.clone())
+    }
+
     /// Get a full screen snapshot for `get_pane_screen_snapshot`.
     pub fn get_pane_snapshot(&self, pane_id: &PaneId) -> Result<ScreenSnapshot, SessionError> {
         let inner = self.inner.read();

@@ -7,9 +7,10 @@
 
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
+use crate::events::{SessionChangeType, SessionStateChangedEvent, emit_session_state_changed};
 use crate::session::{
     SessionRegistry,
     ids::{PaneId, TabId},
@@ -77,9 +78,21 @@ pub async fn close_pane(
 #[tauri::command]
 pub async fn set_active_pane(
     pane_id: PaneId,
-    _registry: State<'_, Arc<SessionRegistry>>,
+    registry: State<'_, Arc<SessionRegistry>>,
+    app: AppHandle,
 ) -> Result<(), TauTermError> {
-    // TODO: update active pane in the registry and emit session-state-changed.
-    let _ = pane_id;
+    let tab_state = registry
+        .set_active_pane(pane_id)
+        .map_err(TauTermError::from)?;
+
+    emit_session_state_changed(
+        &app,
+        SessionStateChangedEvent {
+            change_type: SessionChangeType::ActivePaneChanged,
+            tab: Some(tab_state),
+            active_tab_id: None,
+        },
+    );
+
     Ok(())
 }

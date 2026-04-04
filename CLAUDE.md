@@ -156,7 +156,7 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-04 (session c)
+Last updated: 2026-04-05 (session a)
 
 ### Done
 
@@ -168,7 +168,7 @@ Last updated: 2026-04-04 (session c)
 | **i18n (Paraglide JS)** | ✅ Done | `project.inlang/settings.json`, `en.json` + `fr.json` catalogues, `locale.svelte.ts` reactive state |
 | **IPC types (TypeScript)** | ✅ Done | `src/lib/ipc/types.ts` — full contract mirroring Rust structs; 18 inconsistencies found and corrected |
 | **Svelte component stubs** | ✅ Done | `TerminalView`, `TerminalPane`, `TabBar`, `StatusBar` in `src/lib/components/` |
-| **Rust tests (nextest)** | ✅ Done | 176 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation, LinuxPtySession |
+| **Rust tests (nextest)** | ✅ Done | 186 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation, LinuxPtySession + PTY integration harness |
 | **Frontend tests (vitest)** | ✅ Done | 110 tests pass — ipc/types, locale, keyboard, selection, split-tree, theming/validate |
 | **Security hardening (P0/P1)** | ✅ Done | CSP configured in `tauri.conf.json`; `private_key_path` redacted in Debug; `send_input` 64 KiB size limit; path traversal validation for SSH identity file |
 | **PreferencesStore::load_or_default()** | ✅ Done | Fallback to `Preferences::default()` on any disk/parse error — Language enum stays strict at serde boundary |
@@ -180,13 +180,24 @@ Last updated: 2026-04-04 (session c)
 | **CreateTabConfig.shell + shell validation wiring** | ✅ Done | `CreateTabConfig.shell: Option<String>` added; `resolve_shell_path()` validates via `validate_shell_path()`, falls back to `$SHELL` then `/bin/sh` (FS-PTY-014) |
 | **Login shell flag** | ✅ Done | `CreateTabConfig.login: bool` — first tab passes `--login` to the shell command (FS-PTY-013) |
 
+### Corrections from sprint 2026-04-04
+
+- `PreferencesStore::save()` was listed as "pending" — **incorrect**. `save_to_disk()` is implemented and called by `apply_patch`, `save_theme`, and `delete_theme`. Preferences persist fully.
+- `set_active_tab`, `copy_selection`, `paste_to_pane`, `set_locale`, `get_locale` were listed as "P1 IPC gaps" — **removed from backlog**. None are in the canonical IPC contract (`ARCHITECTURE.md` §4.2). `set_active_tab` is not a command (frontend-local); `set_locale`/`get_locale` are covered by `update_preferences`/`get_preferences`; `copy_selection`/`paste_to_pane` are covered by `copy_to_clipboard` + `get_clipboard` + `send_input`.
+- PTY round-trip integration tests — **done** (session 2026-04-05).
+
+### Done (added 2026-04-05)
+
+| Area | Status | Details |
+|---|---|---|
+| **PTY integration harness** | ✅ Done | `pty_linux.rs`: env var tests (FPL-S-004/009), round-trip read (FPL-W-003/004), SIGHUP on close (FPL-C-001), SIGWINCH on resize (FPL-R-005) — 10 new tests, 186 Rust total |
+| **set_active_pane** | ✅ Done | `SessionRegistry::set_active_pane()` implemented; command handler emits `session-state-changed` with `ActivePaneChanged` |
+
 ### Not Yet Implemented (stubs only)
 
 - SSH connection lifecycle (`SshManager` — auth, known_hosts, keepalive all stub)
 - Secret Service credential store (`is_available() = false`)
-- `PreferencesStore::save()` — load_or_default() done, save() pending
-- Clipboard (`arboard` wired but no command registered)
-- `set_active_tab`, `copy_selection`, `paste_to_pane`, `set_locale`, `get_locale` commands (IPC types removed pending Rust implementation)
+- Clipboard (`arboard` wired but `copy_to_clipboard`/`get_clipboard` commands are TODO stubs)
 - E2E tests (require a built app — `pnpm tauri build` + `pnpm wdio`)
-- Integration tests: PTY round-trip (env vars in child, SIGWINCH delivery, SIGHUP on close) — deferred to integration pass
 - Scroll offset state per pane (`scroll_pane` returns the requested offset without tracking it)
+- `set_active_pane` event emission wiring (command implemented; `session-state-changed` emitted but frontend not wired)

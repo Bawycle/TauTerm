@@ -8,8 +8,8 @@ describe("TauTerm — application launch", () => {
   });
 
   it("renders the main terminal view", async () => {
-    // +page.svelte mounts a <main class="container"> at the top level.
-    const main = await $("main.container");
-    await expect(main).toExist();
+    // +page.svelte mounts .app-shell > TerminalView at the top level.
+    const appShell = await $(".app-shell");
+    await expect(appShell).toExist();
   });
 });

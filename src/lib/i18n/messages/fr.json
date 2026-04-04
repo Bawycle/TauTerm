@@ -1,0 +1,91 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+
+  "app_title": "TauTerm",
+
+  "tab_new": "Nouvel onglet",
+  "tab_close": "Fermer l'onglet",
+  "tab_untitled": "Terminal",
+
+  "pane_split_horizontal": "Diviser horizontalement",
+  "pane_split_vertical": "Diviser verticalement",
+  "pane_close": "Fermer le panneau",
+
+  "status_bar_ready": "Prêt",
+  "status_bar_connected": "Connecté",
+  "status_bar_disconnected": "Déconnecté",
+  "status_bar_connecting": "Connexion en cours…",
+  "status_bar_local": "Local",
+
+  "ssh_state_connecting": "Connexion à {host}…",
+  "ssh_state_authenticating": "Authentification auprès de {host}…",
+  "ssh_state_connected": "{user}@{host}",
+  "ssh_state_disconnected": "Déconnecté : {reason}",
+  "ssh_state_closed": "Fermé",
+
+  "notification_process_exit_success": "Processus terminé proprement",
+  "notification_process_exit_failure": "Processus terminé avec le code {code}",
+  "notification_bell": "Sonnerie",
+  "notification_output": "Nouvelle sortie",
+
+  "search_placeholder": "Rechercher…",
+  "search_no_results": "Aucun résultat",
+  "search_result_count": "{current} sur {total}",
+
+  "preferences_title": "Préférences",
+  "preferences_section_keyboard": "Clavier",
+  "preferences_section_appearance": "Apparence",
+  "preferences_section_terminal": "Terminal",
+  "preferences_section_ssh": "Connexions SSH",
+
+  "preferences_appearance_theme": "Thème",
+  "preferences_appearance_font_family": "Police",
+  "preferences_appearance_font_size": "Taille de police",
+  "preferences_appearance_language": "Langue",
+
+  "preferences_terminal_scrollback": "Lignes de défilement",
+  "preferences_terminal_bell": "Sonnerie",
+  "preferences_terminal_cursor_style": "Style du curseur",
+  "preferences_terminal_cursor_blink": "Clignotement du curseur",
+
+  "preferences_keyboard_shortcut_conflict": "Conflit avec : {other}",
+  "preferences_keyboard_press_shortcut": "Appuyez sur une combinaison de touches…",
+
+  "theme_new": "Nouveau thème",
+  "theme_duplicate": "Dupliquer",
+  "theme_delete": "Supprimer",
+  "theme_edit": "Modifier",
+  "theme_default_label": "Umbra (par défaut)",
+  "theme_cannot_delete_default": "Le thème par défaut ne peut pas être supprimé.",
+
+  "connection_manager_title": "Connexions SSH",
+  "connection_new": "Nouvelle connexion",
+  "connection_edit": "Modifier",
+  "connection_duplicate": "Dupliquer",
+  "connection_delete": "Supprimer",
+  "connection_connect": "Connecter",
+  "connection_field_host": "Hôte",
+  "connection_field_port": "Port",
+  "connection_field_user": "Nom d'utilisateur",
+  "connection_field_identity": "Fichier d'identité",
+  "connection_field_label": "Libellé",
+
+  "ssh_reconnect": "Reconnecter",
+  "ssh_banner_disconnected": "Session déconnectée : {reason}",
+  "ssh_banner_deprecated_algorithm": "Attention : algorithme déprécié utilisé : {algorithm}",
+
+  "error_generic": "Une erreur est survenue",
+  "error_connection_failed": "Échec de la connexion",
+
+  "action_ok": "OK",
+  "action_cancel": "Annuler",
+  "action_save": "Enregistrer",
+  "action_delete": "Supprimer",
+  "action_confirm": "Confirmer",
+  "action_close": "Fermer",
+  "action_copy": "Copier",
+  "action_paste": "Coller",
+
+  "locale_en": "Anglais",
+  "locale_fr": "Français"
+}

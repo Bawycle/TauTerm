@@ -1,2 +1,337 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-@import "tailwindcss";
+@import 'tailwindcss';
+
+@theme {
+  /* ===================================================
+     PRIMITIVE COLOR SCALE
+     Named palette positions — no semantic meaning.
+     Components never consume these directly.
+  =================================================== */
+
+  /* Neutral (warm-shifted dark) */
+  --color-neutral-950: #0e0d0b;
+  --color-neutral-900: #16140f;
+  --color-neutral-850: #1c1a14;
+  --color-neutral-800: #242118;
+  --color-neutral-750: #2c2921;
+  --color-neutral-700: #35312a;
+  --color-neutral-600: #4a4640;
+  --color-neutral-500: #6b6660;
+  --color-neutral-400: #9c9890;
+  --color-neutral-300: #ccc7bc;
+  --color-neutral-200: #e8e3d8;
+  --color-neutral-100: #f5f2ea;
+
+  /* Blue-steel (primary accent) */
+  --color-blue-700: #1a3a52;
+  --color-blue-600: #1e4d6e;
+  --color-blue-500: #2e6f9c;
+  --color-blue-400: #4a92bf;
+  --color-blue-300: #7ab3d3;
+  --color-blue-200: #b3d2e6;
+
+  /* Amber (warning/caution) */
+  --color-amber-700: #4d3000;
+  --color-amber-500: #b06a00;
+  --color-amber-400: #d48a20;
+  --color-amber-300: #e8b060;
+
+  /* Red (error/danger) */
+  --color-red-700: #3d1212;
+  --color-red-500: #9c2c2c;
+  --color-red-400: #c44444;
+  --color-red-300: #d97878;
+
+  /* Green (success/activity) */
+  --color-green-600: #1a3d1a;
+  --color-green-400: #4a9c4a;
+  --color-green-300: #78c078;
+
+  /* ===================================================
+     SEMANTIC COLOR TOKENS — UI SHELL
+     Components consume these, not primitives.
+  =================================================== */
+
+  /* Backgrounds — elevation layers */
+  --color-bg-base: var(--color-neutral-950); /* #0e0d0b — window chrome, deepest */
+  --color-bg-surface: var(--color-neutral-800); /* #242118 — tab bar, sidebar */
+  --color-bg-raised: var(--color-neutral-750); /* #2c2921 — menus, dropdowns, tooltips */
+  --color-bg-overlay: var(--color-neutral-900); /* #16140f — modal scrim base */
+
+  /* Borders and dividers */
+  --color-border: var(--color-neutral-700); /* #35312a */
+  --color-border-subtle: var(--color-neutral-750); /* #2c2921 */
+  --color-divider: var(--color-neutral-700); /* #35312a — pane divider line */
+  --color-divider-active: var(--color-blue-400); /* #4a92bf — divider on hover/drag */
+
+  /* Text hierarchy */
+  --color-text-primary: var(--color-neutral-300); /* #ccc7bc */
+  --color-text-secondary: var(--color-neutral-400); /* #9c9890 */
+  --color-text-tertiary: var(--color-neutral-500); /* #6b6660 — placeholder, disabled */
+  --color-text-inverted: var(--color-neutral-950); /* #0e0d0b — text on accent/light bg */
+  --color-text-heading: var(--color-neutral-400); /* #9c9890 — section heading labels */
+  --color-text-muted: var(--color-neutral-500); /* #6b6660 — muted text */
+
+  /* Icons */
+  --color-icon-default: var(--color-neutral-400); /* #9c9890 */
+  --color-icon-active: var(--color-neutral-300); /* #ccc7bc */
+
+  /* Interactive / accent */
+  --color-accent: var(--color-blue-400); /* #4a92bf */
+  --color-accent-subtle: var(--color-blue-700); /* #1a3a52 — tinted background */
+  --color-accent-text: var(--color-blue-300); /* #7ab3d3 — accent text on dark */
+  --color-hover-bg: var(--color-neutral-750); /* #2c2921 */
+  --color-active-bg: var(--color-neutral-700); /* #35312a */
+  --color-focus-ring: var(--color-blue-400); /* #4a92bf */
+  --color-focus-ring-offset: var(--color-neutral-950); /* #0e0d0b */
+
+  /* Status and notification */
+  --color-activity: var(--color-green-300); /* #78c078 — output on inactive tab */
+  --color-indicator-output: var(--color-green-300); /* #78c078 — scroll arrow badge */
+  --color-indicator-bell: var(
+    --color-amber-400
+  ); /* #d48a20 — scroll arrow badge, pane border pulse */
+  --color-process-end: var(--color-neutral-400); /* #9c9890 — process terminated */
+  --color-bell: var(--color-amber-400); /* #d48a20 */
+  --color-error: var(--color-red-400); /* #c44444 */
+  --color-error-bg: var(--color-red-700); /* #3d1212 */
+  --color-error-text: var(--color-red-300); /* #d97878 */
+  --color-warning: var(--color-amber-400); /* #d48a20 */
+  --color-warning-bg: var(--color-amber-700); /* #4d3000 */
+  --color-warning-text: var(--color-amber-300); /* #e8b060 */
+  --color-success: var(--color-green-400); /* #4a9c4a */
+  --color-success-text: var(--color-green-300); /* #78c078 */
+
+  /* ===================================================
+     COMPONENT COLOR TOKENS
+  =================================================== */
+
+  /* Tab bar */
+  --color-tab-bg: var(--color-neutral-800); /* #242118 */
+  --color-tab-active-bg: var(--color-neutral-900); /* #16140f — matches terminal bg */
+  --color-tab-active-fg: var(--color-neutral-200); /* #e8e3d8 */
+  --color-tab-inactive-bg: transparent;
+  --color-tab-inactive-fg: var(--color-neutral-500); /* #6b6660 */
+  --color-tab-hover-bg: var(--color-neutral-750); /* #2c2921 */
+  --color-tab-hover-fg: var(--color-neutral-400); /* #9c9890 */
+  --color-tab-close-fg: var(--color-neutral-500); /* #6b6660 */
+  --color-tab-close-hover-fg: var(--color-neutral-300); /* #ccc7bc */
+  --color-tab-new-fg: var(--color-neutral-500); /* #6b6660 */
+  --color-tab-new-hover-fg: var(--color-neutral-300); /* #ccc7bc */
+
+  /* SSH session indicators */
+  --color-ssh-badge-bg: var(--color-blue-700); /* #1a3a52 */
+  --color-ssh-badge-fg: var(--color-blue-300); /* #7ab3d3 */
+  --color-ssh-connected: var(--color-blue-300); /* #7ab3d3 — alias of ssh-badge-fg */
+  --color-ssh-disconnected-bg: var(--color-red-700); /* #3d1212 */
+  --color-ssh-disconnected-fg: var(--color-red-300); /* #d97878 */
+  --color-ssh-connecting-fg: var(--color-amber-400); /* #d48a20 */
+
+  /* Pane borders */
+  --color-pane-border-active: var(--color-blue-400); /* #4a92bf */
+  --color-pane-border-inactive: var(--color-neutral-700); /* #35312a */
+
+  /* Scrollbar */
+  --color-scrollbar-track: transparent;
+  --color-scrollbar-thumb: var(--color-neutral-600); /* #4a4640 */
+  --color-scrollbar-thumb-hover: var(--color-neutral-500); /* #6b6660 */
+
+  /* ===================================================
+     TERMINAL SURFACE TOKENS
+  =================================================== */
+
+  --term-bg: var(--color-neutral-900); /* #16140f */
+  --term-fg: var(--color-neutral-300); /* #ccc7bc */
+
+  /* Cursor */
+  --term-cursor-bg: var(--color-blue-300); /* #7ab3d3 — block cursor fill */
+  --term-cursor-fg: var(--color-neutral-900); /* #16140f — char under cursor */
+  --term-cursor-unfocused: #7ab3d3; /* hollow outline when pane is unfocused */
+
+  /* Selection */
+  --term-selection-bg: var(--color-blue-500); /* #2e6f9c */
+  --term-selection-fg: inherit; /* no forced inversion */
+  --term-selection-bg-inactive: var(--color-blue-700); /* #1a3a52 — unfocused pane */
+  --term-selection-flash: #5499c7; /* copy flash — blue-500 lightness +20pp */
+
+  /* Search highlights */
+  --term-search-match-bg: var(--color-amber-700); /* #4d3000 — non-active match */
+  --term-search-match-fg: var(--color-amber-300); /* #e8b060 */
+  --term-search-active-bg: #6b5c22; /* active match — amber blended over terminal bg */
+  --term-search-active-fg: var(--color-neutral-200); /* #e8e3d8 */
+
+  /* Hyperlinks (OSC 8) */
+  --term-hyperlink-fg: var(--color-blue-300); /* #7ab3d3 */
+  --term-hyperlink-underline: var(--color-blue-400); /* #4a92bf */
+
+  /* ANSI palette (16 colors) */
+  --term-color-0: #2c2921; /* Black normal   — hsl(40, 13%, 14%)  */
+  --term-color-1: #c44444; /* Red normal     — hsl(0, 55%, 52%)   — 5.2:1 */
+  --term-color-2: #5c9e5c; /* Green normal   — hsl(120, 27%, 49%) — 4.6:1 */
+  --term-color-3: #b89840; /* Yellow normal  — hsl(43, 50%, 47%)  — 5.1:1 */
+  --term-color-4: #4a92bf; /* Blue normal    — hsl(205, 50%, 52%) — 4.9:1 */
+  --term-color-5: #9b6dbf; /* Magenta normal — hsl(275, 36%, 58%) — 4.7:1 */
+  --term-color-6: #3d9e8a; /* Cyan normal    — hsl(168, 44%, 43%) — 4.9:1 */
+  --term-color-7: #ccc7bc; /* White normal   — hsl(40, 8%, 77%)   — 8.4:1 */
+  --term-color-8: #4a4640; /* Black bright   — hsl(37, 8%, 26%)   — dimmed text */
+  --term-color-9: #e06060; /* Red bright     — hsl(0, 63%, 63%)   — 7.0:1 */
+  --term-color-10: #82c082; /* Green bright   — hsl(120, 30%, 63%) — 7.5:1 */
+  --term-color-11: #d4b860; /* Yellow bright  — hsl(43, 58%, 60%)  — 7.8:1 */
+  --term-color-12: #7ab3d3; /* Blue bright    — hsl(205, 46%, 64%) — 8.1:1 */
+  --term-color-13: #c09cd8; /* Magenta bright — hsl(275, 40%, 73%) — 8.5:1 */
+  --term-color-14: #6ec4ae; /* Cyan bright    — hsl(162, 40%, 60%) — 7.8:1 */
+  --term-color-15: #f5f2ea; /* White bright   — hsl(44, 30%, 94%)  — 13.4:1 */
+
+  /* ===================================================
+     TYPOGRAPHY TOKENS
+  =================================================== */
+
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono-ui: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'DejaVu Sans Mono', monospace;
+  --font-terminal:
+    'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'DejaVu Sans Mono', 'Courier New', monospace;
+
+  --font-size-terminal: 14px;
+  --line-height-terminal: 1.2;
+
+  --font-size-ui-2xs: 10px;
+  --font-size-ui-xs: 11px;
+  --font-size-ui-sm: 12px;
+  --font-size-ui-base: 13px;
+  --font-size-ui-md: 14px;
+  --font-size-ui-lg: 16px;
+  --font-size-ui-xl: 20px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* ===================================================
+     SPACING TOKENS (base unit: 4px)
+  =================================================== */
+
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ===================================================
+     SIZING TOKENS
+  =================================================== */
+
+  --size-tab-height: 40px;
+  --size-toolbar-height: 40px;
+  --size-divider-hit: 8px;
+  --size-scrollbar-width: 8px;
+  --size-icon-sm: 14px;
+  --size-icon-md: 16px;
+  --size-icon-lg: 20px;
+  --size-target-min: 44px;
+  --size-badge: 6px;
+  --size-scroll-arrow-badge: 4px;
+  --size-status-bar-height: 28px;
+  --size-search-overlay-width: 360px;
+  --size-preferences-panel-width: 640px;
+  --size-preferences-nav-width: 180px;
+  --size-connection-manager-width: 400px;
+  --size-cursor-underline-height: 2px;
+  --size-cursor-bar-width: 2px;
+
+  /* ===================================================
+     BORDER RADIUS TOKENS
+  =================================================== */
+
+  --radius-none: 0px; /* panels, tab bar, terminal area, dividers */
+  --radius-sm: 2px; /* buttons, text inputs, dropdown items, tab items */
+  --radius-md: 4px; /* modals, tooltips, context menus, search overlay */
+  --radius-full: 9999px; /* status dots, activity badges, toggle thumb */
+
+  /* ===================================================
+     SHADOW TOKENS
+  =================================================== */
+
+  --shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.6); /* modals, connection manager */
+  --shadow-raised: 0 2px 8px rgba(0, 0, 0, 0.4); /* context menus, tooltips */
+
+  /* ===================================================
+     Z-INDEX SCALE
+  =================================================== */
+
+  --z-base: 0;
+  --z-divider: 10;
+  --z-scrollbar: 15;
+  --z-search: 20;
+  --z-dropdown: 30;
+  --z-overlay: 40;
+  --z-modal-backdrop: 49;
+  --z-modal: 50;
+  --z-tooltip: 60;
+
+  /* ===================================================
+     TRANSITION TOKENS
+  =================================================== */
+
+  --duration-instant: 0ms; /* focus rings, hover states */
+  --duration-fast: 80ms; /* dismissals, fade-outs */
+  --duration-base: 100ms; /* modal/popover appearance */
+  --duration-slow: 300ms; /* scrollbar fade, non-critical transitions */
+
+  --ease-linear: linear;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1); /* elements leaving the screen */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1); /* elements entering the screen */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1); /* dialogs, panels */
+}
+
+/* Base reset and global styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui-base);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus ring — applied consistently across all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Custom scrollbar — minimal, matches theme */
+::-webkit-scrollbar {
+  width: var(--size-scrollbar-width);
+  height: var(--size-scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}

@@ -15,6 +15,8 @@ La plateforme cible, pour cette première version, est Linux (x86, x86_64, ARM32
 - [`docs/UXD.md`](docs/UXD.md) — UX/UI Design: complete design token system, component specifications, interaction patterns, IPC contract (source of truth for all visual and interactive decisions)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Architecture: module decomposition, IPC contract, state machines, concurrency model, platform abstraction, security strategy (source of truth for how the system is built)
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0014)
+- [`docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md`](docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md) — Functional Test Protocol: 93 scenarios covering PTY/session, VT parser, SSH lifecycle, preferences & i18n, UI & accessibility, IPC contract
+- [`docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md`](docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md) — Security Test Protocol: threat model, 28 scenarios covering PTY injection, IPC boundary, SSH auth, credential storage, CSP/WebView, OSC52, input validation
 
 ## Commands
 
@@ -151,3 +153,31 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 - Rust edition: **2024** (`Cargo.toml`) — prefer its idioms (precise capturing, `impl Trait` in closures, etc.)
 - CSP is currently `null` in `tauri.conf.json` — tighten it incrementally as features are added (allowed origins, `script-src`, `connect-src`)
 - `language` field in `AppearancePrefs` MUST be `enum Language { En, Fr }` — never a free `String` across IPC (FS-I18N-006)
+
+## Bootstrap Progress
+
+Last updated: 2026-04-04
+
+### Done
+
+| Area | Status | Details |
+|---|---|---|
+| **Rust modules** | ✅ Done | `error`, `vt`, `session`, `ssh`, `preferences`, `platform`, `events`, `commands` — all with stubs, `cargo check` green |
+| **Cargo dependencies** | ✅ Done | `portable-pty 0.9`, `vte 0.15`, `russh 0.60`, `secret-service 5`, `toml 1`, `tokio`, `thiserror`, `tracing`, etc. |
+| **Frontend design tokens** | ✅ Done | Umbra theme via Tailwind 4 `@theme` in `src/app.css` — full color, typography, spacing, ANSI 16 tokens |
+| **i18n (Paraglide JS)** | ✅ Done | `project.inlang/settings.json`, `en.json` + `fr.json` catalogues, `locale.svelte.ts` reactive state |
+| **IPC types (TypeScript)** | ✅ Done | `src/lib/ipc/types.ts` — full contract mirroring Rust structs; 18 inconsistencies found and corrected |
+| **Svelte component stubs** | ✅ Done | `TerminalView`, `TerminalPane`, `TabBar`, `StatusBar` in `src/lib/components/` |
+| **Rust tests (nextest)** | ✅ Done | 50 tests pass — `vt::cell`, `vt::screen_buffer`, `preferences::schema`, `session::ids` |
+| **Frontend tests (vitest)** | ✅ Done | 24 tests pass — `ipc/types.test.ts`, `state/locale.svelte.test.ts` |
+| **npm packages** | ✅ Done | `vite 8`, `@sveltejs/vite-plugin-svelte 7`, `typescript 6`, `bits-ui 2.17` |
+
+### Not Yet Implemented (stubs only)
+
+- PTY I/O (`LinuxPtySession::write/resize` — `todo!()`)
+- SSH connection lifecycle (`SshManager` — auth, known_hosts, keepalive all stub)
+- Secret Service credential store (`is_available() = false`)
+- Screen buffer → frontend event pipeline (no real event emission yet)
+- Clipboard (`arboard` wired but no command registered)
+- `set_active_tab`, `copy_selection`, `paste_to_pane`, `set_locale`, `get_locale` commands (IPC types removed pending Rust implementation)
+- E2E tests (require a built app — `pnpm tauri build` + `pnpm wdio`)

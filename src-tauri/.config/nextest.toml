@@ -1,0 +1,16 @@
+# Nextest configuration for TauTerm Rust tests.
+# https://nexte.st/docs/configuration/
+
+[profile.default]
+# Retry flaky tests once before marking them as failed.
+retries = 1
+# Per-test timeout: PTY and SSH integration tests can be slow.
+slow-timeout = { period = "30s", terminate-after = 2 }
+# Fail-fast off: collect all failures for complete CI reports.
+fail-fast = false
+
+[profile.ci]
+# Stricter profile for CI: no retries, faster timeout.
+retries = 0
+slow-timeout = { period = "20s", terminate-after = 1 }
+fail-fast = false

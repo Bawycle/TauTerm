@@ -657,6 +657,48 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 
 ---
 
+### 3.17 FS-I18N: Internationalisation
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FS-I18N-001 | All TauTerm UI strings MUST be internationalised. No UI string visible to the user MAY be hardcoded in source; every string MUST be looked up from a locale catalogue. | Must |
+| FS-I18N-002 | TauTerm v1 MUST ship with two locales: English (`en`, default and fallback) and French (`fr`). | Must |
+| FS-I18N-003 | The active UI language MUST be selectable by the user in the Preferences UI. | Must |
+| FS-I18N-004 | A language change in Preferences MUST be applied immediately to all UI elements without requiring a restart. | Must |
+| FS-I18N-005 | The selected language MUST be persisted and restored on next launch. | Must |
+| FS-I18N-006 | If the persisted language is not available (e.g., catalogue missing), TauTerm MUST silently fall back to English. | Must |
+| FS-I18N-007 | TauTerm MUST NOT modify PTY session environment variables (`LANG`, `LC_*`, `LANGUAGE`) based on the UI language selection. The shell locale is fully determined by the user's login environment. | Must |
+
+**Acceptance criteria:**
+- FS-I18N-001: No UI label, button text, error message, or tooltip is hardcoded in source; all are retrieved from the active locale catalogue.
+- FS-I18N-002: Switching to French in Preferences renders all UI labels in French; switching to English renders them in English. No untranslated key (raw key string) is visible in either locale.
+- FS-I18N-003: The Preferences UI includes a language selector listing at least English and French.
+- FS-I18N-004: Changing the language in Preferences immediately updates all visible UI strings without any page reload or restart.
+- FS-I18N-005: Setting the language to French, quitting, and relaunching shows the UI in French.
+- FS-I18N-006: Deleting or corrupting the French locale catalogue causes TauTerm to launch in English with no crash or error dialog.
+- FS-I18N-007: Inspecting `$LANG` and `$LC_ALL` inside a new PTY session after changing the UI language shows the original system values, not TauTerm's UI language.
+
+---
+
+### 3.18 FS-DIST: Distribution
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FS-DIST-001 | TauTerm v1 MUST be distributed as an AppImage. | Must |
+| FS-DIST-002 | The AppImage MUST be self-contained: it MUST bundle all application dependencies (Rust runtime, frontend assets, shared libraries not guaranteed to be present on a target system). It MUST NOT require the user to install external packages beyond a standard Linux desktop environment (display server, GTK or equivalent WebView runtime if unavoidable). | Must |
+| FS-DIST-003 | The AppImage MUST run on the following architectures: x86 (i686), x86_64, ARM32 (armhf), ARM64 (aarch64), RISC-V (riscv64). A separate AppImage binary MAY be produced per architecture. | Must |
+| FS-DIST-004 | The AppImage MUST be executable directly after download (no installation step required). A user who downloads and `chmod +x`es the AppImage MUST be able to run TauTerm immediately. | Must |
+| FS-DIST-005 | The AppImage SHOULD integrate with the host desktop environment: it SHOULD provide a `.desktop` entry and application icon accessible via the AppImage integration daemon (`appimaged`) or equivalent. | Should |
+
+**Acceptance criteria:**
+- FS-DIST-001: The release artefact is an `.AppImage` file.
+- FS-DIST-002: On a clean minimal Linux installation (e.g., Ubuntu Server with a desktop environment added but no TauTerm-specific dependencies), the AppImage runs without prompting for package installation.
+- FS-DIST-003: The AppImage (or per-architecture variant) launches and passes a basic smoke test (`pnpm wdio`) on each of the five target architectures.
+- FS-DIST-004: `chmod +x TauTerm-x86_64.AppImage && ./TauTerm-x86_64.AppImage` opens the application on a clean x86_64 system.
+- FS-DIST-005: After running the AppImage with `appimaged` active, TauTerm appears in the desktop application launcher with its icon.
+
+---
+
 ## 4. Out of Scope (v1)
 
 The following are explicitly excluded from TauTerm v1:
@@ -761,6 +803,11 @@ This matrix maps every functional specification to its originating user requirem
 | **FS-VT-063** | Security review (title read-back injection) |
 | **FS-VT-075 – FS-VT-076** | Security review (OSC 52 clipboard control) |
 | **FS-CRED-003 – FS-CRED-006** | Security review (credential lifecycle) |
+| **FS-I18N: Internationalisation** | |
+| FS-I18N-001 – FS-I18N-006 | UR 10 §10.1 (language support, selection, persistence, fallback) |
+| FS-I18N-007 | UR 10 §10.2 (PTY locale env vars not modified) |
+| **FS-DIST: Distribution** | |
+| FS-DIST-001 – FS-DIST-005 | UR 11 §11.1 (AppImage, self-contained, multi-arch) |
 
 ---
 

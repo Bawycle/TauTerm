@@ -2,7 +2,7 @@
 
 # TauTerm — Architecture Document
 
-> **Version:** 1.3.0
+> **Version:** 1.4.0
 > **Date:** 2026-04-04
 > **Status:** Living document — update when architectural decisions change
 > **Author:** Software Architect — TauTerm team
@@ -922,6 +922,7 @@ pnpm tauri build
        Release profile: opt-level = 3, LTO = thin
        Output: src-tauri/target/release/tau-term
        Tauri bundles: AppImage, .deb, .rpm (Linux)
+       AppImage: requires "appimage" in bundle.targets (tauri.conf.json) — see §10.6 and ADR-0014
 ```
 
 ### 10.2 Development Mode
@@ -945,6 +946,55 @@ Frontend-only iteration: `pnpm dev` — Vite dev server only, no Tauri backend. 
 ### 10.4 Testing
 
 See [§14 — Testing Strategy](#14-testing-strategy) for the complete test organization, pyramid rationale, per-layer coverage targets, CI gate definition, and no-regression policy.
+
+### 10.5 Internationalisation (i18n)
+
+**Library:** Paraglide JS (`@inlang/paraglide-sveltekit`) — the idiomatic i18n solution for SvelteKit. It performs compile-time message extraction and generates fully tree-shakeable, zero-runtime-cost string accessor functions. See ADR-0013.
+
+**Locale files:** `src/lib/i18n/messages/en.json` (source, fallback) and `src/lib/i18n/messages/fr.json`. Both are JSON objects mapping message keys to string values. Keys use snake_case and are namespaced by UI area (e.g., `"prefs.language.label"`, `"tab.new"`, `"ssh.state.connecting"`).
+
+**Loading strategy:** Paraglide generates typed accessor functions at build time from the JSON catalogues. The compile step (`pnpm exec paraglide-js compile`) is run automatically via the Vite plugin integration during `pnpm dev` and `pnpm tauri build`. The generated output lives in `src/lib/paraglide/` and must not be hand-edited. At runtime, the active locale is a Svelte 5 reactive value stored in `src/lib/state/locale.svelte.ts`. The locale value is initialised on mount from `preferences.appearance.language` (IPC: `get_preferences`) and defaults to `"en"` if missing or unknown (FS-I18N-006). Locale switching (FS-I18N-004) updates the reactive locale value; all components that consume message accessors re-render automatically via Svelte 5's fine-grained reactivity.
+
+**Frontend string resolution:** Components import message accessor functions from the Paraglide-generated module (e.g., `import * as m from '$lib/paraglide/messages'`) and call them as plain functions (`m.prefs_language_label()`). There is no runtime lookup table and no string interpolation at the framework level — strings are resolved to their target-locale value at the call site.
+
+**Tauri integration:** Locale files are static frontend assets bundled by Vite. No Rust-side i18n is required: all user-visible strings live in the frontend. The backend emits string keys (error codes, status codes) which the frontend maps to locale strings via its own message catalogue. This keeps the IPC contract locale-agnostic. The backend never reads or modifies PTY environment variables (`LANG`, `LC_*`) based on the UI language selection (FS-I18N-007).
+
+**Persistence:** The active locale is saved to `preferences.json` under `appearance.language` (a `String` field on `AppearancePrefs`, `#[serde(default)]` defaulting to `"en"`) via the standard `update_preferences` command. On next launch, `get_preferences` returns the saved locale; the frontend restores it before first render.
+
+**Module map additions:**
+
+```
+src/
+  lib/
+    i18n/
+      messages/
+        en.json         — English message catalogue (source, fallback) (FS-I18N-001, FS-I18N-002)
+        fr.json         — French message catalogue (FS-I18N-002)
+    paraglide/          — Paraglide-generated code (build artefact; not hand-edited)
+    state/
+      locale.svelte.ts  — reactive locale state; setLocale(lang) writes to preferences;
+                          getLocale() returns current locale (FS-I18N-003, FS-I18N-004, FS-I18N-005)
+```
+
+### 10.6 Distribution: AppImage
+
+**Artefact:** One AppImage binary per target architecture (FS-DIST-003). Naming convention: `TauTerm-{version}-{arch}.AppImage`.
+
+**Bundler:** Tauri's native AppImage bundler. Configured via `bundle.targets: ["appimage"]` in `tauri.conf.json`. No external toolchain (`appimagetool`, `linuxdeploy`) is required. See ADR-0014.
+
+**Runtime dependency:** WebKitGTK (`libwebkit2gtk-4.1` on Ubuntu 22.04+, `libwebkit2gtk-4.0` on older distributions). This is the only dependency not bundled in the AppImage — it is a standard component of any GNOME-compatible Linux desktop environment. All other dependencies (Rust binary, frontend assets, locale JSON files, application icon, `.desktop` entry) are bundled (FS-DIST-002, FS-DIST-005).
+
+**Multi-architecture build strategy:** Cross-compilation is avoided. Tauri's AppImage bundler requires WebKitGTK headers and libraries matching the target architecture at build time, making cross-compilation impractical without a full matching sysroot. The strategy is **separate CI jobs per architecture**, each running on a native or QEMU-emulated runner (FS-DIST-003):
+
+| Architecture | Rust target triple | CI runner strategy |
+|---|---|---|
+| x86_64 | `x86_64-unknown-linux-gnu` | Native x86_64 runner |
+| x86 (i686) | `i686-unknown-linux-gnu` | Native x86_64 runner with `--target i686` + multilib |
+| ARM64 (aarch64) | `aarch64-unknown-linux-gnu` | Native ARM64 runner or QEMU |
+| ARM32 (armhf) | `armv7-unknown-linux-gnueabihf` | QEMU or cross-compiler toolchain |
+| RISC-V (riscv64) | `riscv64gc-unknown-linux-gnu` | QEMU or cross-compiler toolchain |
+
+Each CI job produces a single AppImage artefact. Release artefacts are published as a set of five files.
 
 ---
 
@@ -1155,6 +1205,8 @@ See ADR-0005. The PAL stubs are in `platform/pty_macos.rs`, `platform/credential
 | [ADR-0010](adr/ADR-0010-session-state-delta-events.md) | `session-state-changed` event: complete TabState vs. partial diff | Accepted |
 | [ADR-0011](adr/ADR-0011-scrollback-rust-ring-buffer.md) | Scrollback storage: Rust ring buffer in backend | Accepted |
 | [ADR-0012](adr/ADR-0012-preferences-json-file.md) | Preferences persistence: JSON file in XDG_CONFIG_HOME | Accepted |
+| [ADR-0013](adr/ADR-0013-i18n-paraglide-js.md) | i18n library: Paraglide JS (Inlang) | Accepted |
+| [ADR-0014](adr/ADR-0014-appimage-tauri-bundler.md) | AppImage distribution via Tauri bundler | Accepted |
 
 ---
 

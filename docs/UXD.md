@@ -2,7 +2,7 @@
 
 # UX/UI Design Document — TauTerm
 
-> **Version:** 1.2.0
+> **Version:** 1.3.0
 > **Date:** 2026-04-04
 > **Status:** Draft
 > **Author:** UX/UI Designer — TauTerm team
@@ -102,6 +102,16 @@ TauTerm is used for hours daily. The visual design must not fatigue the eye, pro
 **Grounding:** AD.md §1.3 ("Durability: TauTerm is used for hours daily. The visual design must not fatigue the eye or demand relearning."). Alex (UR §2.1) and Jordan (UR §2.2) are daily users.
 
 **Verification:** No animation exceeds `--duration-slow` (300ms). All hover/focus states follow the same pattern (token pair + timing) across components. The color palette uses warm-shifted neutrals (AD.md §3.1) to reduce luminance extremes that cause long-session fatigue.
+
+### 2.7 Internationalisation as a Design Constraint
+
+All user-visible strings referenced in component specifications throughout this document are logical string keys, not hardcoded text. At render time, each key is resolved to the active locale's value via the i18n message catalogue (see ARCHITECTURE.md §10.5). This constraint applies equally to button labels, section headings, placeholder text, tooltips, error messages, and all other copy.
+
+**Implication for component specs:** when this document specifies text such as "Reconnect" or "THEMES", these are the English-locale display values used as examples. The actual rendered string is always looked up from the active catalogue. No string in component source code may be hardcoded.
+
+**Grounding:** FS-I18N-001 (no hardcoded UI string), FS-I18N-004 (immediate apply on locale change).
+
+**Verification:** No string literal appears in any component `.svelte` file outside of an i18n accessor call. Locale switching in Preferences immediately updates all visible text with no reload.
 
 ---
 
@@ -958,6 +968,15 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - "Create Theme" button (primary variant).
 - Per-theme actions (visible on hover): Edit (opens theme editor, §7.20), Duplicate, Delete (with confirmation; disabled for the default Umbra theme).
 - Section heading: "THEMES" in Caption level.
+
+**Language section:**
+- A dropdown (§7.16) listing available locales. v1 options: "English" and "Français" (each option displays the language name in its own language).
+- Selecting a locale applies it immediately to all visible UI strings without any page reload or application restart (FS-I18N-004).
+- The selected locale is persisted to `preferences.json` and restored on next launch (FS-I18N-005).
+- If the persisted locale catalogue is missing or corrupted on launch, the application silently falls back to English (FS-I18N-006); no error dialog is shown.
+- The dropdown uses standard keyboard navigation (arrow keys to cycle options, Enter to confirm, Escape to cancel).
+- Section heading: "LANGUAGE" in Caption level.
+- Placement in the section nav: last item, after Themes.
 
 ### 7.7 Connection Manager
 
@@ -1982,6 +2001,8 @@ This table maps major UX/UI decisions in this document to their source requireme
 | §13 | Theme extensibility via token override | UR §8.2 (user themes) | FS-THEME-003, FS-THEME-009 |
 | §13.5 | Contrast validation on user themes; editor chrome accessibility invariant (editor always renders with active system tokens, not work-in-progress theme) | UR §8.3 (visual consistency) | FS-THEME-008, FS-A11Y-001, FS-A11Y-005 (to be added), FS-PREF-003 |
 | §15 | IPC contract for frontend-backend communication | — | Cross-cutting (FS-SSH-010, FS-NOTIF, FS-VT, FS-SB) |
+| §2.7 | i18n as design constraint: all strings are locale-resolved keys, no hardcoded copy | UR 10 §10.1 (language support) | FS-I18N-001 |
+| §7.6.3 Language section | Language selector dropdown in Preferences; immediate apply, persisted | UR 10 §10.1 | FS-I18N-003, FS-I18N-004, FS-I18N-005, FS-I18N-006 |
 
 ---
 

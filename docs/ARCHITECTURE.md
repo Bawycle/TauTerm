@@ -165,8 +165,11 @@ src-tauri/src/
   vt.rs               — re-exports: VtProcessor, ScreenBuffer, ScreenSnapshot, Cell,
                         CellAttrs, SearchQuery, SearchMatch, DirtyRegion
   vt/
-    processor.rs      — VtProcessor: implements vte::Perform; owns ScreenBuffer,
-                        ModeState; dispatches to sub-handlers
+    processor.rs      — VtProcessor: struct, public API (new/process/resize/get_snapshot/
+                        get_scrollback_line/search), private helpers; declares sub-modules
+    processor/
+      dispatch.rs     — impl vte::Perform for VtPerformBridge: CSI/OSC/ESC/execute dispatch
+      tests.rs        — unit + security tests (cfg(test))
     screen_buffer.rs  — ScreenBuffer: cell grid (normal + alternate), scrollback ring,
                         dirty tracking, resize, snapshot. Scrollback policy: only lines
                         scrolled off the top of a full-screen scroll region enter the ring.
@@ -1268,7 +1271,7 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 
 | Module | Unit testable? | Notes |
 |--------|---------------|-------|
-| `vt/processor.rs` | Yes | Pure state transformation |
+| `vt/processor.rs` + `vt/processor/dispatch.rs` | Yes | Pure state transformation; tests in `vt/processor/tests.rs` |
 | `vt/screen_buffer.rs` | Yes | Pure grid/scrollback data structure |
 | `vt/cell.rs` | Yes | Value types |
 | `vt/sgr.rs` | Yes | Pure parsing function |

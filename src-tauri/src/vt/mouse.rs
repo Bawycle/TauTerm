@@ -85,3 +85,99 @@ impl MouseEvent {
         vec![0x1b, b'[', b'M', cb + 32, cx, cy]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn left_press(col: u32, row: u32) -> MouseEvent {
+        MouseEvent {
+            col,
+            row,
+            button: 0,
+            is_press: true,
+            shift: false,
+            alt: false,
+            ctrl: false,
+            is_motion: false,
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-016 (partial) — mouse encoding
+    // FS-VT-080, FS-VT-082, FS-VT-083
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn x10_encoding_produces_correct_bytes() {
+        // TEST-VT-016 step 3: left-click at (10, 5) encoded as X10.
+        let ev = left_press(10, 5);
+        let bytes = ev.encode(MouseEncoding::X10);
+        // ESC [ M <cb+32> <cx+32> <cy+32>
+        // cb = 0 (left button, press), cx = 10+32=42, cy = 5+32=37
+        assert_eq!(bytes, vec![0x1b, b'[', b'M', 32, 42, 37]);
+    }
+
+    #[test]
+    fn sgr_encoding_left_press_correct() {
+        let ev = left_press(10, 5);
+        let bytes = ev.encode(MouseEncoding::Sgr);
+        let s = String::from_utf8(bytes).expect("valid utf8");
+        // ESC [ < 0 ; 10 ; 5 M
+        assert_eq!(s, "\x1b[<0;10;5M");
+    }
+
+    #[test]
+    fn sgr_encoding_left_release_uses_lowercase_m() {
+        let ev = MouseEvent {
+            col: 10,
+            row: 5,
+            button: 0,
+            is_press: false,
+            shift: false,
+            alt: false,
+            ctrl: false,
+            is_motion: false,
+        };
+        let bytes = ev.encode(MouseEncoding::Sgr);
+        let s = String::from_utf8(bytes).expect("valid utf8");
+        assert!(s.ends_with('m'), "release must use lowercase 'm'");
+    }
+
+    #[test]
+    fn x10_coordinates_clamped_to_223() {
+        // Coordinates > 223 must be clamped.
+        let ev = left_press(300, 250);
+        let bytes = ev.encode(MouseEncoding::X10);
+        // cx = min(300, 223) + 32 = 255, cy = min(250, 223) + 32 = 255
+        assert_eq!(bytes[4], 255); // cx clamped
+        assert_eq!(bytes[5], 255); // cy clamped
+    }
+
+    #[test]
+    fn urxvt_encoding_correct_format() {
+        let ev = left_press(10, 5);
+        let bytes = ev.encode(MouseEncoding::Urxvt);
+        let s = String::from_utf8(bytes).expect("valid utf8");
+        // ESC [ 32 ; 10 ; 5 M  (cb=0, 0+32=32)
+        assert_eq!(s, "\x1b[32;10;5M");
+    }
+
+    #[test]
+    fn shift_modifier_sets_bit4_in_control_byte() {
+        let ev = MouseEvent {
+            col: 1,
+            row: 1,
+            button: 0,
+            is_press: true,
+            shift: true,
+            alt: false,
+            ctrl: false,
+            is_motion: false,
+        };
+        let bytes = ev.encode(MouseEncoding::Sgr);
+        let s = String::from_utf8(bytes).expect("valid utf8");
+        // cb = 0 | 4 (shift) = 4
+        assert!(s.contains("<4;"), "shift bit must be set in SGR cb (got: {s})");
+    }
+}

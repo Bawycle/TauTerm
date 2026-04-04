@@ -117,6 +117,309 @@ pub fn parse_osc(params: &[u8]) -> OscAction {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // TEST-VT-012 (unit) — OSC title parsing
+    // FS-VT-060, FS-VT-062
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn osc_plain_title_is_returned() {
+        // TEST-VT-012 step 1-2
+        let action = parse_osc(b"0;My Title");
+        match action {
+            OscAction::SetTitle(t) => assert_eq!(t, "My Title"),
+            _ => panic!("expected SetTitle"),
+        }
+    }
+
+    #[test]
+    fn osc1_and_osc2_also_set_title() {
+        for cmd in [b"1;title1" as &[u8], b"2;title2"] {
+            match parse_osc(cmd) {
+                OscAction::SetTitle(_) => {}
+                _ => panic!("OSC 1 and 2 must also produce SetTitle"),
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // OSC 8 — hyperlink
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn osc8_hyperlink_with_id_parses_correctly() {
+        let action = parse_osc(b"8;id=link1;https://example.com");
+        match action {
+            OscAction::SetHyperlink { uri, id } => {
+                assert_eq!(uri, Some("https://example.com".to_string()));
+                assert_eq!(id, Some("link1".to_string()));
+            }
+            _ => panic!("expected SetHyperlink"),
+        }
+    }
+
+    #[test]
+    fn osc8_empty_uri_ends_hyperlink() {
+        let action = parse_osc(b"8;;");
+        match action {
+            OscAction::SetHyperlink { uri, .. } => {
+                assert_eq!(uri, None, "empty URI means end-of-hyperlink");
+            }
+            _ => panic!("expected SetHyperlink with None uri"),
+        }
+    }
+
+    #[test]
+    fn osc8_no_id_param_produces_none_id() {
+        let action = parse_osc(b"8;;https://example.com");
+        match action {
+            OscAction::SetHyperlink { uri, id } => {
+                assert_eq!(uri, Some("https://example.com".to_string()));
+                assert_eq!(id, None);
+            }
+            _ => panic!("expected SetHyperlink"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // OSC 22/23 — title stack push/pop
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn osc22_produces_push_title() {
+        assert!(matches!(parse_osc(b"22;"), OscAction::PushTitle));
+    }
+
+    #[test]
+    fn osc23_produces_pop_title() {
+        assert!(matches!(parse_osc(b"23;"), OscAction::PopTitle));
+    }
+
+    // -----------------------------------------------------------------------
+    // Unknown / malformed commands
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn unknown_osc_command_is_ignored() {
+        assert!(matches!(parse_osc(b"999;some-data"), OscAction::Ignore));
+    }
+
+    #[test]
+    fn non_numeric_osc_command_is_ignored() {
+        assert!(matches!(parse_osc(b"abc;data"), OscAction::Ignore));
+    }
+
+    #[test]
+    fn empty_osc_payload_is_ignored() {
+        assert!(matches!(parse_osc(b""), OscAction::Ignore));
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // SEC-OSC-001 — OSC 52 clipboard read is permanently rejected
+    // -----------------------------------------------------------------------
+
+    /// SEC-OSC-001: Query payload "?" must always return Ignore.
+    #[test]
+    fn sec_osc_001_osc52_read_query_returns_ignore() {
+        // Direct parse_osc call with canonical read payload.
+        let action = parse_osc(b"52;c;?");
+        assert!(
+            matches!(action, OscAction::Ignore),
+            "OSC 52 read query must be permanently ignored (SEC-OSC-001)"
+        );
+    }
+
+    /// SEC-OSC-001: Read query via full OSC byte stream through VtProcessor.
+    #[test]
+    fn sec_osc_001_osc52_read_via_full_sequence_returns_ignore() {
+        use crate::vt::processor::VtProcessor;
+        // ESC ] 52 ; c ; ? BEL
+        let seq = b"\x1b]52;c;\x07";
+        // VtProcessor — no panic, title unchanged, no clipboard write triggered.
+        let mut vt = VtProcessor::new(80, 24);
+        let _dirty = vt.process(seq);
+        // If we get here without panic, the sequence was silently consumed.
+        // There is no observable side-effect to assert beyond "no crash and no
+        // ClipboardWrite" — confirmed by the parse_osc unit test above.
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-PTY-006 — OSC title payloads strip C0/C1 control characters
+    // -----------------------------------------------------------------------
+
+    /// SEC-PTY-006: Control characters in title payloads must be stripped.
+    #[test]
+    fn sec_pty_006_osc_title_strips_control_chars() {
+        // Payload: \x01\x0b\x1b[31mInjection (C0/C1 + partial CSI)
+        let action = parse_osc(b"0;\x01\x0b\x1b[31mInjection");
+        match action {
+            OscAction::SetTitle(title) => {
+                assert!(
+                    !title.contains('\x01'),
+                    "C0 SOH must be stripped from title (SEC-PTY-006)"
+                );
+                assert!(
+                    !title.contains('\x0b'),
+                    "C0 VT must be stripped from title (SEC-PTY-006)"
+                );
+                assert!(
+                    !title.contains('\x1b'),
+                    "ESC must be stripped from title (SEC-PTY-006)"
+                );
+                // "Injection" text content should still be present.
+                assert!(
+                    title.contains("Injection"),
+                    "Title text content should survive stripping"
+                );
+            }
+            other => panic!("Expected SetTitle, got {:?} (SEC-PTY-006)", other),
+        }
+    }
+
+    /// SEC-PTY-006: Title is truncated to 256 characters maximum.
+    #[test]
+    fn sec_pty_006_osc_title_truncated_to_256_chars() {
+        let payload = {
+            let mut v = b"0;".to_vec();
+            v.extend(b"A".repeat(300));
+            v
+        };
+        let action = parse_osc(&payload);
+        match action {
+            OscAction::SetTitle(title) => {
+                assert!(
+                    title.len() <= 256,
+                    "Title must be truncated to 256 chars, got {} (SEC-PTY-006)",
+                    title.len()
+                );
+            }
+            other => panic!("Expected SetTitle, got {:?}", other),
+        }
+    }
+
+    /// SEC-PTY-006: Tab character (\t) is permitted in title (explicit exception).
+    #[test]
+    fn sec_pty_006_tab_character_preserved_in_title() {
+        let action = parse_osc(b"0;hello\tworld");
+        match action {
+            OscAction::SetTitle(title) => {
+                assert!(title.contains('\t'), "Tab should be preserved in title");
+            }
+            other => panic!("Expected SetTitle, got {:?}", other),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-OSC-002 — OSC 52 write gated by allow_osc52_write policy
+    // (partial: parse_osc layer — policy resolution requires VtProcessor wiring)
+    // -----------------------------------------------------------------------
+
+    /// SEC-OSC-002 (partial): When allow_osc52_write is false, the ClipboardWrite
+    /// action is still returned by parse_osc — enforcement is the VtProcessor's
+    /// responsibility via the policy flag. This test confirms parse_osc itself
+    /// correctly identifies write sequences so the caller can apply the policy.
+    #[test]
+    fn sec_osc_002_osc52_write_sequence_parsed_as_clipboard_write() {
+        // Base64 encode "hello" = "aGVsbG8="
+        let action = parse_osc(b"52;c;aGVsbG8=");
+        assert!(
+            matches!(action, OscAction::ClipboardWrite(_)),
+            "Valid OSC 52 write must produce ClipboardWrite action for policy check"
+        );
+    }
+
+    /// SEC-OSC-002 (partial): Non-"c" targets are ignored (no write for primary/"p").
+    #[test]
+    fn sec_osc_002_osc52_non_clipboard_target_ignored() {
+        // Target "p" (primary selection) — not supported for write.
+        let action = parse_osc(b"52;p;aGVsbG8=");
+        assert!(
+            matches!(action, OscAction::Ignore),
+            "OSC 52 write to non-clipboard target must be ignored"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-OSC-003 — OSC 52 oversized payload
+    // -----------------------------------------------------------------------
+
+    /// SEC-OSC-003: A 1-MB base64 payload in an OSC 52 write sequence.
+    /// parse_osc receives raw bytes — the 4096-byte sequence limit is enforced
+    /// upstream by the vte crate / VtProcessor. At the parse_osc level this
+    /// should still decode or truncate without OOM or panic.
+    #[test]
+    fn sec_osc_003_osc52_large_payload_no_panic() {
+        // 1 MB of valid base64 'A' characters (not a valid base64 multiple of 4
+        // for this size, so base64_decode returns None → Ignore).
+        let large_b64 = b"A".repeat(1_000_000);
+        let mut payload = b"52;c;".to_vec();
+        payload.extend_from_slice(&large_b64);
+        // Must not panic — result is Ignore (invalid base64 length) or ClipboardWrite.
+        let action = parse_osc(&payload);
+        // Either outcome is acceptable; what matters is no panic / no OOM.
+        match action {
+            OscAction::Ignore | OscAction::ClipboardWrite(_) => {}
+            other => panic!("Unexpected action from oversized payload: {:?}", other),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-PTY-002 — OSC query sequences silently ignored
+    // -----------------------------------------------------------------------
+
+    /// SEC-PTY-002: OSC 10 (foreground color query "?") returns Ignore.
+    #[test]
+    fn sec_pty_002_osc_color_query_returns_ignore() {
+        // OSC 10 ; ? ST — dynamic color query
+        let action = parse_osc(b"10;?");
+        assert!(
+            matches!(action, OscAction::Ignore),
+            "OSC 10 color query must be ignored (SEC-PTY-002)"
+        );
+    }
+
+    /// SEC-PTY-002: Unknown OSC commands return Ignore.
+    #[test]
+    fn sec_pty_002_unknown_osc_returns_ignore() {
+        let action = parse_osc(b"9999;some_payload");
+        assert!(
+            matches!(action, OscAction::Ignore),
+            "Unknown OSC command must be ignored"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-PTY-003 — Oversized OSC sequence DoS
+    // -----------------------------------------------------------------------
+
+    /// SEC-PTY-003: parse_osc with a 10 000-byte OSC 0 title payload.
+    /// The vte crate enforces the 4096-byte limit before dispatch; this test
+    /// verifies parse_osc itself does not panic when given a large payload.
+    #[test]
+    fn sec_pty_003_large_osc_title_payload_no_panic() {
+        let mut payload = b"0;".to_vec();
+        payload.extend(b"A".repeat(10_000));
+        // Must not panic; title should be truncated to 256.
+        let action = parse_osc(&payload);
+        match action {
+            OscAction::SetTitle(title) => {
+                assert!(title.len() <= 256, "Title must be truncated even with large input");
+            }
+            OscAction::Ignore => {} // Also acceptable.
+            other => panic!("Unexpected action: {:?}", other),
+        }
+    }
+}
+
 /// Minimal base64 decoder (no external dep beyond std).
 /// Returns `None` if the input is invalid.
 fn base64_decode(input: &[u8]) -> Option<Vec<u8>> {

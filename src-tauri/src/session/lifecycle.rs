@@ -41,3 +41,77 @@ impl PaneLifecycleState {
         matches!(self, Self::Closed)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // Lifecycle state machine — is_active / is_closed predicates
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn running_state_is_active() {
+        assert!(PaneLifecycleState::Running.is_active());
+    }
+
+    #[test]
+    fn spawning_state_is_not_active() {
+        assert!(!PaneLifecycleState::Spawning.is_active());
+    }
+
+    #[test]
+    fn terminated_state_is_not_active() {
+        assert!(!PaneLifecycleState::Terminated {
+            exit_code: Some(0),
+            error: None
+        }
+        .is_active());
+    }
+
+    #[test]
+    fn closing_state_is_not_active() {
+        assert!(!PaneLifecycleState::Closing.is_active());
+    }
+
+    #[test]
+    fn closed_state_is_closed() {
+        assert!(PaneLifecycleState::Closed.is_closed());
+    }
+
+    #[test]
+    fn running_state_is_not_closed() {
+        assert!(!PaneLifecycleState::Running.is_closed());
+    }
+
+    // -----------------------------------------------------------------------
+    // Serialization — tag-based discriminant (FS-PTY-006 contract)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn running_serializes_with_type_tag() {
+        let json = serde_json::to_string(&PaneLifecycleState::Running).expect("serialize failed");
+        assert!(json.contains("\"type\":\"running\""), "got: {json}");
+    }
+
+    #[test]
+    fn terminated_serializes_with_exit_code() {
+        let state = PaneLifecycleState::Terminated {
+            exit_code: Some(1),
+            error: None,
+        };
+        let json = serde_json::to_string(&state).expect("serialize failed");
+        assert!(json.contains("\"exitCode\":1") || json.contains("\"exit_code\":1"), "got: {json}");
+    }
+
+    #[test]
+    fn terminated_round_trips_through_json() {
+        let state = PaneLifecycleState::Terminated {
+            exit_code: Some(42),
+            error: Some("some error".to_string()),
+        };
+        let json = serde_json::to_string(&state).expect("serialize failed");
+        let restored: PaneLifecycleState = serde_json::from_str(&json).expect("deserialize failed");
+        assert_eq!(state, restored);
+    }
+}

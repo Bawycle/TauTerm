@@ -11,6 +11,7 @@ pub mod error;
 pub mod events;
 pub mod platform;
 pub mod preferences;
+pub mod security_static_checks;
 pub mod session;
 pub mod ssh;
 pub mod vt;

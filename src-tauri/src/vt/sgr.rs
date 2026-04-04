@@ -102,6 +102,14 @@ pub fn apply_sgr(params: &vte::Params, attrs: &mut CellAttrs) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Unit tests for apply_sgr — tested indirectly via VtProcessor.
+// Direct testing of apply_sgr would require constructing vte::Params, which
+// does not implement Clone and has no public constructor. Tests for SGR
+// behavior at the VtProcessor level are in vt/processor.rs (TEST-VT-006,
+// TEST-VT-007).
+// ---------------------------------------------------------------------------
+
 /// Parse an extended color value from the current parameter (colon sub-params)
 /// or from subsequent parameters (semicolon form).
 fn parse_extended_color<'a>(

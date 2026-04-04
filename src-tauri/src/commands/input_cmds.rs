@@ -13,12 +13,25 @@ use crate::error::TauTermError;
 use crate::session::{SessionRegistry, ids::PaneId, registry::ScrollPositionState};
 use crate::vt::{SearchMatch, SearchQuery, screen_buffer::ScreenSnapshot};
 
+/// Maximum payload size for a single `send_input` call (64 KiB).
+/// Prevents DoS via oversized IPC payloads (FINDING-003 / SEC-IPC-002).
+const SEND_INPUT_MAX_BYTES: usize = 65_536;
+
 #[tauri::command]
 pub async fn send_input(
     pane_id: PaneId,
     data: Vec<u8>,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<(), TauTermError> {
+    if data.len() > SEND_INPUT_MAX_BYTES {
+        return Err(TauTermError::new(
+            "INPUT_TOO_LARGE",
+            &format!(
+                "Input payload exceeds the maximum allowed size of {} bytes.",
+                SEND_INPUT_MAX_BYTES
+            ),
+        ));
+    }
     registry
         .send_input(pane_id, data)
         .map_err(TauTermError::from)

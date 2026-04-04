@@ -277,6 +277,77 @@ mod tests {
         assert!(patch.keyboard.is_none());
     }
 
+    // -----------------------------------------------------------------------
+    // SEC-IPC-005 — Language enum rejects unknown variants at IPC boundary
+    // -----------------------------------------------------------------------
+
+    /// SEC-IPC-005: Unknown language string "de" must fail serde deserialization.
+    /// This prevents arbitrary string injection via the language field.
+    #[test]
+    fn sec_ipc_005_unknown_language_variant_de_rejected() {
+        let result: Result<Language, _> = serde_json::from_str("\"de\"");
+        assert!(
+            result.is_err(),
+            "Unknown language variant 'de' must fail deserialization (SEC-IPC-005)"
+        );
+    }
+
+    /// SEC-IPC-005: Empty string language must fail deserialization.
+    #[test]
+    fn sec_ipc_005_empty_string_language_rejected() {
+        let result: Result<Language, _> = serde_json::from_str("\"\"");
+        assert!(
+            result.is_err(),
+            "Empty string language must fail deserialization (SEC-IPC-005)"
+        );
+    }
+
+    /// SEC-IPC-005: SQL injection payload as language value must fail.
+    #[test]
+    fn sec_ipc_005_language_sql_injection_payload_rejected() {
+        let result: Result<Language, _> =
+            serde_json::from_str("\"en'; DROP TABLE preferences; --\"");
+        assert!(
+            result.is_err(),
+            "SQL injection payload as language must be rejected (SEC-IPC-005)"
+        );
+    }
+
+    /// SEC-IPC-005: Preferences deserialization with unknown language in JSON
+    /// must fail — not silently fall back to a default (serde strict mode).
+    ///
+    /// NOTE: `#[serde(default)]` on AppearancePrefs means a missing field uses
+    /// the default value. However a present-but-invalid variant MUST still fail.
+    #[test]
+    fn sec_ipc_005_preferences_with_unknown_language_fails_deserialization() {
+        let json = r#"{"appearance":{"language":"zz"}}"#;
+        let result: Result<Preferences, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "Preferences with unknown language variant must fail deserialization (SEC-IPC-005)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-I18N-004 — unknown language in preferences falls back to En
+    // FS-I18N-005, FS-I18N-006
+    //
+    // The fallback MUST NOT happen at the serde level (that would weaken
+    // SEC-IPC-005). It must happen in PreferencesStore::load_or_default(),
+    // which catches deserialization errors and applies field-level defaults.
+    // The tests below document the expected store behaviour and are BLOCKED
+    // until load_or_default() is implemented.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[ignore = "TEST-I18N-004: PreferencesStore::load_or_default() not yet implemented (BLOCKED)"]
+    fn i18n_004_preferences_store_falls_back_to_en_for_unknown_language() {
+        // When preferences.json contains `"language": "de"`, load_or_default()
+        // must: (1) detect the deserialization error, (2) substitute Language::En,
+        // (3) return a valid Preferences struct without crashing.
+        // Unblocked when store::load_or_default() is implemented.
+    }
+
     #[test]
     fn preferences_patch_round_trips_through_json() {
         let patch = PreferencesPatch {

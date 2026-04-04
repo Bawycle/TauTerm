@@ -5,13 +5,17 @@
 //! Each pane corresponds to one terminal session (local PTY or SSH channel).
 //! The `VtProcessor` is wrapped in `Arc<RwLock<...>>` so the PTY read task
 //! can hold a reference independently of the registry's lock (§6.2 of ARCHITECTURE.md).
+//!
+//! `PaneSession` now also holds the `PtySession` handle for write/resize operations
+//! and the `PtyTaskHandle` that drives the async read loop.
 
 use std::sync::Arc;
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use crate::session::{ids::PaneId, lifecycle::PaneLifecycleState};
+use crate::platform::PtySession;
+use crate::session::{ids::PaneId, lifecycle::PaneLifecycleState, pty_task::PtyTaskHandle};
 use crate::ssh::SshLifecycleState;
 use crate::vt::VtProcessor;
 
@@ -36,15 +40,22 @@ pub struct PaneSession {
     pub title: Option<String>,
     /// `Some` if this pane is connected via SSH.
     pub ssh_state: Option<SshLifecycleState>,
+    /// Active PTY session. `None` for SSH panes or before spawn completes.
+    pub pty_session: Option<Box<dyn PtySession>>,
+    /// Handle to the running PTY read task. Dropped to abort the task.
+    pub pty_task: Option<PtyTaskHandle>,
 }
 
 impl PaneSession {
+    /// Create a new pane in `Spawning` state (no PTY yet).
     pub fn new(id: PaneId, cols: u16, rows: u16) -> Self {
         Self {
             vt: Arc::new(RwLock::new(VtProcessor::new(cols, rows))),
             lifecycle: PaneLifecycleState::Spawning,
             title: None,
             ssh_state: None,
+            pty_session: None,
+            pty_task: None,
             id,
         }
     }
@@ -57,5 +68,45 @@ impl PaneSession {
             title: self.title.clone(),
             ssh_state: self.ssh_state.clone(),
         }
+    }
+
+    /// Write bytes to the PTY master (keyboard input → shell).
+    ///
+    /// Returns `Err` if the pane is not in `Running` state or has no PTY session.
+    pub fn write_input(&mut self, data: &[u8]) -> Result<(), crate::error::SessionError> {
+        if !self.lifecycle.is_active() {
+            return Err(crate::error::SessionError::PaneNotRunning(
+                self.id.to_string(),
+            ));
+        }
+        match self.pty_session.as_mut() {
+            Some(pty) => pty
+                .write(data)
+                .map_err(|e| crate::error::SessionError::PtyIo(e.to_string())),
+            None => Err(crate::error::SessionError::PaneNotRunning(
+                self.id.to_string(),
+            )),
+        }
+    }
+
+    /// Resize the PTY (TIOCSWINSZ + SIGWINCH) and the VtProcessor grid.
+    pub fn resize(
+        &mut self,
+        cols: u16,
+        rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
+    ) -> Result<(), crate::error::SessionError> {
+        // Resize VtProcessor first (updates the internal grid).
+        {
+            let mut vt = self.vt.write();
+            vt.resize(cols, rows);
+        }
+        // Resize PTY master (delivers SIGWINCH to the foreground process group).
+        if let Some(pty) = self.pty_session.as_mut() {
+            pty.resize(cols, rows, pixel_width, pixel_height)
+                .map_err(|e| crate::error::SessionError::PtyIo(e.to_string()))?;
+        }
+        Ok(())
     }
 }

@@ -20,6 +20,8 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
+use tauri::Manager;
+
 use crate::preferences::PreferencesStore;
 use crate::session::SessionRegistry;
 use crate::ssh::SshManager;
@@ -40,15 +42,20 @@ pub fn run() {
     let prefs: Arc<RwLock<PreferencesStore>> =
         PreferencesStore::load().expect("Failed to determine preferences path — is $HOME set?");
 
-    // Initialize managed state.
-    let registry = SessionRegistry::new();
     let ssh_manager = SshManager::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(registry)
         .manage(ssh_manager)
         .manage(prefs)
+        .setup(|app| {
+            // `SessionRegistry` needs an `AppHandle` to emit events from PTY read tasks.
+            // We create it inside `setup` where the `AppHandle` is available.
+            let pty_backend = Arc::from(platform::create_pty_backend());
+            let registry = SessionRegistry::new(pty_backend, app.handle().clone());
+            app.manage(registry);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // Session commands
             commands::session_cmds::create_tab,

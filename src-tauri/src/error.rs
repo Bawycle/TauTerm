@@ -103,6 +103,18 @@ pub enum SessionError {
     PaneNotFound(String),
     #[error("PTY error: {0}")]
     Pty(#[from] PtyError),
+    /// Pane exists but is not in Running state (e.g., Spawning, Terminated, Closed).
+    #[error("Pane is not running: {0}")]
+    PaneNotRunning(String),
+    /// PTY I/O error during write or resize on a live session.
+    #[error("PTY I/O error: {0}")]
+    PtyIo(String),
+    /// Shell path validation failed.
+    #[error("Invalid shell path: {0}")]
+    InvalidShellPath(String),
+    /// PTY spawn failed.
+    #[error("PTY spawn failed: {0}")]
+    PtySpawn(String),
 }
 
 impl From<SessionError> for TauTermError {
@@ -116,6 +128,18 @@ impl From<SessionError> for TauTermError {
             }
             SessionError::Pty(e) => {
                 TauTermError::from(PtyError::from(std::io::Error::other(e.to_string())))
+            }
+            SessionError::PaneNotRunning(id) => {
+                TauTermError::with_detail("PANE_NOT_RUNNING", "Pane is not in running state.", id)
+            }
+            SessionError::PtyIo(msg) => {
+                TauTermError::with_detail("PTY_IO_ERROR", "Terminal I/O error.", msg)
+            }
+            SessionError::InvalidShellPath(msg) => {
+                TauTermError::with_detail("INVALID_SHELL_PATH", "Invalid shell executable path.", msg)
+            }
+            SessionError::PtySpawn(msg) => {
+                TauTermError::with_detail("PTY_SPAWN_FAILED", "Failed to start the shell process.", msg)
             }
         }
     }

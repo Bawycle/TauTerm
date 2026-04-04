@@ -97,11 +97,11 @@ pub async fn resize_pane(
     rows: u16,
     pixel_width: u16,
     pixel_height: u16,
-    _registry: State<'_, Arc<SessionRegistry>>,
+    registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<(), TauTermError> {
-    // TODO: forward to pane's resize debouncer.
-    let _ = (pane_id, cols, rows, pixel_width, pixel_height);
-    Ok(())
+    registry
+        .resize_pane(pane_id, cols, rows, pixel_width, pixel_height)
+        .map_err(TauTermError::from)
 }
 
 #[cfg(test)]

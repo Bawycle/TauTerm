@@ -688,12 +688,12 @@ The backend uses a single Tokio multi-threaded runtime (standard `#[tauri::main]
 
 ### 6.2 PTY I/O Task
 
-`PaneSession` holds an `Arc<RwLock<VtProcessor>>`. The `PtyReadTask` receives a clone of this `Arc` at creation time. Each `PaneSession` has a dedicated Tokio task (`tokio::spawn`) that runs the PTY read loop:
+`PaneSession` holds an `Arc<RwLock<VtProcessor>>`. The `PtyReadTask` receives a clone of this `Arc` at creation time. Each `PaneSession` has a dedicated blocking task (`tauri::async_runtime::spawn_blocking`) that runs the PTY read loop on Tokio's blocking thread pool:
 
 ```
-PtyReadTask (per pane):
+PtyReadTask (per pane, on a Tokio blocking thread):
   loop {
-    let n = pty_master.read(&mut buf).await;       // non-blocking async read
+    let n = reader.lock().read(&mut buf);          // synchronous blocking read (OS or mpsc channel)
     {
       let mut proc = vt_processor.write();          // write lock — held briefly
       proc.process(&buf[..n]);                     // VtProcessor: parse + update ScreenBuffer
@@ -705,6 +705,8 @@ PtyReadTask (per pane):
     }
   }
 ```
+
+**Why `spawn_blocking` and not `tokio::spawn`:** `portable-pty`'s master reader is a synchronous `Box<dyn Read + Send>` that blocks the OS thread. Wrapping it in `spawn_blocking` keeps Tokio's async worker threads unblocked. `tauri::async_runtime::spawn_blocking` is used (rather than `tokio::task::spawn_blocking`) because `setup()` runs on the main GTK thread, which has no Tokio thread-local context (`Handle::current()` panics); Tauri's API uses a stored static handle that works from any thread.
 
 The write lock is held only for the duration of `process()` + `take_dirty_cells()` — a short, CPU-bound window. Command handlers (e.g., `get_pane_screen_snapshot`) acquire the read lock for snapshots or search; there is no structural conflict between the read task and command handlers. The `ScreenBuffer` is never accessed outside the `RwLock`.
 
@@ -1262,7 +1264,7 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 | Frontend unit | Vitest | `pnpm vitest run` |
 | Frontend types | SvelteKit | `pnpm check` |
 | Frontend formatting | Prettier | `pnpm prettier --check src/` |
-| E2E | WebdriverIO + tauri-driver | `pnpm wdio` (after `pnpm tauri build`) |
+| E2E | WebdriverIO + tauri-driver | `pnpm wdio` (after `pnpm tauri build --no-bundle -- --features e2e-testing`) |
 
 ---
 
@@ -1548,7 +1550,9 @@ Pure rendering components (`MemoryEstimate`, `ContrastAdvisory`, `SshBadge`): no
 
 ### 14.7 E2E Tests (WebdriverIO + tauri-driver)
 
-Require full release build (`pnpm tauri build`). Run on merge to `dev`; gate for promotion `dev` → `main`.
+Require a release build with the E2E feature flag: `pnpm tauri build --no-bundle -- --features e2e-testing`. Run on merge to `dev`; gate for promotion `dev` → `main`.
+
+> **`e2e-testing` feature:** enables `InjectablePtyBackend` (replaces the real PTY with an in-process mpsc channel) and registers the `inject_pty_output` Tauri command, which allows tests to push synthetic bytes directly into the VT pipeline. Without this flag the command is absent, injections are silently dropped, and PTY round-trip tests fail.
 
 #### Mandatory scenarios (v1)
 

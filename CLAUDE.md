@@ -70,9 +70,13 @@ See `docs/ARCHITECTURE.md` §14.3 for the full rationale.
 ### E2E (tauri-driver + WebdriverIO)
 
 ```bash
-pnpm tauri build                     # Build app first
-pnpm wdio                            # Run WebdriverIO tests via tauri-driver
+pnpm tauri build --no-bundle -- --features e2e-testing   # Build E2E binary (must include feature)
+pnpm wdio                                                 # Run WebdriverIO tests via tauri-driver
 ```
+
+> **Note:** the `--features e2e-testing` flag is mandatory. Without it, `inject_pty_output` is not
+> compiled in, injections are silently ignored, and PTY round-trip tests fail. `--no-bundle` skips
+> AppImage/deb packaging and speeds up the build.
 
 ## Architecture
 

@@ -7,7 +7,9 @@
 //! events to the frontend via `AppHandle` (§6.2 of ARCHITECTURE.md).
 //!
 //! The reader (`Box<dyn Read + Send>`) is a synchronous blocking reader.
-//! We run it on `tokio::task::spawn_blocking` to avoid blocking Tokio worker threads.
+//! We run it on `tauri::async_runtime::spawn_blocking` to avoid blocking Tokio worker threads.
+//! Using Tauri's async runtime (rather than `tokio::task` directly) ensures the runtime
+//! is available even when called from Tauri's `setup()` hook.
 //!
 //! Back-pressure: all available bytes are processed before emitting a single
 //! event. Rate limiting is a future improvement (§6.5).
@@ -60,7 +62,7 @@ pub fn spawn_pty_read_task(
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
     registry: Arc<SessionRegistry>,
 ) -> PtyTaskHandle {
-    let task = tokio::task::spawn_blocking(move || {
+    let task = tauri::async_runtime::spawn_blocking(move || {
         let mut buf = vec![0u8; 4096];
         loop {
             // Read from PTY master — blocking call.
@@ -123,7 +125,7 @@ pub fn spawn_pty_read_task(
     });
 
     PtyTaskHandle {
-        abort: task.abort_handle(),
+        abort: task.inner().abort_handle(),
     }
 }
 

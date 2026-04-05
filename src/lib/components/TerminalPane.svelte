@@ -49,6 +49,9 @@
   import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import ScrollToBottomButton from './ScrollToBottomButton.svelte';
+  import Dialog from '$lib/ui/Dialog.svelte';
+  import Button from '$lib/ui/Button.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
   import * as m from '$lib/paraglide/messages';
 
   interface Props {
@@ -68,11 +71,18 @@
      * Mirrors the Rust backend default (TerminalPrefs.wordDelimiters).
      */
     wordDelimiters?: string;
+    /**
+     * Whether to show a confirmation dialog when pasting multi-line text
+     * without bracketed paste active (FS-CLIP-009).
+     */
+    confirmMultilinePaste?: boolean;
     onrestart?: () => void;
     onclosepane?: () => void;
     onsearch?: () => void;
     onsplitH?: () => void;
     onsplitV?: () => void;
+    /** Called when the user checks "Don't ask again" in the paste confirmation dialog. */
+    ondisableConfirmMultilinePaste?: () => void;
   }
 
   const {
@@ -85,11 +95,13 @@
     canClosePane = true,
     sshState = null,
     wordDelimiters = ' \t|"\'`&()*,;<=>[]{}~',
+    confirmMultilinePaste = true,
     onrestart,
     onclosepane,
     onsearch,
     onsplitH,
     onsplitV,
+    ondisableConfirmMultilinePaste,
   }: Props = $props();
 
   // -------------------------------------------------------------------------
@@ -118,11 +130,20 @@
 
   let scrollbarVisible = $state(false);
   let scrollbarFadeTimer: ReturnType<typeof setTimeout> | null = null;
+  let scrollbarDragging = $state(false);
+  let scrollbarHover = $state(false);
+  let scrollbarDragStartY = 0;
+  let scrollbarDragStartOffset = 0;
 
   let viewportEl: HTMLDivElement | undefined = $state();
+  let scrollbarEl: HTMLDivElement | undefined = $state();
 
   // Context menu state
   let hasSelection = $state(false);
+
+  // FS-CLIP-009: Multiline paste confirmation dialog state.
+  let pasteConfirmOpen = $state(false);
+  let pasteConfirmText = $state('');
 
   let unlistenScreenUpdate: (() => void) | null = null;
   let unlistenScrollPos: (() => void) | null = null;
@@ -136,7 +157,7 @@
 
   const currentCursorShape = $derived(cursorShape(cursor.shape));
   const currentCursorBlinks = $derived(cursor.blink && cursorBlinks(cursor.shape));
-  const showScrollbar = $derived(scrollbarVisible || scrollOffset > 0);
+  const showScrollbar = $derived(scrollbarVisible || scrollOffset > 0 || scrollbarHover || scrollbarDragging);
 
   const scrollbarThumbHeightPct = $derived(
     scrollbackLines > 0
@@ -584,10 +605,113 @@
   /**
    * Paste text with bracketed paste support (FS-CLIP-008, SEC-BLK-012/014).
    * Delegates to pasteToBytes() which handles wrapping and sanitization.
+   * When bracketed paste is inactive and text contains newlines, shows a
+   * confirmation dialog first (FS-CLIP-009), unless disabled via preference.
    */
   async function pasteText(text: string) {
+    const hasNewlines = text.includes('\n');
+    if (!bracketedPasteActive && hasNewlines && confirmMultilinePaste) {
+      pasteConfirmText = text;
+      pasteConfirmOpen = true;
+      return;
+    }
     const encoded = pasteToBytes(text, bracketedPasteActive);
     if (encoded) await sendBytes(encoded);
+  }
+
+  /** Confirmed paste from the FS-CLIP-009 dialog. */
+  async function handlePasteConfirm() {
+    const text = pasteConfirmText;
+    pasteConfirmOpen = false;
+    pasteConfirmText = '';
+    const encoded = pasteToBytes(text, bracketedPasteActive);
+    if (encoded) await sendBytes(encoded);
+  }
+
+  function handlePasteCancel() {
+    pasteConfirmOpen = false;
+    pasteConfirmText = '';
+  }
+
+  // -------------------------------------------------------------------------
+  // Scrollbar interaction (FS-SB-007)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Convert a pointer Y position on the scrollbar track to a scroll offset.
+   * The scrollbar thumb represents the visible viewport within total content height.
+   */
+  function scrollbarYToOffset(clientY: number): number {
+    if (!scrollbarEl) return scrollOffset;
+    const rect = scrollbarEl.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    // fraction 0 = top of scrollback, fraction 1 = bottom (offset 0)
+    // scrollbackLines = total lines above current view
+    const totalLines = rows + scrollbackLines;
+    const targetLine = Math.round(fraction * totalLines);
+    // Convert to offset: offset is lines above visible area (0 = at bottom)
+    return Math.max(0, Math.min(scrollbackLines, scrollbackLines - targetLine + rows));
+  }
+
+  async function scrollToOffset(offset: number) {
+    const clamped = Math.max(0, Math.min(scrollbackLines, offset));
+    try {
+      await invoke('scroll_pane', { paneId, offset: clamped });
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  function handleScrollbarPointerdown(event: PointerEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    // Capture pointer to receive events outside the element
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+
+    const thumbEl = (event.currentTarget as HTMLElement).querySelector(
+      '.terminal-pane__scrollbar-thumb',
+    ) as HTMLElement | null;
+    const thumbRect = thumbEl?.getBoundingClientRect();
+
+    // Determine if click landed on the thumb or on the track
+    if (thumbRect && event.clientY >= thumbRect.top && event.clientY <= thumbRect.bottom) {
+      // Click on thumb: start drag
+      scrollbarDragging = true;
+      scrollbarDragStartY = event.clientY;
+      scrollbarDragStartOffset = scrollOffset;
+    } else {
+      // Click on track: jump to position
+      const newOffset = scrollbarYToOffset(event.clientY);
+      scrollToOffset(newOffset);
+    }
+  }
+
+  function handleScrollbarPointermove(event: PointerEvent) {
+    if (!scrollbarDragging) return;
+    event.preventDefault();
+    const deltaY = event.clientY - scrollbarDragStartY;
+    if (!scrollbarEl) return;
+    const trackHeight = scrollbarEl.getBoundingClientRect().height;
+    const totalLines = rows + scrollbackLines;
+    // Delta in lines: proportional to track height
+    const deltaLines = Math.round((deltaY / trackHeight) * totalLines);
+    // Dragging down = scrolling toward bottom = reducing offset
+    const newOffset = Math.max(0, Math.min(scrollbackLines, scrollbarDragStartOffset - deltaLines));
+    scrollToOffset(newOffset);
+  }
+
+  function handleScrollbarPointerup(event: PointerEvent) {
+    if (!scrollbarDragging) return;
+    event.preventDefault();
+    scrollbarDragging = false;
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  }
+
+  function handleScrollbarWheel(event: WheelEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const newOffset = Math.max(0, scrollOffset + (event.deltaY > 0 ? -3 : 3));
+    scrollToOffset(newOffset);
   }
 
   // -------------------------------------------------------------------------
@@ -690,11 +814,28 @@
       {/if}
     </div>
 
-    <!-- Scrollbar overlay — no layout shift (TUITC-UX-070 to 073) -->
+    <!-- Scrollbar overlay — interactive (FS-SB-007, TUITC-UX-070 to 073) -->
     {#if showScrollbar && scrollbackLines > 0}
-      <div class="terminal-pane__scrollbar" aria-hidden="true">
+      <div
+        bind:this={scrollbarEl}
+        class="terminal-pane__scrollbar"
+        class:terminal-pane__scrollbar--dragging={scrollbarDragging}
+        aria-hidden="true"
+        onpointerdown={handleScrollbarPointerdown}
+        onpointermove={handleScrollbarPointermove}
+        onpointerup={handleScrollbarPointerup}
+        onpointerleave={handleScrollbarPointerup}
+        onwheel={handleScrollbarWheel}
+        onmouseenter={() => {
+          scrollbarHover = true;
+        }}
+        onmouseleave={() => {
+          scrollbarHover = false;
+        }}
+      >
         <div
           class="terminal-pane__scrollbar-thumb"
+          class:terminal-pane__scrollbar-thumb--hover={scrollbarHover || scrollbarDragging}
           style:height="{scrollbarThumbHeightPct}%"
           style:top="{scrollbarThumbTopPct}%"
         ></div>
@@ -724,6 +865,33 @@
     </div>
   {/if}
 </div>
+
+<!-- FS-CLIP-009: Multiline paste confirmation dialog -->
+<Dialog
+  open={pasteConfirmOpen}
+  title={m.paste_confirm_title()}
+  size="small"
+  onclose={handlePasteCancel}
+>
+  {#snippet children()}
+    <p class="text-[14px] text-(--color-text-secondary) leading-relaxed">
+      {m.paste_confirm_body({ lines: pasteConfirmText.split('\n').length })}
+    </p>
+    <div class="mt-4">
+      <Toggle
+        checked={!confirmMultilinePaste}
+        label={m.paste_confirm_dont_ask()}
+        onchange={(v) => {
+          if (v) ondisableConfirmMultilinePaste?.();
+        }}
+      />
+    </div>
+  {/snippet}
+  {#snippet footer()}
+    <Button variant="ghost" onclick={handlePasteCancel}>{m.action_cancel()}</Button>
+    <Button variant="primary" onclick={handlePasteConfirm}>{m.paste_confirm_action()}</Button>
+  {/snippet}
+</Dialog>
 
 <style>
   .terminal-pane {
@@ -820,7 +988,7 @@
     mix-blend-mode: normal;
   }
 
-  /* Scrollbar overlay (TUITC-UX-070 to 073) */
+  /* Scrollbar overlay (FS-SB-007, TUITC-UX-070 to 073) */
   .terminal-pane__scrollbar {
     position: absolute;
     top: 0;
@@ -828,8 +996,12 @@
     width: var(--size-scrollbar-width, 8px);
     height: 100%;
     z-index: var(--z-scrollbar, 15);
-    pointer-events: none;
+    cursor: pointer;
     transition: opacity var(--duration-slow, 300ms);
+  }
+
+  .terminal-pane__scrollbar--dragging {
+    cursor: grabbing;
   }
 
   .terminal-pane__scrollbar-thumb {
@@ -839,10 +1011,23 @@
     min-height: 32px;
     background-color: var(--color-scrollbar-thumb);
     border-radius: var(--radius-full, 9999px);
+    transition: background-color var(--duration-fast, 80ms);
+    cursor: grab;
+  }
+
+  .terminal-pane__scrollbar--dragging .terminal-pane__scrollbar-thumb {
+    cursor: grabbing;
+  }
+
+  .terminal-pane__scrollbar-thumb--hover {
+    background-color: var(--color-scrollbar-thumb-hover);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .terminal-pane__scrollbar {
+      transition: none;
+    }
+    .terminal-pane__scrollbar-thumb {
       transition: none;
     }
   }

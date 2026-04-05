@@ -239,7 +239,7 @@
   /** Display title: user label takes precedence over OSC process title (FS-TAB-006). */
   function tabDisplayTitle(tab: TabState): string {
     if (tab.label !== null) return tab.label;
-    return getRootPane(tab)?.processTitle ?? 'Terminal';
+    return getRootPane(tab)?.processTitle ?? m.tab_untitled();
   }
 
   /** Active pane notification for this tab. */

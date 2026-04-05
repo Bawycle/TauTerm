@@ -659,6 +659,8 @@ export interface TerminalPrefs {
   allowOsc52Write: boolean;
   wordDelimiters: string;
   bellType: BellType;
+  /** Show confirmation dialog before pasting multi-line text without bracketed paste (FS-CLIP-009). */
+  confirmMultilinePaste: boolean;
 }
 
 /** Mirrors Rust KeyboardPrefs. */
@@ -775,9 +777,12 @@ export type GetClipboardCommand = () => Promise<string>;
 
 /**
  * Open a validated URL in the system browser.
+ * `paneId` — the pane from which the link was activated. When provided and the
+ * pane is a local PTY session, the `file://` scheme is accepted. When absent
+ * or the pane is an SSH session, `file://` is rejected (FS-VT-073).
  * @command open_url
  */
-export type OpenUrlCommand = (args: { url: string }) => Promise<void>;
+export type OpenUrlCommand = (args: { url: string; paneId?: string }) => Promise<void>;
 
 /**
  * Clear first-launch context menu hint.

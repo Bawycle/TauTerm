@@ -12,7 +12,7 @@ use tauri::State;
 
 use crate::error::TauTermError;
 use crate::preferences::PreferencesStore;
-use crate::session::{SessionRegistry, SessionState};
+use crate::session::{SessionRegistry, SessionState, ids::PaneId};
 
 /// Maximum clipboard text size: 16 MiB.
 ///
@@ -101,10 +101,22 @@ pub async fn get_clipboard() -> Result<String, TauTermError> {
     })?
 }
 
-/// Open a URL in the system browser. Scheme is validated (§8.1).
+/// Open a URL in the system browser. Scheme is validated (§8.1 / FS-VT-073).
+///
+/// `pane_id` — the pane from which the link was activated. When provided, the
+/// `file://` scheme is allowed only if that pane is a local PTY session. When
+/// absent (e.g. called without a pane context), `file://` is always rejected.
 #[tauri::command]
-pub async fn open_url(url: String) -> Result<(), TauTermError> {
-    validate_url_scheme(&url)?;
+pub async fn open_url(
+    url: String,
+    pane_id: Option<String>,
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<(), TauTermError> {
+    let is_local = pane_id
+        .as_deref()
+        .map(|id| registry.is_local_pane(&PaneId(id.to_string())))
+        .unwrap_or(false);
+    validate_url_scheme(&url, is_local)?;
     tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| {
         TauTermError::with_detail(
             "OPEN_URL_FAILED",
@@ -127,9 +139,14 @@ pub async fn mark_context_menu_used(
     })
 }
 
-/// Validate that a URL scheme is whitelisted (§8.1).
-fn validate_url_scheme(url: &str) -> Result<(), TauTermError> {
-    const ALLOWED_SCHEMES: &[&str] = &["http", "https", "mailto", "ssh"];
+/// Validate that a URL scheme is whitelisted (§8.1 / FS-VT-073).
+///
+/// `is_local_pty` — when `true`, the `file://` scheme is additionally allowed
+/// (local PTY sessions may activate `file://` hyperlinks). When `false` (SSH
+/// sessions or unknown context), `file://` is rejected as an information-
+/// disclosure risk (SEC-PATH-004).
+fn validate_url_scheme(url: &str, is_local_pty: bool) -> Result<(), TauTermError> {
+    const ALWAYS_ALLOWED: &[&str] = &["http", "https", "mailto", "ssh"];
     const MAX_URL_LEN: usize = 2048;
 
     if url.len() > MAX_URL_LEN {
@@ -156,14 +173,19 @@ fn validate_url_scheme(url: &str) -> Result<(), TauTermError> {
         .unwrap_or("")
         .to_lowercase();
 
-    if !ALLOWED_SCHEMES.contains(&scheme.as_str()) {
-        return Err(TauTermError::new(
-            "INVALID_URL_SCHEME",
-            "The URL scheme is not permitted.",
-        ));
+    if ALWAYS_ALLOWED.contains(&scheme.as_str()) {
+        return Ok(());
     }
 
-    Ok(())
+    // `file://` is only permitted for local PTY sessions (FS-VT-073).
+    if scheme == "file" && is_local_pty {
+        return Ok(());
+    }
+
+    Err(TauTermError::new(
+        "INVALID_URL_SCHEME",
+        "The URL scheme is not permitted.",
+    ))
 }
 
 #[cfg(test)]
@@ -177,7 +199,7 @@ mod security_tests {
     /// SEC-PATH-003: javascript: scheme must be rejected.
     #[test]
     fn sec_path_003_javascript_scheme_rejected() {
-        let result = validate_url_scheme("javascript:alert(1)");
+        let result = validate_url_scheme("javascript:alert(1)", false);
         assert!(
             result.is_err(),
             "javascript: scheme must be rejected (SEC-PATH-003)"
@@ -192,7 +214,7 @@ mod security_tests {
     /// SEC-PATH-003: data: scheme must be rejected.
     #[test]
     fn sec_path_003_data_scheme_rejected() {
-        let result = validate_url_scheme("data:text/html,<script>alert(1)</script>");
+        let result = validate_url_scheme("data:text/html,<script>alert(1)</script>", false);
         assert!(
             result.is_err(),
             "data: scheme must be rejected (SEC-PATH-003)"
@@ -202,7 +224,7 @@ mod security_tests {
     /// SEC-PATH-003: blob: scheme must be rejected.
     #[test]
     fn sec_path_003_blob_scheme_rejected() {
-        let result = validate_url_scheme("blob:http://example.com/uuid");
+        let result = validate_url_scheme("blob:http://example.com/uuid", false);
         assert!(
             result.is_err(),
             "blob: scheme must be rejected (SEC-PATH-003)"
@@ -212,7 +234,7 @@ mod security_tests {
     /// SEC-PATH-003: vbscript: scheme must be rejected.
     #[test]
     fn sec_path_003_vbscript_scheme_rejected() {
-        let result = validate_url_scheme("vbscript:msgbox(1)");
+        let result = validate_url_scheme("vbscript:msgbox(1)", false);
         assert!(
             result.is_err(),
             "vbscript: scheme must be rejected (SEC-PATH-003)"
@@ -222,7 +244,7 @@ mod security_tests {
     /// SEC-PATH-003: Unknown custom scheme must be rejected.
     #[test]
     fn sec_path_003_custom_scheme_rejected() {
-        let result = validate_url_scheme("foobar:something");
+        let result = validate_url_scheme("foobar:something", false);
         assert!(
             result.is_err(),
             "Unknown custom scheme must be rejected (SEC-PATH-003)"
@@ -233,21 +255,58 @@ mod security_tests {
     // SEC-PATH-004 — file:// scheme rejected
     // -----------------------------------------------------------------------
 
-    /// SEC-PATH-004: file:// URIs must be rejected (information disclosure risk).
+    /// SEC-PATH-004: file:// URIs must be rejected when session is SSH or context unknown.
     #[test]
-    fn sec_path_004_file_scheme_rejected() {
-        let result = validate_url_scheme("file:///etc/passwd");
+    fn sec_path_004_file_scheme_rejected_for_ssh_session() {
+        let result = validate_url_scheme("file:///etc/passwd", false);
         assert!(
             result.is_err(),
-            "file:// scheme must be rejected (SEC-PATH-004)"
+            "file:// scheme must be rejected for SSH sessions (SEC-PATH-004)"
         );
     }
 
-    /// SEC-PATH-004: file:// with traversal must also be rejected.
+    /// SEC-PATH-004: file:// with traversal must also be rejected for SSH session.
     #[test]
-    fn sec_path_004_file_scheme_with_traversal_rejected() {
-        let result = validate_url_scheme("file:///../../etc/shadow");
-        assert!(result.is_err(), "file:// with traversal must be rejected");
+    fn sec_path_004_file_scheme_with_traversal_rejected_for_ssh() {
+        let result = validate_url_scheme("file:///../../etc/shadow", false);
+        assert!(
+            result.is_err(),
+            "file:// with traversal must be rejected for SSH sessions (SEC-PATH-004)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // FS-VT-073 — file:// scheme allowed only for local PTY sessions
+    // -----------------------------------------------------------------------
+
+    /// FS-VT-073: file:// URI is accepted when the session is a local PTY.
+    #[test]
+    fn fs_vt_073_file_scheme_allowed_for_local_pty() {
+        let result = validate_url_scheme("file:///home/user/docs/readme.txt", true);
+        assert!(
+            result.is_ok(),
+            "file:// scheme must be accepted for local PTY sessions (FS-VT-073)"
+        );
+    }
+
+    /// FS-VT-073: file:// URI is rejected when session is SSH (is_local_pty = false).
+    #[test]
+    fn fs_vt_073_file_scheme_rejected_for_ssh() {
+        let result = validate_url_scheme("file:///etc/passwd", false);
+        assert!(
+            result.is_err(),
+            "file:// scheme must be rejected for SSH sessions (FS-VT-073)"
+        );
+    }
+
+    /// FS-VT-073: file:// URI is rejected when no pane context is available (is_local_pty = false).
+    #[test]
+    fn fs_vt_073_file_scheme_rejected_without_pane_context() {
+        let result = validate_url_scheme("file:///tmp/output.log", false);
+        assert!(
+            result.is_err(),
+            "file:// scheme must be rejected when no local pane context is available (FS-VT-073)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -257,28 +316,28 @@ mod security_tests {
     /// Allowed scheme: https
     #[test]
     fn sec_path_003_https_scheme_allowed() {
-        let result = validate_url_scheme("https://example.com");
+        let result = validate_url_scheme("https://example.com", false);
         assert!(result.is_ok(), "https: scheme must be allowed");
     }
 
     /// Allowed scheme: http
     #[test]
     fn sec_path_003_http_scheme_allowed() {
-        let result = validate_url_scheme("http://example.com");
+        let result = validate_url_scheme("http://example.com", false);
         assert!(result.is_ok(), "http: scheme must be allowed");
     }
 
     /// Allowed scheme: mailto
     #[test]
     fn sec_path_003_mailto_scheme_allowed() {
-        let result = validate_url_scheme("mailto:user@example.com");
+        let result = validate_url_scheme("mailto:user@example.com", false);
         assert!(result.is_ok(), "mailto: scheme must be allowed");
     }
 
     /// Allowed scheme: ssh
     #[test]
     fn sec_path_003_ssh_scheme_allowed() {
-        let result = validate_url_scheme("ssh://user@host");
+        let result = validate_url_scheme("ssh://user@host", false);
         assert!(result.is_ok(), "ssh: scheme must be allowed");
     }
 
@@ -290,7 +349,7 @@ mod security_tests {
     #[test]
     fn sec_url_length_limit_enforced() {
         let long_url = format!("https://example.com/{}", "a".repeat(2049));
-        let result = validate_url_scheme(&long_url);
+        let result = validate_url_scheme(&long_url, false);
         assert!(
             result.is_err(),
             "URLs longer than 2048 chars must be rejected"
@@ -313,7 +372,7 @@ mod security_tests {
             2048,
             "Test construction error: URL must be exactly 2048 chars"
         );
-        let result = validate_url_scheme(&url);
+        let result = validate_url_scheme(&url, false);
         assert!(result.is_ok(), "URL of exactly 2048 chars must be accepted");
     }
 
@@ -324,7 +383,7 @@ mod security_tests {
     /// URL containing C0 control characters must be rejected.
     #[test]
     fn sec_url_control_chars_rejected() {
-        let result = validate_url_scheme("https://ex\x01ample.com");
+        let result = validate_url_scheme("https://ex\x01ample.com", false);
         assert!(
             result.is_err(),
             "URL with C0 control chars must be rejected"
@@ -334,7 +393,7 @@ mod security_tests {
     /// URL containing C1 control characters must be rejected.
     #[test]
     fn sec_url_c1_control_chars_rejected() {
-        let result = validate_url_scheme("https://ex\u{0080}ample.com");
+        let result = validate_url_scheme("https://ex\u{0080}ample.com", false);
         assert!(
             result.is_err(),
             "URL with C1 control chars must be rejected"

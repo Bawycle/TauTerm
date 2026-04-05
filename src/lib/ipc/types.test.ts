@@ -312,6 +312,7 @@ describe('TEST-SPRINT-004: BellType IPC type uses lowercase camelCase values', (
       allowOsc52Write: false,
       wordDelimiters: ' \t|"\'`&()*,;<=>[]{}~',
       bellType: 'visual',
+      confirmMultilinePaste: true,
     };
     expect(prefs.bellType).toBe('visual');
   });

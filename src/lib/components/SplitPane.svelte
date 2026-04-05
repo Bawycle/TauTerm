@@ -37,11 +37,13 @@
     terminatedPanes: Set<PaneId>;
     wordDelimiters?: string;
     canClosePane?: boolean;
+    confirmMultilinePaste?: boolean;
     onpaneclick?: (paneId: PaneId) => void;
     onclosepane?: (paneId: PaneId) => void;
     onsearch?: (paneId: PaneId) => void;
     onsplith?: (paneId: PaneId) => void;
     onsplitv?: (paneId: PaneId) => void;
+    ondisableConfirmMultilinePaste?: () => void;
   }
 
   const {
@@ -52,11 +54,13 @@
     terminatedPanes,
     wordDelimiters,
     canClosePane = true,
+    confirmMultilinePaste = true,
     onpaneclick,
     onclosepane,
     onsearch,
     onsplith,
     onsplitv,
+    ondisableConfirmMultilinePaste,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -129,10 +133,12 @@
       {canClosePane}
       sshState={sshStates.get(node.paneId) ?? null}
       {wordDelimiters}
+      {confirmMultilinePaste}
       onclosepane={() => onclosepane?.(node.paneId)}
       onsearch={() => onsearch?.(node.paneId)}
       onsplitH={() => onsplith?.(node.paneId)}
       onsplitV={() => onsplitv?.(node.paneId)}
+      {ondisableConfirmMultilinePaste}
     />
   </div>
 {:else}
@@ -161,11 +167,13 @@
         {terminatedPanes}
         {wordDelimiters}
         {canClosePane}
+        {confirmMultilinePaste}
         {onpaneclick}
         {onclosepane}
         {onsearch}
         {onsplith}
         {onsplitv}
+        {ondisableConfirmMultilinePaste}
       />
     </div>
 
@@ -193,11 +201,13 @@
         {terminatedPanes}
         {wordDelimiters}
         {canClosePane}
+        {confirmMultilinePaste}
         {onpaneclick}
         {onclosepane}
         {onsearch}
         {onsplith}
         {onsplitv}
+        {ondisableConfirmMultilinePaste}
       />
     </div>
   </div>

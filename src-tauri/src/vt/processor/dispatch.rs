@@ -56,16 +56,22 @@ impl Perform for VtPerformBridge<'_> {
             }
             // LF / VT / FF (0x0A / 0x0B / 0x0C)
             0x0A..=0x0C => {
+                // A hard newline always clears the pending wrap flag — the line
+                // is terminated by an explicit LF, not by auto-wrap.
+                p.wrap_pending = false;
                 let (top, bottom) = p.modes.scroll_region;
                 let is_full = top == 0 && bottom == p.rows - 1;
                 if row == bottom {
-                    p.active_buf_mut().scroll_up(top, bottom, 1, is_full);
+                    // `soft_wrapped: false` — this is an explicit newline.
+                    p.active_buf_mut().scroll_up(top, bottom, 1, is_full, false);
                 } else {
                     p.active_cursor_mut().row = (row + 1).min(p.rows - 1);
                 }
             }
             // CR (0x0D)
             0x0D => {
+                // Carriage return cancels any pending wrap.
+                p.wrap_pending = false;
                 p.active_cursor_mut().col = 0;
             }
             // SI (0x0F) — switch to G0

@@ -612,6 +612,18 @@ impl SessionRegistry {
         Ok(vt.search(query))
     }
 
+    /// Returns `true` if the pane identified by `pane_id` is a local PTY session
+    /// (not SSH). Returns `false` if the pane is an SSH pane or does not exist.
+    pub fn is_local_pane(&self, pane_id: &PaneId) -> bool {
+        let inner = self.inner.read();
+        inner
+            .tabs
+            .values()
+            .find_map(|e| e.panes.get(pane_id))
+            .map(|p| p.ssh_channel.is_none())
+            .unwrap_or(false)
+    }
+
     /// Get a full session state snapshot.
     pub fn get_state_snapshot(&self) -> SessionState {
         let inner = self.inner.read();

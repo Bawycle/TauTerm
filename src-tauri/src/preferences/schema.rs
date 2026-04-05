@@ -73,6 +73,15 @@ pub struct TerminalPrefs {
     pub word_delimiters: String,
     /// Bell notification type.
     pub bell_type: BellType,
+    /// Show a confirmation dialog before pasting multi-line text when bracketed
+    /// paste is inactive (FS-CLIP-009). Default: `true`. The user can disable
+    /// it via the "Don't ask again" toggle in the paste dialog.
+    #[serde(default = "default_confirm_multiline_paste")]
+    pub confirm_multiline_paste: bool,
+}
+
+fn default_confirm_multiline_paste() -> bool {
+    true
 }
 
 impl Default for TerminalPrefs {
@@ -82,6 +91,7 @@ impl Default for TerminalPrefs {
             allow_osc52_write: false,
             word_delimiters: r#" \t|"'`&()*,;<=>[]{}~"#.to_string(),
             bell_type: BellType::default(),
+            confirm_multiline_paste: true,
         }
     }
 }
@@ -190,6 +200,27 @@ mod tests {
         assert_eq!(prefs.terminal.scrollback_lines, 10_000);
         assert!(!prefs.terminal.allow_osc52_write);
         assert_eq!(prefs.terminal.bell_type, BellType::Visual);
+        assert!(prefs.terminal.confirm_multiline_paste, "FS-CLIP-009: default must be true");
+    }
+
+    #[test]
+    fn confirm_multiline_paste_round_trips_through_json() {
+        let mut prefs = Preferences::default();
+        prefs.terminal.confirm_multiline_paste = false;
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        let restored: Preferences = serde_json::from_str(&json).expect("deserialize");
+        assert!(!restored.terminal.confirm_multiline_paste);
+    }
+
+    #[test]
+    fn confirm_multiline_paste_defaults_to_true_when_absent_from_json() {
+        // Old preferences files without this field should default to true (FS-CLIP-009).
+        let json = r#"{"terminal":{"scrollbackLines":5000}}"#;
+        let prefs: Preferences = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            prefs.terminal.confirm_multiline_paste,
+            "Missing field must default to true"
+        );
     }
 
     #[test]

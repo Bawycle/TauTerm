@@ -63,6 +63,10 @@ pub struct VtProcessor {
     pub mode_changed: bool,
     // Whether the OSC title changed since last flush.
     pub title_changed: bool,
+    // DEC "delayed wrap" flag: set when the cursor reaches the last column after
+    // a printable character. The next printed character will trigger an implicit
+    // LF+CR before writing. Used to mark scrollback lines as soft-wrapped.
+    pub wrap_pending: bool,
 }
 
 /// Cursor position and attributes.
@@ -99,6 +103,7 @@ impl VtProcessor {
             pending_dirty: DirtyRegion::default(),
             mode_changed: false,
             title_changed: false,
+            wrap_pending: false,
         }
     }
 
@@ -143,15 +148,15 @@ impl VtProcessor {
 
     /// Get a scrollback line by 0-based index (oldest first).
     pub fn get_scrollback_line(&self, index: usize) -> Option<Vec<Cell>> {
-        self.normal.get_scrollback_line(index).cloned()
+        self.normal
+            .get_scrollback_line(index)
+            .map(|sl| sl.cells.clone())
     }
 
     /// Search the scrollback buffer.
     pub fn search(&self, query: &SearchQuery) -> Vec<SearchMatch> {
         use crate::vt::search::search_scrollback;
-        let lines =
-            (0..self.normal.scrollback_len()).filter_map(|i| self.normal.get_scrollback_line(i));
-        search_scrollback(lines, query)
+        search_scrollback(self.normal.scrollback_iter(), query)
     }
 
     /// If the OSC title changed since last call, returns the new title and resets the flag.
@@ -222,11 +227,29 @@ impl VtProcessor {
     /// Write the current character to the active buffer at cursor position, then advance.
     fn write_char(&mut self, c: char) {
         let width = unicode_width::UnicodeWidthChar::width(c).unwrap_or(1) as u8;
-        let row = self.cursor_row();
-        let col = self.cursor_col();
+        let mut row = self.cursor_row();
+        let mut col = self.cursor_col();
         // Extract attrs before the mutable borrow on the buffer.
         let attrs = self.current_attrs;
         let cols = self.cols;
+
+        // DEC "delayed wrap": if the previous character set wrap_pending, apply
+        // the implicit LF+CR now before writing the new character.
+        if self.wrap_pending {
+            self.wrap_pending = false;
+            let (top, bottom) = self.modes.scroll_region;
+            let is_full = top == 0 && bottom == self.rows - 1;
+            if row == bottom {
+                // The line being scrolled out is a soft-wrapped line.
+                self.active_buf_mut()
+                    .scroll_up(top, bottom, 1, is_full, true);
+            } else {
+                self.active_cursor_mut().row = (row + 1).min(self.rows - 1);
+            }
+            self.active_cursor_mut().col = 0;
+            row = self.cursor_row();
+            col = self.cursor_col();
+        }
 
         if let Some(cell) = self.active_buf_mut().get_mut(row, col) {
             cell.grapheme = c.to_string();
@@ -246,7 +269,9 @@ impl VtProcessor {
         let advance = width.max(1) as u16;
         let new_col = col + advance;
         if new_col >= cols {
-            // Wrap — handled by next LF/print sequence.
+            // Cursor has reached the last column: set pending wrap.
+            // The actual line wrap occurs when the next printable character arrives.
+            self.wrap_pending = true;
             self.active_cursor_mut().col = cols - 1;
         } else {
             self.active_cursor_mut().col = new_col;

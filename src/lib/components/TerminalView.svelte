@@ -52,7 +52,7 @@
   import ConnectionManager from './ConnectionManager.svelte';
   import Dialog from '$lib/ui/Dialog.svelte';
   import Button from '$lib/ui/Button.svelte';
-  import { Network } from 'lucide-svelte';
+  import { Network, MousePointerClick } from 'lucide-svelte';
   import type {
     Preferences,
     PreferencesPatch,
@@ -121,6 +121,18 @@
   // Tâche #13: ConnectionManager panel toggle.
   let connectionManagerOpen = $state(false);
   let savedConnections = $state<SshConnectionConfig[]>([]);
+
+  // FS-UX-002: First-launch context menu hint.
+  // Visible when preferences are loaded and hint has not been shown yet.
+  // Latched: once dismissed, stays dismissed even if preferences are refreshed.
+  let contextMenuHintVisible = $state(false);
+  let contextMenuHintDismissed = $state(false);
+
+  $effect(() => {
+    if (preferences !== undefined && !preferences.appearance.contextMenuHintShown && !contextMenuHintDismissed) {
+      contextMenuHintVisible = true;
+    }
+  });
 
   let unlistenSessionState: (() => void) | null = null;
   let unlistenSshState: (() => void) | null = null;
@@ -193,6 +205,7 @@
     } catch {
       // Non-fatal
     }
+
 
     // Listen for topology changes
     unlistenSessionState = await listen<SessionStateChangedEvent>(
@@ -764,6 +777,21 @@
   }
 
   // -------------------------------------------------------------------------
+  // FS-UX-002: Context menu hint dismissal
+  // -------------------------------------------------------------------------
+
+  async function handleContextMenuHintDismiss() {
+    if (!contextMenuHintVisible) return;
+    contextMenuHintVisible = false;
+    contextMenuHintDismissed = true;
+    try {
+      await invoke('mark_context_menu_used');
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Preferences
   // -------------------------------------------------------------------------
 
@@ -815,7 +843,8 @@
   </div>
 
   <!-- Pane area: render the full split-tree layout for the active tab -->
-  <div class="terminal-view__pane-area">
+  <!-- FS-UX-002: contextmenu bubbles up from TerminalPane to dismiss the first-launch hint -->
+  <div class="terminal-view__pane-area" role="region" oncontextmenu={handleContextMenuHintDismiss}>
     {#if activeTab && activePanes.length > 0}
       <SplitPane
         node={activeTab.layout}
@@ -824,6 +853,7 @@
         {sshStates}
         {terminatedPanes}
         wordDelimiters={preferences?.terminal.wordDelimiters}
+        confirmMultilinePaste={preferences?.terminal.confirmMultilinePaste ?? true}
         canClosePane={activePanes.length > 1}
         onpaneclick={async (paneId) => {
           try {
@@ -838,6 +868,8 @@
         }}
         onsplith={() => handleSplitPane('horizontal')}
         onsplitv={() => handleSplitPane('vertical')}
+        ondisableConfirmMultilinePaste={() =>
+          handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
       />
     {:else}
       <div class="terminal-view__empty">
@@ -845,6 +877,14 @@
       </div>
     {/if}
   </div>
+
+  <!-- FS-UX-002: First-launch context menu hint — non-blocking, bottom-right corner -->
+  {#if contextMenuHintVisible}
+    <div class="terminal-view__context-hint" aria-hidden="true">
+      <MousePointerClick size={14} aria-hidden="true" />
+      <span>{m.context_menu_hint()}</span>
+    </div>
+  {/if}
 
   <!-- Status bar: reflects active pane state -->
   <StatusBar {activePaneState} />
@@ -1012,5 +1052,26 @@
     color: var(--color-text-tertiary);
     font-size: var(--font-size-ui-base);
     font-family: var(--font-ui);
+  }
+
+  /* FS-UX-002: First-launch context menu hint (UXD §7.13) */
+  .terminal-view__context-hint {
+    position: absolute;
+    bottom: calc(var(--size-status-bar-height) + var(--space-4));
+    right: var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--color-bg-raised);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-raised);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-ui-sm);
+    font-family: var(--font-ui);
+    pointer-events: none;
+    z-index: var(--z-overlay);
+    white-space: nowrap;
   }
 </style>

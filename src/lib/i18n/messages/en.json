@@ -204,5 +204,12 @@
   "theme_edit_title": "Edit theme",
   "theme_empty_state": "No custom themes. Click \"New theme\" to create one.",
   "theme_section_builtin": "Built-in",
-  "theme_section_custom": "Custom themes"
+  "theme_section_custom": "Custom themes",
+
+  "context_menu_hint": "Right-click for more options",
+
+  "paste_confirm_title": "Paste multi-line text?",
+  "paste_confirm_body": "The text contains {lines} lines. Pasting multi-line text directly into a terminal may execute commands unintentionally.",
+  "paste_confirm_action": "Paste",
+  "paste_confirm_dont_ask": "Don't ask again"
 }

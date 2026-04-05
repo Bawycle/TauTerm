@@ -44,6 +44,7 @@ function makePrefs(overrides: Partial<Preferences> = {}): Preferences {
       allowOsc52Write: false,
       wordDelimiters: ' ,;:.{}[]()"\`|\\/',
       bellType: 'visual',
+      confirmMultilinePaste: true,
     },
     keyboard: {
       bindings: {},

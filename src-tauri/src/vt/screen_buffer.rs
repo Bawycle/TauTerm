@@ -17,6 +17,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::vt::cell::Cell;
 
+// ---------------------------------------------------------------------------
+// Scrollback line
+// ---------------------------------------------------------------------------
+
+/// A single line in the scrollback ring.
+///
+/// `soft_wrapped` is `true` when this line ended because the terminal width was
+/// exhausted (the cursor automatically wrapped to the next row) rather than
+/// because a hard newline (`\n`) was received.
+///
+/// This flag is used by the search engine to join consecutive soft-wrapped lines
+/// into a single logical string (FS-SB-008, FS-SEARCH-002).
+#[derive(Debug, Clone)]
+pub struct ScrollbackLine {
+    /// Cell content of the line.
+    pub cells: Vec<Cell>,
+    /// `true` if the line break is a soft wrap; `false` if it is a hard newline.
+    pub soft_wrapped: bool,
+}
+
 /// The maximum number of scrollback lines (configurable via preferences in the
 /// full implementation; this constant is the hard upper bound).
 pub const MAX_SCROLLBACK_LINES: usize = 100_000;
@@ -117,7 +137,7 @@ pub struct ScreenBuffer {
     /// Row-major grid: `rows × cols` cells.
     cells: Vec<Vec<Cell>>,
     /// Scrollback ring (normal screen only; capacity = `scrollback_limit`).
-    scrollback: std::collections::VecDeque<Vec<Cell>>,
+    scrollback: std::collections::VecDeque<ScrollbackLine>,
     pub scrollback_limit: usize,
     /// Pending dirty region since last `take_dirty`.
     dirty: DirtyRegion,
@@ -186,7 +206,18 @@ impl ScreenBuffer {
     /// Scroll up by `count` lines within `[top, bottom]` (DECSTBM-bounded).
     /// Lines scrolled off the top of a full-screen region enter scrollback.
     /// Lines scrolled off a partial region are discarded (FS-SB-004).
-    pub fn scroll_up(&mut self, top: u16, bottom: u16, count: u16, is_full_screen: bool) {
+    ///
+    /// `soft_wrapped` — when `true`, the first evicted line is marked as a soft
+    /// wrap (it was pushed out by auto-wrap, not a hard newline). Subsequent
+    /// lines in the same `scroll_up` call are always hard-newline lines.
+    pub fn scroll_up(
+        &mut self,
+        top: u16,
+        bottom: u16,
+        count: u16,
+        is_full_screen: bool,
+        soft_wrapped: bool,
+    ) {
         let count = count as usize;
         let top = top as usize;
         let bottom = bottom as usize;
@@ -197,13 +228,19 @@ impl ScreenBuffer {
 
         let bottom = bottom.min(self.cells.len() - 1);
 
-        for _ in 0..count {
+        for i in 0..count {
             if is_full_screen && !self.cells.is_empty() {
                 let evicted = self.cells[top].clone();
                 if self.scrollback.len() >= self.scrollback_limit {
                     self.scrollback.pop_front();
                 }
-                self.scrollback.push_back(evicted);
+                // Only the first evicted line in this scroll_up call may be
+                // soft-wrapped — subsequent ones are always hard-newline lines
+                // (they correspond to existing screen content, not the cursor row).
+                self.scrollback.push_back(ScrollbackLine {
+                    cells: evicted,
+                    soft_wrapped: soft_wrapped && i == 0,
+                });
             }
 
             for row in top..bottom {
@@ -270,8 +307,13 @@ impl ScreenBuffer {
     }
 
     /// Get a scrollback line by 0-based index from the oldest line.
-    pub fn get_scrollback_line(&self, index: usize) -> Option<&Vec<Cell>> {
+    pub fn get_scrollback_line(&self, index: usize) -> Option<&ScrollbackLine> {
         self.scrollback.get(index)
+    }
+
+    /// Iterate over all scrollback lines from oldest to newest.
+    pub fn scrollback_iter(&self) -> impl Iterator<Item = &ScrollbackLine> {
+        self.scrollback.iter()
     }
 
     /// Number of lines in scrollback.
@@ -388,14 +430,14 @@ mod tests {
         if let Some(cell) = buf.get_mut(0, 0) {
             cell.grapheme = "A".to_string();
         }
-        buf.scroll_up(0, 2, 1, true);
+        buf.scroll_up(0, 2, 1, true, false);
         assert_eq!(buf.scrollback_len(), 1);
     }
 
     #[test]
     fn scroll_up_partial_region_does_not_add_to_scrollback() {
         let mut buf = ScreenBuffer::new(5, 5, 100);
-        buf.scroll_up(1, 3, 1, false);
+        buf.scroll_up(1, 3, 1, false, false);
         assert_eq!(buf.scrollback_len(), 0);
     }
 
@@ -404,7 +446,7 @@ mod tests {
         let limit = 3usize;
         let mut buf = ScreenBuffer::new(5, 1, limit);
         for _ in 0..10 {
-            buf.scroll_up(0, 0, 1, true);
+            buf.scroll_up(0, 0, 1, true, false);
         }
         assert!(buf.scrollback_len() <= limit);
     }

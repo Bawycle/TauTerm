@@ -204,5 +204,12 @@
   "theme_edit_title": "Modifier le thème",
   "theme_empty_state": "Aucun thème personnalisé. Cliquez sur « Nouveau thème » pour en créer un.",
   "theme_section_builtin": "Intégré",
-  "theme_section_custom": "Thèmes personnalisés"
+  "theme_section_custom": "Thèmes personnalisés",
+
+  "context_menu_hint": "Clic droit pour plus d'options",
+
+  "paste_confirm_title": "Coller du texte multi-lignes ?",
+  "paste_confirm_body": "Le texte contient {lines} lignes. Coller du texte multi-lignes directement dans un terminal peut exécuter des commandes involontairement.",
+  "paste_confirm_action": "Coller",
+  "paste_confirm_dont_ask": "Ne plus demander"
 }

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Scrollback search — iterate scrollback lines, skip soft-wrap boundaries,
+//! Scrollback search — iterate scrollback lines, join soft-wrap boundaries,
 //! return `SearchMatch` positions.
 
 use serde::{Deserialize, Serialize};
 
 use crate::vt::cell::Cell;
+use crate::vt::screen_buffer::ScrollbackLine;
 
 /// A search query.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,13 +96,85 @@ fn cells_to_text(row: &[Cell]) -> (String, Vec<u16>) {
     (text, char_to_col)
 }
 
-/// Find all literal matches in `haystack` and append `SearchMatch` to `out`.
-fn find_literal(
+// ---------------------------------------------------------------------------
+// Soft-wrap group building
+// ---------------------------------------------------------------------------
+
+/// A logical search unit: one or more consecutive scrollback rows joined by soft wraps.
+struct LogicalLine<'a> {
+    /// Row index (in the original scrollback) of the first row in this group.
+    first_row: usize,
+    /// All constituent rows, in order.
+    rows: Vec<&'a Vec<Cell>>,
+}
+
+/// Group consecutive scrollback lines into logical lines, joining across soft-wrap
+/// boundaries (FS-SB-008 / FS-SEARCH-002).
+///
+/// A row with `soft_wrapped == true` continues into the next row. The last row of
+/// a group has `soft_wrapped == false` (or is the final row in the scrollback).
+fn build_logical_lines<'a>(
+    scrollback_lines: impl Iterator<Item = &'a ScrollbackLine>,
+) -> Vec<LogicalLine<'a>> {
+    let mut groups: Vec<LogicalLine<'_>> = Vec::new();
+    let mut current: Option<LogicalLine<'_>> = None;
+
+    for (idx, sl) in scrollback_lines.enumerate() {
+        match current.as_mut() {
+            None => {
+                current = Some(LogicalLine {
+                    first_row: idx,
+                    rows: vec![&sl.cells],
+                });
+            }
+            Some(group) => {
+                group.rows.push(&sl.cells);
+            }
+        }
+        // When a line is NOT soft-wrapped, it terminates the current group.
+        if !sl.soft_wrapped
+            && let Some(group) = current.take()
+        {
+            groups.push(group);
+        }
+    }
+    // Flush any open group (trailing soft-wrapped lines or last line overall).
+    if let Some(group) = current {
+        groups.push(group);
+    }
+    groups
+}
+
+/// Convert a logical line (potentially multiple rows) to a flat string with
+/// `(row_offset, col)` position metadata for each character.
+///
+/// `row_offset` is relative to `LogicalLine::first_row`.
+fn logical_line_to_text(rows: &[&Vec<Cell>]) -> (String, Vec<(usize, u16)>) {
+    let mut text = String::new();
+    let mut positions: Vec<(usize, u16)> = Vec::new();
+
+    for (row_offset, row) in rows.iter().enumerate() {
+        let (row_text, char_to_col) = cells_to_text(row);
+        text.push_str(&row_text);
+        for col in char_to_col {
+            positions.push((row_offset, col));
+        }
+    }
+
+    (text, positions)
+}
+
+// ---------------------------------------------------------------------------
+// Match emitters
+// ---------------------------------------------------------------------------
+
+/// Find all literal matches in a logical line and push `SearchMatch` entries.
+fn find_literal_logical(
     haystack: &str,
     needle: &str,
     case_sensitive: bool,
-    char_to_col: &[u16],
-    row_idx: usize,
+    positions: &[(usize, u16)],
+    first_row: usize,
     out: &mut Vec<SearchMatch>,
 ) {
     let search_str: &str;
@@ -119,14 +192,14 @@ fn find_literal(
         let char_start = search_str[..abs_byte].chars().count();
         let char_end = char_start + needle.chars().count();
 
-        let col_start = char_to_col.get(char_start).copied().unwrap_or(0);
-        let col_end = char_to_col
+        let (row_off, col_start) = positions.get(char_start).copied().unwrap_or((0, 0));
+        let col_end = positions
             .get(char_end)
-            .copied()
+            .map(|&(_, c)| c)
             .unwrap_or_else(|| col_start + needle.chars().count() as u16);
 
         out.push(SearchMatch {
-            scrollback_row: row_idx,
+            scrollback_row: first_row + row_off,
             col_start,
             col_end,
         });
@@ -142,10 +215,15 @@ fn find_literal(
 
 /// Search scrollback lines for matches of `query`.
 ///
-/// Returns all matches in row-major order (oldest row first, left-to-right within a row).
-/// Returns an empty Vec if the query is empty, or if regex compilation fails.
+/// Consecutive soft-wrapped lines are joined into a single logical line for
+/// matching purposes (FS-SB-008 / FS-SEARCH-002). A word split across a
+/// soft-wrap boundary is therefore found as a single match.
+///
+/// Returns all matches in row-major order (oldest row first, left-to-right
+/// within a row). Returns an empty Vec if the query is empty or regex
+/// compilation fails.
 pub fn search_scrollback<'a>(
-    scrollback_lines: impl Iterator<Item = &'a Vec<Cell>>,
+    scrollback_lines: impl Iterator<Item = &'a ScrollbackLine>,
     query: &SearchQuery,
 ) -> Vec<SearchMatch> {
     if query.text.is_empty() {
@@ -160,10 +238,11 @@ pub fn search_scrollback<'a>(
         }
     };
 
+    let groups = build_logical_lines(scrollback_lines);
     let mut results = Vec::new();
 
-    for (row_idx, row) in scrollback_lines.enumerate() {
-        let (text, char_to_col) = cells_to_text(row);
+    for group in &groups {
+        let (text, positions) = logical_line_to_text(&group.rows);
         if text.is_empty() {
             continue;
         }
@@ -173,12 +252,12 @@ pub fn search_scrollback<'a>(
                 needle,
                 case_sensitive,
             } => {
-                find_literal(
+                find_literal_logical(
                     &text,
                     needle,
                     *case_sensitive,
-                    &char_to_col,
-                    row_idx,
+                    &positions,
+                    group.first_row,
                     &mut results,
                 );
             }
@@ -186,13 +265,13 @@ pub fn search_scrollback<'a>(
                 for m in re.find_iter(&text) {
                     let char_start = text[..m.start()].chars().count();
                     let char_end = text[..m.end()].chars().count();
-                    let col_start = char_to_col.get(char_start).copied().unwrap_or(0);
-                    let col_end = char_to_col
+                    let (row_off, col_start) = positions.get(char_start).copied().unwrap_or((0, 0));
+                    let col_end = positions
                         .get(char_end)
-                        .copied()
+                        .map(|&(_, c)| c)
                         .unwrap_or(col_start + (char_end - char_start) as u16);
                     results.push(SearchMatch {
-                        scrollback_row: row_idx,
+                        scrollback_row: group.first_row + row_off,
                         col_start,
                         col_end,
                     });
@@ -231,14 +310,29 @@ mod tests {
         }
     }
 
+    /// Wrap a `Vec<Cell>` into a hard-newline `ScrollbackLine`.
+    fn hard(cells: Vec<Cell>) -> ScrollbackLine {
+        ScrollbackLine {
+            cells,
+            soft_wrapped: false,
+        }
+    }
+
+    /// Wrap a `Vec<Cell>` into a soft-wrapped `ScrollbackLine`.
+    fn soft(cells: Vec<Cell>) -> ScrollbackLine {
+        ScrollbackLine {
+            cells,
+            soft_wrapped: true,
+        }
+    }
+
     // -----------------------------------------------------------------------
     // FS-SEARCH-001 — literal case-insensitive search returns matches
     // -----------------------------------------------------------------------
 
     #[test]
     fn fs_search_001_literal_case_insensitive_finds_match() {
-        let row = make_row("Hello World", 20);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("Hello World", 20))];
         let query = SearchQuery {
             text: "hello".to_string(),
             case_sensitive: false,
@@ -257,8 +351,7 @@ mod tests {
 
     #[test]
     fn fs_search_003_regex_finds_match() {
-        let row = make_row("error: file not found", 30);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("error: file not found", 30))];
         let query = SearchQuery {
             text: r"error:\s+\w+".to_string(),
             case_sensitive: false,
@@ -271,8 +364,7 @@ mod tests {
 
     #[test]
     fn fs_search_invalid_regex_returns_empty() {
-        let row = make_row("test", 10);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("test", 10))];
         let query = SearchQuery {
             text: "[invalid(regex".to_string(),
             case_sensitive: false,
@@ -287,8 +379,7 @@ mod tests {
 
     #[test]
     fn fs_search_empty_query_returns_empty() {
-        let row = make_row("hello", 10);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("hello", 10))];
         let query = SearchQuery {
             text: String::new(),
             case_sensitive: false,
@@ -300,8 +391,7 @@ mod tests {
 
     #[test]
     fn fs_search_multiple_matches_on_same_row() {
-        let row = make_row("aabaa", 10);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("aabaa", 10))];
         let query = SearchQuery {
             text: "a".to_string(),
             case_sensitive: true,
@@ -313,8 +403,7 @@ mod tests {
 
     #[test]
     fn fs_search_case_sensitive_no_match() {
-        let row = make_row("Hello", 10);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("Hello", 10))];
         let query = SearchQuery {
             text: "hello".to_string(),
             case_sensitive: true,
@@ -352,8 +441,7 @@ mod tests {
     #[test]
     fn search_literal_regex_special_chars_treated_as_literal() {
         // Row contains the literal string "foo.*bar"
-        let row = make_row("foo.*bar  ", 10);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("foo.*bar  ", 10))];
         let query = SearchQuery {
             text: "foo.*bar".to_string(),
             case_sensitive: true,
@@ -374,8 +462,7 @@ mod tests {
     /// SEARCH-LITERAL-002: regex metacharacter '(' as literal does not panic.
     #[test]
     fn search_literal_open_paren_does_not_panic() {
-        let row = make_row("func(arg) rest", 20);
-        let lines = vec![row];
+        let lines = vec![hard(make_row("func(arg) rest", 20))];
         let query = SearchQuery {
             text: "func(arg)".to_string(),
             case_sensitive: true,
@@ -390,25 +477,18 @@ mod tests {
     // -----------------------------------------------------------------------
     // SEARCH-SOFT-001: soft-wrapped line — cross-row match
     //
-    // When a word spans two consecutive rows (soft-wrapped), search_scrollback
-    // in its current row-by-row implementation will NOT find the cross-row match.
-    // This test documents the EXPECTED behaviour after soft-wrap support is added.
-    //
-    // Marked #[ignore] — TDD red phase. Will pass once search_scrollback gains
-    // cross-row (soft-wrap) joining.
+    // When a word spans two consecutive rows connected by a soft wrap,
+    // search_scrollback must join them and find the cross-row match.
     // -----------------------------------------------------------------------
 
     /// SEARCH-SOFT-001: word spanning a soft-wrapped boundary is found as one match.
     ///
     /// cols=5, row0="hello" (soft-wrapped), row1="world"
-    /// Query: "helloworld" → one match spanning both rows.
+    /// Query: "helloworld" → one match starting on row 0.
     #[test]
-    #[ignore = "cross-row soft-wrap search not yet implemented — TDD red phase (SEARCH-SOFT-001)"]
     fn search_soft_wrap_word_spanning_two_rows_is_found() {
-        // Two rows of 5 columns, soft-wrapped (no newline between them)
-        let row0 = make_row("hello", 5);
-        let row1 = make_row("world", 5);
-        let lines = vec![row0, row1];
+        // row0 is soft-wrapped (continues into row1); row1 is a hard newline.
+        let lines = vec![soft(make_row("hello", 5)), hard(make_row("world", 5))];
 
         let query = SearchQuery {
             text: "helloworld".to_string(),
@@ -422,5 +502,88 @@ mod tests {
             "Soft-wrap search must find 'helloworld' spanning rows 0 and 1"
         );
         assert_eq!(matches[0].scrollback_row, 0, "Match must start on row 0");
+    }
+
+    // -----------------------------------------------------------------------
+    // SEARCH-SOFT-002: word spanning three soft-wrapped rows
+    // -----------------------------------------------------------------------
+
+    /// SEARCH-SOFT-002: word spanning three soft-wrapped rows is found.
+    ///
+    /// cols=4, row0="abcd" (soft), row1="efgh" (soft), row2="ijkl" (hard)
+    /// Query: "abcdefghijkl" → one match starting on row 0.
+    #[test]
+    fn search_soft_wrap_word_spanning_three_rows_is_found() {
+        let lines = vec![
+            soft(make_row("abcd", 4)),
+            soft(make_row("efgh", 4)),
+            hard(make_row("ijkl", 4)),
+        ];
+
+        let query = SearchQuery {
+            text: "abcdefghijkl".to_string(),
+            case_sensitive: true,
+            regex: false,
+        };
+
+        let matches = search_scrollback(lines.iter(), &query);
+        assert!(
+            !matches.is_empty(),
+            "Soft-wrap search must find 'abcdefghijkl' spanning rows 0, 1, and 2"
+        );
+        assert_eq!(matches[0].scrollback_row, 0, "Match must start on row 0");
+    }
+
+    // -----------------------------------------------------------------------
+    // SEARCH-SOFT-003: cross-row match where only the boundary chars span rows
+    // -----------------------------------------------------------------------
+
+    /// SEARCH-SOFT-003: query spanning only 2 chars at the row boundary is found.
+    ///
+    /// cols=3, row0="aab" (soft), row1="bcc" (hard)
+    /// Query: "bb" → spans col 2 of row0 and col 0 of row1.
+    #[test]
+    fn search_soft_wrap_boundary_chars_found() {
+        let lines = vec![soft(make_row("aab", 3)), hard(make_row("bcc", 3))];
+
+        let query = SearchQuery {
+            text: "bb".to_string(),
+            case_sensitive: true,
+            regex: false,
+        };
+
+        let matches = search_scrollback(lines.iter(), &query);
+        assert!(
+            !matches.is_empty(),
+            "Soft-wrap search must find 'bb' spanning the boundary of rows 0 and 1"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEARCH-HARD-001: hard-newline rows are NOT joined
+    //
+    // Verifies that two hard-newline rows are not concatenated, so a word
+    // that would only appear if they were joined is NOT found.
+    // -----------------------------------------------------------------------
+
+    /// SEARCH-HARD-001: two hard-newline rows are treated as separate logical lines.
+    #[test]
+    fn search_hard_newline_rows_are_not_joined() {
+        // "hello" ends with a hard newline, so "world" is on a new logical line.
+        let lines = vec![hard(make_row("hello", 5)), hard(make_row("world", 5))];
+
+        let query = SearchQuery {
+            text: "helloworld".to_string(),
+            case_sensitive: false,
+            regex: false,
+        };
+
+        // The query spans both rows — but since they're hard-newline separated,
+        // no match should be found.
+        let matches = search_scrollback(lines.iter(), &query);
+        assert!(
+            matches.is_empty(),
+            "Hard-newline rows must NOT be joined: 'helloworld' must not match"
+        );
     }
 }

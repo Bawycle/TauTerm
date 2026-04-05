@@ -220,6 +220,9 @@ impl ScreenBuffer {
 
     /// Scroll down by `count` lines within `[top, bottom]`.
     pub fn scroll_down(&mut self, top: u16, bottom: u16, count: u16) {
+        if self.cells.is_empty() || top >= bottom {
+            return;
+        }
         let count = count as usize;
         let top = top as usize;
         let bottom = (bottom as usize).min(self.cells.len() - 1);

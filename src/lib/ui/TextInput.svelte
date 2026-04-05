@@ -61,20 +61,18 @@
       : `${baseInputClasses} border-(--color-border)`,
   );
 
-  const describedBy = $derived(
-    error ? `${uid}-error` : helper ? `${uid}-helper` : undefined,
-  );
+  const describedBy = $derived(error ? `${uid}-error` : helper ? `${uid}-helper` : undefined);
 </script>
 
 <div class="flex flex-col">
   {#if label}
-    <label for={id} class="block text-[12px] font-medium text-(--color-text-secondary) mb-1">
+    <label for={uid} class="block text-[12px] font-medium text-(--color-text-secondary) mb-1">
       {label}
     </label>
   {/if}
 
   <input
-    {id}
+    id={uid}
     {type}
     {placeholder}
     {disabled}

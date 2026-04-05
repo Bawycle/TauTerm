@@ -118,6 +118,11 @@ export interface SessionStateChangedEvent {
    * Present when `changeType === 'active-tab-changed'` or `'tab-closed'`.
    */
   activeTabId?: TabId;
+  /**
+   * Present when `changeType === 'tab-closed'` — the ID of the closed tab.
+   * Used to reliably identify which tab to remove from the local list.
+   */
+  closedTabId?: TabId;
 }
 
 // ---------------------------------------------------------------------------

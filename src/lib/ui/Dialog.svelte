@@ -20,6 +20,7 @@
   import { Dialog } from 'bits-ui';
   import { X } from 'lucide-svelte';
   import type { Snippet } from 'svelte';
+  import * as m from '$lib/paraglide/messages';
 
   interface Props {
     open?: boolean;
@@ -42,7 +43,12 @@
   const contentWidth = $derived(size === 'medium' ? 'w-[560px]' : 'w-[420px]');
 </script>
 
-<Dialog.Root bind:open onOpenChange={(o) => { if (!o) onclose?.(); }}>
+<Dialog.Root
+  bind:open
+  onOpenChange={(o) => {
+    if (!o) onclose?.();
+  }}
+>
   <Dialog.Portal>
     <Dialog.Overlay class="fixed inset-0 z-[49] bg-(--color-bg-overlay)/60" />
 
@@ -55,15 +61,13 @@
     >
       <!-- Header: title + close button -->
       <div class="flex items-start justify-between mb-3">
-        <Dialog.Title
-          class="text-[16px] font-semibold text-(--color-text-primary) leading-snug"
-        >
+        <Dialog.Title class="text-[16px] font-semibold text-(--color-text-primary) leading-snug">
           {title}
         </Dialog.Title>
 
         <Dialog.Close
           class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-[2px] -mr-3 -mt-1 flex-shrink-0"
-          aria-label="Close dialog"
+          aria-label={m.dialog_close()}
         >
           <X size={16} aria-hidden="true" />
         </Dialog.Close>

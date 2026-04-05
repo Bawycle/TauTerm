@@ -87,7 +87,7 @@ export function cellStyleFromUpdate(content: string, attrs: CellAttrsDto): CellS
  * Returns an object suitable for Svelte's style directive or inline style attribute.
  * NEVER produces HTML — callers set textContent, not innerHTML.
  */
-export function cellToCssVars(cell: CellStyle, focused: boolean): Record<string, string> {
+export function cellToCssVars(cell: CellStyle): Record<string, string> {
   const style: Record<string, string> = {};
 
   // Apply inverse: swap fg and bg
@@ -117,11 +117,7 @@ export function cellToCssVars(cell: CellStyle, focused: boolean): Record<string,
  * The grid is row-major: index = row * cols + col.
  * Mutates `grid` in place.
  */
-export function applyUpdates(
-  grid: CellStyle[],
-  updates: CellUpdate[],
-  cols: number,
-): void {
+export function applyUpdates(grid: CellStyle[], updates: CellUpdate[], cols: number): void {
   for (const update of updates) {
     const idx = update.row * cols + update.col;
     if (idx >= 0 && idx < grid.length) {

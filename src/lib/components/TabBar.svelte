@@ -22,6 +22,7 @@
   import { Plus, X, Bell, CheckCircle, XCircle, Network } from 'lucide-svelte';
   import { Tooltip } from 'bits-ui';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
+  import * as m from '$lib/paraglide/messages';
 
   interface Props {
     tabs: TabState[];
@@ -72,9 +73,10 @@
       const sorted = sortedTabs;
       const idx = sorted.findIndex((t) => t.id === tabId);
       if (idx === -1) return;
-      const next = event.key === 'ArrowRight'
-        ? sorted[(idx + 1) % sorted.length]
-        : sorted[(idx - 1 + sorted.length) % sorted.length];
+      const next =
+        event.key === 'ArrowRight'
+          ? sorted[(idx + 1) % sorted.length]
+          : sorted[(idx - 1 + sorted.length) % sorted.length];
       const nextEl = document.querySelector<HTMLElement>(`[data-tab-id="${next.id}"]`);
       nextEl?.focus();
     }
@@ -131,9 +133,12 @@
         <button
           class="tab-bar__close"
           type="button"
-          aria-label="Close tab"
+          aria-label={m.tab_bar_close_tab()}
           tabindex={-1}
-          onclick={(e) => { e.stopPropagation(); onTabClose(tab.id); }}
+          onclick={(e) => {
+            e.stopPropagation();
+            onTabClose(tab.id);
+          }}
           onkeydown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -156,7 +161,7 @@
           {...props}
           class="tab-bar__new-tab"
           type="button"
-          aria-label="New tab"
+          aria-label={m.tab_bar_new_tab()}
           onclick={onNewTab}
         >
           <Plus size={14} aria-hidden="true" />
@@ -164,7 +169,7 @@
       {/snippet}
     </Tooltip.Trigger>
     <Tooltip.Content class="tab-bar__tooltip">
-      New Tab (Ctrl+Shift+T)
+      {m.tab_bar_new_tab_tooltip()}
     </Tooltip.Content>
   </Tooltip.Root>
 </div>
@@ -261,9 +266,15 @@
   }
 
   /* Activity icon color classes are set on lucide-svelte components via class prop */
-  :global(.activity-icon--success) { color: var(--color-process-end); }
-  :global(.activity-icon--error)   { color: var(--color-error); }
-  :global(.activity-icon--bell)    { color: var(--color-bell); }
+  :global(.activity-icon--success) {
+    color: var(--color-process-end);
+  }
+  :global(.activity-icon--error) {
+    color: var(--color-error);
+  }
+  :global(.activity-icon--bell) {
+    color: var(--color-bell);
+  }
 
   /* Close button — TUITC-UX-030 to 034 */
   .tab-bar__close {

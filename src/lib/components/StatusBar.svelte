@@ -19,6 +19,7 @@
 <script lang="ts">
   import { Network, WifiOff, XCircle } from 'lucide-svelte';
   import type { PaneState, SshLifecycleState } from '$lib/ipc/types';
+  import * as m from '$lib/paraglide/messages';
 
   interface Props {
     activePaneState?: PaneState | null;
@@ -35,24 +36,26 @@
   // -------------------------------------------------------------------------
 
   const isSsh = $derived(
-    activePaneState?.sessionType === 'ssh' && activePaneState?.sshState !== null
+    activePaneState?.sessionType === 'ssh' && activePaneState?.sshState !== null,
   );
 
   const sshState = $derived(activePaneState?.sshState ?? null);
 
-  const sshStatusText = $derived((): string | null => {
+  const sshStatusText = $derived.by((): string | null => {
     if (!isSsh || !sshState) return null;
     switch (sshState.type) {
       case 'connecting':
-        return sshHost ? `Connecting to ${sshHost}...` : 'Connecting...';
+        return sshHost ? m.ssh_state_connecting({ host: sshHost }) : m.status_bar_connecting();
       case 'authenticating':
-        return 'Authenticating...';
+        return sshHost ? m.ssh_state_authenticating({ host: sshHost }) : m.status_bar_connecting();
       case 'connected':
-        return sshUser && sshHost ? `${sshUser}@${sshHost}` : 'Connected';
+        return sshUser && sshHost
+          ? m.ssh_state_connected({ user: sshUser, host: sshHost })
+          : m.status_bar_connected();
       case 'disconnected':
-        return 'Disconnected';
+        return m.status_bar_disconnected();
       case 'closed':
-        return 'Closed';
+        return m.ssh_state_closed();
       default:
         return null;
     }
@@ -60,7 +63,7 @@
 
   // Icon selection per SSH state
   type IconName = 'network' | 'wifi-off' | 'x-circle' | null;
-  const sshIconName = $derived((): IconName => {
+  const sshIconName: IconName = $derived.by(() => {
     if (!isSsh || !sshState) return null;
     switch (sshState.type) {
       case 'connecting':
@@ -77,7 +80,7 @@
   });
 
   // CSS class for icon color per SSH state (UXD §7.5.1)
-  const sshIconClass = $derived((): string => {
+  const sshIconClass: string = $derived.by(() => {
     if (!sshState) return '';
     switch (sshState.type) {
       case 'connecting':
@@ -95,7 +98,7 @@
   });
 
   // Animation class for connecting/authenticating states
-  const sshIconAnimClass = $derived((): string => {
+  const sshIconAnimClass: string = $derived.by(() => {
     if (!sshState) return '';
     if (sshState.type === 'connecting') return 'status-bar__ssh-icon--rotating';
     if (sshState.type === 'authenticating') return 'status-bar__ssh-icon--pulsing';
@@ -112,7 +115,7 @@
   <div class="status-bar__left">
     {#if activePaneState?.sessionType === 'local'}
       <!-- No indicator for local sessions (absence = local per UXD §7.5.1) -->
-      <span class="status-bar__session-label">LOCAL</span>
+      <span class="status-bar__session-label">{m.status_bar_local()}</span>
     {/if}
 
     {#if isSsh && sshState}
@@ -122,19 +125,19 @@
         class:status-bar__ssh--disconnected={sshState.type === 'disconnected'}
       >
         <!-- Icon: Network / WifiOff / XCircle -->
-        <span class="status-bar__ssh-icon {sshIconClass()} {sshIconAnimClass()}">
-          {#if sshIconName() === 'network'}
+        <span class="status-bar__ssh-icon {sshIconClass} {sshIconAnimClass}">
+          {#if sshIconName === 'network'}
             <Network size={14} aria-hidden="true" />
-          {:else if sshIconName() === 'wifi-off'}
+          {:else if sshIconName === 'wifi-off'}
             <WifiOff size={14} aria-hidden="true" />
-          {:else if sshIconName() === 'x-circle'}
+          {:else if sshIconName === 'x-circle'}
             <XCircle size={14} aria-hidden="true" />
           {/if}
         </span>
 
         <!-- SSH status text — text interpolation only -->
-        {#if sshStatusText()}
-          <span class="status-bar__ssh-text">{sshStatusText()}</span>
+        {#if sshStatusText}
+          <span class="status-bar__ssh-text">{sshStatusText}</span>
         {/if}
       </span>
     {/if}
@@ -242,13 +245,22 @@
 
   /* Animations */
   @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.4; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .status-bar__ssh-icon--rotating :global(svg) {

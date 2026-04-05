@@ -20,7 +20,7 @@ impl Perform for VtPerformBridge<'_> {
     fn print(&mut self, c: char) {
         let p = &mut self.inner;
         // Apply DEC Special Graphics mapping if active.
-        let mapped_c = if (c as u8) >= 0x60 {
+        let mapped_c = if c.is_ascii() && (c as u8) >= 0x60 {
             let active_charset = match p.modes.charset_slot {
                 CharsetSlot::G0 => p.modes.g0,
                 CharsetSlot::G1 => p.modes.g1,

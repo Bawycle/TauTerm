@@ -23,7 +23,17 @@
     - no clipboard read on render (SEC-UI-005)
 -->
 <script lang="ts">
-  import { X, Plus, Server, ExternalLink, SplitSquareVertical, Pencil, Copy, Trash2, ChevronDown } from 'lucide-svelte';
+  import {
+    X,
+    Plus,
+    Server,
+    ExternalLink,
+    SplitSquareVertical,
+    Pencil,
+    Copy,
+    Trash2,
+    ChevronDown,
+  } from 'lucide-svelte';
   import TextInput from '$lib/ui/TextInput.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import Button from '$lib/ui/Button.svelte';
@@ -102,10 +112,11 @@
   // Grouped connections
   // ---------------------------------------------------------------------------
 
-  const groupedConnections = $derived(() => {
+  const groupedConnections = $derived.by(() => {
     const groups = new Map<string, SshConnectionConfig[]>();
     for (const conn of connections) {
-      const g = (conn as SshConnectionConfig & { group?: string }).group ?? m.connection_group_ungrouped();
+      const g =
+        (conn as SshConnectionConfig & { group?: string }).group ?? m.connection_group_ungrouped();
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g)!.push(conn);
     }
@@ -181,14 +192,10 @@
     const duped: SshConnectionConfig = {
       ...conn,
       id: '',
-      label: conn.label
-        ? m.connection_duplicate_label_suffix({ label: conn.label })
-        : '',
+      label: conn.label ? m.connection_duplicate_label_suffix({ label: conn.label }) : '',
     };
     onsave?.(duped);
   }
-
-
 </script>
 
 <div
@@ -228,7 +235,7 @@
       </p>
     {:else}
       <div class="connection-manager__list" role="list">
-        {#each [...groupedConnections()] as [group, items] (group)}
+        {#each [...groupedConnections] as [group, items] (group)}
           <!-- Group heading -->
           <button
             class="connection-manager__group-heading"
@@ -249,7 +256,9 @@
               <div class="connection-manager__item" role="listitem">
                 <!-- Left: icon + labels -->
                 <div class="connection-manager__item-info">
-                  <span class="connection-manager__item-icon"><Server size={16} aria-hidden="true" /></span>
+                  <span class="connection-manager__item-icon"
+                    ><Server size={16} aria-hidden="true" /></span
+                  >
                   <div>
                     <p class="connection-manager__item-primary">
                       {conn.label || `${conn.host}:${conn.port}`}
@@ -261,7 +270,11 @@
                 </div>
 
                 <!-- Right: action buttons (visible on hover via CSS, always accessible) -->
-                <div class="connection-manager__item-actions" role="group" aria-label="Connection actions">
+                <div
+                  class="connection-manager__item-actions"
+                  role="group"
+                  aria-label="Connection actions"
+                >
                   <button
                     class="connection-manager__action-btn"
                     onclick={() => onopen?.({ connectionId: conn.id, target: 'tab' })}
@@ -309,41 +322,54 @@
         {/each}
       </div>
     {/if}
-
   {:else}
     <!-- Edit form view -->
-    <div class="connection-manager__form" role="form" aria-label={editingId ? m.connection_edit() : m.connection_new()}>
+    <div
+      class="connection-manager__form"
+      role="form"
+      aria-label={editingId ? m.connection_edit() : m.connection_new()}
+    >
       <div class="space-y-3">
         <TextInput
           id="cm-label"
           label={m.connection_field_label()}
           value={formLabel}
-          oninput={(v) => { formLabel = v; }}
+          oninput={(v) => {
+            formLabel = v;
+          }}
         />
         <TextInput
           id="cm-group"
           label={m.connection_field_group()}
           value={formGroup}
-          oninput={(v) => { formGroup = v; }}
+          oninput={(v) => {
+            formGroup = v;
+          }}
         />
         <TextInput
           id="cm-host"
           label={m.connection_field_host()}
           value={formHost}
-          oninput={(v) => { formHost = v; }}
+          oninput={(v) => {
+            formHost = v;
+          }}
         />
         <TextInput
           id="cm-port"
           label={m.connection_field_port()}
           type="number"
           value={formPort}
-          oninput={(v) => { formPort = v; }}
+          oninput={(v) => {
+            formPort = v;
+          }}
         />
         <TextInput
           id="cm-username"
           label={m.connection_field_user()}
           value={formUsername}
-          oninput={(v) => { formUsername = v; }}
+          oninput={(v) => {
+            formUsername = v;
+          }}
         />
 
         <!-- Auth method -->
@@ -352,23 +378,31 @@
             {m.connection_field_auth_method()}
           </p>
           <div class="flex gap-4">
-            <label class="flex items-center gap-2 text-[13px] text-(--color-text-primary) cursor-pointer">
+            <label
+              class="flex items-center gap-2 text-[13px] text-(--color-text-primary) cursor-pointer"
+            >
               <input
                 type="radio"
                 name="cm-auth-method"
                 value="identity"
                 checked={formAuthMethod === 'identity'}
-                onchange={() => { formAuthMethod = 'identity'; }}
+                onchange={() => {
+                  formAuthMethod = 'identity';
+                }}
               />
               {m.connection_auth_identity_file()}
             </label>
-            <label class="flex items-center gap-2 text-[13px] text-(--color-text-primary) cursor-pointer">
+            <label
+              class="flex items-center gap-2 text-[13px] text-(--color-text-primary) cursor-pointer"
+            >
               <input
                 type="radio"
                 name="cm-auth-method"
                 value="password"
                 checked={formAuthMethod === 'password'}
-                onchange={() => { formAuthMethod = 'password'; }}
+                onchange={() => {
+                  formAuthMethod = 'password';
+                }}
               />
               {m.connection_auth_password()}
             </label>
@@ -380,7 +414,9 @@
             id="cm-identity-file"
             label={m.connection_field_identity()}
             value={formIdentityFile}
-            oninput={(v) => { formIdentityFile = v; }}
+            oninput={(v) => {
+              formIdentityFile = v;
+            }}
           />
         {:else}
           <!-- Password field — type="password" ensures masking (SEC-UI-002) -->
@@ -389,14 +425,18 @@
             label={m.connection_field_password()}
             type="password"
             value={formPassword}
-            oninput={(v) => { formPassword = v; }}
+            oninput={(v) => {
+              formPassword = v;
+            }}
           />
         {/if}
 
         <Toggle
           label={m.connection_osc52_label()}
           checked={formAllowOsc52}
-          onchange={(v) => { formAllowOsc52 = v; }}
+          onchange={(v) => {
+            formAllowOsc52 = v;
+          }}
         />
       </div>
 

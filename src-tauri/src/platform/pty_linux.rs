@@ -124,6 +124,10 @@ impl LinuxPtySession {
 }
 
 impl PtySession for LinuxPtySession {
+    fn reader_handle(&self) -> Option<Arc<Mutex<Box<dyn Read + Send>>>> {
+        Some(self.reader.clone())
+    }
+
     fn write(&mut self, data: &[u8]) -> Result<(), PtyError> {
         let mut writer = self
             .writer

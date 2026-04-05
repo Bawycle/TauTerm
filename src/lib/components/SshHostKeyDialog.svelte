@@ -49,7 +49,7 @@
 
 <Dialog
   {open}
-  title={isChanged ? 'Host Key Changed — Possible Security Risk' : 'Verify Host Key'}
+  title={isChanged ? m.ssh_host_key_dialog_title_changed() : m.ssh_host_key_dialog_title_verify()}
   size="medium"
   {onclose}
 >
@@ -58,33 +58,30 @@
       {#if isChanged}
         <!-- Key change: prominent warning (FS-SSH-011) -->
         <div class="ssh-host-key-dialog__warning" role="alert">
-          <strong>Warning: The host key for {host} has changed.</strong>
+          <strong>{m.ssh_host_key_dialog_warning_title({ host })}</strong>
           <p>
-            This may indicate a man-in-the-middle attack. Do not accept unless you have verified
-            this change with your server administrator.
+            {m.ssh_host_key_dialog_warning_body()}
           </p>
         </div>
       {:else}
         <!-- First-time TOFU (FS-SSH-011) -->
         <p class="ssh-host-key-dialog__intro">
-          TauTerm is connecting to <strong>{host}</strong> for the first time. To confirm you are
-          connecting to the right server, verify the fingerprint below with your server
-          administrator. If you are unsure, click Reject.
+          {m.ssh_host_key_dialog_intro({ host })}
         </p>
       {/if}
 
       <dl class="ssh-host-key-dialog__details">
         <div class="ssh-host-key-dialog__detail-row">
-          <dt>Host</dt>
+          <dt>{m.ssh_host_key_dialog_label_host()}</dt>
           <!-- SEC-BLK-004: host is from config, text interpolation only -->
           <dd>{host}</dd>
         </div>
         <div class="ssh-host-key-dialog__detail-row">
-          <dt>Key type</dt>
+          <dt>{m.ssh_host_key_dialog_label_key_type()}</dt>
           <dd>{keyType}</dd>
         </div>
         <div class="ssh-host-key-dialog__detail-row">
-          <dt>SHA-256 fingerprint</dt>
+          <dt>{m.ssh_host_key_dialog_label_fingerprint()}</dt>
           <dd class="ssh-host-key-dialog__fingerprint">{fingerprint}</dd>
         </div>
       </dl>
@@ -96,9 +93,10 @@
     <Button variant="ghost" onclick={handleReject}>{m.action_cancel()}</Button>
     {#if isChanged}
       <!-- Key change: Accept must be non-default, visually less prominent -->
-      <Button variant="ghost" onclick={handleAccept}>Accept Anyway</Button>
+      <Button variant="ghost" onclick={handleAccept}>{m.ssh_host_key_dialog_accept_anyway()}</Button
+      >
     {:else}
-      <Button variant="primary" onclick={handleAccept}>Accept</Button>
+      <Button variant="primary" onclick={handleAccept}>{m.ssh_host_key_dialog_accept()}</Button>
     {/if}
   {/snippet}
 </Dialog>

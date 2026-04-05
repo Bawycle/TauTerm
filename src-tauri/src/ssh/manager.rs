@@ -440,18 +440,16 @@ impl SshManager {
             registry,
         );
 
-        // Store the russh Handle and channel in the connection entry.
-        // We must remove and re-insert because DashMap entries cannot be mutated
-        // structurally via a shared reference.
-        if let Some((key, mut conn)) = self.connections.remove(&pane_id) {
-            *conn
-                .handle
-                .try_lock()
-                .expect("handle mutex uncontested at init") = Some(session);
+        // Mutate the connection entry in-place via DashMap::get_mut.
+        // This avoids a remove/insert window where concurrent access would
+        // return PaneNotFound.
+        if let Some(mut conn) = self.connections.get_mut(&pane_id) {
+            let mut handle_guard = conn.handle.lock().await;
+            *handle_guard = Some(session);
+            drop(handle_guard);
             conn.channel = Some(channel_arc);
             conn.read_task = Some(read_task);
             conn.set_state(SshLifecycleState::Connected);
-            self.connections.insert(key, conn);
         }
 
         // Transition to Connected.

@@ -181,14 +181,11 @@ fn load_from_disk(path: &PathBuf) -> Preferences {
     match std::fs::read_to_string(path) {
         Ok(content) => match serde_json::from_str::<Preferences>(&content) {
             Ok(prefs) => {
-                tracing::info!("Loaded preferences from {}", path.display());
+                tracing::info!("Loaded preferences from preferences.json");
                 prefs
             }
             Err(e) => {
-                tracing::warn!(
-                    "Failed to parse preferences ({}), using defaults: {e}",
-                    path.display()
-                );
+                tracing::warn!("Failed to parse preferences.json, using defaults: {e}",);
                 Preferences::default()
             }
         },
@@ -197,10 +194,7 @@ fn load_from_disk(path: &PathBuf) -> Preferences {
             Preferences::default()
         }
         Err(e) => {
-            tracing::warn!(
-                "Could not read preferences file ({}), using defaults: {e}",
-                path.display()
-            );
+            tracing::warn!("Could not read preferences.json, using defaults: {e}",);
             Preferences::default()
         }
     }

@@ -72,7 +72,7 @@
   // Match count display
   // ---------------------------------------------------------------------------
 
-  const matchCountDisplay = $derived(() => {
+  const matchCountDisplay = $derived.by(() => {
     if (matchCount === 0) return m.search_no_results();
     return m.search_result_count({ current: currentMatch, total: matchCount });
   });
@@ -114,11 +114,7 @@
 </script>
 
 {#if open}
-  <div
-    class="search-overlay"
-    role="search"
-    aria-label={m.action_search()}
-  >
+  <div class="search-overlay" role="search" aria-label={m.action_search()}>
     <!-- Search input -->
     <input
       bind:this={inputEl}
@@ -135,7 +131,7 @@
 
     <!-- Match count -->
     <span class="search-overlay__count" aria-live="polite" aria-atomic="true">
-      {matchCountDisplay()}
+      {matchCountDisplay}
     </span>
 
     <!-- Previous match -->

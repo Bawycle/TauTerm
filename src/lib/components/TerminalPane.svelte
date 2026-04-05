@@ -41,11 +41,7 @@
     CursorState,
     SshLifecycleState,
   } from '$lib/ipc/types';
-  import {
-    buildGridFromSnapshot,
-    applyUpdates,
-    type CellStyle,
-  } from '$lib/terminal/screen.js';
+  import { buildGridFromSnapshot, applyUpdates, type CellStyle } from '$lib/terminal/screen.js';
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
   import { SelectionManager } from '$lib/terminal/selection.js';
   import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
@@ -120,7 +116,6 @@
   let viewportEl: HTMLDivElement | undefined = $state();
 
   // Context menu state
-  let contextMenuOpen = $state(false);
   let hasSelection = $state(false);
 
   let unlistenScreenUpdate: (() => void) | null = null;
@@ -139,14 +134,16 @@
 
   const scrollbarThumbHeightPct = $derived(
     scrollbackLines > 0
-      ? Math.max(32 / (rows * 16 || 400) * 100, (rows / (rows + scrollbackLines)) * 100)
-      : 0
+      ? Math.max((32 / (rows * 16 || 400)) * 100, (rows / (rows + scrollbackLines)) * 100)
+      : 0,
   );
 
   const scrollbarThumbTopPct = $derived(
     scrollbackLines > 0 && scrollOffset > 0
       ? ((scrollbackLines - scrollOffset) / (scrollbackLines + rows)) * 100
-      : scrollOffset === 0 ? 100 - scrollbarThumbHeightPct : 0
+      : scrollOffset === 0
+        ? 100 - scrollbarThumbHeightPct
+        : 0,
   );
 
   // Build rendered grid rows
@@ -154,14 +151,26 @@
     Array.from({ length: rows }, (_, r) =>
       Array.from({ length: cols }, (_, c) => {
         const cell = grid[r * cols + c];
-        return cell ?? ({
-          content: ' ', fg: undefined, bg: undefined, width: 1,
-          bold: false, dim: false, italic: false, underline: 0,
-          blink: false, inverse: false, hidden: false, strikethrough: false,
-          underlineColor: undefined,
-        } satisfies CellStyle);
-      })
-    )
+        return (
+          cell ??
+          ({
+            content: ' ',
+            fg: undefined,
+            bg: undefined,
+            width: 1,
+            bold: false,
+            dim: false,
+            italic: false,
+            underline: 0,
+            blink: false,
+            inverse: false,
+            hidden: false,
+            strikethrough: false,
+            underlineColor: undefined,
+          } satisfies CellStyle)
+        );
+      }),
+    ),
   );
 
   // -------------------------------------------------------------------------
@@ -210,9 +219,11 @@
         scrollbarVisible = true;
         if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
         if (scrollOffset === 0) {
-          scrollbarFadeTimer = setTimeout(() => { scrollbarVisible = false; }, 1500);
+          scrollbarFadeTimer = setTimeout(() => {
+            scrollbarVisible = false;
+          }, 1500);
         }
-      }
+      },
     );
 
     unlistenModeState = await listen<ModeStateChangedEvent>('mode-state-changed', (event) => {
@@ -256,7 +267,10 @@
   }
 
   function stopCursorBlink() {
-    if (blinkTimer) { clearInterval(blinkTimer); blinkTimer = null; }
+    if (blinkTimer) {
+      clearInterval(blinkTimer);
+      blinkTimer = null;
+    }
     cursorVisible = true;
   }
 
@@ -286,7 +300,13 @@
     const pixelHeight = Math.max(1, Math.floor(rect.height));
 
     try {
-      await invoke('resize_pane', { paneId, cols: newCols, rows: newRows, pixelWidth, pixelHeight });
+      await invoke('resize_pane', {
+        paneId,
+        cols: newCols,
+        rows: newRows,
+        pixelWidth,
+        pixelHeight,
+      });
       cols = newCols;
       rows = newRows;
     } catch {
@@ -334,7 +354,9 @@
   async function handleScrollToBottom() {
     try {
       await invoke('scroll_pane', { paneId, offset: 0 });
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -353,7 +375,9 @@
     const newOffset = Math.max(0, scrollOffset + (event.deltaY > 0 ? -3 : 3));
     try {
       await invoke('scroll_pane', { paneId, offset: newOffset });
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -367,10 +391,7 @@
     event: MouseEvent,
     release: boolean,
   ) {
-    const modBits =
-      (event.shiftKey ? 4 : 0) |
-      (event.metaKey ? 8 : 0) |
-      (event.ctrlKey ? 16 : 0);
+    const modBits = (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0) | (event.ctrlKey ? 16 : 0);
     const cb = button | modBits;
     const cx = col + 1;
     const cy = row + 1;
@@ -387,10 +408,14 @@
 
   function mouseButtonCode(event: MouseEvent): number {
     switch (event.button) {
-      case 0: return 0;
-      case 1: return 1;
-      case 2: return 2;
-      default: return 3;
+      case 0:
+        return 0;
+      case 1:
+        return 1;
+      case 2:
+        return 2;
+      default:
+        return 3;
     }
   }
 
@@ -412,7 +437,11 @@
   async function handleMousedown(event: MouseEvent) {
     // Item 9: set_active_pane on click
     if (!active) {
-      try { await invoke('set_active_pane', { paneId }); } catch { /* non-fatal */ }
+      try {
+        await invoke('set_active_pane', { paneId });
+      } catch {
+        /* non-fatal */
+      }
     }
     if (event.button !== 0) return;
     // FS-VT-082/083: mouse reporting active + not Shift → send to PTY, skip selection
@@ -458,7 +487,11 @@
       const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
       hasSelection = text.length > 0;
       if (hasSelection) {
-        try { await invoke('copy_to_clipboard', { text }); } catch { /* non-fatal */ }
+        try {
+          await invoke('copy_to_clipboard', { text });
+        } catch {
+          /* non-fatal */
+        }
       }
     } else {
       hasSelection = false;
@@ -487,14 +520,22 @@
   // -------------------------------------------------------------------------
 
   async function handleReconnect() {
-    try { await invoke('reconnect_ssh', { paneId }); } catch { /* non-fatal */ }
+    try {
+      await invoke('reconnect_ssh', { paneId });
+    } catch {
+      /* non-fatal */
+    }
   }
 
   async function handleContextMenuCopy() {
     if (!selectionRange) return;
     const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
     if (text) {
-      try { await invoke('copy_to_clipboard', { text }); } catch { /* non-fatal */ }
+      try {
+        await invoke('copy_to_clipboard', { text });
+      } catch {
+        /* non-fatal */
+      }
     }
   }
 
@@ -504,7 +545,9 @@
       if (text) {
         await pasteText(text);
       }
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   /**
@@ -561,97 +604,92 @@
     {canClosePane}
     oncopy={handleContextMenuCopy}
     onpaste={handleContextMenuPaste}
-    onsearch={onsearch}
-    onsplitH={onsplitH}
-    onsplitV={onsplitV}
-    onclosepane={onclosepane}
+    {onsearch}
+    {onsplitH}
+    {onsplitV}
+    {onclosepane}
   >
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div
-    bind:this={viewportEl}
-    class="terminal-pane__viewport terminal-grid"
-    tabindex={active ? 0 : -1}
-    role="textbox"
-    aria-multiline="true"
-    aria-label="Terminal output"
-    aria-readonly="false"
-    onkeydown={handleKeydown}
-    oninput={handleInput}
-    onmousedown={handleMousedown}
-    onmousemove={handleMousemove}
-    onmouseup={handleMouseup}
-    onwheel={handleWheel}
-    onfocus={handleFocus}
-    onblur={handleBlur}
-  >
-    <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
-    {#each gridRows as row, rowIdx}
-      <div class="terminal-pane__row">
-        {#each row as cell, colIdx}
-          {#if cell.width !== 0}
-            <span
-              class="terminal-pane__cell"
-              class:terminal-pane__cell--wide={cell.width === 2}
-              class:terminal-pane__cell--selected={isSelected(rowIdx, colIdx) && active}
-              class:terminal-pane__cell--selected-inactive={isSelected(rowIdx, colIdx) && !active}
-              style={cellStyle(cell)}
-            >{cell.content === '' ? '\u00a0' : cell.content}</span>
-          {/if}
-        {/each}
-      </div>
-    {/each}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      bind:this={viewportEl}
+      class="terminal-pane__viewport terminal-grid"
+      tabindex={active ? 0 : -1}
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Terminal output"
+      aria-readonly="false"
+      onkeydown={handleKeydown}
+      oninput={handleInput}
+      onmousedown={handleMousedown}
+      onmousemove={handleMousemove}
+      onmouseup={handleMouseup}
+      onwheel={handleWheel}
+      onfocus={handleFocus}
+      onblur={handleBlur}
+    >
+      <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
+      {#each gridRows as row, rowIdx}
+        <div class="terminal-pane__row">
+          {#each row as cell, colIdx}
+            {#if cell.width !== 0}
+              <span
+                class="terminal-pane__cell"
+                class:terminal-pane__cell--wide={cell.width === 2}
+                class:terminal-pane__cell--selected={isSelected(rowIdx, colIdx) && active}
+                class:terminal-pane__cell--selected-inactive={isSelected(rowIdx, colIdx) && !active}
+                style={cellStyle(cell)}>{cell.content === '' ? '\u00a0' : cell.content}</span
+              >
+            {/if}
+          {/each}
+        </div>
+      {/each}
 
-    <!-- Cursor overlay (TUITC-FN-001 to 006, TUITC-UX-050 to 053) -->
-    {#if cursor.visible && (cursorVisible || !currentCursorBlinks)}
-      <div
-        class="terminal-pane__cursor"
-        class:terminal-pane__cursor--block={currentCursorShape === 'block'}
-        class:terminal-pane__cursor--underline={currentCursorShape === 'underline'}
-        class:terminal-pane__cursor--bar={currentCursorShape === 'bar'}
-        class:terminal-pane__cursor--unfocused={!active}
-        style:top="{cursor.row}lh"
-        style:left="{cursor.col}ch"
-        aria-hidden="true"
-      ></div>
-    {/if}
-  </div>
-
-  <!-- Scrollbar overlay — no layout shift (TUITC-UX-070 to 073) -->
-  {#if showScrollbar && scrollbackLines > 0}
-    <div class="terminal-pane__scrollbar" aria-hidden="true">
-      <div
-        class="terminal-pane__scrollbar-thumb"
-        style:height="{scrollbarThumbHeightPct}%"
-        style:top="{scrollbarThumbTopPct}%"
-      ></div>
+      <!-- Cursor overlay (TUITC-FN-001 to 006, TUITC-UX-050 to 053) -->
+      {#if cursor.visible && (cursorVisible || !currentCursorBlinks)}
+        <div
+          class="terminal-pane__cursor"
+          class:terminal-pane__cursor--block={currentCursorShape === 'block'}
+          class:terminal-pane__cursor--underline={currentCursorShape === 'underline'}
+          class:terminal-pane__cursor--bar={currentCursorShape === 'bar'}
+          class:terminal-pane__cursor--unfocused={!active}
+          style:top="{cursor.row}lh"
+          style:left="{cursor.col}ch"
+          aria-hidden="true"
+        ></div>
+      {/if}
     </div>
-  {/if}
 
-  <!-- Scroll-to-bottom button — shown when scrolled up into scrollback history -->
-  {#if scrollOffset > 0}
-    <ScrollToBottomButton onclick={handleScrollToBottom} />
-  {/if}
+    <!-- Scrollbar overlay — no layout shift (TUITC-UX-070 to 073) -->
+    {#if showScrollbar && scrollbackLines > 0}
+      <div class="terminal-pane__scrollbar" aria-hidden="true">
+        <div
+          class="terminal-pane__scrollbar-thumb"
+          style:height="{scrollbarThumbHeightPct}%"
+          style:top="{scrollbarThumbTopPct}%"
+        ></div>
+      </div>
+    {/if}
+
+    <!-- Scroll-to-bottom button — shown when scrolled up into scrollback history -->
+    {#if scrollOffset > 0}
+      <ScrollToBottomButton onclick={handleScrollToBottom} />
+    {/if}
   </ContextMenu>
 
   <!-- ProcessTerminatedPane banner — shown when PTY process exits (FS-PTY-005/006) -->
   {#if terminated}
-    <ProcessTerminatedPane
-      {exitCode}
-      {signalName}
-      onrestart={onrestart}
-      onclose={onclosepane}
-    />
+    <ProcessTerminatedPane {exitCode} {signalName} {onrestart} onclose={onclosepane} />
   {/if}
 
   <!-- SSH disconnected banner — shown when SSH connection drops (FS-SSH-040/041) -->
   {#if sshState?.type === 'disconnected'}
     <div class="terminal-pane__ssh-disconnected" role="status" aria-live="polite">
-      <span class="terminal-pane__ssh-disconnected-label">{m.ssh_banner_disconnected({ reason: '' })}</span>
-      <button
-        class="terminal-pane__ssh-reconnect-btn"
-        type="button"
-        onclick={handleReconnect}
-      >{m.ssh_reconnect()}</button>
+      <span class="terminal-pane__ssh-disconnected-label"
+        >{m.ssh_banner_disconnected({ reason: '' })}</span
+      >
+      <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={handleReconnect}
+        >{m.ssh_reconnect()}</button
+      >
     </div>
   {/if}
 </div>

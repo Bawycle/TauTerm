@@ -64,6 +64,16 @@ pub trait PtySession: Send + Sync {
 
     /// Close the PTY, delivering SIGHUP to the foreground process group.
     fn close(self: Box<Self>);
+
+    /// Get a shared reader handle for the PTY read task.
+    ///
+    /// Platform implementations that support a read task return `Some(...)`.
+    /// The default returns `None` (no reader available).
+    fn reader_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Read + Send>>>> {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------

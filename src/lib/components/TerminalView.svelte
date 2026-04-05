@@ -59,6 +59,7 @@
     ModeStateChangedEvent,
   } from '$lib/ipc/types';
   import { pasteToBytes } from '$lib/terminal/paste.js';
+  import * as m from '$lib/paraglide/messages';
 
   // -------------------------------------------------------------------------
   // State
@@ -108,14 +109,12 @@
     return [...collectLeafPanes(node.first), ...collectLeafPanes(node.second)];
   }
 
-  const activePanes = $derived(
-    activeTab ? collectLeafPanes(activeTab.layout) : []
-  );
+  const activePanes = $derived(activeTab ? collectLeafPanes(activeTab.layout) : []);
 
   const activePaneState = $derived(
     activeTab
-      ? activePanes.find((p) => p.paneId === activeTab.activePaneId)?.state ?? null
-      : null
+      ? (activePanes.find((p) => p.paneId === activeTab.activePaneId)?.state ?? null)
+      : null,
   );
 
   // -------------------------------------------------------------------------
@@ -151,12 +150,23 @@
             }
             break;
 
-          case 'tab-closed':
+          case 'tab-closed': {
+            // Determine which tab was closed: prefer explicit closedTabId,
+            // otherwise find the tab that is no longer referenced.
+            const closedId =
+              change.closedTabId ??
+              tabs.find((t) => t.id !== change.activeTabId && t.id !== activeTabId)?.id ??
+              activeTabId; // last resort fallback — old behavior
+            tabs = tabs.filter((t) => t.id !== closedId);
             if (change.activeTabId !== undefined) {
-              tabs = tabs.filter((t) => t.id !== activeTabId);
-              activeTabId = change.activeTabId ?? '';
+              activeTabId = change.activeTabId;
+            } else if (activeTabId === closedId && tabs.length > 0) {
+              activeTabId = tabs[tabs.length - 1].id;
+            } else if (tabs.length === 0) {
+              activeTabId = '';
             }
             break;
+          }
 
           case 'tab-reordered':
           case 'pane-metadata-changed':
@@ -173,7 +183,7 @@
             }
             break;
         }
-      }
+      },
     );
 
     // Item 6: SSH auth dialogs
@@ -198,7 +208,7 @@
       'notification-changed',
       (event) => {
         updatePaneNotification(event.payload);
-      }
+      },
     );
 
     // Item 2: Track bracketed paste mode per pane for Ctrl+Shift+V
@@ -345,7 +355,9 @@
     hostKeyPrompt = null;
     try {
       await invoke('accept_host_key', { paneId: prompt.paneId });
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   async function handleRejectHostKey() {
@@ -354,7 +366,9 @@
     hostKeyPrompt = null;
     try {
       await invoke('reject_host_key', { paneId: prompt.paneId });
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   async function handleProvideCredentials(password: string) {
@@ -363,7 +377,9 @@
     credentialPrompt = null;
     try {
       await invoke('provide_credentials', { paneId: prompt.paneId, password });
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   async function handleCancelCredentials() {
@@ -372,7 +388,9 @@
     credentialPrompt = null;
     try {
       await invoke('close_ssh_connection', { paneId: prompt.paneId });
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -462,13 +480,13 @@
       {/if}
     {:else}
       <div class="terminal-view__empty">
-        <p>No terminal sessions. Press Ctrl+Shift+T or click + to open one.</p>
+        <p>{m.terminal_view_empty()}</p>
       </div>
     {/if}
   </div>
 
   <!-- Status bar: reflects active pane state -->
-  <StatusBar activePaneState={activePaneState} />
+  <StatusBar {activePaneState} />
 
   <!-- SearchOverlay: positioned relative to pane area (FS-SEARCH-007, UXD §7.4) -->
   {#if activePanes.length > 0}
@@ -489,7 +507,9 @@
   <PreferencesPanel
     bind:open={prefsOpen}
     {preferences}
-    onclose={() => { prefsOpen = false; }}
+    onclose={() => {
+      prefsOpen = false;
+    }}
     onupdate={handlePreferencesUpdate}
   />
 

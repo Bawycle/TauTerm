@@ -142,5 +142,26 @@
   "connection_duplicate_label_suffix": "{label} (copie)",
   "connection_group_ungrouped": "Sans groupe",
 
-  "scroll_to_bottom": "Aller en bas"
+  "scroll_to_bottom": "Aller en bas",
+
+  "ssh_host_key_dialog_title_changed": "Clé d'hôte modifiée — Risque de sécurité potentiel",
+  "ssh_host_key_dialog_title_verify": "Vérifier la clé d'hôte",
+  "ssh_host_key_dialog_warning_title": "Attention : la clé d'hôte pour {host} a changé.",
+  "ssh_host_key_dialog_warning_body": "Cela peut indiquer une attaque de l'homme du milieu. N'acceptez pas avant d'avoir vérifié ce changement auprès de votre administrateur système.",
+  "ssh_host_key_dialog_intro": "TauTerm se connecte à {host} pour la première fois. Pour confirmer que vous vous connectez au bon serveur, vérifiez l'empreinte ci-dessous auprès de votre administrateur système. En cas de doute, cliquez sur Rejeter.",
+  "ssh_host_key_dialog_label_host": "Hôte",
+  "ssh_host_key_dialog_label_key_type": "Type de clé",
+  "ssh_host_key_dialog_label_fingerprint": "Empreinte SHA-256",
+  "ssh_host_key_dialog_accept_anyway": "Accepter quand même",
+  "ssh_host_key_dialog_accept": "Accepter",
+
+  "tab_bar_close_tab": "Fermer l'onglet",
+  "tab_bar_new_tab": "Nouvel onglet",
+  "tab_bar_new_tab_tooltip": "Nouvel onglet (Ctrl+Shift+T)",
+
+  "terminal_view_empty": "Aucune session de terminal. Appuyez sur Ctrl+Shift+T ou cliquez sur + pour en ouvrir une.",
+
+  "dialog_close": "Fermer la boîte de dialogue",
+
+  "ssh_credential_password_for": "Mot de passe pour {username}@{host} :"
 }

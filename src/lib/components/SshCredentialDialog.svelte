@@ -54,16 +54,11 @@
   }
 </script>
 
-<Dialog
-  {open}
-  title={m.ssh_state_authenticating({ host })}
-  size="small"
-  onclose={handleCancel}
->
+<Dialog {open} title={m.ssh_state_authenticating({ host })} size="small" onclose={handleCancel}>
   {#snippet children()}
     <div class="ssh-credential-dialog">
       <p class="ssh-credential-dialog__intro">
-        {prompt ?? `Password for ${username}@${host}:`}
+        {prompt ?? m.ssh_credential_password_for({ username, host })}
       </p>
 
       <div class="ssh-credential-dialog__field">

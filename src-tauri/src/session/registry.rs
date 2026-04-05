@@ -160,7 +160,7 @@ impl SessionRegistry {
         let args: &[&str] = if config.login { &["--login"] } else { &[] };
 
         // --- Spawn the PTY session via the platform backend ---
-        let mut pty_box: Box<dyn PtySession> = self
+        let pty_box: Box<dyn PtySession> = self
             .pty_backend
             .open_session(config.cols, config.rows, &shell_path, args, &env)
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
@@ -181,7 +181,7 @@ impl SessionRegistry {
         // Since `PtySession` is a trait object, we need a concrete accessor.
         // We downcast to `LinuxPtySession` to access `reader_handle()`.
         // To avoid coupling the registry to the Linux type, we use a helper trait.
-        let reader_handle = get_reader_handle(&mut pty_box);
+        let reader_handle = get_reader_handle(&*pty_box);
 
         if let Some(reader) = reader_handle
             && let Some(registry) = self.self_ref.upgrade()
@@ -326,7 +326,7 @@ impl SessionRegistry {
         // during a potentially slow spawn).
         drop(inner);
 
-        let mut pty_box: Box<dyn PtySession> = self
+        let pty_box: Box<dyn PtySession> = self
             .pty_backend
             .open_session(cols, rows, &shell_path, &[], &env)
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
@@ -342,7 +342,7 @@ impl SessionRegistry {
         let mut new_pane = PaneSession::new(new_pane_id.clone(), cols, rows);
         new_pane.lifecycle = PaneLifecycleState::Running;
 
-        let reader_handle = get_reader_handle(&mut pty_box);
+        let reader_handle = get_reader_handle(&*pty_box);
         if let Some(reader) = reader_handle
             && let Some(registry) = self.self_ref.upgrade()
         {
@@ -362,7 +362,10 @@ impl SessionRegistry {
 
         // Rebuild the layout tree, replacing the target leaf with a split node.
         let existing_state = {
-            let pane = entry.panes.get(&pane_id).unwrap();
+            let pane = entry
+                .panes
+                .get(&pane_id)
+                .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
             pane.to_state()
         };
 
@@ -666,27 +669,12 @@ fn resolve_shell_path(explicit: Option<&str>) -> Result<String, SessionError> {
 
 /// Extract a reader handle from a `Box<dyn PtySession>` for the read task.
 ///
-/// This downcasts to `LinuxPtySession` on Linux. On other platforms the
-/// corresponding concrete type must be added here.
+/// Delegates to the `PtySession::reader_handle()` trait method, which each
+/// platform backend implements. No unsafe downcast needed.
 fn get_reader_handle(
-    pty: &mut Box<dyn PtySession>,
+    pty: &dyn PtySession,
 ) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Read + Send>>>> {
-    use crate::platform::pty_linux::LinuxPtySession;
-    let concrete = pty.as_mut() as *mut dyn PtySession as *mut LinuxPtySession;
-    // Safety: we only cast on Linux where the concrete type is LinuxPtySession.
-    // This is guarded by the cfg below.
-    #[cfg(target_os = "linux")]
-    {
-        // SAFETY: on Linux, `open_session` always returns a `LinuxPtySession`.
-        // The pointer cast is sound because we are on the same platform that created it.
-        let linux_session = unsafe { &mut *concrete };
-        Some(linux_session.reader_handle())
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = concrete;
-        None
-    }
+    pty.reader_handle()
 }
 
 // ---------------------------------------------------------------------------

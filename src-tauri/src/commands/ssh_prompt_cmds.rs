@@ -73,13 +73,15 @@ pub async fn accept_host_key(
 
     // For mismatch: remove old entry first.
     if pending.is_mismatch {
-        store.remove_entries_for_host(&pending.host).map_err(|e| {
-            TauTermError::with_detail(
-                "KNOWN_HOSTS_IO_ERROR",
-                "Failed to remove old host key entry.",
-                e.to_string(),
-            )
-        })?;
+        store
+            .remove_entries_for_host(&pending.host, &pending.key_type)
+            .map_err(|e| {
+                TauTermError::with_detail(
+                    "KNOWN_HOSTS_IO_ERROR",
+                    "Failed to remove old host key entry.",
+                    e.to_string(),
+                )
+            })?;
     }
 
     // Persist the new key.

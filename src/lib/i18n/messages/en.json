@@ -142,5 +142,26 @@
   "connection_duplicate_label_suffix": "{label} (copy)",
   "connection_group_ungrouped": "Ungrouped",
 
-  "scroll_to_bottom": "Go to bottom"
+  "scroll_to_bottom": "Go to bottom",
+
+  "ssh_host_key_dialog_title_changed": "Host Key Changed — Possible Security Risk",
+  "ssh_host_key_dialog_title_verify": "Verify Host Key",
+  "ssh_host_key_dialog_warning_title": "Warning: The host key for {host} has changed.",
+  "ssh_host_key_dialog_warning_body": "This may indicate a man-in-the-middle attack. Do not accept unless you have verified this change with your server administrator.",
+  "ssh_host_key_dialog_intro": "TauTerm is connecting to {host} for the first time. To confirm you are connecting to the right server, verify the fingerprint below with your server administrator. If you are unsure, click Reject.",
+  "ssh_host_key_dialog_label_host": "Host",
+  "ssh_host_key_dialog_label_key_type": "Key type",
+  "ssh_host_key_dialog_label_fingerprint": "SHA-256 fingerprint",
+  "ssh_host_key_dialog_accept_anyway": "Accept Anyway",
+  "ssh_host_key_dialog_accept": "Accept",
+
+  "tab_bar_close_tab": "Close tab",
+  "tab_bar_new_tab": "New tab",
+  "tab_bar_new_tab_tooltip": "New Tab (Ctrl+Shift+T)",
+
+  "terminal_view_empty": "No terminal sessions. Press Ctrl+Shift+T or click + to open one.",
+
+  "dialog_close": "Close dialog",
+
+  "ssh_credential_password_for": "Password for {username}@{host}:"
 }

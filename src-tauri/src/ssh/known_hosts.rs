@@ -139,11 +139,15 @@ impl KnownHostsStore {
         Ok((entries, skipped_hashed))
     }
 
-    /// Look up a host by name.
+    /// Look up a host by name and key type.
     ///
-    /// Returns `Unknown` if the host has never been seen.
-    /// Returns `Trusted` if the stored key matches `offered_key_bytes`.
-    /// Returns `Mismatch` if the host is known but the key differs.
+    /// Returns `Unknown` if no entry matches `(hostname, offered_key_type)`.
+    /// Returns `Trusted` if the stored key bytes match `offered_key_bytes`.
+    /// Returns `Mismatch` if the host+key_type is known but the key bytes differ.
+    ///
+    /// Filtering by `(hostname, key_type)` ensures that entries for other
+    /// algorithms (e.g. an `ssh-rsa` key alongside an `ssh-ed25519` key for
+    /// the same host) are not incorrectly treated as mismatches or purged.
     pub fn lookup(
         &self,
         hostname: &str,
@@ -152,7 +156,9 @@ impl KnownHostsStore {
     ) -> io::Result<KnownHostLookup> {
         let (entries, _) = self.load()?;
 
-        let stored = entries.into_iter().find(|e| e.hostname == hostname);
+        let stored = entries
+            .into_iter()
+            .find(|e| e.hostname == hostname && e.key_type == offered_key_type);
 
         match stored {
             None => Ok(KnownHostLookup::Unknown),
@@ -197,15 +203,19 @@ impl KnownHostsStore {
         Ok(())
     }
 
-    /// Remove all entries for a given hostname from the known-hosts file.
+    /// Remove the entry for a given `(hostname, key_type)` from the known-hosts file.
     ///
     /// Used when accepting a new key for a host whose key has changed (Mismatch case):
     /// the old entry is removed before the new one is added.
-    pub fn remove_entries_for_host(&self, hostname: &str) -> io::Result<()> {
+    ///
+    /// Only the entry matching both hostname AND key_type is removed. Entries for
+    /// the same host with a different algorithm are preserved (e.g. an `ssh-rsa`
+    /// key is not purged when an `ssh-ed25519` key is replaced).
+    pub fn remove_entries_for_host(&self, hostname: &str, key_type: &str) -> io::Result<()> {
         let (entries, _) = self.load()?;
         let remaining: Vec<_> = entries
             .into_iter()
-            .filter(|e| e.hostname != hostname)
+            .filter(|e| !(e.hostname == hostname && e.key_type == key_type))
             .collect();
 
         // Re-write the file with the filtered entries.

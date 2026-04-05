@@ -43,13 +43,33 @@ pub async fn copy_to_clipboard(text: String) -> Result<(), TauTermError> {
                 e.to_string(),
             )
         })?;
+
+        // Write to CLIPBOARD (Ctrl+C/V selection).
         cb.set_text(&text).map_err(|e| {
             TauTermError::with_detail(
                 "CLIPBOARD_WRITE_FAILED",
                 "Failed to write to clipboard.",
                 e.to_string(),
             )
-        })
+        })?;
+
+        // On Linux/X11 and Wayland, also write to PRIMARY so that
+        // middle-click paste works as expected (FS-CLIP-006).
+        #[cfg(target_os = "linux")]
+        {
+            use arboard::{LinuxClipboardKind, SetExtLinux as _};
+            // Non-fatal: PRIMARY may be unsupported on some Wayland compositors.
+            // Log a warning but do not propagate the error to the caller.
+            if let Err(e) = cb
+                .set()
+                .clipboard(LinuxClipboardKind::Primary)
+                .text(text.clone())
+            {
+                tracing::warn!("Failed to write to X11 PRIMARY selection: {e}");
+            }
+        }
+
+        Ok(())
     })
     .await
     .map_err(|e| {

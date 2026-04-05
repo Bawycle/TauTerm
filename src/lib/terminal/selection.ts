@@ -55,6 +55,12 @@ export class SelectionManager {
   #anchor: CellPosition | null = null;
   /** The current active end of the selection (mouse is here). */
   #active: CellPosition | null = null;
+  /**
+   * When true, a zero-length selection (anchor === active) is treated as
+   * a valid single-cell selection. This is set by selectWordAt / selectLineAt
+   * (programmatic selections) and cleared on drag start.
+   */
+  #allowSingleCell = false;
 
   /**
    * Start a new selection at the given cell position.
@@ -63,6 +69,7 @@ export class SelectionManager {
   startSelection(pos: CellPosition): void {
     this.#anchor = { ...pos };
     this.#active = { ...pos };
+    this.#allowSingleCell = false;
   }
 
   /**
@@ -80,21 +87,95 @@ export class SelectionManager {
   clearSelection(): void {
     this.#anchor = null;
     this.#active = null;
+    this.#allowSingleCell = false;
   }
 
   /**
    * Return the current selection range (normalized, start ≤ end),
    * or null if there is no active selection.
    *
-   * A zero-length selection (anchor === active) returns null — a single cell
-   * click without drag does not constitute a selection.
+   * A zero-length selection (anchor === active) returns null for drag-based
+   * selections (a click without drag does not constitute a selection).
+   * Programmatic selections (selectWordAt, selectLineAt) may return a
+   * single-cell range when #allowSingleCell is true.
    */
   getSelection(): SelectionRange | null {
     if (this.#anchor === null || this.#active === null) return null;
     if (this.#anchor.row === this.#active.row && this.#anchor.col === this.#active.col) {
-      return null;
+      if (!this.#allowSingleCell) return null;
+      // Single-cell programmatic selection: return a range covering exactly that cell.
+      return { start: { ...this.#anchor }, end: { ...this.#active } };
     }
     return normalize(this.#anchor, this.#active);
+  }
+
+  /**
+   * Select the word at (row, col) using the provided delimiter set.
+   * (FS-CLIP-002)
+   *
+   * A "word" is a maximal run of non-delimiter characters surrounding the
+   * clicked cell. If the clicked cell is itself a delimiter, only that single
+   * cell is selected.
+   *
+   * @param col - Column of the clicked cell.
+   * @param row - Row of the clicked cell.
+   * @param getCell - Callback returning the character at (row, col).
+   * @param cols - Terminal width (number of columns).
+   * @param wordDelimiters - String of characters that act as word boundaries.
+   *   Default mirrors the Rust backend default.
+   */
+  selectWordAt(
+    col: number,
+    row: number,
+    getCell: GetCellFn,
+    cols: number,
+    wordDelimiters: string = ' \t|"\'`&()*,;<=>[]{}~',
+  ): void {
+    this.#allowSingleCell = true;
+    const clickedChar = getCell(row, col);
+    // If the clicked cell is a delimiter or a wide-char continuation, select
+    // only that single cell.
+    if (wordDelimiters.includes(clickedChar) || clickedChar === '') {
+      this.#anchor = { row, col };
+      this.#active = { row, col };
+      return;
+    }
+
+    // Scan left to find word start.
+    let start = col;
+    while (start > 0) {
+      const ch = getCell(row, start - 1);
+      if (wordDelimiters.includes(ch) || ch === '') break;
+      start--;
+    }
+
+    // Scan right to find word end.
+    let end = col;
+    while (end < cols - 1) {
+      const ch = getCell(row, end + 1);
+      if (wordDelimiters.includes(ch) || ch === '') break;
+      end++;
+    }
+
+    this.#anchor = { row, col: start };
+    this.#active = { row, col: end };
+  }
+
+  /**
+   * Select the entire row at `row`.
+   * (FS-CLIP-003)
+   *
+   * Sets anchor to col 0 and active to the last column so the full row
+   * is covered regardless of trailing spaces (those are trimmed at extraction
+   * time by `getSelectedText`).
+   *
+   * @param row - Row index to select.
+   * @param cols - Terminal width (number of columns).
+   */
+  selectLineAt(row: number, cols: number): void {
+    this.#allowSingleCell = true;
+    this.#anchor = { row, col: 0 };
+    this.#active = { row, col: cols - 1 };
   }
 
   /**

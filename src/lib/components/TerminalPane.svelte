@@ -63,6 +63,11 @@
     canClosePane?: boolean;
     /** SSH lifecycle state for Disconnected reconnect UI. */
     sshState?: SshLifecycleState | null;
+    /**
+     * Characters treated as word delimiters for double-click word selection.
+     * Mirrors the Rust backend default (TerminalPrefs.wordDelimiters).
+     */
+    wordDelimiters?: string;
     onrestart?: () => void;
     onclosepane?: () => void;
     onsearch?: () => void;
@@ -79,6 +84,7 @@
     signalName,
     canClosePane = true,
     sshState = null,
+    wordDelimiters = ' \t|"\'`&()*,;<=>[]{}~',
     onrestart,
     onclosepane,
     onsearch,
@@ -420,7 +426,7 @@
   }
 
   // -------------------------------------------------------------------------
-  // Selection (TUITC-FN-060/061/062)
+  // Selection (TUITC-FN-060/061/062, FS-CLIP-002, FS-CLIP-003)
   // -------------------------------------------------------------------------
 
   function pixelToCell(event: MouseEvent): { row: number; col: number } {
@@ -434,8 +440,27 @@
     };
   }
 
+  /** Copy the current selection to clipboard and update hasSelection. */
+  async function copySelectionToClipboard() {
+    const sel = selection.getSelection();
+    if (sel) {
+      const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
+      hasSelection = text.length > 0;
+      if (hasSelection) {
+        try {
+          await invoke('copy_to_clipboard', { text });
+        } catch {
+          /* non-fatal */
+        }
+      }
+    } else {
+      hasSelection = false;
+    }
+    selectionRange = sel;
+  }
+
   async function handleMousedown(event: MouseEvent) {
-    // Item 9: set_active_pane on click
+    // set_active_pane on click
     if (!active) {
       try {
         await invoke('set_active_pane', { paneId });
@@ -450,8 +475,34 @@
       await sendMouseEvent(mouseButtonCode(event), cell.col, cell.row, event, false);
       return;
     }
+
+    const cell = pixelToCell(event);
+
+    // Triple-click (detail >= 3): select full line (FS-CLIP-003)
+    if (event.detail >= 3) {
+      isSelecting = false;
+      selection.selectLineAt(cell.row, cols);
+      await copySelectionToClipboard();
+      return;
+    }
+
+    // Double-click (detail === 2): select word (FS-CLIP-002)
+    if (event.detail === 2) {
+      isSelecting = false;
+      selection.selectWordAt(
+        cell.col,
+        cell.row,
+        (r, c) => grid[r * cols + c]?.content ?? '',
+        cols,
+        wordDelimiters,
+      );
+      await copySelectionToClipboard();
+      return;
+    }
+
+    // Single click: start drag selection
     isSelecting = true;
-    selection.startSelection(pixelToCell(event));
+    selection.startSelection(cell);
     selectionRange = selection.getSelection();
   }
 
@@ -482,20 +533,7 @@
     if (!isSelecting) return;
     isSelecting = false;
     selection.extendSelection(pixelToCell(event));
-    selectionRange = selection.getSelection();
-    if (selectionRange) {
-      const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
-      hasSelection = text.length > 0;
-      if (hasSelection) {
-        try {
-          await invoke('copy_to_clipboard', { text });
-        } catch {
-          /* non-fatal */
-        }
-      }
-    } else {
-      hasSelection = false;
-    }
+    await copySelectionToClipboard();
   }
 
   // -------------------------------------------------------------------------
@@ -529,14 +567,7 @@
 
   async function handleContextMenuCopy() {
     if (!selectionRange) return;
-    const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
-    if (text) {
-      try {
-        await invoke('copy_to_clipboard', { text });
-      } catch {
-        /* non-fatal */
-      }
-    }
+    await copySelectionToClipboard();
   }
 
   async function handleContextMenuPaste() {

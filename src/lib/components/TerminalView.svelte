@@ -468,6 +468,7 @@
           tabId={activeTab.id}
           active={true}
           sshState={sshStates.get(activePanes[0].paneId) ?? null}
+          wordDelimiters={preferences?.terminal.wordDelimiters}
         />
       {:else}
         <!-- Multi-pane: simple flex layout (full split-tree rendering deferred) -->
@@ -478,6 +479,7 @@
               tabId={activeTab.id}
               active={paneId === activeTab.activePaneId}
               sshState={sshStates.get(paneId) ?? null}
+              wordDelimiters={preferences?.terminal.wordDelimiters}
             />
           {/each}
         </div>

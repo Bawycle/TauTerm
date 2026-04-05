@@ -175,3 +175,121 @@ describe('wide character handling', () => {
     expect(sm.getSelectedText(getCell, 4)).toBe('AWB');
   });
 });
+
+// ---------------------------------------------------------------------------
+// TEST-CLIP-004 — selectWordAt (FS-CLIP-002)
+// ---------------------------------------------------------------------------
+describe('TEST-CLIP-004: selectWordAt', () => {
+  const COLS = 20;
+  const DELIMITERS = ' \t|"\'`&()*,;<=>[]{}~';
+
+  it('selects the whole word when clicking on a middle character', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(['hello world         '], COLS);
+    sm.selectWordAt(2, 0, getCell, COLS, DELIMITERS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start).toEqual({ row: 0, col: 0 });
+    expect(sel!.end).toEqual({ row: 0, col: 4 });
+    expect(sm.getSelectedText(getCell, COLS)).toBe('hello');
+  });
+
+  it('selects the whole word when clicking on the first character', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(['hello world         '], COLS);
+    sm.selectWordAt(6, 0, getCell, COLS, DELIMITERS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start).toEqual({ row: 0, col: 6 });
+    expect(sel!.end).toEqual({ row: 0, col: 10 });
+    expect(sm.getSelectedText(getCell, COLS)).toBe('world');
+  });
+
+  it('selects the whole word when clicking on the last character', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(['hello world         '], COLS);
+    sm.selectWordAt(10, 0, getCell, COLS, DELIMITERS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start).toEqual({ row: 0, col: 6 });
+    expect(sel!.end).toEqual({ row: 0, col: 10 });
+    expect(sm.getSelectedText(getCell, COLS)).toBe('world');
+  });
+
+  it('clicking on a delimiter selects only that delimiter cell', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(['hello world         '], COLS);
+    // col 5 is the space between 'hello' and 'world'
+    sm.selectWordAt(5, 0, getCell, COLS, DELIMITERS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    // The delimiter cell is selected as a single-cell range
+    expect(sel!.start.col).toBe(5);
+    expect(sel!.end.col).toBe(5);
+  });
+
+  it('uses custom delimiters passed as argument', () => {
+    const sm = new SelectionManager();
+    // With '.' as a delimiter, 'foo.bar' splits into two words
+    const getCell = gridFromLines(['foo.bar             '], COLS);
+    sm.selectWordAt(0, 0, getCell, COLS, '.');
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start.col).toBe(0);
+    expect(sel!.end.col).toBe(2);
+    expect(sm.getSelectedText(getCell, COLS)).toBe('foo');
+  });
+
+  it('single-character word at start of row', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(['a hello             '], COLS);
+    sm.selectWordAt(0, 0, getCell, COLS, DELIMITERS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start).toEqual({ row: 0, col: 0 });
+    expect(sel!.end).toEqual({ row: 0, col: 0 });
+    expect(sm.getSelectedText(getCell, COLS)).toBe('a');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEST-CLIP-005 — selectLineAt (FS-CLIP-003)
+// ---------------------------------------------------------------------------
+describe('TEST-CLIP-005: selectLineAt', () => {
+  const COLS = 20;
+
+  it('selects from col 0 to last col on the given row', () => {
+    const sm = new SelectionManager();
+    sm.selectLineAt(0, COLS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start).toEqual({ row: 0, col: 0 });
+    expect(sel!.end).toEqual({ row: 0, col: COLS - 1 });
+  });
+
+  it('extracts the full line text (trailing spaces trimmed)', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(['hello world         '], COLS);
+    sm.selectLineAt(0, COLS);
+    expect(sm.getSelectedText(getCell, COLS)).toBe('hello world');
+  });
+
+  it('selects the correct row when multiple rows exist', () => {
+    const sm = new SelectionManager();
+    const getCell = gridFromLines(
+      ['first line          ', 'second line         ', 'third line          '],
+      COLS,
+    );
+    sm.selectLineAt(1, COLS);
+    expect(sm.getSelectedText(getCell, COLS)).toBe('second line');
+  });
+
+  it('selection range row matches the requested row', () => {
+    const sm = new SelectionManager();
+    sm.selectLineAt(3, COLS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start.row).toBe(3);
+    expect(sel!.end.row).toBe(3);
+  });
+});

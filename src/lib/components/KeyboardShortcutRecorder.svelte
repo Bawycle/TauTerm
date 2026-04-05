@@ -136,11 +136,11 @@
       ? ''
       : recorderState === 'captured' || recorderState === 'conflict'
         ? pendingShortcut
-        : value
+        : value,
   );
 
   const placeholderText = $derived(
-    recorderState === 'recording' ? m.preferences_keyboard_press_shortcut() : ''
+    recorderState === 'recording' ? m.preferences_keyboard_press_shortcut() : '',
   );
 </script>
 
@@ -235,8 +235,13 @@
   }
 
   @keyframes pulse-opacity {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

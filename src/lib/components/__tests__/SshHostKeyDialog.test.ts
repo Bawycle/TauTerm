@@ -103,9 +103,7 @@ describe('SSH-HK-FN-003: TOFU — Accept button is present and not disabled', ()
   it('Accept button exists in TOFU mode', () => {
     mountDialog({ isChanged: false });
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const acceptButton = buttons.find(
-      (b) => b.textContent?.trim().toLowerCase() === 'accept',
-    );
+    const acceptButton = buttons.find((b) => b.textContent?.trim().toLowerCase() === 'accept');
     expect(acceptButton).toBeDefined();
     expect(acceptButton!.disabled).toBe(false);
   });
@@ -122,9 +120,7 @@ describe('SSH-HK-FN-004: TOFU — Accept calls onaccept and onclose', () => {
     mountDialog({ isChanged: false, onaccept, onclose });
 
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const acceptButton = buttons.find(
-      (b) => b.textContent?.trim().toLowerCase() === 'accept',
-    );
+    const acceptButton = buttons.find((b) => b.textContent?.trim().toLowerCase() === 'accept');
     expect(acceptButton).toBeDefined();
     acceptButton!.click();
     flushSync();
@@ -147,9 +143,7 @@ describe('SSH-HK-FN-005: TOFU — Reject/Cancel calls onreject and onclose', () 
     const buttons = Array.from(document.body.querySelectorAll('button'));
     // The cancel/reject button contains "Cancel" text (m.action_cancel()).
     // The Bits UI Dialog close button has aria-label but no visible text.
-    const cancelButton = buttons.find(
-      (b) => b.textContent?.trim().toLowerCase() === 'cancel',
-    );
+    const cancelButton = buttons.find((b) => b.textContent?.trim().toLowerCase() === 'cancel');
     expect(cancelButton).toBeDefined();
     cancelButton!.click();
     flushSync();
@@ -198,9 +192,7 @@ describe('SSH-HK-FN-007: MITM — Accept Anyway button is less prominent (ghost)
   it('"Accept Anyway" button exists when isChanged=true', () => {
     mountDialog({ isChanged: true });
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const acceptButton = buttons.find(
-      (b) => b.textContent?.toLowerCase().includes('accept'),
-    );
+    const acceptButton = buttons.find((b) => b.textContent?.toLowerCase().includes('accept'));
     expect(acceptButton).toBeDefined();
   });
 
@@ -208,9 +200,7 @@ describe('SSH-HK-FN-007: MITM — Accept Anyway button is less prominent (ghost)
     const onaccept = vi.fn();
     mountDialog({ isChanged: true, onaccept });
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const acceptButton = buttons.find(
-      (b) => b.textContent?.toLowerCase().includes('accept'),
-    );
+    const acceptButton = buttons.find((b) => b.textContent?.toLowerCase().includes('accept'));
     expect(acceptButton).toBeDefined();
     acceptButton!.click();
     flushSync();

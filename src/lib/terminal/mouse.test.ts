@@ -27,7 +27,7 @@ import { describe, it, expect } from 'vitest';
 
 // TDD: import defensively — tests fail until mouse.ts exports these functions.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mouse = await import('./mouse.js').catch(() => ({})) as any;
+const mouse = (await import('./mouse.js').catch(() => ({}))) as any;
 
 // ---------------------------------------------------------------------------
 // Helpers

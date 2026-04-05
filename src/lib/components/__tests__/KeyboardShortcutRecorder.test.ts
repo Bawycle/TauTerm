@@ -39,7 +39,11 @@ const instances: ReturnType<typeof mount>[] = [];
 
 afterEach(() => {
   instances.forEach((i) => {
-    try { unmount(i); } catch { /* ignore */ }
+    try {
+      unmount(i);
+    } catch {
+      /* ignore */
+    }
   });
   instances.length = 0;
   document.body.innerHTML = '';
@@ -72,7 +76,9 @@ describe('UITCP-PREF-FN-010: click field enters recording state', () => {
     const { container, instance } = mountRecorder({ value: 'Ctrl+Shift+T' });
     instances.push(instance);
     const field = container.querySelector('.shortcut-recorder__field') as HTMLElement;
-    flushSync(() => { field.click(); });
+    flushSync(() => {
+      field.click();
+    });
     // In recording state, the placeholder text should appear
     expect(container.querySelector('.shortcut-recorder__placeholder')).not.toBeNull();
   });
@@ -84,7 +90,9 @@ describe('UITCP-PREF-FN-011: Escape while recording cancels and reverts', () => 
     instances.push(instance);
     const field = container.querySelector('.shortcut-recorder__field') as HTMLElement;
     // Enter recording state
-    flushSync(() => { field.click(); });
+    flushSync(() => {
+      field.click();
+    });
     expect(container.querySelector('.shortcut-recorder__placeholder')).not.toBeNull();
     // Press Escape
     flushSync(() => {
@@ -108,15 +116,19 @@ describe('UITCP-PREF-FN-013: conflict detection', () => {
     instances.push(instance);
     const field = container.querySelector('.shortcut-recorder__field') as HTMLElement;
     // Enter recording state
-    flushSync(() => { field.click(); });
+    flushSync(() => {
+      field.click();
+    });
     // Simulate pressing Ctrl+Shift+T (conflicts with new_tab)
     flushSync(() => {
-      field.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'T',
-        ctrlKey: true,
-        shiftKey: true,
-        bubbles: true,
-      }));
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'T',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+        }),
+      );
     });
     // Should show conflict state
     expect(container.querySelector('.shortcut-recorder__field--conflict')).not.toBeNull();
@@ -139,15 +151,19 @@ describe('UITCP-PREF-FN-012: key capture and Enter confirmation', () => {
     instances.push(instance);
     const field = container.querySelector('.shortcut-recorder__field') as HTMLElement;
     // Enter recording
-    flushSync(() => { field.click(); });
+    flushSync(() => {
+      field.click();
+    });
     // Capture Ctrl+Shift+X (no conflict)
     flushSync(() => {
-      field.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'X',
-        ctrlKey: true,
-        shiftKey: true,
-        bubbles: true,
-      }));
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'X',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+        }),
+      );
     });
     // Should be in captured state
     expect(container.querySelector('.shortcut-recorder__field--captured')).not.toBeNull();

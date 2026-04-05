@@ -25,7 +25,7 @@ import { keyEventToVtSequence } from './keyboard.js';
 
 // We import them defensively — tests will fail if the functions don't exist.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const kb = await import('./keyboard.js') as any;
+const kb = (await import('./keyboard.js')) as any;
 
 // ---------------------------------------------------------------------------
 // Helpers

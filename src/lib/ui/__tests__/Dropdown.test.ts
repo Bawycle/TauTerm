@@ -139,8 +139,7 @@ describe('UIBC-FN-DRP-004 — disabled', () => {
     const { container } = mountDropdown({ options: BASIC_OPTIONS, disabled: true });
     const btn = container.querySelector('button') as HTMLButtonElement | null;
     expect(btn).not.toBeNull();
-    const isDisabled =
-      btn!.disabled === true || btn!.getAttribute('aria-disabled') === 'true';
+    const isDisabled = btn!.disabled === true || btn!.getAttribute('aria-disabled') === 'true';
     expect(isDisabled).toBe(true);
   });
 
@@ -213,9 +212,7 @@ describe('UIBC-SEC-003 — XSS via option labels', () => {
   });
 
   it('script tag in option label is not executed on mount', () => {
-    const xssOptions = [
-      { value: 'x', label: '<script>window.__xss_dropdown=true<\/script>' },
-    ];
+    const xssOptions = [{ value: 'x', label: '<script>window.__xss_dropdown=true<\/script>' }];
     mountDropdown({ options: xssOptions });
     expect((window as unknown as Record<string, unknown>).__xss_dropdown).toBeUndefined();
   });

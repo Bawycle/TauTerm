@@ -61,17 +61,23 @@ async function mountToggle(props: {
 // ---------------------------------------------------------------------------
 
 describe('UIBC-FN-TOG-001/002 — checked/unchecked state', () => {
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-FN-TOG-001: unchecked toggle has aria-checked="false"', async () => {
-    const { container } = await mountToggle({ checked: false });
-    const toggle = container.querySelector('[role="switch"]')!;
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-FN-TOG-001: unchecked toggle has aria-checked="false"',
+    async () => {
+      const { container } = await mountToggle({ checked: false });
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+    },
+  );
 
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-FN-TOG-002: checked toggle has aria-checked="true"', async () => {
-    const { container } = await mountToggle({ checked: true });
-    const toggle = container.querySelector('[role="switch"]')!;
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-FN-TOG-002: checked toggle has aria-checked="true"',
+    async () => {
+      const { container } = await mountToggle({ checked: true });
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute('aria-checked')).toBe('true');
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -93,19 +99,25 @@ describe('UIBC-FN-TOG-003 — onchange callback', () => {
 // ---------------------------------------------------------------------------
 
 describe('UIBC-FN-TOG-004/005 — disabled state', () => {
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-FN-TOG-004: disabled toggle has aria-disabled="true"', async () => {
-    const { container } = await mountToggle({ disabled: true });
-    const toggle = container.querySelector('[role="switch"]')!;
-    expect(toggle.getAttribute('aria-disabled')).toBe('true');
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-FN-TOG-004: disabled toggle has aria-disabled="true"',
+    async () => {
+      const { container } = await mountToggle({ disabled: true });
+      const toggle = container.querySelector('[role="switch"]')!;
+      expect(toggle.getAttribute('aria-disabled')).toBe('true');
+    },
+  );
 
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-FN-TOG-005 / UIBC-SEC-013: disabled toggle does not fire onchange', async () => {
-    const handler = vi.fn();
-    const { container } = await mountToggle({ disabled: true, onchange: handler });
-    const toggle = container.querySelector('[role="switch"]') as HTMLElement;
-    toggle.click();
-    expect(handler).not.toHaveBeenCalled();
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-FN-TOG-005 / UIBC-SEC-013: disabled toggle does not fire onchange',
+    async () => {
+      const handler = vi.fn();
+      const { container } = await mountToggle({ disabled: true, onchange: handler });
+      const toggle = container.querySelector('[role="switch"]') as HTMLElement;
+      toggle.click();
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -118,45 +130,65 @@ describe('UIBC-A11Y-TOG — ARIA', () => {
     expect(container.querySelector('[role="switch"]')).not.toBeNull();
   });
 
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-A11Y-TOG-002: aria-checked mirrors checked prop', async () => {
-    const { container: c1 } = await mountToggle({ checked: true });
-    expect(c1.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
-    document.body.innerHTML = '';
-    const { container: c2 } = await mountToggle({ checked: false });
-    expect(c2.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-A11Y-TOG-002: aria-checked mirrors checked prop',
+    async () => {
+      const { container: c1 } = await mountToggle({ checked: true });
+      expect(c1.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+      document.body.innerHTML = '';
+      const { container: c2 } = await mountToggle({ checked: false });
+      expect(c2.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
+    },
+  );
 
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-A11Y-TOG-003: aria-disabled mirrors disabled prop', async () => {
-    const { container } = await mountToggle({ disabled: true });
-    expect(container.querySelector('[role="switch"]')!.getAttribute('aria-disabled')).toBe('true');
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-A11Y-TOG-003: aria-disabled mirrors disabled prop',
+    async () => {
+      const { container } = await mountToggle({ disabled: true });
+      expect(container.querySelector('[role="switch"]')!.getAttribute('aria-disabled')).toBe(
+        'true',
+      );
+    },
+  );
 
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-A11Y-TOG-004: toggle has 44×44px hit area wrapper (WCAG 2.5.5)', async () => {
-    const { container } = await mountToggle({});
-    // Toggle.svelte wraps the visual track in a <span class="w-[44px] h-[44px]">
-    // hit area. The [role="switch"] input itself is sr-only; the touch target
-    // is on the visual wrapper span.
-    const hitArea = container.querySelector('span.w-\\[44px\\].h-\\[44px\\]') as HTMLElement | null;
-    // Also accept any element with both dimensions in className
-    const anyWithDimensions = container.querySelector('[class*="w-[44px]"][class*="h-[44px]"]') as HTMLElement | null;
-    // Or find by querying all spans and checking className
-    const spans = Array.from(container.querySelectorAll('span'));
-    const has44Target = spans.some(
-      (s) => s.className.includes('w-[44px]') && s.className.includes('h-[44px]'),
-    );
-    expect(hitArea !== null || anyWithDimensions !== null || has44Target,
-      'Expected a 44×44px hit area wrapper span').toBe(true);
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-A11Y-TOG-004: toggle has 44×44px hit area wrapper (WCAG 2.5.5)',
+    async () => {
+      const { container } = await mountToggle({});
+      // Toggle.svelte wraps the visual track in a <span class="w-[44px] h-[44px]">
+      // hit area. The [role="switch"] input itself is sr-only; the touch target
+      // is on the visual wrapper span.
+      const hitArea = container.querySelector(
+        'span.w-\\[44px\\].h-\\[44px\\]',
+      ) as HTMLElement | null;
+      // Also accept any element with both dimensions in className
+      const anyWithDimensions = container.querySelector(
+        '[class*="w-[44px]"][class*="h-[44px]"]',
+      ) as HTMLElement | null;
+      // Or find by querying all spans and checking className
+      const spans = Array.from(container.querySelectorAll('span'));
+      const has44Target = spans.some(
+        (s) => s.className.includes('w-[44px]') && s.className.includes('h-[44px]'),
+      );
+      expect(
+        hitArea !== null || anyWithDimensions !== null || has44Target,
+        'Expected a 44×44px hit area wrapper span',
+      ).toBe(true);
+    },
+  );
 
-  it.skipIf(!COMPONENT_PRESENT)('UIBC-A11Y-TOG-005: label text is accessible via aria-label or visible text', async () => {
-    const { container } = await mountToggle({ label: 'Enable feature' });
-    const toggle = container.querySelector('[role="switch"]') as HTMLElement;
-    const hasLabel =
-      toggle.getAttribute('aria-label') === 'Enable feature' ||
-      toggle.getAttribute('aria-labelledby') !== null ||
-      (container.textContent ?? '').includes('Enable feature');
-    expect(hasLabel).toBe(true);
-  });
+  it.skipIf(!COMPONENT_PRESENT)(
+    'UIBC-A11Y-TOG-005: label text is accessible via aria-label or visible text',
+    async () => {
+      const { container } = await mountToggle({ label: 'Enable feature' });
+      const toggle = container.querySelector('[role="switch"]') as HTMLElement;
+      const hasLabel =
+        toggle.getAttribute('aria-label') === 'Enable feature' ||
+        toggle.getAttribute('aria-labelledby') !== null ||
+        (container.textContent ?? '').includes('Enable feature');
+      expect(hasLabel).toBe(true);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

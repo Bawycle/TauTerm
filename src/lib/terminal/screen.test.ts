@@ -162,9 +162,7 @@ describe('TUITC-FN-031: combining character width=0', () => {
 // ---------------------------------------------------------------------------
 describe('TUITC-FN-071: buildGridFromSnapshot creates correct grid size', () => {
   it('2×4 grid → 8 cells', () => {
-    const cells = Array.from({ length: 8 }, (_, i) =>
-      makeSnapshotCell({ content: String(i) }),
-    );
+    const cells = Array.from({ length: 8 }, (_, i) => makeSnapshotCell({ content: String(i) }));
     const grid = buildGridFromSnapshot(cells, 2, 4);
     expect(grid.length).toBe(8);
     expect(grid[0].content).toBe('0');

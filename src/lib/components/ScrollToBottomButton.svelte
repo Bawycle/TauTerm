@@ -37,7 +37,7 @@
   role="button"
   tabindex="0"
   aria-label={m.scroll_to_bottom()}
-  onclick={onclick}
+  {onclick}
   onkeydown={handleKeydown}
 >
   <ArrowDown size="var(--size-icon-sm)" aria-hidden="true" />

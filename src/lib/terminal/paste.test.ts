@@ -27,7 +27,7 @@ import { describe, it, expect } from 'vitest';
 
 // TDD: import defensively — tests fail until paste.ts exists.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const pasteModule = await import('./paste.js').catch(() => ({})) as any;
+const pasteModule = (await import('./paste.js').catch(() => ({}))) as any;
 
 // ---------------------------------------------------------------------------
 // Helpers

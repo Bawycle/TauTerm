@@ -48,7 +48,9 @@
     value ? (options.find((o) => o.value === value)?.label ?? value) : placeholder,
   );
 
-  const triggerTextClass = $derived(value ? 'text-(--color-text-primary)' : 'text-(--color-text-tertiary)');
+  const triggerTextClass = $derived(
+    value ? 'text-(--color-text-primary)' : 'text-(--color-text-tertiary)',
+  );
 </script>
 
 <div class="flex flex-col">
@@ -58,12 +60,7 @@
     </label>
   {/if}
 
-  <Select.Root
-    type="single"
-    {value}
-    onValueChange={(v) => onchange?.(v)}
-    {disabled}
-  >
+  <Select.Root type="single" {value} onValueChange={(v) => onchange?.(v)} {disabled}>
     <Select.Trigger
       {id}
       class="relative w-full h-[44px] px-3 pr-9 text-[13px] bg-(--term-bg) border border-(--color-border) rounded-[2px] flex items-center text-left cursor-pointer disabled:cursor-not-allowed disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) {triggerTextClass}"

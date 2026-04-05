@@ -21,22 +21,22 @@ import type { ColorDto, Color } from '$lib/ipc/types';
  * These map to the `--ansi-*` tokens defined in src/app.css.
  */
 const ANSI_16_VARS: readonly string[] = [
-  'var(--ansi-black)',        // 0
-  'var(--ansi-red)',          // 1
-  'var(--ansi-green)',        // 2
-  'var(--ansi-yellow)',       // 3
-  'var(--ansi-blue)',         // 4
-  'var(--ansi-magenta)',      // 5
-  'var(--ansi-cyan)',         // 6
-  'var(--ansi-white)',        // 7
+  'var(--ansi-black)', // 0
+  'var(--ansi-red)', // 1
+  'var(--ansi-green)', // 2
+  'var(--ansi-yellow)', // 3
+  'var(--ansi-blue)', // 4
+  'var(--ansi-magenta)', // 5
+  'var(--ansi-cyan)', // 6
+  'var(--ansi-white)', // 7
   'var(--ansi-bright-black)', // 8
-  'var(--ansi-bright-red)',   // 9
+  'var(--ansi-bright-red)', // 9
   'var(--ansi-bright-green)', // 10
-  'var(--ansi-bright-yellow)',// 11
-  'var(--ansi-bright-blue)',  // 12
-  'var(--ansi-bright-magenta)',// 13
+  'var(--ansi-bright-yellow)', // 11
+  'var(--ansi-bright-blue)', // 12
+  'var(--ansi-bright-magenta)', // 13
   'var(--ansi-bright-cyan)', // 14
-  'var(--ansi-bright-white)',// 15
+  'var(--ansi-bright-white)', // 15
 ];
 
 /**

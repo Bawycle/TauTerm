@@ -230,21 +230,36 @@ export function keyEventToVtSequence(
   // -------------------------------------------------------------------------
   if (appKeypad && !ctrlKey && !altKey && !shiftKey) {
     switch (key) {
-      case '0': return encode('\x1bOp');
-      case '1': return encode('\x1bOq');
-      case '2': return encode('\x1bOr');
-      case '3': return encode('\x1bOs');
-      case '4': return encode('\x1bOt');
-      case '5': return encode('\x1bOu');
-      case '6': return encode('\x1bOv');
-      case '7': return encode('\x1bOw');
-      case '8': return encode('\x1bOx');
-      case '9': return encode('\x1bOy');
-      case '.': return encode('\x1bOn');
-      case '+': return encode('\x1bOl');
-      case '-': return encode('\x1bOm');
-      case '*': return encode('\x1bOj');
-      case '/': return encode('\x1bOo');
+      case '0':
+        return encode('\x1bOp');
+      case '1':
+        return encode('\x1bOq');
+      case '2':
+        return encode('\x1bOr');
+      case '3':
+        return encode('\x1bOs');
+      case '4':
+        return encode('\x1bOt');
+      case '5':
+        return encode('\x1bOu');
+      case '6':
+        return encode('\x1bOv');
+      case '7':
+        return encode('\x1bOw');
+      case '8':
+        return encode('\x1bOx');
+      case '9':
+        return encode('\x1bOy');
+      case '.':
+        return encode('\x1bOn');
+      case '+':
+        return encode('\x1bOl');
+      case '-':
+        return encode('\x1bOm');
+      case '*':
+        return encode('\x1bOj');
+      case '/':
+        return encode('\x1bOo');
     }
   }
 
@@ -274,23 +289,40 @@ export function keypadToVtSequence(event: KeyboardEvent, deckpam: boolean): Uint
   if (!event.code.startsWith('Numpad')) return null;
   if (event.ctrlKey || event.altKey || event.shiftKey) return null;
   switch (event.key) {
-    case '0': return encode('\x1bOp');
-    case '1': return encode('\x1bOq');
-    case '2': return encode('\x1bOr');
-    case '3': return encode('\x1bOs');
-    case '4': return encode('\x1bOt');
-    case '5': return encode('\x1bOu');
-    case '6': return encode('\x1bOv');
-    case '7': return encode('\x1bOw');
-    case '8': return encode('\x1bOx');
-    case '9': return encode('\x1bOy');
-    case '.': return encode('\x1bOn');
-    case '+': return encode('\x1bOl');
-    case '-': return encode('\x1bOm');
-    case '*': return encode('\x1bOj');
-    case '/': return encode('\x1bOo');
-    case 'Enter': return encode('\x1bOM');
-    default: return null;
+    case '0':
+      return encode('\x1bOp');
+    case '1':
+      return encode('\x1bOq');
+    case '2':
+      return encode('\x1bOr');
+    case '3':
+      return encode('\x1bOs');
+    case '4':
+      return encode('\x1bOt');
+    case '5':
+      return encode('\x1bOu');
+    case '6':
+      return encode('\x1bOv');
+    case '7':
+      return encode('\x1bOw');
+    case '8':
+      return encode('\x1bOx');
+    case '9':
+      return encode('\x1bOy');
+    case '.':
+      return encode('\x1bOn');
+    case '+':
+      return encode('\x1bOl');
+    case '-':
+      return encode('\x1bOm');
+    case '*':
+      return encode('\x1bOj');
+    case '/':
+      return encode('\x1bOo');
+    case 'Enter':
+      return encode('\x1bOM');
+    default:
+      return null;
   }
 }
 

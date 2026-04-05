@@ -803,7 +803,10 @@ mod tests {
         // existing payloads without the field behave as non-login shells.
         let json = r#"{"cols":80,"rows":24}"#;
         let config: CreateTabConfig = serde_json::from_str(json).expect("deserialize failed");
-        assert!(!config.login, "serde default for CreateTabConfig.login must be false");
+        assert!(
+            !config.login,
+            "serde default for CreateTabConfig.login must be false"
+        );
     }
 
     #[test]

@@ -31,11 +31,7 @@
   const isSuccess = $derived(exitCode === 0);
 </script>
 
-<div
-  class="process-terminated-pane"
-  role="status"
-  aria-live="polite"
->
+<div class="process-terminated-pane" role="status" aria-live="polite">
   <!-- Exit status text (left side) -->
   <div class="process-terminated-pane__status">
     {#if isSuccess}

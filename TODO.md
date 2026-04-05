@@ -6,28 +6,11 @@
 
 ~~### Majeurs — Câblage IPC manquant~~ ✅ *Complétés le 2026-04-05*
 
-### Majeurs — Fonctionnalités absentes
+~~### Majeurs — Fonctionnalités absentes~~ ✅ *Complétés le 2026-04-05 — voir `docs/test-protocols/report-major-sprint-2026-04-05.md`*
 
-- [ ] **Split layout arborescent** — `split-tree.ts` existe mais non utilisé dans le rendu. Les panes sont en flex plat. Pas de séparateur draggable. (FS-PANE-001, FS-PANE-003)
-- [ ] **Tab drag-and-drop** — `reorder_tab` IPC existe, zéro DnD dans `TabBar.svelte`. (FS-TAB-005)
-- [ ] **Tab inline rename** — double-click + F2 absents. Context menu "Rename" non câblé à un input inline. (FS-TAB-006)
-- [ ] **Close confirmation dialog** — TODO commenté dans `TerminalView.svelte:157`. Aucun dialogue si processus actif lors de la fermeture d'un tab/pane. (FS-PTY-008)
-- [ ] **ConnectionManager dans l'UI principale** — composant complet mais non monté dans `TerminalView.svelte`. Les connexions SSH sauvegardées sont inaccessibles. (FS-SSH-031, FS-SSH-032)
-- [ ] **Theme editor** — backend CRUD themes complet, zéro UI. Pas de section Themes dans `PreferencesPanel`. (FS-THEME-003 à 006)
-- [ ] **Double-click word select / triple-click line select** — non implémentés dans `TerminalPane.svelte`. `SelectionManager` n'a pas ces méthodes. (FS-CLIP-002)
-- [ ] **Primary selection X11** — `arboard` écrit dans CLIPBOARD, pas PRIMARY → middle-click paste ne fonctionne pas sur Linux/X11. (FS-CLIP-004)
-- [ ] **Login shell premier tab** — `create_tab` appelé sans `login: true` depuis le frontend → `~/.bash_profile` / `~/.zprofile` non sourcés. (FS-PTY-013)
+~~### Majeurs — Raccourcis clavier~~ ✅ *Complétés le 2026-04-05*
 
-### Majeurs — Raccourcis clavier
-
-- [ ] **Raccourcis pane non interceptés** — Ctrl+Shift+D (split H), Ctrl+Shift+E (split V), Ctrl+Shift+Q (close pane), Ctrl+Shift+Arrow (navigate panes), Ctrl+Tab, Ctrl+Shift+Tab, F2 : aucun handler dans `TerminalView.svelte`. (FS-KBD-003)
-- [ ] **Raccourcis non persistés** — `KeyboardShortcutRecorder` fonctionne visuellement mais les valeurs ne sont ni sauvegardées via `update_preferences` ni relues dans `handleGlobalKeydown`. Les raccourcis hardcodés ignorent la config utilisateur. (FS-KBD-002)
-
-### Majeurs — Préférences non câblées
-
-- [ ] **Préférences terminal incomplètes** — cursor shape, bell type, cursor blink rate ont des dropdowns avec valeurs hardcodées dans `PreferencesPanel.svelte`, zéro handler `onchange`. Ne lisent pas les prefs réelles, ne sauvegardent rien. (FS-PREF-003, FS-PREF-006)
-- [ ] **IPC type drift Rust ↔ TypeScript** — `Preferences` TypeScript manque `keyboard` et `themes`. `TerminalPrefs.bell` est `boolean` en TS vs enum `BellType` en Rust. `UserTheme` struct complètement divergente. Provoquera des erreurs silencieuses de sérialisation. (ARCHITECTURE 4.6)
-- [ ] **Word delimiters** — champ présent dans les prefs Rust + UI, mais double-click word select non implémenté → jamais utilisé. (FS-CLIP-003)
+~~### Majeurs — Préférences non câblées~~ ✅ *Complétés le 2026-04-05*
 
 ### Mineurs
 

@@ -43,9 +43,7 @@ describe('UIBC-SEC-014 — no {@html} in base UI components', () => {
         return;
       }
       const source = readFileSync(filePath, 'utf-8');
-      expect(stripComments(source), `${name}.svelte must not use {@html}`).not.toContain(
-        '{@html',
-      );
+      expect(stripComments(source), `${name}.svelte must not use {@html}`).not.toContain('{@html');
     });
   }
 });
@@ -82,9 +80,6 @@ describe('UIBC-SEC-006 alias — all six components free of {@html}', () => {
         violations.push(name);
       }
     }
-    expect(
-      violations,
-      `Components with {@html}: ${violations.join(', ')}`,
-    ).toHaveLength(0);
+    expect(violations, `Components with {@html}: ${violations.join(', ')}`).toHaveLength(0);
   });
 });

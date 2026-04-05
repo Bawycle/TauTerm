@@ -50,7 +50,11 @@ const instances: ReturnType<typeof mount>[] = [];
 
 afterEach(() => {
   instances.forEach((i) => {
-    try { unmount(i); } catch { /* ignore */ }
+    try {
+      unmount(i);
+    } catch {
+      /* ignore */
+    }
   });
   instances.length = 0;
   document.body.innerHTML = '';
@@ -169,7 +173,9 @@ describe('UITCP-SO-FN-011: Shift+Enter triggers onprev', () => {
     const { container, instance } = mountOverlay({ onprev });
     instances.push(instance);
     const input = container.querySelector('input') as HTMLInputElement;
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }),
+    );
     expect(onprev).toHaveBeenCalledTimes(1);
   });
 });
@@ -221,7 +227,9 @@ describe('UITCP-SO-A11Y-004: nav buttons have 44px hit area (CSS class)', () => 
   it('nav buttons and close button have the nav-btn class with 44px sizing', () => {
     const { container, instance } = mountOverlay({});
     instances.push(instance);
-    const buttons = container.querySelectorAll('.search-overlay__nav-btn, .search-overlay__close-btn');
+    const buttons = container.querySelectorAll(
+      '.search-overlay__nav-btn, .search-overlay__close-btn',
+    );
     expect(buttons.length).toBe(3);
   });
 });

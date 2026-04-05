@@ -54,10 +54,7 @@ export function encodeMouseEvent(
   if (mode === 'none') return null;
 
   // Build modifier bitmask (xterm convention)
-  const modBits =
-    (mods.shiftKey ? 4 : 0) |
-    (mods.altKey ? 8 : 0) |
-    (mods.ctrlKey ? 16 : 0);
+  const modBits = (mods.shiftKey ? 4 : 0) | (mods.altKey ? 8 : 0) | (mods.ctrlKey ? 16 : 0);
 
   const cb = button | modBits;
 

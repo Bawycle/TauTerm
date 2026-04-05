@@ -56,7 +56,11 @@ const instances: ReturnType<typeof mount>[] = [];
 
 afterEach(() => {
   instances.forEach((i) => {
-    try { unmount(i); } catch { /* ignore */ }
+    try {
+      unmount(i);
+    } catch {
+      /* ignore */
+    }
   });
   instances.length = 0;
   document.body.innerHTML = '';
@@ -96,7 +100,9 @@ describe('UITCP-CM-FN-003: New Connection button opens edit form', () => {
     const { container, instance } = mountCM({ connections: [] });
     instances.push(instance);
     const firstPrimaryBtn = container.querySelector('button');
-    flushSync(() => { firstPrimaryBtn?.click(); });
+    flushSync(() => {
+      firstPrimaryBtn?.click();
+    });
     // Form should be visible
     const form = container.querySelector('[role="form"]');
     expect(form).not.toBeNull();
@@ -109,7 +115,9 @@ describe('UITCP-CM-FN-004: edit form has required fields', () => {
     instances.push(instance);
     // Open form
     const firstBtn = container.querySelector('button');
-    flushSync(() => { firstBtn?.click(); });
+    flushSync(() => {
+      firstBtn?.click();
+    });
     // Check for input fields
     const inputs = container.querySelectorAll('input');
     expect(inputs.length).toBeGreaterThan(2);
@@ -122,7 +130,9 @@ describe('UITCP-CM-FN-010: port field default is 22', () => {
     instances.push(instance);
     // Open form
     const firstBtn = container.querySelector('button');
-    flushSync(() => { firstBtn?.click(); });
+    flushSync(() => {
+      firstBtn?.click();
+    });
     // Find the port input by its id
     const portInput = container.querySelector('#cm-port') as HTMLInputElement | null;
     if (portInput) {
@@ -142,11 +152,13 @@ describe('UITCP-CM-FN-011: password field is type="password"', () => {
     instances.push(instance);
     // Open form
     const firstBtn = container.querySelector('button');
-    flushSync(() => { firstBtn?.click(); });
+    flushSync(() => {
+      firstBtn?.click();
+    });
     // Select password auth method radio
     const radios = container.querySelectorAll('input[type="radio"]');
     const passwordRadio = Array.from(radios).find(
-      (r) => (r as HTMLInputElement).value === 'password'
+      (r) => (r as HTMLInputElement).value === 'password',
     );
     if (passwordRadio) {
       flushSync(() => {
@@ -167,11 +179,15 @@ describe('UITCP-CM-FN-006: Cancel returns to list without saving', () => {
     instances.push(instance);
     // Open form
     const firstBtn = container.querySelector('button');
-    flushSync(() => { firstBtn?.click(); });
+    flushSync(() => {
+      firstBtn?.click();
+    });
     // Find Cancel button
     const buttons = Array.from(container.querySelectorAll('button'));
     const cancelBtn = buttons.find((b) => b.textContent?.match(/cancel|annuler/i));
-    flushSync(() => { cancelBtn?.click(); });
+    flushSync(() => {
+      cancelBtn?.click();
+    });
     // Form should be gone
     const form = container.querySelector('[role="form"]');
     expect(form).toBeNull();
@@ -217,11 +233,13 @@ describe('SEC-UI-002: password cleared after cancel (transient state)', () => {
     const { container, instance } = mountCM({ connections: [] });
     instances.push(instance);
     const firstBtn = container.querySelector('button');
-    flushSync(() => { firstBtn?.click(); });
+    flushSync(() => {
+      firstBtn?.click();
+    });
     // Switch to password auth
     const radios = container.querySelectorAll('input[type="radio"]');
     const passwordRadio = Array.from(radios).find(
-      (r) => (r as HTMLInputElement).value === 'password'
+      (r) => (r as HTMLInputElement).value === 'password',
     );
     if (passwordRadio) {
       flushSync(() => {

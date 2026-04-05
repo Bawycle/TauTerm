@@ -86,7 +86,8 @@ describe('TUITC-SEC-010/011: tab title injection prevention', () => {
     const maliciousTitle = '<script>evil()</script>';
     const tab = makeTabState();
     (tab.layout as { type: 'leaf'; state: PaneState }).state.processTitle = maliciousTitle;
-    const displayTitle = tab.label ?? (tab.layout as { type: 'leaf'; state: PaneState }).state.processTitle;
+    const displayTitle =
+      tab.label ?? (tab.layout as { type: 'leaf'; state: PaneState }).state.processTitle;
     // The string is returned as-is; it will be set as textContent by the component
     expect(displayTitle).toBe(maliciousTitle);
     // It is a plain string — DOM rendering via textContent is safe

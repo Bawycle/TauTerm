@@ -129,9 +129,7 @@ describe('TPSC-FN-001: ScrollToBottomButton absent at initial render (scrollOffs
 // ---------------------------------------------------------------------------
 
 describe('TPSC-FN-002 [E2E-deferred]: ScrollToBottomButton present when scrollOffset > 0', () => {
-  it.todo(
-    'renders scroll-to-bottom button after scroll-position-changed event with offset > 0',
-  );
+  it.todo('renders scroll-to-bottom button after scroll-position-changed event with offset > 0');
 });
 
 describe('TPSC-FN-003 [E2E-deferred]: scroll-position-changed makes button appear', () => {

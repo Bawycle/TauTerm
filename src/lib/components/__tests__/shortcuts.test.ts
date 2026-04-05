@@ -77,10 +77,7 @@ function matchesShortcut(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function key(
-  k: string,
-  mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {},
-) {
+function key(k: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}) {
   return {
     key: k,
     ctrlKey: mods.ctrl ?? false,

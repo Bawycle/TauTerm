@@ -41,7 +41,11 @@ const instances: ReturnType<typeof mount>[] = [];
 
 afterEach(() => {
   instances.forEach((i) => {
-    try { unmount(i); } catch { /* ignore */ }
+    try {
+      unmount(i);
+    } catch {
+      /* ignore */
+    }
   });
   instances.length = 0;
   document.body.innerHTML = '';
@@ -149,7 +153,9 @@ describe('UITCP-PTP-A11Y-002: icons are aria-hidden', () => {
     instances.push(instance);
     const svgIcons = container.querySelectorAll('svg');
     // At least one icon should be aria-hidden
-    const hiddenIcons = Array.from(svgIcons).filter((s) => s.getAttribute('aria-hidden') === 'true');
+    const hiddenIcons = Array.from(svgIcons).filter(
+      (s) => s.getAttribute('aria-hidden') === 'true',
+    );
     expect(hiddenIcons.length).toBeGreaterThan(0);
   });
 });

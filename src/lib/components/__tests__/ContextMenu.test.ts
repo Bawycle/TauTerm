@@ -56,7 +56,11 @@ const instances: ReturnType<typeof mount>[] = [];
 
 afterEach(() => {
   instances.forEach((i) => {
-    try { unmount(i); } catch { /* ignore */ }
+    try {
+      unmount(i);
+    } catch {
+      /* ignore */
+    }
   });
   instances.length = 0;
   document.body.innerHTML = '';
@@ -130,11 +134,19 @@ describe('SEC-UI-005: no clipboard read on render', () => {
   it('clipboard API is not called when context menu mounts', () => {
     // JSDOM does not provide navigator.clipboard — install a mock before spying.
     const mockClipboard = { readText: vi.fn().mockResolvedValue(''), writeText: vi.fn() };
-    Object.defineProperty(navigator, 'clipboard', { value: mockClipboard, writable: true, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      writable: true,
+      configurable: true,
+    });
     const { instance } = mountContextMenu({ variant: 'terminal' });
     instances.push(instance);
     expect(mockClipboard.readText).not.toHaveBeenCalled();
     // Restore
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, writable: true, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
   });
 });

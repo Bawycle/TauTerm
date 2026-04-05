@@ -121,9 +121,7 @@ describe('SSH-CRED-FN-003: OK button disabled when password is empty', () => {
   it('OK button is disabled on initial render (empty password)', () => {
     mountDialog();
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const okButton = buttons.find(
-      (b) => b.textContent?.trim() !== '' && b.disabled,
-    );
+    const okButton = buttons.find((b) => b.textContent?.trim() !== '' && b.disabled);
     expect(okButton).toBeDefined();
     expect(okButton!.disabled).toBe(true);
   });
@@ -147,9 +145,7 @@ describe('SSH-CRED-FN-004: OK button enabled after typing a password', () => {
     flushSync();
 
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const disabledOkButton = buttons.find(
-      (b) => b.disabled && !b.classList.contains('btn--ghost'),
-    );
+    const disabledOkButton = buttons.find((b) => b.disabled && !b.classList.contains('btn--ghost'));
     expect(disabledOkButton).toBeUndefined();
   });
 });

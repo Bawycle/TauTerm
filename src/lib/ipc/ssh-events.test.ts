@@ -50,7 +50,9 @@ function makeHostKeyEvent(overrides: Partial<HostKeyPromptEvent> = {}): HostKeyP
   };
 }
 
-function makeCredentialEvent(overrides: Partial<CredentialPromptEvent> = {}): CredentialPromptEvent {
+function makeCredentialEvent(
+  overrides: Partial<CredentialPromptEvent> = {},
+): CredentialPromptEvent {
   return {
     paneId: 'pane-1',
     host: 'my-server.example.com',
@@ -100,11 +102,7 @@ describe('SEC-BLK-005: Disconnected reason must not contain password', () => {
   it('reason is a generic string with no password material', () => {
     const password = 'hunter2';
     // Simulate a Disconnected event as it would arrive from the backend.
-    const event = makeSshStateEvent(
-      { type: 'disconnected' },
-      'pane-1',
-      'Authentication failed',
-    );
+    const event = makeSshStateEvent({ type: 'disconnected' }, 'pane-1', 'Authentication failed');
     expect(event.reason).not.toContain(password);
     // The reason field must be a safe, generic string.
     expect(event.reason).toBeDefined();
@@ -112,11 +110,7 @@ describe('SEC-BLK-005: Disconnected reason must not contain password', () => {
   });
 
   it('reason does not include username', () => {
-    const event = makeSshStateEvent(
-      { type: 'disconnected' },
-      'pane-1',
-      'Authentication failed',
-    );
+    const event = makeSshStateEvent({ type: 'disconnected' }, 'pane-1', 'Authentication failed');
     // Username 'alice' must not appear in the reason either.
     expect(event.reason).not.toContain('alice');
   });

@@ -43,10 +43,9 @@ afterEach(() => {
 // Helper — mounts Tooltip wrapped in required Provider context
 // ---------------------------------------------------------------------------
 
-function mountTooltip(props: {
-  content: string;
-  delayDuration?: number;
-}): { container: HTMLElement } {
+function mountTooltip(props: { content: string; delayDuration?: number }): {
+  container: HTMLElement;
+} {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -145,18 +144,14 @@ describe('UIBC-SEC-004 — XSS via content prop', () => {
     vi.runAllTimers();
     // No script element anywhere in the document
     expect(document.querySelector('script[src]')).toBeNull();
-    expect(
-      (window as unknown as Record<string, unknown>).__xss_tooltip_content,
-    ).toBeUndefined();
+    expect((window as unknown as Record<string, unknown>).__xss_tooltip_content).toBeUndefined();
   });
 
   it('img onerror payload in content is not executed on mount', () => {
     const xss = '<img src=x onerror="window.__xss_tooltip_img=true">';
     mountTooltip({ content: xss });
     vi.runAllTimers();
-    expect(
-      (window as unknown as Record<string, unknown>).__xss_tooltip_img,
-    ).toBeUndefined();
+    expect((window as unknown as Record<string, unknown>).__xss_tooltip_img).toBeUndefined();
   });
 });
 
@@ -166,7 +161,9 @@ describe('UIBC-SEC-004 — XSS via content prop', () => {
 // ---------------------------------------------------------------------------
 describe('UIBC-FN-TIP-001/002/003/005/006 — hover visibility (E2E deferred)', () => {
   it.todo('tooltip hidden by default — verify via E2E that no tooltip is visible on load');
-  it.todo('tooltip appears after mouseenter + delay — E2E: hover trigger element, wait, assert tooltip visible');
+  it.todo(
+    'tooltip appears after mouseenter + delay — E2E: hover trigger element, wait, assert tooltip visible',
+  );
   it.todo('tooltip appears after focus — E2E: tab to trigger, assert tooltip visible');
   it.todo('tooltip disappears on mouseleave — E2E: move mouse away, assert tooltip gone');
   it.todo('tooltip disappears on blur — E2E: blur trigger, assert tooltip gone');

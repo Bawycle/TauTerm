@@ -25,10 +25,7 @@ import type { PaneState, TabState } from '$lib/ipc/types';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeTabState(
-  paneTitle: string,
-  userLabel: string | null = null,
-): TabState {
+function makeTabState(paneTitle: string, userLabel: string | null = null): TabState {
   const pane: PaneState = {
     id: 'pane-1',
     sessionType: 'local',

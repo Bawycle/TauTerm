@@ -186,5 +186,23 @@
 
   "ssh_connections_panel_toggle": "Connexions SSH",
   "ssh_connections_panel_open": "Ouvrir le panneau des connexions SSH",
-  "ssh_connections_panel_close": "Fermer le panneau des connexions SSH"
+  "ssh_connections_panel_close": "Fermer le panneau des connexions SSH",
+
+  "theme_activate": "Activer",
+  "theme_active_label": "Actif",
+  "theme_palette_label": "Palette ANSI",
+  "theme_color_index": "Couleur {index}",
+  "theme_foreground_label": "Premier plan",
+  "theme_background_label": "Arrière-plan",
+  "theme_cursor_color_label": "Curseur",
+  "theme_selection_bg_label": "Arrière-plan de sélection",
+  "theme_name_label": "Nom du thème",
+  "theme_name_placeholder": "Mon thème",
+  "theme_save": "Enregistrer le thème",
+  "theme_cancel": "Annuler",
+  "theme_create_title": "Nouveau thème",
+  "theme_edit_title": "Modifier le thème",
+  "theme_empty_state": "Aucun thème personnalisé. Cliquez sur « Nouveau thème » pour en créer un.",
+  "theme_section_builtin": "Intégré",
+  "theme_section_custom": "Thèmes personnalisés"
 }

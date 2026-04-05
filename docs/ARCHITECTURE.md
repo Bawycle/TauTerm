@@ -1256,6 +1256,7 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 |-------|------|---------|
 | Rust unit + integration | `cargo nextest` | `cargo nextest run` (from `src-tauri/`) |
 | Rust VT conformance | `cargo nextest` | included in `cargo nextest run` |
+| Rust SecretService (keyring) | Podman + nextest | `./scripts/run-keyring-tests.sh` |
 | Rust formatting | `rustfmt` | `cargo fmt -- --check` |
 | Rust linting | `clippy` | `cargo clippy -- -D warnings` |
 | Frontend unit | Vitest | `pnpm vitest run` |
@@ -1351,12 +1352,38 @@ Uses `tauri::test::mock_app`. Scenarios:
 - `rename_tab` → label updated; subsequent `get_session_state` reflects rename
 - `update_preferences` with invalid value → `TauTermError { code: "PREF_INVALID_VALUE" }`
 
+#### SecretService integration tests (Podman container)
+
+`src-tauri/tests/credentials_integration.rs` — exercises `LinuxCredentialStore` against a real GNOME Keyring daemon (SEC-CRED-INT-001 to 005). These tests cannot run in a standard CI environment because they require a live D-Bus Secret Service daemon with an unlocked default collection. They are therefore isolated in a dedicated Podman image.
+
+**Why a custom image:** The standard Rust CI base image (slim-bookworm) has no D-Bus session bus, no GNOME Keyring, and no display server. Creating a real Secret Service session requires:
+1. A D-Bus session bus (`dbus-run-session`)
+2. GNOME Keyring daemon (`gnome-keyring-daemon --unlock --components=secrets`)
+3. A virtual framebuffer (`Xvfb :99`) — gnome-keyring 42 activates `gcr-prompter` via D-Bus to create the initial "login" collection; `gcr-prompter` is a GTK application that requires a display even when only the virtual display is in use
+4. `xdotool` to auto-dismiss the password dialog (empty password = no encryption, acceptable for ephemeral CI keyrings)
+
+**Critical ordering constraint:** `Xvfb` and `DISPLAY` must be set *before* `dbus-run-session` is invoked. D-Bus-activated services (`gcr-prompter`) inherit the environment of `dbus-daemon`, not the calling shell. Setting `DISPLAY` after `dbus-run-session` has started means `gcr-prompter` never sees it and crashes with `cannot open display`.
+
+**Image:** `Containerfile.keyring-test` (project root) — single-stage `rust:1.86-slim-bookworm`. Full Tauri Linux build dependencies are required because `tau_term_lib` (which the test binary links against) depends on `gtk`, `gio`, `webkit2gtk`, etc. at compile time. The test binary is pre-compiled during `docker build` to keep `docker run` fast.
+
+**nextest profile:** `keyring` (defined in `src-tauri/.config/nextest.toml`) — `test-threads = 1` (tests share a single daemon; parallelism causes race conditions), `slow-timeout = 60s`, `fail-fast = false`.
+
+**Running:**
+```bash
+./scripts/run-keyring-tests.sh             # build image + run
+./scripts/run-keyring-tests.sh --no-build  # reuse existing image
+./scripts/run-keyring-tests.sh --dry-run   # print commands only
+```
+
+These tests are **not** part of the default `cargo nextest run` gate. They are an optional step, run on-demand or in a dedicated CI job.
+
 #### Isolation rules
 
 - Temp directories via `tempfile::TempDir` for all filesystem-touching tests
 - `SessionRegistry::new()` and `PreferencesStore::load(path)` receive injected paths — no hardcoded `~/.config/tauterm/`
 - No port binding in integration tests
 - nextest process isolation by default; shared mutable state within a binary → test-scoped `Mutex`
+- SecretService integration tests run single-threaded in the `keyring` nextest profile; each test uses a unique attribute key (`tauterm:integration-test:<name>`) and a RAII `Cleanup` guard that deletes the key in `Drop`, preventing keyring pollution across test runs
 
 ---
 

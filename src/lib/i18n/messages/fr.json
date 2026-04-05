@@ -173,5 +173,18 @@
   "terminal_pane_aria_label": "Panneau de terminal",
   "terminal_output_aria_label": "Sortie du terminal",
   "terminal_view_aria_label": "Terminal TauTerm",
-  "connection_actions_aria_label": "Actions de connexion"
+  "connection_actions_aria_label": "Actions de connexion",
+
+  "close_confirm_title": "Fermer le terminal ?",
+  "close_confirm_body": "Un processus est en cours d'exécution dans ce terminal. Le fermer mettra fin au processus.",
+  "close_confirm_action": "Fermer quand même",
+
+  "pane_navigate_up": "Naviguer vers le panneau au-dessus",
+  "pane_navigate_down": "Naviguer vers le panneau en-dessous",
+  "pane_navigate_left": "Naviguer vers le panneau à gauche",
+  "pane_navigate_right": "Naviguer vers le panneau à droite",
+
+  "ssh_connections_panel_toggle": "Connexions SSH",
+  "ssh_connections_panel_open": "Ouvrir le panneau des connexions SSH",
+  "ssh_connections_panel_close": "Fermer le panneau des connexions SSH"
 }

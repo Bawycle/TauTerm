@@ -173,5 +173,18 @@
   "terminal_pane_aria_label": "Terminal pane",
   "terminal_output_aria_label": "Terminal output",
   "terminal_view_aria_label": "TauTerm terminal",
-  "connection_actions_aria_label": "Connection actions"
+  "connection_actions_aria_label": "Connection actions",
+
+  "close_confirm_title": "Close terminal?",
+  "close_confirm_body": "A process is running in this terminal. Closing it will terminate the process.",
+  "close_confirm_action": "Close anyway",
+
+  "pane_navigate_up": "Navigate to pane above",
+  "pane_navigate_down": "Navigate to pane below",
+  "pane_navigate_left": "Navigate to pane on the left",
+  "pane_navigate_right": "Navigate to pane on the right",
+
+  "ssh_connections_panel_toggle": "SSH connections",
+  "ssh_connections_panel_open": "Open SSH connections panel",
+  "ssh_connections_panel_close": "Close SSH connections panel"
 }

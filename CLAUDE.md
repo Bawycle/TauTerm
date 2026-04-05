@@ -55,6 +55,18 @@ pnpm prettier --check src/          # Check formatting
 pnpm prettier --write src/          # Format
 ```
 
+### SecretService integration tests (Podman — Linux only)
+
+```bash
+./scripts/run-keyring-tests.sh             # build image + run
+./scripts/run-keyring-tests.sh --no-build  # reuse existing image
+```
+
+These tests (`src-tauri/tests/credentials_integration.rs`) require a live GNOME Keyring
+daemon and are **not** included in `cargo nextest run`. They run in an isolated Podman
+container with a virtual framebuffer (Xvfb) and auto-dismissed password prompt (xdotool).
+See `docs/ARCHITECTURE.md` §14.3 for the full rationale.
+
 ### E2E (tauri-driver + WebdriverIO)
 
 ```bash

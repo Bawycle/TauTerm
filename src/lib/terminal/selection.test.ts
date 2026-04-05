@@ -253,6 +253,27 @@ describe('TEST-CLIP-004: selectWordAt', () => {
 });
 
 // ---------------------------------------------------------------------------
+// TEST-CLIP-004b — selectWordAt edge: word at right boundary
+// ---------------------------------------------------------------------------
+describe('TEST-CLIP-004b: selectWordAt — word touching right edge', () => {
+  const DELIMITERS = ' \t|"\'`&()*,;<=>[]{}~';
+
+  it('word touching the right edge of the line (no trailing space)', () => {
+    // Edge case: word runs all the way to col COLS-1
+    const COLS_EDGE = 5;
+    const sm = new SelectionManager();
+    // 'hello' exactly fills a 5-column line
+    const getCell = gridFromLines(['hello'], COLS_EDGE);
+    sm.selectWordAt(4, 0, getCell, COLS_EDGE, DELIMITERS);
+    const sel = sm.getSelection();
+    expect(sel).not.toBeNull();
+    expect(sel!.start.col).toBe(0);
+    expect(sel!.end.col).toBe(4);
+    expect(sm.getSelectedText(getCell, COLS_EDGE)).toBe('hello');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // TEST-CLIP-005 — selectLineAt (FS-CLIP-003)
 // ---------------------------------------------------------------------------
 describe('TEST-CLIP-005: selectLineAt', () => {

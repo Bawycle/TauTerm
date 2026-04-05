@@ -52,10 +52,13 @@ describe('TUITC-SEC-031: keyEventToVtSequence returns Uint8Array, never a string
     });
   }
 
-  it('printable character → null (not sent via keyEventToVtSequence)', () => {
-    // Printable chars return null — they go through the input event pipeline
+  it('printable character → UTF-8 bytes (sent via keyEventToVtSequence)', () => {
+    // Printable chars are encoded directly — the viewport div is not contenteditable
+    // so oninput never fires; all input must go through keydown.
     const result = keyEventToVtSequence(key('a'), false);
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.constructor.name).toBe('Uint8Array');
+    expect(Array.from(result!)).toEqual([0x61]);
   });
 });
 

@@ -4,8 +4,9 @@
  * VT escape sequence mapping for keyboard input.
  *
  * Implements xterm key encoding per FS-KBD-004 through FS-KBD-009.
- * Only handles special keys — printable characters are returned as-is
- * via the browser's normal text input pipeline.
+ * Handles all key events including printable characters — the viewport
+ * element is a non-contenteditable <div> so the browser's oninput pipeline
+ * never fires for it; every keystroke must go through keydown.
  *
  * References:
  *  - FS-KBD-004: Ctrl+letter → C0 control character
@@ -75,7 +76,7 @@ function csiTilde(code: number, mod: number): Uint8Array {
  * @param appCursorKeys - Whether DECCKM (application cursor mode) is active.
  * @param appKeypad - Whether DECKPAM (application keypad mode) is active (FS-KBD-010).
  * @returns The VT sequence bytes to send to the PTY, or `null` if the key
- *          should not be consumed (printable characters, unhandled modifiers).
+ *          should not be consumed (unrecognised combinations, Meta key, etc.).
  */
 export function keyEventToVtSequence(
   event: KeyboardEvent,
@@ -264,11 +265,11 @@ export function keyEventToVtSequence(
   }
 
   // -------------------------------------------------------------------------
-  // Printable single characters — NOT consumed here.
-  // The browser's compositionupdate / input events handle these.
+  // Printable single characters — send UTF-8 bytes directly to PTY.
+  // Placed after DECKPAM so keypad application sequences take priority.
   // -------------------------------------------------------------------------
   if (key.length === 1 && !ctrlKey && !altKey) {
-    return null;
+    return encode(key);
   }
 
   // Unrecognised key — do not consume

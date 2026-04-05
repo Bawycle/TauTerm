@@ -148,17 +148,17 @@ describe('TEST-KBD-004: function keys', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Printable characters → null (not consumed)
+// Printable characters → UTF-8 bytes
 // ---------------------------------------------------------------------------
-describe('printable characters → null', () => {
-  it('regular letter "a" → null', () => {
-    expect(keyEventToVtSequence(key('a'), false)).toBeNull();
+describe('printable characters → UTF-8 bytes', () => {
+  it('regular letter "a" → [0x61]', () => {
+    expect(toArr(keyEventToVtSequence(key('a'), false))).toEqual([0x61]);
   });
-  it('digit "5" → null', () => {
-    expect(keyEventToVtSequence(key('5'), false)).toBeNull();
+  it('digit "5" → [0x35]', () => {
+    expect(toArr(keyEventToVtSequence(key('5'), false))).toEqual([0x35]);
   });
-  it('space " " → null', () => {
-    expect(keyEventToVtSequence(key(' '), false)).toBeNull();
+  it('space " " → [0x20]', () => {
+    expect(toArr(keyEventToVtSequence(key(' '), false))).toEqual([0x20]);
   });
 });
 

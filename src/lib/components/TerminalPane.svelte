@@ -355,19 +355,14 @@
     // Do NOT intercept them here — let them bubble
     if (event.ctrlKey && event.shiftKey) return;
     if (event.ctrlKey && event.key === ',') return; // Ctrl+, = preferences
+    // Let the IME composition pipeline finish before we consume the event
+    if (event.isComposing) return;
 
     const sequence = keyEventToVtSequence(event, decckm, deckpam);
     if (sequence !== null) {
       event.preventDefault();
       sendBytes(sequence);
     }
-  }
-
-  function handleInput(event: Event) {
-    const inputEvent = event as InputEvent;
-    if (inputEvent.isComposing) return;
-    const data = inputEvent.data;
-    if (data) sendBytes(new TextEncoder().encode(data));
   }
 
   async function sendBytes(bytes: Uint8Array) {
@@ -781,7 +776,6 @@
       aria-label={m.terminal_output_aria_label()}
       aria-readonly="false"
       onkeydown={handleKeydown}
-      oninput={handleInput}
       onmousedown={handleMousedown}
       onmousemove={handleMousemove}
       onmouseup={handleMouseup}

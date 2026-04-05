@@ -6,40 +6,7 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>tau-term</title>
-    <script>
-      // Fix for WebKitGTK + tauri:// protocol:
-      //
-      // Vite's modulepreload polyfill (Dj6f-nJM.js) inserts
-      // <link rel="stylesheet" crossOrigin=""> elements and awaits their
-      // load/error events before resolving the import() chain. Under WebKitGTK
-      // with the tauri:// custom protocol, stylesheet links with crossOrigin set
-      // to "" trigger a CORS fetch that the tauri:// handler does not satisfy
-      // (no Access-Control-Allow-Origin header). WebKitGTK then fires neither
-      // load nor error — the Promise hangs forever and kit.start() never
-      // completes, leaving the DOM untouched.
-      //
-      // Fix: intercept insertions into <head> and strip crossOrigin from any
-      // <link rel="stylesheet"> before the network request is initiated.
-      // Without crossOrigin the request is a plain (no-CORS) fetch, which the
-      // tauri:// handler serves correctly, and the load event fires naturally.
-      //
-      // Active only under tauri: — no-op in dev mode (http://localhost:1420).
-      if (typeof window !== 'undefined' && location.protocol === 'tauri:') {
-        var _origHeadAppendChild = document.head.appendChild.bind(document.head);
-        document.head.appendChild = function (node) {
-          if (
-            node &&
-            node.tagName === 'LINK' &&
-            node.rel === 'stylesheet' &&
-            node.crossOrigin === ''
-          ) {
-            node.removeAttribute('crossorigin');
-          }
-          return _origHeadAppendChild(node);
-        };
-      }
-    </script>
-    %sveltekit.head%
+%sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>

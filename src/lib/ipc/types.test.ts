@@ -219,3 +219,107 @@ describe('IPC types — structural smoke tests', () => {
     expect(tab.order).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// TEST-SPRINT-003 — FS-I18N-006: Language type drift — 'en'/'fr' not 'En'/'Fr'
+//
+// The Rust backend serializes Language::En as "en" and Language::Fr as "fr"
+// (serde rename_all = "camelCase" on a two-letter enum lowercases both).
+// The TypeScript type MUST be 'en' | 'fr' — never 'En' | 'Fr'.
+// ---------------------------------------------------------------------------
+
+describe('TEST-SPRINT-003: Language IPC type uses lowercase values', () => {
+  it('Language "en" is a valid value', () => {
+    // TEST-SPRINT-003
+    const lang: import('$lib/ipc/types').Language = 'en';
+    expect(lang).toBe('en');
+  });
+
+  it('Language "fr" is a valid value', () => {
+    // TEST-SPRINT-003
+    const lang: import('$lib/ipc/types').Language = 'fr';
+    expect(lang).toBe('fr');
+  });
+
+  it('AppearancePrefs.language field accepts "en"', () => {
+    // TEST-SPRINT-003: verify the field type is correct through a full object.
+    const prefs: import('$lib/ipc/types').AppearancePrefs = {
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cursorStyle: 'block',
+      cursorBlinkMs: 530,
+      themeName: 'umbra',
+      opacity: 1.0,
+      language: 'en',
+      contextMenuHintShown: false,
+    };
+    expect(prefs.language).toBe('en');
+  });
+
+  it('AppearancePrefs.language field accepts "fr"', () => {
+    // TEST-SPRINT-003
+    const prefs: import('$lib/ipc/types').AppearancePrefs = {
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cursorStyle: 'block',
+      cursorBlinkMs: 530,
+      themeName: 'umbra',
+      opacity: 1.0,
+      language: 'fr',
+      contextMenuHintShown: false,
+    };
+    expect(prefs.language).toBe('fr');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEST-SPRINT-004 — BellType serialization contract
+//
+// The Rust backend serializes BellType as: none/visual/audio/both (camelCase
+// applied to single-word variants lowercases them).
+// The TypeScript type must match exactly.
+// ---------------------------------------------------------------------------
+
+describe('TEST-SPRINT-004: BellType IPC type uses lowercase camelCase values', () => {
+  it('BellType "none" is a valid value', () => {
+    // TEST-SPRINT-004
+    const bell: import('$lib/ipc/types').BellType = 'none';
+    expect(bell).toBe('none');
+  });
+
+  it('BellType "visual" is a valid value', () => {
+    // TEST-SPRINT-004
+    const bell: import('$lib/ipc/types').BellType = 'visual';
+    expect(bell).toBe('visual');
+  });
+
+  it('BellType "audio" is a valid value', () => {
+    // TEST-SPRINT-004
+    const bell: import('$lib/ipc/types').BellType = 'audio';
+    expect(bell).toBe('audio');
+  });
+
+  it('BellType "both" is a valid value', () => {
+    // TEST-SPRINT-004
+    const bell: import('$lib/ipc/types').BellType = 'both';
+    expect(bell).toBe('both');
+  });
+
+  it('TerminalPrefs.bellType field accepts "visual"', () => {
+    // TEST-SPRINT-004: verify field type via full object.
+    const prefs: import('$lib/ipc/types').TerminalPrefs = {
+      scrollbackLines: 10000,
+      allowOsc52Write: false,
+      wordDelimiters: ' \t|"\'`&()*,;<=>[]{}~',
+      bellType: 'visual',
+    };
+    expect(prefs.bellType).toBe('visual');
+  });
+
+  it('all four BellType values are distinct strings', () => {
+    // TEST-SPRINT-004: guard against accidental alias collapse.
+    const values: import('$lib/ipc/types').BellType[] = ['none', 'visual', 'audio', 'both'];
+    const unique = new Set(values);
+    expect(unique.size).toBe(4);
+  });
+});

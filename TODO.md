@@ -40,6 +40,7 @@
 - [ ] **Paste confirmation multiline** — pas de dialogue de confirmation quand le texte collé contient des newlines et que bracketed paste est inactif. (FS-CLIP-009 — SHOULD)
 - [ ] **Tab contrast WCAG AA** — titre de tab inactif à ≈ 2.5:1, sous le seuil 4.5:1. Décision design requise. (TUITC-UX-060)
 - [ ] **FS-SSH-013 erratum** — opcodes VKILL/VEOF inversés dans `docs/FS.md`. Implémentation correcte (VKILL=4, VEOF=5 per RFC 4254) ; corriger le doc.
+- [ ] **Recherche scrollback cross-row** — `search_scrollback` cherche ligne par ligne ; un mot à cheval sur deux lignes soft-wrappées n'est pas trouvé. Implémenter la jonction cross-row et retirer `#[ignore]` sur `vt/search.rs::search_soft_wrap_word_spanning_two_rows_is_found` (SEARCH-SOFT-001).
 
 ### Tests manquants
 

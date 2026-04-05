@@ -12,6 +12,11 @@ export default defineConfig({
   ],
 
   resolve: {
+    // 'browser' condition ensures Svelte resolves its client-side exports
+    // (mount, unmount, etc.) rather than the server-side stubs when running
+    // under jsdom. Without this, `import { mount } from 'svelte'` resolves
+    // to index-server.js which throws lifecycle_function_unavailable.
+    conditions: ['browser'],
     alias: {
       // Mirror the SvelteKit $lib alias so tests resolve the same paths.
       $lib: path.resolve(__dirname, 'src/lib'),

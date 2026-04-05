@@ -156,7 +156,7 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-05 (session f)
+Last updated: 2026-04-05 (session g)
 
 ### Done
 
@@ -220,6 +220,16 @@ Last updated: 2026-04-05 (session f)
 | **Terminal UI test protocol** | ✅ Done | `docs/test-protocols/ui-terminal-components.md` — 91 scenarios (TUITC-FN, TUITC-UX, TUITC-SEC) |
 | **SEC-CSP-003 scanner fix** | ✅ Done | `security_static_checks.rs`: comment lines (`<!--`, `//`, `*`, `-` prefixed) excluded from `{@html}` scan to eliminate false-positives from doc notes |
 | **Test report** | ✅ Done | `docs/test-reports/ui-terminal-components-2026-04-05.md` |
+
+### Done (added 2026-04-05 session g)
+
+| Area | Status | Details |
+|---|---|---|
+| **Base UI components** | ✅ Done | `src/lib/ui/`: `Button` (4 variantes: primary/secondary/ghost/destructive), `TextInput` (label, placeholder, error, helper, disabled), `Toggle` (switch sémantique, states checked/disabled), `Dropdown` (Bits UI `Select`, keyboard nav, 44px items), `Tooltip` (Bits UI `Tooltip`, delayDuration=300ms), `Dialog` (Bits UI `Dialog`, focus trap, Escape, `aria-modal`); barrel export via `index.ts`; SPDX headers; `pnpm check` 0 erreurs |
+| **Base UI test protocol** | ✅ Done | `docs/test-protocols/ui-base-components.md` — 159 scénarios (fonctionnels, accessibilité WCAG 2.1 AA, i18n, sécurité UIBC-SEC-001 à SEC-015, design tokens, reduced motion); security sign-off intégré |
+| **Base UI tests (vitest)** | ✅ Done | `src/lib/ui/__tests__/`: 7 fichiers, 107 nouveaux tests passants (345 total, 0 régressions); `security-static.test.ts` (UIBC-SEC-014/006 statiques); 16 scénarios E2E-deferred (Bits UI portails, interactions pointer/focus); `vitest.config.ts` : `resolve.conditions: ['browser']` ajouté pour Svelte SSR fix |
+| **Test report** | ✅ Done | `docs/test-reports/ui-base-components-2026-04-05.md` |
+| **Bits UI API divergences** | ✅ Resolved | `Select.Value` absent en v2.17.0 → trigger label calculé via `$derived`; `Select.Trigger` utilise le pattern `{#snippet child({ props })}` (WithChild); `Tooltip` nécessite `Tooltip.Provider` en wrapper de test; `Dialog.Root` : `bind:open` via `$bindable()` |
 
 ### Not Yet Implemented (stubs only)
 

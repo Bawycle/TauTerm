@@ -39,20 +39,16 @@
   <!-- Exit status text (left side) -->
   <div class="process-terminated-pane__status">
     {#if isSuccess}
-      <CheckCircle
-        size={16}
-        class="process-terminated-pane__icon process-terminated-pane__icon--success"
-        aria-hidden="true"
-      />
+      <span class="process-terminated-pane__icon process-terminated-pane__icon--success">
+        <CheckCircle size={16} aria-hidden="true" />
+      </span>
       <span class="process-terminated-pane__primary">
         {m.notification_process_exit_success()}
       </span>
     {:else}
-      <XCircle
-        size={16}
-        class="process-terminated-pane__icon process-terminated-pane__icon--error"
-        aria-hidden="true"
-      />
+      <span class="process-terminated-pane__icon process-terminated-pane__icon--error">
+        <XCircle size={16} aria-hidden="true" />
+      </span>
       <div class="process-terminated-pane__exit-info">
         <span class="process-terminated-pane__primary">
           {m.notification_process_exit_failure({ code: exitCode })}

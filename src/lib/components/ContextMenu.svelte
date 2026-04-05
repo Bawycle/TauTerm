@@ -77,6 +77,9 @@
     children,
   }: Props = $props();
 
+  // svelte-ignore state_referenced_locally -- intentional: local mutable copy needed
+  // because onOpenChange mutates internalOpen internally; $derived would be read-only.
+  // $effect keeps it in sync when the parent changes the `open` prop.
   let internalOpen = $state(open);
   $effect(() => { internalOpen = open; });
 

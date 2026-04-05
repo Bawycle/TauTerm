@@ -196,29 +196,6 @@
       // Backend not ready — will be populated by first session-state-changed event
     }
 
-    // STOPGAP — TODO: move initial tab creation to the backend (lib.rs setup()).
-    //
-    // The backend starts with an empty SessionRegistry; the correct architecture
-    // is for lib.rs to call create_tab() during Tauri setup() so that the frontend
-    // always receives a non-empty state from get_session_state. Keeping this logic
-    // here couples TerminalView to session initialisation, which is a backend
-    // responsibility. See TODO.md § "Dette architecturale — création du premier onglet".
-    //
-    // Auto-create the first tab if the session starts empty (standard terminal UX:
-    // the app always opens with at least one tab ready). Uses a login shell so that
-    // ~/.bash_profile / ~/.zprofile are sourced (FS-PTY-013).
-    if (tabs.length === 0) {
-      try {
-        const newTab: TabState = await invoke('create_tab', { config: { cols: 80, rows: 24, login: true } });
-        tabs = [newTab];
-        activeTabId = newTab.id;
-      } catch (err) {
-        // Non-fatal — backend may not be ready yet; the session-state-changed event
-        // will populate tabs when the backend emits tab-created.
-        console.warn('[TerminalView] create_tab failed on startup:', err);
-      }
-    }
-
     // Fetch preferences for PreferencesPanel
     try {
       preferences = await invoke('get_preferences');

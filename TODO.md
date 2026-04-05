@@ -32,12 +32,6 @@
 
 ---
 
-## Dette architecturale — création du premier onglet
-
-- [ ] **Déplacer la création du premier onglet dans `lib.rs`** — Actuellement, `TerminalView.svelte` détecte un état de session vide au montage et appelle `invoke('create_tab', ...)` pour pallier le démarrage à vide du backend. C'est un stopgap : la responsabilité de l'état initial de la session appartient au backend. La solution correcte est d'appeler `create_tab` dans `setup()` de `lib.rs` (ou via une méthode dédiée sur `SessionRegistry`) avant que la fenêtre ne soit affichée, de façon à ce que `get_session_state` retourne toujours au moins un onglet. Voir le commentaire STOPGAP dans `src/lib/components/TerminalView.svelte`.
-
----
-
 ## Backlog
 
 ### Claude Code Agent Teams — multi-pane support

@@ -25,7 +25,7 @@ use tauri::Manager;
 
 use crate::credentials::CredentialManager;
 use crate::preferences::PreferencesStore;
-use crate::session::SessionRegistry;
+use crate::session::{CreateTabConfig, SessionRegistry};
 use crate::ssh::SshManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -80,6 +80,23 @@ pub fn run() {
                 #[cfg(feature = "e2e-testing")]
                 injectable_registry,
             );
+
+            // Create the initial tab before registering the registry as Tauri state.
+            // This guarantees that `get_session_state` always returns ≥1 tab on first
+            // call, so the frontend never needs to call `create_tab` on startup.
+            // Uses a login shell (FS-PTY-013) so ~/.bash_profile / ~/.zprofile are sourced.
+            // Non-fatal: if PTY is unavailable, log and continue — the frontend will handle
+            // an empty state gracefully via `session-state-changed` events.
+            if let Err(e) = registry.create_tab(CreateTabConfig {
+                label: None,
+                cols: 80,
+                rows: 24,
+                shell: None,
+                login: true,
+            }) {
+                tracing::error!("Failed to create initial tab during setup: {e}");
+            }
+
             app.manage(registry);
             Ok(())
         })

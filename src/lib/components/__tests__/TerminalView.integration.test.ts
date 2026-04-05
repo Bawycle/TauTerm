@@ -5,8 +5,10 @@
  *
  * These tests cover two regressions that were previously caught only by E2E:
  *
- *   TV-INIT-001 — Empty session on mount: TerminalView calls create_tab when
- *     get_session_state returns zero tabs.
+ *   TV-INIT-001 — Backend invariant: TerminalView NEVER calls create_tab directly.
+ *     The backend (lib.rs setup()) guarantees ≥1 tab before the window is shown,
+ *     so TerminalView must not call create_tab on mount under any condition —
+ *     including when get_session_state returns zero tabs (abnormal state).
  *   TV-CLOSE-001 — Tab close confirmation: handleTabClose shows the
  *     "Close terminal?" dialog when the target tab has a running process, and
  *     invoke('close_tab') is called only after the user confirms.
@@ -23,7 +25,7 @@
  *   - ResizeObserver is stubbed for jsdom compatibility (used by TerminalPane).
  *
  * E2E-deferred (require real Tauri backend / full render pipeline):
- *   TV-INIT-002 — Tab created by backend event after failed create_tab
+ *   TV-INIT-002 — Tab populated by backend session-state-changed event
  *   TV-CLOSE-002 — Pane close confirmation dialog
  *   TV-CLOSE-003 — Dialog cancel does not call close_tab
  */
@@ -138,14 +140,16 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// TV-INIT-001: Empty session → create_tab is called automatically
+// TV-INIT-001: TerminalView never calls create_tab directly (backend invariant)
 // ---------------------------------------------------------------------------
 
-describe('TV-INIT-001: empty session triggers automatic first-tab creation', () => {
-  it('calls invoke("create_tab") when get_session_state returns zero tabs', async () => {
+describe('TV-INIT-001: TerminalView never calls create_tab directly', () => {
+  it('does NOT call invoke("create_tab") even when get_session_state returns zero tabs', async () => {
+    // The backend (lib.rs setup()) guarantees ≥1 tab before the window is shown.
+    // An empty get_session_state response is abnormal; TerminalView must not
+    // compensate by calling create_tab — it is not its responsibility.
     const invokeSpy = vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
       if (cmd === 'get_session_state') return { tabs: [], activeTabId: '' };
-      if (cmd === 'create_tab') return makeTab();
       if (cmd === 'get_preferences') return basePrefs;
       if (cmd === 'get_connections') return [];
       return undefined;
@@ -157,12 +161,8 @@ describe('TV-INIT-001: empty session triggers automatic first-tab creation', () 
     instances.push(instance);
     await settle();
 
-    // Verify create_tab was called with the correct login-shell config.
-    // FS-PTY-013 requires the first tab to use a login shell.
     const createTabCalls = invokeSpy.mock.calls.filter(([cmd]) => cmd === 'create_tab');
-    expect(createTabCalls.length).toBeGreaterThanOrEqual(1);
-    const [, args] = createTabCalls[0];
-    expect(args).toMatchObject({ config: { cols: 80, rows: 24, login: true } });
+    expect(createTabCalls.length).toBe(0);
   });
 
   it('does NOT call invoke("create_tab") when get_session_state returns a tab', async () => {

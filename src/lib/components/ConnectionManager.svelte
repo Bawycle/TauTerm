@@ -188,10 +188,7 @@
     onsave?.(duped);
   }
 
-  const contentEl = `
-    connection-manager__content
-    ${standalone ? 'connection-manager__content--standalone' : ''}
-  `.trim();
+
 </script>
 
 <div
@@ -252,7 +249,7 @@
               <div class="connection-manager__item" role="listitem">
                 <!-- Left: icon + labels -->
                 <div class="connection-manager__item-info">
-                  <Server size={16} aria-hidden="true" class="connection-manager__item-icon" />
+                  <span class="connection-manager__item-icon"><Server size={16} aria-hidden="true" /></span>
                   <div>
                     <p class="connection-manager__item-primary">
                       {conn.label || `${conn.host}:${conn.port}`}

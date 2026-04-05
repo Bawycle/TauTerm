@@ -86,18 +86,32 @@ pub async fn scroll_to_bottom(
     Ok(())
 }
 
+/// Maximum length (in bytes) of a search query text.
+const MAX_SEARCH_QUERY_LEN: usize = 1024;
+
+/// Validate the search query text length.
+///
+/// Extracted as a pure function so it can be unit-tested without Tauri state.
+fn validate_search_query_len(text: &str) -> Result<(), TauTermError> {
+    if text.len() > MAX_SEARCH_QUERY_LEN {
+        return Err(TauTermError::new(
+            "QUERY_TOO_LONG",
+            "Search query exceeds maximum allowed length of 1024 bytes",
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn search_pane(
     pane_id: PaneId,
     query: SearchQuery,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<Vec<SearchMatch>, TauTermError> {
-    let inner = registry
-        .get_pane_snapshot(&pane_id)
-        .map_err(TauTermError::from)?;
-    // TODO: run search on the VtProcessor directly rather than on the snapshot.
-    let _ = (inner, query);
-    Ok(Vec::new())
+    validate_search_query_len(&query.text)?;
+    registry
+        .search_pane(&pane_id, &query)
+        .map_err(TauTermError::from)
 }
 
 #[tauri::command]

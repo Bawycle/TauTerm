@@ -18,9 +18,15 @@ use std::sync::{Arc, Mutex};
 use parking_lot::RwLock;
 use tauri::AppHandle;
 
-use crate::events::{emit_screen_update, types::ScreenUpdateEvent};
+use crate::events::{
+    emit_mode_state_changed, emit_screen_update, emit_session_state_changed,
+    types::{
+        ModeStateChangedEvent, ScreenUpdateEvent, SessionChangeType, SessionStateChangedEvent,
+    },
+};
 use crate::session::ids::PaneId;
-use crate::vt::{DirtyRegion, VtProcessor};
+use crate::session::registry::SessionRegistry;
+use crate::vt::{DirtyRegion, VtProcessor, modes::MouseEncoding, modes::MouseReportingMode};
 
 /// Handle to a running PTY read task.
 /// Dropping this handle signals the task to stop.
@@ -52,6 +58,7 @@ pub fn spawn_pty_read_task(
     vt: Arc<RwLock<VtProcessor>>,
     app: AppHandle,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
+    registry: Arc<SessionRegistry>,
 ) -> PtyTaskHandle {
     let task = tokio::task::spawn_blocking(move || {
         let mut buf = vec![0u8; 4096];
@@ -79,10 +86,34 @@ pub fn spawn_pty_read_task(
             };
 
             // Process bytes through the VT processor.
-            let dirty = {
+            let (dirty, mode_changed, new_title) = {
                 let mut proc = vt.write();
-                proc.process(&buf[..n])
+                let dirty = proc.process(&buf[..n]);
+                let changed = proc.mode_changed;
+                if changed {
+                    proc.mode_changed = false;
+                }
+                let title = proc.take_title_changed();
+                (dirty, changed, title)
             };
+
+            if mode_changed {
+                let event = build_mode_state_event(&pane_id, &vt);
+                emit_mode_state_changed(&app, event);
+            }
+
+            if let Some(title) = new_title
+                && let Some(tab_state) = registry.update_pane_title(&pane_id, title)
+            {
+                emit_session_state_changed(
+                    &app,
+                    SessionStateChangedEvent {
+                        change_type: SessionChangeType::PaneMetadataChanged,
+                        tab: Some(tab_state),
+                        active_tab_id: None,
+                    },
+                );
+            }
 
             if !dirty.is_empty() {
                 let event = build_screen_update_event(&pane_id, &vt, &dirty);
@@ -93,6 +124,36 @@ pub fn spawn_pty_read_task(
 
     PtyTaskHandle {
         abort: task.abort_handle(),
+    }
+}
+
+/// Build a `ModeStateChangedEvent` from the current mode state.
+pub(crate) fn build_mode_state_event(
+    pane_id: &PaneId,
+    vt: &Arc<RwLock<VtProcessor>>,
+) -> ModeStateChangedEvent {
+    let proc = vt.read();
+    let modes = proc.mode_state();
+    let mouse_reporting = match modes.mouse_reporting {
+        MouseReportingMode::None => "none",
+        MouseReportingMode::X10 => "x10",
+        MouseReportingMode::Normal => "normal",
+        MouseReportingMode::ButtonEvent => "buttonEvent",
+        MouseReportingMode::AnyEvent => "anyEvent",
+    };
+    let mouse_encoding = match modes.mouse_encoding {
+        MouseEncoding::X10 => "x10",
+        MouseEncoding::Sgr => "sgr",
+        MouseEncoding::Urxvt => "urxvt",
+    };
+    ModeStateChangedEvent {
+        pane_id: pane_id.clone(),
+        decckm: modes.decckm,
+        deckpam: modes.deckpam,
+        mouse_reporting: mouse_reporting.to_string(),
+        mouse_encoding: mouse_encoding.to_string(),
+        focus_events: modes.focus_events,
+        bracketed_paste: modes.bracketed_paste,
     }
 }
 

@@ -85,6 +85,8 @@ pub struct SessionRegistry {
     pty_backend: Arc<dyn PtyBackend>,
     /// Tauri app handle — used to emit events from PTY read tasks.
     app: AppHandle,
+    /// Weak self-reference so read tasks can call back into the registry.
+    self_ref: std::sync::Weak<SessionRegistry>,
 }
 
 struct RegistryInner {
@@ -105,10 +107,11 @@ impl RegistryInner {
 
 impl SessionRegistry {
     pub fn new(pty_backend: Arc<dyn PtyBackend>, app: AppHandle) -> Arc<Self> {
-        Arc::new(Self {
+        Arc::new_cyclic(|weak| Self {
             inner: RwLock::new(RegistryInner::new()),
             pty_backend,
             app,
+            self_ref: weak.clone(),
         })
     }
 
@@ -180,9 +183,16 @@ impl SessionRegistry {
         // To avoid coupling the registry to the Linux type, we use a helper trait.
         let reader_handle = get_reader_handle(&mut pty_box);
 
-        if let Some(reader) = reader_handle {
-            let task =
-                spawn_pty_read_task(pane_id.clone(), pane.vt.clone(), self.app.clone(), reader);
+        if let Some(reader) = reader_handle
+            && let Some(registry) = self.self_ref.upgrade()
+        {
+            let task = spawn_pty_read_task(
+                pane_id.clone(),
+                pane.vt.clone(),
+                self.app.clone(),
+                reader,
+                registry,
+            );
             pane.pty_task = Some(task);
         }
 
@@ -291,7 +301,10 @@ impl SessionRegistry {
         let cols_str = cols.to_string();
         let rows_str = rows.to_string();
         let term_program_version = env!("CARGO_PKG_VERSION");
-        let env: Vec<(&str, &str)> = vec![
+        let display = std::env::var("DISPLAY").ok();
+        let wayland = std::env::var("WAYLAND_DISPLAY").ok();
+        let dbus = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok();
+        let mut env: Vec<(&str, &str)> = vec![
             ("TERM", "xterm-256color"),
             ("COLORTERM", "truecolor"),
             ("LINES", &rows_str),
@@ -299,6 +312,15 @@ impl SessionRegistry {
             ("TERM_PROGRAM", "TauTerm"),
             ("TERM_PROGRAM_VERSION", term_program_version),
         ];
+        if let Some(ref v) = display {
+            env.push(("DISPLAY", v.as_str()));
+        }
+        if let Some(ref v) = wayland {
+            env.push(("WAYLAND_DISPLAY", v.as_str()));
+        }
+        if let Some(ref v) = dbus {
+            env.push(("DBUS_SESSION_BUS_ADDRESS", v.as_str()));
+        }
 
         // Drop the write lock before calling into pty_backend (avoid holding the lock
         // during a potentially slow spawn).
@@ -321,12 +343,15 @@ impl SessionRegistry {
         new_pane.lifecycle = PaneLifecycleState::Running;
 
         let reader_handle = get_reader_handle(&mut pty_box);
-        if let Some(reader) = reader_handle {
+        if let Some(reader) = reader_handle
+            && let Some(registry) = self.self_ref.upgrade()
+        {
             let task = spawn_pty_read_task(
                 new_pane_id.clone(),
                 new_pane.vt.clone(),
                 self.app.clone(),
                 reader,
+                registry,
             );
             new_pane.pty_task = Some(task);
         }
@@ -545,6 +570,45 @@ impl SessionRegistry {
         Ok(vt.get_snapshot())
     }
 
+    /// Update the stored title for a pane (called from PTY/SSH read tasks on OSC title change).
+    ///
+    /// Returns the updated `TabState` if the pane is found, `None` otherwise.
+    pub fn update_pane_title(&self, pane_id: &PaneId, title: String) -> Option<TabState> {
+        let mut inner = self.inner.write();
+        let (tab_id, entry) = inner
+            .tabs
+            .iter_mut()
+            .find(|(_, e)| e.panes.contains_key(pane_id))
+            .map(|(id, e)| (id.clone(), e))?;
+
+        // Update the pane's stored title.
+        if let Some(pane) = entry.panes.get_mut(pane_id) {
+            pane.title = Some(title.clone());
+        }
+
+        // Rebuild the pane's state in the layout tree.
+        update_pane_title_in_tree(&mut entry.state.layout, pane_id, &title);
+
+        let _ = tab_id;
+        Some(entry.state.clone())
+    }
+
+    /// Search the scrollback buffer of a pane.
+    pub fn search_pane(
+        &self,
+        pane_id: &PaneId,
+        query: &crate::vt::SearchQuery,
+    ) -> Result<Vec<crate::vt::SearchMatch>, SessionError> {
+        let inner = self.inner.read();
+        let pane = inner
+            .tabs
+            .values()
+            .find_map(|e| e.panes.get(pane_id))
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        let vt = pane.vt.read();
+        Ok(vt.search(query))
+    }
+
     /// Get a full session state snapshot.
     pub fn get_state_snapshot(&self) -> SessionState {
         let inner = self.inner.read();
@@ -678,6 +742,20 @@ fn replace_leaf_with_split(
                 direction,
             )),
         },
+    }
+}
+
+/// Update the `PaneState.title` for a specific pane in the layout tree in-place.
+fn update_pane_title_in_tree(node: &mut PaneNode, target_id: &PaneId, title: &str) {
+    match node {
+        PaneNode::Leaf { pane_id, state } if pane_id == target_id => {
+            state.title = Some(title.to_string());
+        }
+        PaneNode::Leaf { .. } => {}
+        PaneNode::Split { first, second, .. } => {
+            update_pane_title_in_tree(first, target_id, title);
+            update_pane_title_in_tree(second, target_id, title);
+        }
     }
 }
 

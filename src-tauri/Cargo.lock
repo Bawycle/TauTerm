@@ -5789,6 +5789,7 @@ dependencies = [
  "notify-rust",
  "parking_lot",
  "portable-pty",
+ "regex",
  "russh",
  "russh-keys",
  "secret-service",

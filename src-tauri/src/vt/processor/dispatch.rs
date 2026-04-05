@@ -96,14 +96,20 @@ impl Perform for VtPerformBridge<'_> {
         let raw: Vec<u8> = params.join(&b';');
         match parse_osc(&raw) {
             OscAction::SetTitle(title) => {
-                self.inner.title = title;
+                if self.inner.title != title {
+                    self.inner.title = title;
+                    self.inner.title_changed = true;
+                }
             }
             OscAction::PushTitle => {
                 self.inner.title_stack.push(self.inner.title.clone());
             }
             OscAction::PopTitle => {
-                if let Some(t) = self.inner.title_stack.pop() {
+                if let Some(t) = self.inner.title_stack.pop()
+                    && self.inner.title != t
+                {
                     self.inner.title = t;
+                    self.inner.title_changed = true;
                 }
             }
             OscAction::SetHyperlink { .. } => {
@@ -226,6 +232,10 @@ impl Perform for VtPerformBridge<'_> {
                 for param in params.iter() {
                     let mode = param.first().copied().unwrap_or(0);
                     let prev_decckm = p.modes.decckm;
+                    let prev_mouse_reporting = p.modes.mouse_reporting;
+                    let prev_mouse_encoding = p.modes.mouse_encoding;
+                    let prev_focus_events = p.modes.focus_events;
+                    let prev_bracketed_paste = p.modes.bracketed_paste;
                     match mode {
                         1 => p.modes.decckm = true,
                         9 => p.modes.mouse_reporting = MouseReportingMode::X10,
@@ -242,7 +252,12 @@ impl Perform for VtPerformBridge<'_> {
                         2004 => p.modes.bracketed_paste = true,
                         _ => {}
                     }
-                    if p.modes.decckm != prev_decckm {
+                    if p.modes.decckm != prev_decckm
+                        || p.modes.mouse_reporting != prev_mouse_reporting
+                        || p.modes.mouse_encoding != prev_mouse_encoding
+                        || p.modes.focus_events != prev_focus_events
+                        || p.modes.bracketed_paste != prev_bracketed_paste
+                    {
                         p.mode_changed = true;
                     }
                 }
@@ -252,6 +267,10 @@ impl Perform for VtPerformBridge<'_> {
                 for param in params.iter() {
                     let mode = param.first().copied().unwrap_or(0);
                     let prev_decckm = p.modes.decckm;
+                    let prev_mouse_reporting = p.modes.mouse_reporting;
+                    let prev_mouse_encoding = p.modes.mouse_encoding;
+                    let prev_focus_events = p.modes.focus_events;
+                    let prev_bracketed_paste = p.modes.bracketed_paste;
                     match mode {
                         1 => p.modes.decckm = false,
                         9 | 1000 | 1002 | 1003 => {
@@ -267,7 +286,12 @@ impl Perform for VtPerformBridge<'_> {
                         2004 => p.modes.bracketed_paste = false,
                         _ => {}
                     }
-                    if p.modes.decckm != prev_decckm {
+                    if p.modes.decckm != prev_decckm
+                        || p.modes.mouse_reporting != prev_mouse_reporting
+                        || p.modes.mouse_encoding != prev_mouse_encoding
+                        || p.modes.focus_events != prev_focus_events
+                        || p.modes.bracketed_paste != prev_bracketed_paste
+                    {
                         p.mode_changed = true;
                     }
                 }

@@ -61,6 +61,8 @@ pub struct VtProcessor {
     pending_dirty: DirtyRegion,
     // Whether DECCKM or DECKPAM changed since last flush.
     pub mode_changed: bool,
+    // Whether the OSC title changed since last flush.
+    pub title_changed: bool,
 }
 
 /// Cursor position and attributes.
@@ -96,6 +98,7 @@ impl VtProcessor {
             title: String::new(),
             pending_dirty: DirtyRegion::default(),
             mode_changed: false,
+            title_changed: false,
         }
     }
 
@@ -145,13 +148,25 @@ impl VtProcessor {
 
     /// Search the scrollback buffer.
     pub fn search(&self, query: &SearchQuery) -> Vec<SearchMatch> {
-        let _ = query; // TODO: implement in full pass
-        Vec::new()
+        use crate::vt::search::search_scrollback;
+        let lines =
+            (0..self.normal.scrollback_len()).filter_map(|i| self.normal.get_scrollback_line(i));
+        search_scrollback(lines, query)
     }
 
-    /// DECCKM and DECKPAM state — used to emit `mode-state-changed`.
-    pub fn mode_flags(&self) -> (bool, bool) {
-        (self.modes.decckm, self.modes.deckpam)
+    /// If the OSC title changed since last call, returns the new title and resets the flag.
+    pub fn take_title_changed(&mut self) -> Option<String> {
+        if self.title_changed {
+            self.title_changed = false;
+            Some(self.title.clone())
+        } else {
+            None
+        }
+    }
+
+    /// All frontend-relevant mode flags — used to emit `mode-state-changed`.
+    pub fn mode_state(&self) -> &ModeState {
+        &self.modes
     }
 
     // -----------------------------------------------------------------------

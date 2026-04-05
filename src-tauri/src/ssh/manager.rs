@@ -31,6 +31,7 @@ use crate::error::SshError;
 use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
 use crate::platform::validation::validate_ssh_identity_path;
 use crate::session::ids::PaneId;
+use crate::session::registry::SessionRegistry;
 use crate::session::ssh_task::spawn_ssh_read_task;
 use crate::ssh::auth::{authenticate_password, authenticate_pubkey};
 use crate::ssh::connection::{SshChannelArc, TauTermSshHandler};
@@ -259,6 +260,7 @@ impl SshManager {
         vt: Arc<RwLock<VtProcessor>>,
         cols: u16,
         rows: u16,
+        registry: Arc<SessionRegistry>,
     ) -> Result<(), SshError> {
         if self.connections.contains_key(&pane_id) {
             return Err(SshError::Connection(
@@ -291,6 +293,7 @@ impl SshManager {
                     vt,
                     cols,
                     rows,
+                    registry,
                 )
                 .await;
 
@@ -321,6 +324,7 @@ impl SshManager {
         vt: Arc<RwLock<VtProcessor>>,
         cols: u16,
         rows: u16,
+        registry: Arc<SessionRegistry>,
     ) -> Result<(), SshError> {
         let addr = format!("{}:{}", config.host, config.port);
 
@@ -428,8 +432,13 @@ impl SshManager {
         let channel_arc: SshChannelArc = Arc::new(tokio::sync::Mutex::new(channel));
 
         // Spawn the read task.
-        let read_task =
-            spawn_ssh_read_task(pane_id.clone(), vt, app.clone(), Arc::clone(&channel_arc));
+        let read_task = spawn_ssh_read_task(
+            pane_id.clone(),
+            vt,
+            app.clone(),
+            Arc::clone(&channel_arc),
+            registry,
+        );
 
         // Store the russh Handle and channel in the connection entry.
         // We must remove and re-insert because DashMap entries cannot be mutated
@@ -578,6 +587,7 @@ impl SshManager {
         vt: Arc<RwLock<VtProcessor>>,
         cols: u16,
         rows: u16,
+        registry: Arc<SessionRegistry>,
     ) -> Result<(), SshError> {
         // Retrieve the config from the existing (disconnected) entry.
         let config = {
@@ -595,7 +605,7 @@ impl SshManager {
 
         // Re-open the connection. Credentials are None — the connect task will
         // prompt the user via the credential-prompt event if needed.
-        self.open_connection(pane_id, &config, None, app, vt, cols, rows)
+        self.open_connection(pane_id, &config, None, app, vt, cols, rows, registry)
             .await
     }
 

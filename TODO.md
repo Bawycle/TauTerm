@@ -2,23 +2,9 @@
 
 ## Gaps d'implémentation (analyse docs vs codebase)
 
-### Bloquants
+~~### Bloquants~~ ✅ *Complétés le 2026-04-05 — voir `docs/test-protocols/report-blocking-ipc-2026-04-05.md`*
 
-- [ ] **Recherche scrollback** — `search_pane` est un stub (`Ok(Vec::new())`). Implémenter la logique dans `vt/search.rs` et câbler dans `commands/input_cmds.rs`. (FS-SEARCH-001 à 007)
-- [ ] **SSH auth interactive** — le frontend n'écoute jamais `ssh-state-changed`, `credential-prompt`, `host-key-prompt`. Implémenter les handlers dans `TerminalView.svelte` + UI TOFU dialog + password prompt. (FS-SSH-010 à 014)
-- [ ] **SSH reconnexion UI** — `reconnect_ssh` IPC existe mais aucun bouton de reconnexion n'est affiché dans un pane/tab disconnecté. (FS-SSH-040 à 042)
-- [ ] **Mouse reporting** — les modes X10/Normal/Button-event/Any-event ne sont pas encodés vers le PTY. Tout clic est capturé pour la sélection. Les apps souris (vim, htop, mc) ne fonctionnent pas. (FS-VT-080 à 086)
-- [ ] **Bracketed paste** — DECSET 2004 non géré côté frontend. Le texte collé n'est jamais wrappé en `ESC [200~…ESC [201~`. Casse zsh, fish, et tout shell qui l'active. (FS-CLIP-008)
-
-### Majeurs — Câblage IPC manquant
-
-- [ ] **Ctrl+Shift+V paste** — non intercepté dans `handleGlobalKeydown` de `TerminalView.svelte`. Seul le context menu paste fonctionne. (FS-CLIP-005, FS-KBD-003)
-- [ ] **Notifications d'activité tabs** — backend émet `notification-changed`, frontend ne l'écoute jamais → badges de tabs inertes. (FS-NOTIF-001 à 004)
-- [ ] **Pane focus → `set_active_pane`** — cliquer sur un pane ne notifie jamais le backend du changement de pane actif. (FS-PANE-005)
-- [ ] **Credential store SSH** — `CredentialManager` non injecté dans l'état Tauri, non utilisé par `ssh_cmds.rs`. Mots de passe SSH ni stockés ni récupérés du keychain. (FS-CRED-001, FS-CRED-005)
-- [ ] **OSC title update** — les séquences OSC 0/1/2 ne propagent pas le titre au frontend (pas d'emit `PaneMetadataChanged` dans le backend) → titres de tabs figés. (FS-VT-060 à 062, FS-TAB-006)
-- [ ] **Focus events mode 1004** — frontend ne génère pas `ESC [I` / `ESC [O` sur gain/perte de focus. Vim et autres apps focus-aware non notifiées. (FS-VT-084)
-- [ ] **DECKPAM** — mode reçu du backend via `ModeStateChangedEvent` mais ignoré dans `keyboard.ts`. Pavé numérique en mode application non géré. (FS-KBD-010)
+~~### Majeurs — Câblage IPC manquant~~ ✅ *Complétés le 2026-04-05*
 
 ### Majeurs — Fonctionnalités absentes
 
@@ -50,7 +36,7 @@
 - [ ] **AppImage non configuré** — `tauri.conf.json` a `"targets": "all"` mais pas de config spécifique AppImage (pas de `linux > appImage`). (FS-DIST-001 à 006)
 - [ ] **Strings UI hardcodées** — ARIA labels et textes dans `TabBar.svelte`, `TerminalPane.svelte`, `TerminalView.svelte` non passés par Paraglide. Viole FS-I18N-001.
 - [ ] **`file://` scheme rejeté** — `validate_url_scheme` rejette systématiquement `file://`, y compris pour les sessions locales. (FS-VT-073)
-- [ ] **ENV split_pane incomplètes** — `split_pane` ne forward pas DISPLAY, WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS contrairement à `create_tab`. Apps graphiques cassées dans les panes splits.
+~~- [ ] **ENV split_pane incomplètes**~~ ✅ *Corrigé le 2026-04-05*
 - [ ] **Paste confirmation multiline** — pas de dialogue de confirmation quand le texte collé contient des newlines et que bracketed paste est inactif. (FS-CLIP-009 — SHOULD)
 - [ ] **Tab contrast WCAG AA** — titre de tab inactif à ≈ 2.5:1, sous le seuil 4.5:1. Décision design requise. (TUITC-UX-060)
 - [ ] **FS-SSH-013 erratum** — opcodes VKILL/VEOF inversés dans `docs/FS.md`. Implémentation correcte (VKILL=4, VEOF=5 per RFC 4254) ; corriger le doc.

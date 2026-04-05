@@ -144,9 +144,9 @@ pub enum ColorDto {
 // Terminal mode state (keyboard encoding)
 // ---------------------------------------------------------------------------
 
-/// Emitted when DECCKM or DECKPAM/DECKPNM changes.
-/// The frontend keyboard encoder (`keyboard.ts`) needs these flags to produce
-/// correct escape sequences for arrow keys and keypad (FS-KBD-007, FS-KBD-010).
+/// Emitted when any terminal mode relevant to the frontend changes.
+/// The frontend uses these flags for keyboard encoding, mouse reporting,
+/// focus events, and bracketed paste (FS-KBD-007, FS-KBD-010, FS-VT-080–086, FS-CLIP-008).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModeStateChangedEvent {
@@ -155,6 +155,14 @@ pub struct ModeStateChangedEvent {
     pub decckm: bool,
     /// DECKPAM active (ESC =): application keypad mode.
     pub deckpam: bool,
+    /// Mouse reporting mode: "none", "x10", "normal", "buttonEvent", or "anyEvent".
+    pub mouse_reporting: String,
+    /// Mouse encoding: "x10", "sgr", or "urxvt".
+    pub mouse_encoding: String,
+    /// DECSET 1004: focus events active.
+    pub focus_events: bool,
+    /// DECSET 2004: bracketed paste mode active.
+    pub bracketed_paste: bool,
 }
 
 // ---------------------------------------------------------------------------

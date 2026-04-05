@@ -95,6 +95,8 @@ impl CredentialManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::CredentialError;
+    use std::sync::Mutex;
 
     /// credential_key must produce the expected format.
     #[test]
@@ -116,5 +118,142 @@ mod tests {
     fn credential_manager_is_available_returns_bool() {
         let mgr = CredentialManager::new();
         let _ = mgr.is_available(); // just must not panic
+    }
+
+    // -----------------------------------------------------------------------
+    // CRED-MOCK-001: In-memory mock CredentialStore — round-trip tests
+    //
+    // These tests exercise CredentialManager logic (key formatting, UTF-8
+    // decoding) without requiring a live D-Bus Secret Service daemon.
+    // -----------------------------------------------------------------------
+
+    /// In-memory credential store for unit tests. Thread-safe via Mutex.
+    struct MockCredentialStore {
+        data: Mutex<std::collections::HashMap<String, Vec<u8>>>,
+    }
+
+    impl MockCredentialStore {
+        fn new() -> Self {
+            Self {
+                data: Mutex::new(std::collections::HashMap::new()),
+            }
+        }
+    }
+
+    impl crate::platform::CredentialStore for MockCredentialStore {
+        fn is_available(&self) -> bool {
+            true
+        }
+
+        fn store(&self, key: &str, secret: &[u8]) -> Result<(), CredentialError> {
+            self.data
+                .lock()
+                .unwrap()
+                .insert(key.to_string(), secret.to_vec());
+            Ok(())
+        }
+
+        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, CredentialError> {
+            Ok(self.data.lock().unwrap().get(key).cloned())
+        }
+
+        fn delete(&self, key: &str) -> Result<(), CredentialError> {
+            self.data.lock().unwrap().remove(key);
+            Ok(())
+        }
+    }
+
+    fn mock_manager() -> CredentialManager {
+        CredentialManager {
+            store: Box::new(MockCredentialStore::new()),
+        }
+    }
+
+    /// CRED-MOCK-001: store_password → get_password round-trip returns same value.
+    #[tokio::test]
+    async fn cred_mock_001_store_and_retrieve_password_round_trip() {
+        let mgr = mock_manager();
+        mgr.store_password("conn-1", "alice", "s3cr3t!")
+            .await
+            .expect("store must succeed");
+
+        let result = mgr
+            .get_password("conn-1", "alice")
+            .await
+            .expect("get must succeed");
+
+        assert_eq!(
+            result,
+            Some("s3cr3t!".to_string()),
+            "Retrieved password must match stored"
+        );
+    }
+
+    /// CRED-MOCK-002: get_password returns None when nothing is stored.
+    #[tokio::test]
+    async fn cred_mock_002_get_password_returns_none_when_not_stored() {
+        let mgr = mock_manager();
+        let result = mgr
+            .get_password("conn-nonexistent", "bob")
+            .await
+            .expect("get must succeed (not an error)");
+        assert!(result.is_none(), "Must return None for unknown credential");
+    }
+
+    /// CRED-MOCK-003: delete_password removes the credential.
+    #[tokio::test]
+    async fn cred_mock_003_delete_removes_stored_password() {
+        let mgr = mock_manager();
+        mgr.store_password("conn-2", "carol", "pass123")
+            .await
+            .expect("store must succeed");
+
+        mgr.delete_password("conn-2", "carol")
+            .await
+            .expect("delete must succeed");
+
+        let result = mgr
+            .get_password("conn-2", "carol")
+            .await
+            .expect("get must succeed");
+        assert!(result.is_none(), "Password must be gone after delete");
+    }
+
+    /// CRED-MOCK-004: credential_key isolation — two different users on the same
+    /// connection must not share the same stored credential.
+    #[tokio::test]
+    async fn cred_mock_004_different_users_have_different_keys() {
+        let mgr = mock_manager();
+        mgr.store_password("conn-3", "alice", "alice_pass")
+            .await
+            .expect("store alice");
+        mgr.store_password("conn-3", "bob", "bob_pass")
+            .await
+            .expect("store bob");
+
+        let alice = mgr.get_password("conn-3", "alice").await.unwrap();
+        let bob = mgr.get_password("conn-3", "bob").await.unwrap();
+
+        assert_eq!(alice, Some("alice_pass".to_string()));
+        assert_eq!(bob, Some("bob_pass".to_string()));
+    }
+
+    /// CRED-MOCK-005: overwriting a credential replaces the old value.
+    #[tokio::test]
+    async fn cred_mock_005_overwrite_updates_stored_password() {
+        let mgr = mock_manager();
+        mgr.store_password("conn-4", "dave", "old_pass")
+            .await
+            .unwrap();
+        mgr.store_password("conn-4", "dave", "new_pass")
+            .await
+            .unwrap();
+
+        let result = mgr.get_password("conn-4", "dave").await.unwrap();
+        assert_eq!(
+            result,
+            Some("new_pass".to_string()),
+            "Overwrite must replace old value"
+        );
     }
 }

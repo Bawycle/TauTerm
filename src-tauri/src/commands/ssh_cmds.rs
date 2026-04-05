@@ -9,11 +9,12 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tauri::{AppHandle, State};
 
+use crate::credentials::CredentialManager;
 use crate::error::TauTermError;
 use crate::preferences::PreferencesStore;
 use crate::session::SessionRegistry;
 use crate::session::ids::{ConnectionId, PaneId};
-use crate::ssh::SshManager;
+use crate::ssh::{Credentials, SshManager};
 
 #[tauri::command]
 pub async fn open_ssh_connection(
@@ -22,6 +23,7 @@ pub async fn open_ssh_connection(
     ssh_manager: State<'_, Arc<SshManager>>,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
     registry: State<'_, Arc<SessionRegistry>>,
+    credential_manager: State<'_, Arc<CredentialManager>>,
     app: AppHandle,
 ) -> Result<(), TauTermError> {
     let config = {
@@ -39,6 +41,28 @@ pub async fn open_ssh_connection(
             })?
     };
 
+    // Look up stored password from OS keychain (FS-CRED-001, FS-CRED-005).
+    // Never log credential values.
+    let credentials = if credential_manager.is_available() {
+        match credential_manager
+            .get_password(&config.id.to_string(), &config.username)
+            .await
+        {
+            Ok(Some(password)) => Some(Credentials {
+                username: config.username.clone(),
+                password: Some(password),
+                private_key_path: config.identity_file.clone(),
+            }),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!("Keychain lookup failed for {}: {e}", config.host);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Retrieve the pane's VtProcessor and dimensions for the SSH read task.
     let vt = registry.get_pane_vt(&pane_id).map_err(TauTermError::from)?;
     let (cols, rows) = registry
@@ -47,7 +71,16 @@ pub async fn open_ssh_connection(
 
     // Path validation is performed inside SshManager::open_connection (FINDING-004).
     ssh_manager
-        .open_connection(pane_id, &config, None, app, vt, cols, rows)
+        .open_connection(
+            pane_id,
+            &config,
+            credentials,
+            app,
+            vt,
+            cols,
+            rows,
+            Arc::clone(&*registry),
+        )
         .await
         .map_err(TauTermError::from)
 }
@@ -76,7 +109,7 @@ pub async fn reconnect_ssh(
         .map_err(TauTermError::from)?;
 
     ssh_manager
-        .reconnect(pane_id, app, vt, cols, rows)
+        .reconnect(pane_id, app, vt, cols, rows, Arc::clone(&*registry))
         .await
         .map_err(TauTermError::from)
 }

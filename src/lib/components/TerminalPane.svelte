@@ -33,11 +33,13 @@
   import { listen } from '@tauri-apps/api/event';
   import type {
     PaneId,
+    TabId,
     ScreenSnapshot,
     ScreenUpdateEvent,
     ScrollPositionChangedEvent,
     ModeStateChangedEvent,
     CursorState,
+    SshLifecycleState,
   } from '$lib/ipc/types';
   import {
     buildGridFromSnapshot,
@@ -47,12 +49,15 @@
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
   import { SelectionManager } from '$lib/terminal/selection.js';
   import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
+  import { pasteToBytes } from '$lib/terminal/paste.js';
   import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import ScrollToBottomButton from './ScrollToBottomButton.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   interface Props {
     paneId: PaneId;
+    tabId: TabId;
     active: boolean;
     /** Set to true when the PTY process has exited (from session-state-changed event). */
     terminated?: boolean;
@@ -60,6 +65,8 @@
     signalName?: string;
     /** Whether there is more than one pane (controls Close Pane visibility). */
     canClosePane?: boolean;
+    /** SSH lifecycle state for Disconnected reconnect UI. */
+    sshState?: SshLifecycleState | null;
     onrestart?: () => void;
     onclosepane?: () => void;
     onsearch?: () => void;
@@ -69,11 +76,13 @@
 
   const {
     paneId,
+    tabId: _tabId,
     active,
     terminated = false,
     exitCode = 0,
     signalName,
     canClosePane = true,
+    sshState = null,
     onrestart,
     onclosepane,
     onsearch,
@@ -92,6 +101,11 @@
   let scrollOffset = $state(0);
   let scrollbackLines = $state(0);
   let decckm = $state(false);
+  let deckpam = $state(false);
+  let mouseReporting = $state<'none' | 'x10' | 'normal' | 'buttonEvent' | 'anyEvent'>('none');
+  let mouseEncoding = $state<'x10' | 'sgr' | 'urxvt'>('x10');
+  let focusEventsActive = $state(false);
+  let bracketedPasteActive = $state(false);
 
   let cursorVisible = $state(true);
   let blinkTimer: ReturnType<typeof setInterval> | null = null;
@@ -205,6 +219,11 @@
       const mode = event.payload;
       if (mode.paneId !== paneId) return;
       decckm = mode.decckm;
+      deckpam = mode.deckpam;
+      mouseReporting = mode.mouseReporting;
+      mouseEncoding = mode.mouseEncoding;
+      focusEventsActive = mode.focusEvents;
+      bracketedPasteActive = mode.bracketedPaste;
     });
 
     startCursorBlink();
@@ -285,7 +304,7 @@
     if (event.ctrlKey && event.shiftKey) return;
     if (event.ctrlKey && event.key === ',') return; // Ctrl+, = preferences
 
-    const sequence = keyEventToVtSequence(event, decckm);
+    const sequence = keyEventToVtSequence(event, decckm, deckpam);
     if (sequence !== null) {
       event.preventDefault();
       sendBytes(sequence);
@@ -319,15 +338,60 @@
   }
 
   // -------------------------------------------------------------------------
-  // Mouse wheel (TUITC-FN-052)
+  // Mouse wheel (TUITC-FN-052, FS-VT-085)
   // -------------------------------------------------------------------------
 
   async function handleWheel(event: WheelEvent) {
     event.preventDefault();
+    // FS-VT-085: Shift+Wheel always scrolls TauTerm's scrollback
+    if (!event.shiftKey && mouseReporting !== 'none') {
+      const button = event.deltaY < 0 ? 64 : 65;
+      const cell = pixelToCell(event);
+      await sendMouseEvent(button, cell.col, cell.row, event, false);
+      return;
+    }
     const newOffset = Math.max(0, scrollOffset + (event.deltaY > 0 ? -3 : 3));
     try {
       await invoke('scroll_pane', { paneId, offset: newOffset });
     } catch { /* non-fatal */ }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mouse reporting (FS-VT-080 to 086)
+  // -------------------------------------------------------------------------
+
+  async function sendMouseEvent(
+    button: number,
+    col: number,
+    row: number,
+    event: MouseEvent,
+    release: boolean,
+  ) {
+    const modBits =
+      (event.shiftKey ? 4 : 0) |
+      (event.metaKey ? 8 : 0) |
+      (event.ctrlKey ? 16 : 0);
+    const cb = button | modBits;
+    const cx = col + 1;
+    const cy = row + 1;
+    let seq: string;
+    if (mouseEncoding === 'sgr') {
+      const suffix = release ? 'm' : 'M';
+      seq = `\x1b[<${cb};${cx};${cy}${suffix}`;
+    } else {
+      const clamp = (n: number) => Math.min(n + 32, 255);
+      seq = `\x1b[M${String.fromCharCode(clamp(cb), clamp(cx), clamp(cy))}`;
+    }
+    await sendBytes(new TextEncoder().encode(seq));
+  }
+
+  function mouseButtonCode(event: MouseEvent): number {
+    switch (event.button) {
+      case 0: return 0;
+      case 1: return 1;
+      case 2: return 2;
+      default: return 3;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -345,20 +409,47 @@
     };
   }
 
-  function handleMousedown(event: MouseEvent) {
+  async function handleMousedown(event: MouseEvent) {
+    // Item 9: set_active_pane on click
+    if (!active) {
+      try { await invoke('set_active_pane', { paneId }); } catch { /* non-fatal */ }
+    }
     if (event.button !== 0) return;
+    // FS-VT-082/083: mouse reporting active + not Shift → send to PTY, skip selection
+    if (mouseReporting !== 'none' && !event.shiftKey) {
+      const cell = pixelToCell(event);
+      await sendMouseEvent(mouseButtonCode(event), cell.col, cell.row, event, false);
+      return;
+    }
     isSelecting = true;
     selection.startSelection(pixelToCell(event));
     selectionRange = selection.getSelection();
   }
 
-  function handleMousemove(event: MouseEvent) {
+  async function handleMousemove(event: MouseEvent) {
+    if (
+      (mouseReporting === 'buttonEvent' && event.buttons !== 0) ||
+      mouseReporting === 'anyEvent'
+    ) {
+      if (!event.shiftKey) {
+        const cell = pixelToCell(event);
+        const motionBtn = event.buttons !== 0 ? 32 + mouseButtonCode(event) : 35;
+        await sendMouseEvent(motionBtn, cell.col, cell.row, event, false);
+        return;
+      }
+    }
     if (!isSelecting) return;
     selection.extendSelection(pixelToCell(event));
     selectionRange = selection.getSelection();
   }
 
   async function handleMouseup(event: MouseEvent) {
+    if (mouseReporting !== 'none' && mouseReporting !== 'x10' && !event.shiftKey) {
+      const cell = pixelToCell(event);
+      const releaseBtn = mouseEncoding === 'sgr' ? mouseButtonCode(event) : 3;
+      await sendMouseEvent(releaseBtn, cell.col, cell.row, event, true);
+      return;
+    }
     if (!isSelecting) return;
     isSelecting = false;
     selection.extendSelection(pixelToCell(event));
@@ -374,6 +465,31 @@
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Focus events (FS-VT-084, DECSET 1004)
+  // -------------------------------------------------------------------------
+
+  async function handleFocus() {
+    if (!active) return;
+    if (focusEventsActive) {
+      await sendBytes(new TextEncoder().encode('\x1b[I'));
+    }
+  }
+
+  async function handleBlur() {
+    if (focusEventsActive) {
+      await sendBytes(new TextEncoder().encode('\x1b[O'));
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // SSH reconnect (FS-SSH-040/041)
+  // -------------------------------------------------------------------------
+
+  async function handleReconnect() {
+    try { await invoke('reconnect_ssh', { paneId }); } catch { /* non-fatal */ }
+  }
+
   async function handleContextMenuCopy() {
     if (!selectionRange) return;
     const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
@@ -386,10 +502,18 @@
     try {
       const text: string = await invoke('get_clipboard');
       if (text) {
-        const data = Array.from(new TextEncoder().encode(text));
-        await invoke('send_input', { paneId, data });
+        await pasteText(text);
       }
     } catch { /* non-fatal */ }
+  }
+
+  /**
+   * Paste text with bracketed paste support (FS-CLIP-008, SEC-BLK-012/014).
+   * Delegates to pasteToBytes() which handles wrapping and sanitization.
+   */
+  async function pasteText(text: string) {
+    const encoded = pasteToBytes(text, bracketedPasteActive);
+    if (encoded) await sendBytes(encoded);
   }
 
   // -------------------------------------------------------------------------
@@ -457,6 +581,8 @@
     onmousemove={handleMousemove}
     onmouseup={handleMouseup}
     onwheel={handleWheel}
+    onfocus={handleFocus}
+    onblur={handleBlur}
   >
     <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
     {#each gridRows as row, rowIdx}
@@ -515,6 +641,18 @@
       onrestart={onrestart}
       onclose={onclosepane}
     />
+  {/if}
+
+  <!-- SSH disconnected banner — shown when SSH connection drops (FS-SSH-040/041) -->
+  {#if sshState?.type === 'disconnected'}
+    <div class="terminal-pane__ssh-disconnected" role="status" aria-live="polite">
+      <span class="terminal-pane__ssh-disconnected-label">{m.ssh_banner_disconnected({ reason: '' })}</span>
+      <button
+        class="terminal-pane__ssh-reconnect-btn"
+        type="button"
+        onclick={handleReconnect}
+      >{m.ssh_reconnect()}</button>
+    </div>
   {/if}
 </div>
 
@@ -638,5 +776,47 @@
     .terminal-pane__scrollbar {
       transition: none;
     }
+  }
+
+  /* SSH disconnected banner (FS-SSH-040/041) */
+  .terminal-pane__ssh-disconnected {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-3, 0.75rem);
+    padding: var(--spacing-2, 0.5rem) var(--spacing-4, 1rem);
+    background-color: var(--color-surface-overlay, rgba(0, 0, 0, 0.85));
+    border-top: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.1));
+    z-index: var(--z-overlay, 50);
+  }
+
+  .terminal-pane__ssh-disconnected-label {
+    color: var(--color-text-muted, #a0a0a0);
+    font-size: var(--font-size-sm, 0.875rem);
+  }
+
+  .terminal-pane__ssh-reconnect-btn {
+    padding: var(--spacing-1, 0.25rem) var(--spacing-3, 0.75rem);
+    background-color: var(--color-accent, #6e9fd8);
+    color: var(--color-on-accent, #000);
+    border: none;
+    border-radius: var(--radius-sm, 4px);
+    font-size: var(--font-size-sm, 0.875rem);
+    cursor: pointer;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .terminal-pane__ssh-reconnect-btn:hover {
+    background-color: var(--color-accent-hover, #5a8bc4);
+  }
+
+  .terminal-pane__ssh-reconnect-btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring, #6e9fd8);
+    outline-offset: 2px;
   }
 </style>

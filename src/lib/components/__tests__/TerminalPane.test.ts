@@ -45,6 +45,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 
 async function mountPane(props?: {
   paneId?: string;
+  tabId?: string;
   active?: boolean;
 }): Promise<{ container: HTMLElement; instance: ReturnType<typeof mount> }> {
   const container = document.createElement('div');
@@ -53,6 +54,7 @@ async function mountPane(props?: {
     target: container,
     props: {
       paneId: props?.paneId ?? 'test-pane-1',
+      tabId: props?.tabId ?? 'test-tab-1',
       active: props?.active ?? true,
     },
   });

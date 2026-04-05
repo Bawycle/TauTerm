@@ -17,9 +17,14 @@ use parking_lot::RwLock;
 use russh::ChannelMsg;
 use tauri::AppHandle;
 
-use crate::events::{SshStateChangedEvent, emit_screen_update, emit_ssh_state_changed};
+use crate::events::{
+    SshStateChangedEvent, emit_mode_state_changed, emit_screen_update, emit_session_state_changed,
+    emit_ssh_state_changed,
+    types::{SessionChangeType, SessionStateChangedEvent},
+};
 use crate::session::ids::PaneId;
-use crate::session::pty_task::build_screen_update_event;
+use crate::session::pty_task::{build_mode_state_event, build_screen_update_event};
+use crate::session::registry::SessionRegistry;
 use crate::ssh::SshLifecycleState;
 use crate::vt::VtProcessor;
 
@@ -53,6 +58,7 @@ pub fn spawn_ssh_read_task(
     vt: Arc<RwLock<VtProcessor>>,
     app: AppHandle,
     channel: Arc<tokio::sync::Mutex<russh::Channel<russh::client::Msg>>>,
+    registry: Arc<SessionRegistry>,
 ) -> SshTaskHandle {
     let task = tokio::spawn(async move {
         loop {
@@ -64,10 +70,32 @@ pub fn spawn_ssh_read_task(
             match msg {
                 Some(ChannelMsg::Data { ref data }) => {
                     let bytes: &[u8] = data;
-                    let dirty = {
+                    let (dirty, mode_changed, new_title) = {
                         let mut proc = vt.write();
-                        proc.process(bytes)
+                        let dirty = proc.process(bytes);
+                        let changed = proc.mode_changed;
+                        if changed {
+                            proc.mode_changed = false;
+                        }
+                        let title = proc.take_title_changed();
+                        (dirty, changed, title)
                     };
+                    if mode_changed {
+                        let event = build_mode_state_event(&pane_id, &vt);
+                        emit_mode_state_changed(&app, event);
+                    }
+                    if let Some(title) = new_title
+                        && let Some(tab_state) = registry.update_pane_title(&pane_id, title)
+                    {
+                        emit_session_state_changed(
+                            &app,
+                            SessionStateChangedEvent {
+                                change_type: SessionChangeType::PaneMetadataChanged,
+                                tab: Some(tab_state),
+                                active_tab_id: None,
+                            },
+                        );
+                    }
                     if !dirty.is_empty() {
                         let event = build_screen_update_event(&pane_id, &vt, &dirty);
                         emit_screen_update(&app, event);
@@ -77,10 +105,32 @@ pub fn spawn_ssh_read_task(
                     // stderr from the remote shell — feed to VT processor so it
                     // appears in the terminal (same as PTY stderr mixing).
                     let bytes: &[u8] = data;
-                    let dirty = {
+                    let (dirty, mode_changed, new_title) = {
                         let mut proc = vt.write();
-                        proc.process(bytes)
+                        let dirty = proc.process(bytes);
+                        let changed = proc.mode_changed;
+                        if changed {
+                            proc.mode_changed = false;
+                        }
+                        let title = proc.take_title_changed();
+                        (dirty, changed, title)
                     };
+                    if mode_changed {
+                        let event = build_mode_state_event(&pane_id, &vt);
+                        emit_mode_state_changed(&app, event);
+                    }
+                    if let Some(title) = new_title
+                        && let Some(tab_state) = registry.update_pane_title(&pane_id, title)
+                    {
+                        emit_session_state_changed(
+                            &app,
+                            SessionStateChangedEvent {
+                                change_type: SessionChangeType::PaneMetadataChanged,
+                                tab: Some(tab_state),
+                                active_tab_id: None,
+                            },
+                        );
+                    }
                     if !dirty.is_empty() {
                         let event = build_screen_update_event(&pane_id, &vt, &dirty);
                         emit_screen_update(&app, event);

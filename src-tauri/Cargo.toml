@@ -64,6 +64,9 @@ uuid = { version = "1", features = ["v4"] }
 # Unicode / character width
 unicode-width = "0.2"
 
+# Regex engine (DFA-based, no ReDoS risk) for scrollback search
+regex = "1"
+
 # Base64 encoding (known_hosts key encoding)
 base64 = "0.22"
 

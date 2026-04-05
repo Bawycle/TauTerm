@@ -234,7 +234,7 @@ export type ColorDto =
 // ---------------------------------------------------------------------------
 
 /**
- * Emitted when DECCKM or DECKPAM/DECKPNM changes.
+ * Emitted when any terminal mode relevant to the frontend changes.
  *
  * Mirrors Rust ModeStateChangedEvent.
  */
@@ -244,6 +244,14 @@ export interface ModeStateChangedEvent {
   decckm: boolean;
   /** DECKPAM active (ESC =): application keypad mode. */
   deckpam: boolean;
+  /** Mouse reporting mode. */
+  mouseReporting: 'none' | 'x10' | 'normal' | 'buttonEvent' | 'anyEvent';
+  /** Mouse encoding format. */
+  mouseEncoding: 'x10' | 'sgr' | 'urxvt';
+  /** DECSET 1004: focus events active. */
+  focusEvents: boolean;
+  /** DECSET 2004: bracketed paste mode active. */
+  bracketedPaste: boolean;
 }
 
 // ---------------------------------------------------------------------------

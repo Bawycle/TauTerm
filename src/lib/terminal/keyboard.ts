@@ -73,12 +73,14 @@ function csiTilde(code: number, mod: number): Uint8Array {
  *
  * @param event - The browser KeyboardEvent (keydown).
  * @param appCursorKeys - Whether DECCKM (application cursor mode) is active.
+ * @param appKeypad - Whether DECKPAM (application keypad mode) is active (FS-KBD-010).
  * @returns The VT sequence bytes to send to the PTY, or `null` if the key
  *          should not be consumed (printable characters, unhandled modifiers).
  */
 export function keyEventToVtSequence(
   event: KeyboardEvent,
   appCursorKeys: boolean,
+  appKeypad: boolean = false,
 ): Uint8Array | null {
   const { key, ctrlKey, altKey, shiftKey, metaKey } = event;
 
@@ -194,7 +196,9 @@ export function keyEventToVtSequence(
   // Ctrl+A (0x01) through Ctrl+Z (0x1A)
   // Ctrl+[ (0x1B), Ctrl+\ (0x1C), Ctrl+] (0x1D), Ctrl+^ (0x1E), Ctrl+_ (0x1F)
   // -------------------------------------------------------------------------
-  if (ctrlKey && !altKey) {
+  // Ctrl+Shift+letter combinations are TauTerm application shortcuts
+  // (FS-KBD-003: Ctrl+Shift+T, W, F, V). Never send them to the PTY.
+  if (ctrlKey && !altKey && !shiftKey) {
     const code = key.toUpperCase().codePointAt(0);
     // A–Z: codes 65–90 → control chars 0x01–0x1A
     if (code !== undefined && code >= 65 && code <= 90) {
@@ -221,6 +225,30 @@ export function keyEventToVtSequence(
   }
 
   // -------------------------------------------------------------------------
+  // Keypad application mode (DECKPAM, FS-KBD-010)
+  // When active, numeric keypad keys send SS3 sequences instead of digits.
+  // -------------------------------------------------------------------------
+  if (appKeypad && !ctrlKey && !altKey && !shiftKey) {
+    switch (key) {
+      case '0': return encode('\x1bOp');
+      case '1': return encode('\x1bOq');
+      case '2': return encode('\x1bOr');
+      case '3': return encode('\x1bOs');
+      case '4': return encode('\x1bOt');
+      case '5': return encode('\x1bOu');
+      case '6': return encode('\x1bOv');
+      case '7': return encode('\x1bOw');
+      case '8': return encode('\x1bOx');
+      case '9': return encode('\x1bOy');
+      case '.': return encode('\x1bOn');
+      case '+': return encode('\x1bOl');
+      case '-': return encode('\x1bOm');
+      case '*': return encode('\x1bOj');
+      case '/': return encode('\x1bOo');
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Printable single characters — NOT consumed here.
   // The browser's compositionupdate / input events handle these.
   // -------------------------------------------------------------------------
@@ -230,4 +258,64 @@ export function keyEventToVtSequence(
 
   // Unrecognised key — do not consume
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Standalone helper exports (used by tests and higher-level components)
+// ---------------------------------------------------------------------------
+
+/**
+ * Encode a keypad key event to a VT sequence when DECKPAM is active.
+ * Only fires for physical numpad keys (event.code starts with 'Numpad').
+ * Returns null in numeric mode or for non-numpad keys.
+ */
+export function keypadToVtSequence(event: KeyboardEvent, deckpam: boolean): Uint8Array | null {
+  if (!deckpam) return null;
+  if (!event.code.startsWith('Numpad')) return null;
+  if (event.ctrlKey || event.altKey || event.shiftKey) return null;
+  switch (event.key) {
+    case '0': return encode('\x1bOp');
+    case '1': return encode('\x1bOq');
+    case '2': return encode('\x1bOr');
+    case '3': return encode('\x1bOs');
+    case '4': return encode('\x1bOt');
+    case '5': return encode('\x1bOu');
+    case '6': return encode('\x1bOv');
+    case '7': return encode('\x1bOw');
+    case '8': return encode('\x1bOx');
+    case '9': return encode('\x1bOy');
+    case '.': return encode('\x1bOn');
+    case '+': return encode('\x1bOl');
+    case '-': return encode('\x1bOm');
+    case '*': return encode('\x1bOj');
+    case '/': return encode('\x1bOo');
+    case 'Enter': return encode('\x1bOM');
+    default: return null;
+  }
+}
+
+/** Focus-in sequence (DECSET 1004): ESC [ I */
+export function encodeFocusIn(): Uint8Array {
+  return encode('\x1b[I');
+}
+
+/** Focus-out sequence (DECSET 1004): ESC [ O */
+export function encodeFocusOut(): Uint8Array {
+  return encode('\x1b[O');
+}
+
+/**
+ * Returns true if the event is Ctrl+Shift+V (paste shortcut).
+ */
+export function isCtrlShiftV(event: KeyboardEvent): boolean {
+  return event.ctrlKey && event.shiftKey && (event.key === 'v' || event.key === 'V');
+}
+
+/**
+ * Wrap text in bracketed paste markers (ESC[200~ … ESC[201~).
+ * Strips embedded ESC[201~ (SEC-BLK-012) and null bytes (SEC-BLK-014) from the payload.
+ */
+export function wrapBracketedPaste(text: string): string {
+  const sanitized = text.replaceAll('\x00', '').replaceAll('\x1b[201~', '');
+  return '\x1b[200~' + sanitized + '\x1b[201~';
 }

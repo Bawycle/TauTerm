@@ -23,6 +23,7 @@ use parking_lot::RwLock;
 
 use tauri::Manager;
 
+use crate::credentials::CredentialManager;
 use crate::preferences::PreferencesStore;
 use crate::session::SessionRegistry;
 use crate::ssh::SshManager;
@@ -44,11 +45,13 @@ pub fn run() {
         PreferencesStore::load().expect("Failed to determine preferences path — is $HOME set?");
 
     let ssh_manager = SshManager::new();
+    let credential_manager = Arc::new(CredentialManager::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(ssh_manager)
         .manage(prefs)
+        .manage(credential_manager)
         .setup(|app| {
             // `SessionRegistry` needs an `AppHandle` to emit events from PTY read tasks.
             // We create it inside `setup` where the `AppHandle` is available.

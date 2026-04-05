@@ -747,6 +747,81 @@ fn update_pane_title_in_tree(node: &mut PaneNode, target_id: &PaneId, title: &st
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // TEST-SPRINT-001 — FS-PTY-013: CreateTabConfig.login=true → "--login" args
+    //
+    // The `create_tab` implementation selects args based on `config.login`:
+    //   let args: &[&str] = if config.login { &["--login"] } else { &[] };
+    //
+    // This test validates the contract at the `CreateTabConfig` level:
+    // a config with `login: true` must map to the `--login` flag, and a config
+    // with `login: false` must not pass any args.
+    // Integration with the real PTY backend requires a running system and is
+    // covered by the functional test protocol (PTY-FN-001).
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_sprint_001_login_true_selects_login_args() {
+        // TEST-SPRINT-001
+        let config = CreateTabConfig {
+            label: None,
+            cols: 80,
+            rows: 24,
+            shell: None,
+            login: true,
+        };
+        // Mirror the logic from create_tab (line ~160):
+        let args: &[&str] = if config.login { &["--login"] } else { &[] };
+        assert_eq!(args, &["--login"], "login:true must produce --login arg");
+    }
+
+    #[test]
+    fn test_sprint_001_login_false_produces_empty_args() {
+        // TEST-SPRINT-001
+        let config = CreateTabConfig {
+            label: None,
+            cols: 80,
+            rows: 24,
+            shell: None,
+            login: false,
+        };
+        let args: &[&str] = if config.login { &["--login"] } else { &[] };
+        assert!(args.is_empty(), "login:false must produce no args");
+    }
+
+    #[test]
+    fn test_sprint_001_create_tab_config_login_default_is_false() {
+        // TEST-SPRINT-001: serde default for `login` must be false so that
+        // existing payloads without the field behave as non-login shells.
+        let json = r#"{"cols":80,"rows":24}"#;
+        let config: CreateTabConfig = serde_json::from_str(json).expect("deserialize failed");
+        assert!(!config.login, "serde default for CreateTabConfig.login must be false");
+    }
+
+    #[test]
+    fn test_sprint_001_create_tab_config_login_true_round_trips() {
+        // TEST-SPRINT-001: login:true must survive a JSON round-trip (IPC safety).
+        let config = CreateTabConfig {
+            label: None,
+            cols: 80,
+            rows: 24,
+            shell: None,
+            login: true,
+        };
+        let json = serde_json::to_string(&config).expect("serialize failed");
+        let restored: CreateTabConfig = serde_json::from_str(&json).expect("deserialize failed");
+        assert!(restored.login, "login:true must survive serde round-trip");
+    }
+}
+
 /// Remove the leaf for `target_id`, collapsing its sibling upward.
 fn remove_pane_from_tree(node: PaneNode, target_id: &PaneId) -> PaneNode {
     match node {

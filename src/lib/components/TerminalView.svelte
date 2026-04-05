@@ -514,92 +514,147 @@
   }
 
   // -------------------------------------------------------------------------
-  // Application shortcuts (FS-KBD-001/003, TUITC-FN-047)
-  // These are intercepted here at the TerminalView level and never forwarded to PTY
+  // Application shortcuts (FS-KBD-001/003, FS-KBD-002, TUITC-FN-047)
+  // These are intercepted here at the TerminalView level and never forwarded to PTY.
+  //
+  // FS-KBD-002: shortcuts are resolved from preferences.keyboard.bindings first,
+  // with hardcoded defaults as fallback when bindings are absent.
   // -------------------------------------------------------------------------
 
+  /**
+   * Default shortcut strings — mirrors PreferencesPanel.defaultShortcuts.
+   * Used as fallback when preferences.keyboard.bindings does not override an action.
+   */
+  const defaultShortcuts: Record<string, string> = {
+    new_tab: 'Ctrl+Shift+T',
+    close_tab: 'Ctrl+Shift+W',
+    paste: 'Ctrl+Shift+V',
+    search: 'Ctrl+Shift+F',
+    preferences: 'Ctrl+,',
+    next_tab: 'Ctrl+Tab',
+    prev_tab: 'Ctrl+Shift+Tab',
+    rename_tab: 'F2',
+  };
+
+  /**
+   * Resolve the effective shortcut string for a given action ID,
+   * preferring user bindings from preferences over the hardcoded defaults.
+   */
+  function effectiveShortcut(actionId: string): string {
+    return preferences?.keyboard?.bindings?.[actionId] ?? defaultShortcuts[actionId] ?? '';
+  }
+
+  /**
+   * Test whether a KeyboardEvent matches a shortcut string of the form
+   * "Ctrl+Shift+T", "Ctrl+,", "F2", etc.
+   * Modifier matching is order-independent; key comparison is case-insensitive
+   * for single-character keys (handles Shift state differences).
+   */
+  function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
+    if (!shortcut) return false;
+    const parts = shortcut.split('+');
+    const requiredCtrl = parts.includes('Ctrl');
+    const requiredAlt = parts.includes('Alt');
+    const requiredShift = parts.includes('Shift');
+    const keyParts = parts.filter((p) => !['Ctrl', 'Alt', 'Shift', 'Meta'].includes(p));
+    if (keyParts.length !== 1) return false;
+    const requiredKey = keyParts[0];
+
+    if (event.ctrlKey !== requiredCtrl) return false;
+    if (event.altKey !== requiredAlt) return false;
+    if (event.shiftKey !== requiredShift) return false;
+
+    // For single-char keys compare case-insensitively (Shift can alter event.key case).
+    const eventKey = event.key;
+    if (requiredKey.length === 1) {
+      return eventKey.toLowerCase() === requiredKey.toLowerCase();
+    }
+    return eventKey === requiredKey;
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
+    // FS-KBD-002: check user-configurable shortcuts first, then fixed pane shortcuts.
+
+    if (matchesShortcut(event, effectiveShortcut('new_tab'))) {
+      event.preventDefault();
+      handleNewTab();
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('close_tab'))) {
+      event.preventDefault();
+      if (activeTabId) handleTabClose(activeTabId);
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('search'))) {
+      event.preventDefault();
+      searchOpen = true;
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('paste'))) {
+      // FS-CLIP-007: Ctrl+Shift+V → paste via IPC
+      event.preventDefault();
+      handleGlobalPaste();
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('preferences'))) {
+      event.preventDefault();
+      prefsOpen = true;
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('next_tab'))) {
+      event.preventDefault();
+      handleSwitchTab(1);
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('prev_tab'))) {
+      event.preventDefault();
+      handleSwitchTab(-1);
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('rename_tab'))) {
+      event.preventDefault();
+      if (activeTabId) {
+        requestedRenameTabId = activeTabId;
+      }
+      return;
+    }
+
+    // FS-KBD-003: pane actions — these are not user-configurable in this release.
     if (event.ctrlKey && event.shiftKey) {
       switch (event.key) {
-        case 'T':
-        case 't':
-          event.preventDefault();
-          handleNewTab();
-          break;
-        case 'W':
-        case 'w':
-          event.preventDefault();
-          if (activeTabId) handleTabClose(activeTabId);
-          break;
-        case 'F':
-        case 'f':
-          event.preventDefault();
-          searchOpen = true;
-          break;
-        case 'V':
-        case 'v':
-          // Item 2: Ctrl+Shift+V → paste via IPC (FS-CLIP-007)
-          event.preventDefault();
-          handleGlobalPaste();
-          break;
         case 'D':
         case 'd':
-          // FS-KBD-003: split pane horizontally
           event.preventDefault();
           handleSplitPane('horizontal');
-          break;
+          return;
         case 'E':
         case 'e':
-          // FS-KBD-003: split pane vertically
           event.preventDefault();
           handleSplitPane('vertical');
-          break;
+          return;
         case 'Q':
         case 'q': {
-          // FS-KBD-003: close active pane (with confirmation if process active)
           event.preventDefault();
           const activePaneId = activeTab?.activePaneId;
           if (activePaneId) handlePaneClose(activePaneId);
-          break;
+          return;
         }
         case 'ArrowLeft':
           event.preventDefault();
           handleNavigatePane('left');
-          break;
+          return;
         case 'ArrowRight':
           event.preventDefault();
           handleNavigatePane('right');
-          break;
+          return;
         case 'ArrowUp':
           event.preventDefault();
           handleNavigatePane('up');
-          break;
+          return;
         case 'ArrowDown':
           event.preventDefault();
           handleNavigatePane('down');
-          break;
-      }
-    }
-    // Ctrl+Tab — next tab (FS-KBD-003)
-    if (event.ctrlKey && !event.shiftKey && event.key === 'Tab') {
-      event.preventDefault();
-      handleSwitchTab(1);
-    }
-    // Ctrl+Shift+Tab — previous tab (FS-KBD-003)
-    if (event.ctrlKey && event.shiftKey && event.key === 'Tab') {
-      event.preventDefault();
-      handleSwitchTab(-1);
-    }
-    // Ctrl+, — open preferences (FS-KBD-003)
-    if (event.ctrlKey && !event.shiftKey && event.key === ',') {
-      event.preventDefault();
-      prefsOpen = true;
-    }
-    // F2 — rename active tab (FS-KBD-003)
-    if (!event.ctrlKey && !event.shiftKey && !event.altKey && event.key === 'F2') {
-      event.preventDefault();
-      if (activeTabId) {
-        requestedRenameTabId = activeTabId;
+          return;
       }
     }
   }

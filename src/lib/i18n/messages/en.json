@@ -135,6 +135,7 @@
   "preferences_bell_type_visual": "Visual",
   "preferences_bell_type_audible": "Audible",
   "preferences_bell_type_disabled": "Disabled",
+  "preferences_bell_type_both": "Visual + Audible",
 
   "shortcut_recorder_aria_label": "Keyboard shortcut",
   "tab_context_menu_aria_label": "Tab context menu",

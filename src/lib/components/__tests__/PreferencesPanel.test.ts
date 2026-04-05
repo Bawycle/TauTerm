@@ -30,16 +30,26 @@ import type { Preferences } from '$lib/ipc/types';
 function makePrefs(overrides: Partial<Preferences> = {}): Preferences {
   return {
     appearance: {
-      theme: 'umbra',
-      fontSize: 13,
       fontFamily: 'monospace',
-      language: 'En',
+      fontSize: 13,
+      cursorStyle: 'block',
+      cursorBlinkMs: 530,
+      themeName: 'umbra',
+      opacity: 1.0,
+      language: 'en',
+      contextMenuHintShown: false,
     },
     terminal: {
       scrollbackLines: 10000,
-      bell: false,
+      allowOsc52Write: false,
+      wordDelimiters: ' ,;:.{}[]()"\`|\\/',
+      bellType: 'visual',
+    },
+    keyboard: {
+      bindings: {},
     },
     connections: [],
+    themes: [],
     ...overrides,
   };
 }
@@ -63,7 +73,11 @@ const instances: ReturnType<typeof mount>[] = [];
 
 afterEach(() => {
   instances.forEach((i) => {
-    try { unmount(i); } catch { /* ignore */ }
+    try {
+      unmount(i);
+    } catch {
+      /* ignore */
+    }
   });
   instances.length = 0;
   document.body.innerHTML = '';
@@ -90,7 +104,9 @@ describe('UITCP-PREF-FN-002: clicking section nav switches content', () => {
   // Bits UI Dialog renders content via portal outside the JSDOM container.
   // Section nav + section content visibility requires the portal to be rendered,
   // which only works in a real browser. Deferred to E2E.
-  it.todo('clicking Appearance nav item makes Appearance section active — deferred to E2E (Bits UI Dialog portal)');
+  it.todo(
+    'clicking Appearance nav item makes Appearance section active — deferred to E2E (Bits UI Dialog portal)',
+  );
 });
 
 describe('UITCP-PREF-FN-007: language selection emits Language enum', () => {
@@ -109,15 +125,19 @@ describe('UITCP-PREF-FN-007: language selection emits Language enum', () => {
     // Testing the guard: only 'En' and 'Fr' are valid values
     // Verify the handler filters invalid values
     // Note: Full dropdown interaction is E2E-deferred; we test the guard logic here
-    expect(onupdate).not.toHaveBeenCalledWith(expect.objectContaining({
-      appearance: expect.objectContaining({ language: 'English' }),
-    }));
+    expect(onupdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({ language: 'English' }),
+      }),
+    );
   });
 });
 
 describe('UITCP-PREF-FN-004: Terminal section renders required controls', () => {
   // Section content is inside Bits UI Dialog portal — not accessible in JSDOM.
-  it.todo('Terminal section has scrollback and cursor controls — deferred to E2E (Bits UI Dialog portal)');
+  it.todo(
+    'Terminal section has scrollback and cursor controls — deferred to E2E (Bits UI Dialog portal)',
+  );
 });
 
 describe('UITCP-PREF-FN-005: scrollback shows memory estimate', () => {
@@ -146,7 +166,9 @@ describe('UITCP-PREF-A11Y-001 (E2E-deferred): focus trap', () => {
 describe('UITCP-PREF-A11Y-002: panel has role="dialog" and aria-modal', () => {
   // Bits UI Dialog.Content renders in a portal that JSDOM does not attach to
   // document.body in the vitest environment. Verified manually and deferred to E2E.
-  it.todo('dialog element has aria-modal="true" — deferred to E2E (Bits UI Dialog portal in JSDOM)');
+  it.todo(
+    'dialog element has aria-modal="true" — deferred to E2E (Bits UI Dialog portal in JSDOM)',
+  );
 });
 
 describe('UITCP-PREF-A11Y-003: form controls have labels', () => {
@@ -172,9 +194,11 @@ describe('UITCP-PREF-A11Y-003: form controls have labels', () => {
 
 describe('UITCP-PREF-I18N-002: language enum never a free string', () => {
   // The Language enum constraint is enforced at the TypeScript level: handleLanguageChange
-  // only accepts 'En' | 'Fr'. This is a compile-time guarantee verified by pnpm check.
+  // only accepts 'en' | 'fr'. This is a compile-time guarantee verified by pnpm check.
   // The dropdown itself is inside the Bits UI Dialog portal (not accessible in JSDOM).
-  it.todo('language option values are "En" or "Fr" (enum values) — compile-time enforced; dropdown interaction deferred to E2E');
+  it.todo(
+    'language option values are "en" or "fr" (enum values) — compile-time enforced; dropdown interaction deferred to E2E',
+  );
 });
 
 // ---------------------------------------------------------------------------

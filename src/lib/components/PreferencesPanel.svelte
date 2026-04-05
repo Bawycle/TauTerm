@@ -38,12 +38,7 @@
     onupdate?: (patch: PreferencesPatch) => void;
   }
 
-  let {
-    open = $bindable(false),
-    preferences,
-    onclose,
-    onupdate,
-  }: Props = $props();
+  let { open = $bindable(false), preferences, onclose, onupdate }: Props = $props();
 
   // ---------------------------------------------------------------------------
   // Section navigation
@@ -99,14 +94,14 @@
   }
 
   function handleLanguageChange(val: string) {
-    if (val === 'En' || val === 'Fr') {
+    if (val === 'en' || val === 'fr') {
       onupdate?.({ appearance: { language: val } });
     }
   }
 
   const languageOptions = [
-    { value: 'En', label: m.locale_en() },
-    { value: 'Fr', label: m.locale_fr() },
+    { value: 'en', label: m.locale_en() },
+    { value: 'fr', label: m.locale_fr() },
   ];
 
   // ---------------------------------------------------------------------------
@@ -120,9 +115,10 @@
   ]);
 
   const bellTypeOptions = $derived([
+    { value: 'none', label: m.preferences_bell_type_disabled() },
     { value: 'visual', label: m.preferences_bell_type_visual() },
-    { value: 'audible', label: m.preferences_bell_type_audible() },
-    { value: 'disabled', label: m.preferences_bell_type_disabled() },
+    { value: 'audio', label: m.preferences_bell_type_audible() },
+    { value: 'both', label: m.preferences_bell_type_both() },
   ]);
 
   function handleScrollbackChange(val: string) {
@@ -135,8 +131,8 @@
   /** Rough memory estimate: ~200 bytes per line per pane. */
   const scrollbackEstimateMb = $derived(
     preferences?.terminal?.scrollbackLines
-      ? Math.round((preferences.terminal.scrollbackLines * 200) / (1024 * 1024) * 10) / 10
-      : 0
+      ? Math.round(((preferences.terminal.scrollbackLines * 200) / (1024 * 1024)) * 10) / 10
+      : 0,
   );
 
   // ---------------------------------------------------------------------------
@@ -155,7 +151,12 @@
   ];
 </script>
 
-<Dialog.Root bind:open onOpenChange={(o) => { if (!o) onclose?.(); }}>
+<Dialog.Root
+  bind:open
+  onOpenChange={(o) => {
+    if (!o) onclose?.();
+  }}
+>
   <Dialog.Portal>
     <Dialog.Overlay class="fixed inset-0 z-[49] bg-(--color-bg-overlay)/60" />
 
@@ -183,7 +184,6 @@
 
       <!-- Body: left nav + right content -->
       <div class="flex flex-1 min-h-0 border-t border-(--color-border)">
-
         <!-- Section navigation -->
         <nav
           class="w-[180px] flex-shrink-0 border-r border-(--color-border) py-2"
@@ -194,7 +194,9 @@
               class="preferences-panel__nav-item w-full text-left px-4 h-[40px] text-[13px] cursor-pointer
                      hover:bg-(--color-hover-bg) focus-visible:outline-2 focus-visible:outline-(--color-focus-ring)"
               class:preferences-panel__nav-item--active={activeSection === section.id}
-              onclick={() => { activeSection = section.id; }}
+              onclick={() => {
+                activeSection = section.id;
+              }}
               aria-current={activeSection === section.id ? 'page' : undefined}
             >
               {section.label()}
@@ -204,10 +206,11 @@
 
         <!-- Section content -->
         <div class="flex-1 overflow-y-auto p-6">
-
           <!-- ===== KEYBOARD SECTION ===== -->
           {#if activeSection === 'keyboard'}
-            <p class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+            <p
+              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+            >
               {m.preferences_section_keyboard()}
             </p>
             <div class="space-y-1">
@@ -224,9 +227,11 @@
               {/each}
             </div>
 
-          <!-- ===== APPEARANCE SECTION ===== -->
+            <!-- ===== APPEARANCE SECTION ===== -->
           {:else if activeSection === 'appearance'}
-            <p class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+            <p
+              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+            >
               {m.preferences_section_appearance()}
             </p>
 
@@ -250,14 +255,16 @@
                 id="pref-language"
                 label={m.preferences_appearance_language()}
                 options={languageOptions}
-                value={preferences?.appearance?.language ?? 'En'}
+                value={preferences?.appearance?.language ?? 'en'}
                 onchange={handleLanguageChange}
               />
             </div>
 
-          <!-- ===== TERMINAL BEHAVIOR SECTION ===== -->
+            <!-- ===== TERMINAL BEHAVIOR SECTION ===== -->
           {:else if activeSection === 'terminal'}
-            <p class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+            <p
+              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+            >
               {m.preferences_section_terminal()}
             </p>
 
@@ -289,7 +296,7 @@
                 id="pref-bell"
                 label={m.preferences_terminal_bell_type()}
                 options={bellTypeOptions}
-                value={preferences?.terminal?.bell ? 'audible' : 'visual'}
+                value={preferences?.terminal?.bellType ?? 'visual'}
               />
 
               <TextInput
@@ -299,9 +306,11 @@
               />
             </div>
 
-          <!-- ===== CONNECTIONS SECTION ===== -->
+            <!-- ===== CONNECTIONS SECTION ===== -->
           {:else if activeSection === 'connections'}
-            <p class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+            <p
+              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+            >
               {m.preferences_section_connections()}
             </p>
             <p class="text-[13px] text-(--color-text-secondary) mb-4">
@@ -312,7 +321,6 @@
               {m.action_import_known_hosts()}
             </Button>
           {/if}
-
         </div>
       </div>
     </Dialog.Content>

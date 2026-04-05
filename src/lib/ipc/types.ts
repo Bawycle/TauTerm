@@ -595,35 +595,83 @@ export type GetPreferencesCommand = () => Promise<Preferences>;
  */
 export type UpdatePreferencesCommand = (args: { patch: PreferencesPatch }) => Promise<Preferences>;
 
+// ---------------------------------------------------------------------------
+// Preferences types
+// Mirrors src-tauri/src/preferences/schema.rs — #[serde(rename_all = "camelCase")]
+// ---------------------------------------------------------------------------
+
+/**
+ * UI language enum.
+ * Mirrors Rust Language: #[serde(rename_all = "camelCase")]
+ * Language::En → "en", Language::Fr → "fr"
+ * MUST NOT be a free string (FS-I18N-006, CLAUDE.md constraint).
+ */
+export type Language = 'en' | 'fr';
+
+/**
+ * Cursor shape.
+ * Mirrors Rust CursorStyle: #[serde(rename_all = "camelCase")]
+ * CursorStyle::Block → "block", CursorStyle::Underline → "underline", CursorStyle::Bar → "bar"
+ */
+export type CursorStyle = 'block' | 'underline' | 'bar';
+
+/**
+ * Bell notification type.
+ * Mirrors Rust BellType: #[serde(rename_all = "camelCase")]
+ * BellType::None → "none", BellType::Visual → "visual",
+ * BellType::Audio → "audio", BellType::Both → "both"
+ */
+export type BellType = 'none' | 'visual' | 'audio' | 'both';
+
 /** Mirrors Rust Preferences. */
 export interface Preferences {
   appearance: AppearancePrefs;
   terminal: TerminalPrefs;
+  keyboard: KeyboardPrefs;
   connections: SshConnectionConfig[];
+  /** User-defined themes. */
+  themes: UserTheme[];
 }
 
 /** Mirrors Rust AppearancePrefs. */
 export interface AppearancePrefs {
-  theme: string;
-  fontSize: number;
   fontFamily: string;
+  fontSize: number;
+  cursorStyle: CursorStyle;
+  /** Cursor blink period in milliseconds. Default: 530. */
+  cursorBlinkMs: number;
+  /** Name of the active theme. */
+  themeName: string;
+  /** Background opacity (0.0–1.0). */
+  opacity: number;
   /**
-   * Language enum. MUST be 'En' or 'Fr' — never a free string (FS-I18N-006).
-   * Mirrors Rust Language enum: Language::En | Language::Fr
+   * Language enum. MUST be 'en' or 'fr' — never a free string (FS-I18N-006).
+   * Mirrors Rust Language::En → "en", Language::Fr → "fr"
    */
-  language: 'En' | 'Fr';
+  language: Language;
+  /** Whether the context menu hint has been shown at least once. */
+  contextMenuHintShown: boolean;
 }
 
 /** Mirrors Rust TerminalPrefs. */
 export interface TerminalPrefs {
   scrollbackLines: number;
-  bell: boolean;
+  allowOsc52Write: boolean;
+  wordDelimiters: string;
+  bellType: BellType;
+}
+
+/** Mirrors Rust KeyboardPrefs. */
+export interface KeyboardPrefs {
+  /** Keybinding overrides: action name → key combo string. */
+  bindings: Record<string, string>;
 }
 
 /** Mirrors Rust PreferencesPatch — all fields optional. */
 export interface PreferencesPatch {
   appearance?: Partial<AppearancePrefs>;
   terminal?: Partial<TerminalPrefs>;
+  keyboard?: Partial<KeyboardPrefs>;
 }
 
 /**
@@ -632,10 +680,35 @@ export interface PreferencesPatch {
  */
 export type GetThemesCommand = () => Promise<UserTheme[]>;
 
-/** Mirrors Rust UserTheme. */
+/**
+ * A user-defined color theme.
+ * Mirrors Rust UserTheme: #[serde(rename_all = "camelCase")]
+ */
 export interface UserTheme {
   name: string;
-  colors: Record<string, string>;
+  /** ANSI palette: 16 colors (0–15). Each entry is an RGB hex string (e.g., "#1e1e2e"). */
+  palette: [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+  foreground: string;
+  background: string;
+  cursorColor: string;
+  selectionBg: string;
 }
 
 /**

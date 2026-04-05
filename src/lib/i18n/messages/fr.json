@@ -135,6 +135,7 @@
   "preferences_bell_type_visual": "Visuel",
   "preferences_bell_type_audible": "Sonore",
   "preferences_bell_type_disabled": "Désactivé",
+  "preferences_bell_type_both": "Visuel + Sonore",
 
   "shortcut_recorder_aria_label": "Raccourci clavier",
   "tab_context_menu_aria_label": "Menu contextuel de l'onglet",

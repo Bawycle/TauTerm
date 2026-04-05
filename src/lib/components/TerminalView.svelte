@@ -44,7 +44,7 @@
   import { listen } from '@tauri-apps/api/event';
   import TabBar from './TabBar.svelte';
   import StatusBar from './StatusBar.svelte';
-  import TerminalPane from './TerminalPane.svelte';
+  import SplitPane from './SplitPane.svelte';
   import SearchOverlay from './SearchOverlay.svelte';
   import PreferencesPanel from './PreferencesPanel.svelte';
   import SshHostKeyDialog from './SshHostKeyDialog.svelte';
@@ -814,32 +814,31 @@
     </button>
   </div>
 
-  <!-- Pane area: render all leaf panes of the active tab -->
+  <!-- Pane area: render the full split-tree layout for the active tab -->
   <div class="terminal-view__pane-area">
     {#if activeTab && activePanes.length > 0}
-      <!-- Simple single-pane layout — multi-pane split layout deferred to split-tree -->
-      {#if activePanes.length === 1}
-        <TerminalPane
-          paneId={activePanes[0].paneId}
-          tabId={activeTab.id}
-          active={true}
-          sshState={sshStates.get(activePanes[0].paneId) ?? null}
-          wordDelimiters={preferences?.terminal.wordDelimiters}
-        />
-      {:else}
-        <!-- Multi-pane: simple flex layout (full split-tree rendering deferred) -->
-        <div class="terminal-view__split-container">
-          {#each activePanes as { paneId } (paneId)}
-            <TerminalPane
-              {paneId}
-              tabId={activeTab.id}
-              active={paneId === activeTab.activePaneId}
-              sshState={sshStates.get(paneId) ?? null}
-              wordDelimiters={preferences?.terminal.wordDelimiters}
-            />
-          {/each}
-        </div>
-      {/if}
+      <SplitPane
+        node={activeTab.layout}
+        tabId={activeTab.id}
+        activePaneId={activeTab.activePaneId}
+        {sshStates}
+        {terminatedPanes}
+        wordDelimiters={preferences?.terminal.wordDelimiters}
+        canClosePane={activePanes.length > 1}
+        onpaneclick={async (paneId) => {
+          try {
+            await invoke('set_active_pane', { paneId });
+          } catch {
+            /* non-fatal */
+          }
+        }}
+        onclosepane={handlePaneClose}
+        onsearch={() => {
+          searchOpen = true;
+        }}
+        onsplith={() => handleSplitPane('horizontal')}
+        onsplitv={() => handleSplitPane('vertical')}
+      />
     {:else}
       <div class="terminal-view__empty">
         <p>{m.terminal_view_empty()}</p>
@@ -987,13 +986,6 @@
     overflow: hidden;
     position: relative;
     background-color: var(--term-bg);
-  }
-
-  .terminal-view__split-container {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
   }
 
   .terminal-view__search-container {

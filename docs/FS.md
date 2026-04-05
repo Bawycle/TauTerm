@@ -634,11 +634,15 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 |----|-------------|----------|
 | FS-UX-001 | Every user-visible error or warning message MUST (a) identify what happened in plain language, without raw system error codes as the primary text; (b) indicate what the user can do next, or explicitly state that no action is required; (c) display any technical detail (errno, exit code, system message) as a secondary, collapsible or visually subordinate element only. | Must |
 | FS-UX-002 | On first launch, TauTerm MUST display a non-intrusive, non-blocking indication that right-clicking in the terminal area opens a context menu. This indication MUST disappear automatically after the user has performed a right-click in the terminal area at least once. It MUST NOT block or delay the user from using the terminal. | Must |
+| FS-UX-003 | When a terminal pane becomes the active pane — on application launch, on new tab creation, or on tab switch — the terminal viewport MUST automatically receive keyboard focus without requiring a mouse click from the user. | Must |
 
 **Acceptance criteria:**
 - FS-UX-001: When the configured shell is not found, the message reads in terms the user can understand (e.g., "Shell not found: `/usr/local/bin/zsh`. TauTerm has fallen back to `/bin/sh`. You can update your shell in Preferences → Terminal Behavior."), not a raw system error string.
 - FS-UX-001: When an SSH connection drops, the pane shows a human-readable reason (e.g., "Connection lost: server did not respond to keepalive. Click Reconnect to try again."), not a raw errno or SSH error code alone.
 - FS-UX-002: On a fresh install, a hint referencing the right-click context menu is visible in the terminal area. After the user right-clicks once, the hint is gone and does not reappear on subsequent launches.
+- FS-UX-003: On application launch, the user can type a command immediately without clicking the terminal area first.
+- FS-UX-003: After Ctrl+Shift+T creates a new tab, the user can type immediately in the new session without clicking.
+- FS-UX-003: After clicking a tab in the tab bar, the user can type immediately without clicking the terminal area.
 
 ---
 

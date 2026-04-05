@@ -350,6 +350,12 @@
     tabNotifications = next;
 
     activeTabId = tabId;
+
+    try {
+      await invoke('set_active_tab', { tabId });
+    } catch {
+      // Non-fatal — frontend state is already updated
+    }
   }
 
   async function handleTabClose(tabId: string) {
@@ -848,6 +854,7 @@
   <!-- Pane area: render the full split-tree layout for the active tab -->
   <!-- FS-UX-002: contextmenu bubbles up from TerminalPane to dismiss the first-launch hint -->
   <div class="terminal-view__pane-area" role="region" oncontextmenu={handleContextMenuHintDismiss}>
+    {#key activeTabId}
     {#if activeTab && activePanes.length > 0}
       <SplitPane
         node={activeTab.layout}
@@ -879,6 +886,7 @@
         <p>{m.terminal_view_empty()}</p>
       </div>
     {/if}
+    {/key}
   </div>
 
   <!-- FS-UX-002: First-launch context menu hint — non-blocking, bottom-right corner -->

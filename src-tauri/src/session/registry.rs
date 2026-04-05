@@ -555,6 +555,19 @@ impl SessionRegistry {
         pane.resize(cols, rows, pixel_width, pixel_height)
     }
 
+    /// Set the active tab in the registry.
+    ///
+    /// Called by the `set_active_tab` command handler, which then emits
+    /// `session-state-changed` with `ActiveTabChanged`.
+    pub fn set_active_tab(&self, tab_id: TabId) -> Result<TabState, SessionError> {
+        let mut inner = self.inner.write();
+        if !inner.tabs.contains_key(&tab_id) {
+            return Err(SessionError::TabNotFound(tab_id.to_string()));
+        }
+        inner.active_tab_id = Some(tab_id.clone());
+        Ok(inner.tabs[&tab_id].state.clone())
+    }
+
     /// Set the active pane (and its containing tab) in the registry.
     ///
     /// Called by the `set_active_pane` command handler, which then emits

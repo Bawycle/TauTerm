@@ -76,6 +76,28 @@ pub async fn close_pane(
 }
 
 #[tauri::command]
+pub async fn set_active_tab(
+    tab_id: TabId,
+    registry: State<'_, Arc<SessionRegistry>>,
+    app: AppHandle,
+) -> Result<(), TauTermError> {
+    let tab_state = registry
+        .set_active_tab(tab_id.clone())
+        .map_err(TauTermError::from)?;
+
+    emit_session_state_changed(
+        &app,
+        SessionStateChangedEvent {
+            change_type: SessionChangeType::ActiveTabChanged,
+            tab: Some(tab_state),
+            active_tab_id: Some(tab_id.to_string()),
+        },
+    );
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn set_active_pane(
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,

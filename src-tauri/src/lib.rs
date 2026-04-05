@@ -112,6 +112,7 @@ pub fn run() {
             commands::session_cmds::reorder_tab,
             commands::session_cmds::split_pane,
             commands::session_cmds::close_pane,
+            commands::session_cmds::set_active_tab,
             commands::session_cmds::set_active_pane,
             // Input / screen commands
             commands::input_cmds::send_input,

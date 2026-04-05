@@ -205,6 +205,17 @@
   );
 
   // -------------------------------------------------------------------------
+  // FS-UX-003: Auto-focus — give the active, non-terminated terminal keyboard focus
+  // without requiring a mouse click (on mount, tab switch, new tab).
+  // -------------------------------------------------------------------------
+
+  $effect(() => {
+    if (active && !terminated) {
+      viewportEl?.focus({ preventScroll: true });
+    }
+  });
+
+  // -------------------------------------------------------------------------
   // Mount / destroy
   // -------------------------------------------------------------------------
 

@@ -1559,6 +1559,7 @@ When an SSH connection is established and the negotiated host key algorithm is d
 - **Tab order:** Tab bar tabs → Tab bar new-tab button → Terminal area → Status bar elements. Within the terminal area, Tab key is captured by the PTY; pane navigation uses dedicated shortcuts.
 - **Focus trap in modals:** When a dialog or the preferences panel is open, Tab key cycles only through focusable elements within the modal. Shift+Tab cycles backward. Focus starts on the default action (typically the safe/cancel action for destructive dialogs).
 - **Focus restoration:** When a modal closes, focus returns to the element that triggered it.
+- **Auto-focus on active pane (FS-UX-003):** The active terminal pane's viewport MUST receive keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created (Ctrl+Shift+T or UI button), (3) when the user switches to a different tab (tab bar click or Ctrl+Tab). In all cases focus is applied via `element.focus({ preventScroll: true })` immediately after the pane viewport is mounted. This does not apply to terminated panes.
 
 ### 8.3 Scroll Behavior
 

@@ -1,0 +1,11 @@
+# Build artifacts — never copy into container images
+src-tauri/target/
+
+# Frontend build output
+build/
+node_modules/
+
+# Local dev / IDE files
+.git/
+.vscode/
+.idea/

@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Containerfile.keyring-test
+#
+# Podman image for running SecretService integration tests headlessly.
+# Provides a D-Bus session bus + GNOME Keyring daemon (no display required).
+#
+# Build:  podman build -t tauterm-keyring-test -f Containerfile.keyring-test .
+# Run:    podman run --rm --security-opt label=disable tauterm-keyring-test
+
+FROM docker.io/library/rust:1.86-slim-bookworm
+
+# System dependencies:
+#   - build-essential, pkg-config: base compilation toolchain
+#   - libdbus-1-dev: D-Bus C library (dbus crate)
+#   - libssl-dev: OpenSSL (transitive dependency)
+#   - libwebkit2gtk-4.1-dev: WebKit/GTK (Tauri mandatory dep — pulls in glib, gio, gtk3…)
+#   - libayatana-appindicator3-dev: system-tray (Tauri optional but linked at compile time)
+#   - librsvg2-dev: SVG rendering (Tauri)
+#   - libxdo-dev: xdotool bindings (Tauri)
+#   - dbus, dbus-x11: D-Bus daemon + dbus-run-session (test runtime)
+#   - gnome-keyring: SecretService daemon (test runtime)
+#   - libsecret-1-0: SecretService runtime library
+#   - curl: used to install cargo-nextest
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libdbus-1-dev \
+    libssl-dev \
+    libwebkit2gtk-4.1-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    libxdo-dev \
+    curl \
+    dbus \
+    dbus-x11 \
+    gnome-keyring \
+    libsecret-1-0 \
+    libsecret-tools \
+    xvfb \
+    xdotool \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-nextest.
+RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/cargo/bin
+
+WORKDIR /app
+
+# Copy the Rust workspace.
+COPY src-tauri/ .
+
+# Pre-compile the integration test binary (without running it).
+# This bakes the compiled artifact into the image layer so `podman run` is fast.
+RUN cargo nextest run --no-run --test credentials_integration
+
+# Copy the entrypoint script.
+COPY scripts/run-keyring-tests-inner.sh /usr/local/bin/run-keyring-tests-inner
+RUN chmod +x /usr/local/bin/run-keyring-tests-inner
+
+ENTRYPOINT ["run-keyring-tests-inner"]

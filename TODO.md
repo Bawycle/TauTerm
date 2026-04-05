@@ -27,7 +27,7 @@
 
 ### Tests manquants (blocages environnement)
 
-- [ ] **SecretService integration test** — round-trip D-Bus requiert keyring daemon actif ; bloqué sur l'environnement. Test écrit avec `#[ignore = "requires active keyring daemon"]`.
+~~- [ ] **SecretService integration test**~~ ✅ Tests écrits (`src-tauri/tests/credentials_integration.rs`, SEC-CRED-INT-001 à 005). Environnement Podman fourni (`Containerfile.keyring-test` + `scripts/run-keyring-tests.sh`). Lancer avec `./scripts/run-keyring-tests.sh`.
 - [ ] **E2E tests** — `pty-roundtrip.spec.ts` + `tab-lifecycle.spec.ts` bloqués sur le wiring PTY SSH → screen-update → DOM.
 
 ---

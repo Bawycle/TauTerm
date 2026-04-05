@@ -9,11 +9,13 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 // Path to the Tauri binary to test.
 // Override with TAUTERM_BINARY_PATH to point at a custom build location.
-// Default: the debug binary produced by `cargo build --features e2e-testing`
-// (run from src-tauri/).
+// Default: the release binary produced by:
+//   pnpm tauri build --no-bundle -- --features e2e-testing
+// Must go through the Tauri CLI (not bare `cargo build`) so that the frontend
+// assets are embedded. `--no-bundle` skips AppImage/deb packaging.
 const binaryPath =
   process.env.TAUTERM_BINARY_PATH ??
-  path.resolve(__dirname, "src-tauri", "target", "debug", "tau-term");
+  path.resolve(__dirname, "src-tauri", "target", "release", "tau-term");
 
 const tauriDriverPath = path.resolve(
   os.homedir(),
@@ -73,6 +75,27 @@ export const config: Options.Testrunner = {
     tauriDriver = spawn(tauriDriverPath, [], {
       stdio: [null, process.stdout, process.stderr],
     });
+  },
+
+  // Wait for the app shell to be fully rendered before any spec runs.
+  // tauri-driver connects as soon as the process starts, but the WebView
+  // takes time to load the embedded assets and mount the Svelte app.
+  before: async () => {
+    await browser.waitUntil(
+      async () => {
+        try {
+          const el = await $(".app-shell");
+          return await el.isExisting();
+        } catch {
+          return false;
+        }
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "App shell (.app-shell) did not appear within 30 s — app may have failed to start",
+        interval: 500,
+      }
+    );
   },
 
   // Kill tauri-driver after the session to avoid zombie processes.

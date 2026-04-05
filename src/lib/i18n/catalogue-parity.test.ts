@@ -160,11 +160,7 @@ describe('TP-MIN-007: TerminalPane component keys present in both catalogues', (
 // ---------------------------------------------------------------------------
 
 describe('TP-MIN-008: TerminalView component keys present in both catalogues', () => {
-  const terminalViewKeys = [
-    'terminal_view_empty',
-    'terminal_view_aria_label',
-    'app_title',
-  ];
+  const terminalViewKeys = ['terminal_view_empty', 'terminal_view_aria_label', 'app_title'];
 
   for (const key of terminalViewKeys) {
     it(`key "${key}" is present and non-empty in en.json`, () => {

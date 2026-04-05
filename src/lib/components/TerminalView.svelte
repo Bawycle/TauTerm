@@ -129,7 +129,11 @@
   let contextMenuHintDismissed = $state(false);
 
   $effect(() => {
-    if (preferences !== undefined && !preferences.appearance.contextMenuHintShown && !contextMenuHintDismissed) {
+    if (
+      preferences !== undefined &&
+      !preferences.appearance.contextMenuHintShown &&
+      !contextMenuHintDismissed
+    ) {
       contextMenuHintVisible = true;
     }
   });
@@ -192,6 +196,20 @@
       // Backend not ready — will be populated by first session-state-changed event
     }
 
+    // Auto-create the first tab if the session starts empty (standard terminal UX:
+    // the app always opens with at least one tab ready). Uses a login shell so that
+    // ~/.bash_profile / ~/.zprofile are sourced (FS-PTY-013).
+    if (tabs.length === 0) {
+      try {
+        const newTab: TabState = await invoke('create_tab', { config: { cols: 80, rows: 24, login: true } });
+        tabs = [newTab];
+        activeTabId = newTab.id;
+      } catch {
+        // Non-fatal — backend may not be ready yet; the session-state-changed event
+        // will populate tabs when the backend emits tab-created.
+      }
+    }
+
     // Fetch preferences for PreferencesPanel
     try {
       preferences = await invoke('get_preferences');
@@ -205,7 +223,6 @@
     } catch {
       // Non-fatal
     }
-
 
     // Listen for topology changes
     unlistenSessionState = await listen<SessionStateChangedEvent>(

@@ -119,7 +119,7 @@ Development is coordinated by a multi-agent team defined in `.claude/agents/`. A
 
 | Agent file | Name | Role |
 |---|---|---|
-| `tauterm-moe.md` | `moe` | Maître d'Œuvre — orchestration, task decomposition, arbitration |
+| `tauterm-moe.md` | `moe` | Maître d'Œuvre — arbitration, quality gate, escalation |
 | `tauterm-user-rep.md` | `user-rep` | User Representative — personas, acceptance criteria, UX validation |
 | `tauterm-domain-expert.md` | `domain-expert` | Terminal/PTY domain expert — VT standards, PTY Linux, SSH, app compatibility |
 | `tauterm-architect.md` | `architect` | Software Architect — IPC design, state machines, ADRs |
@@ -131,7 +131,7 @@ Development is coordinated by a multi-agent team defined in `.claude/agents/`. A
 
 **Team name:** `tauterm-team` — runtime config at `~/.claude/teams/tauterm-team/config.json`
 
-**Typical feature flow:** `moe` decomposes → `domain-expert` + `architect` → `ux-designer` + `user-rep` → `rust-dev` + `frontend-dev` (parallel) → `test-engineer` + `security-expert` (review).
+**Typical feature flow:** `domain-expert` + `architect` (constraints) → `ux-designer` + `user-rep` (UX/acceptance) → `rust-dev` + `frontend-dev` in parallel (implementation) → `test-engineer` + `security-expert` (review). `moe` arbitrates when specialists disagree and validates quality gates.
 
 ## License
 

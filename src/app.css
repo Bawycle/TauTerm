@@ -115,7 +115,9 @@
     --color-neutral-200
   ); /* #e8e3d8 — WCAG AA: ~5.1:1 on tab-bg (#242118); distinguishable from active by font-weight */
   --color-tab-hover-bg: var(--color-neutral-750); /* #2c2921 */
-  --color-tab-hover-fg: var(--color-neutral-200); /* #e8e3d8 — matches inactive for hover coherence */
+  --color-tab-hover-fg: var(
+    --color-neutral-200
+  ); /* #e8e3d8 — matches inactive for hover coherence */
   --color-tab-close-fg: var(--color-neutral-500); /* #6b6660 */
   --color-tab-close-hover-fg: var(--color-neutral-300); /* #ccc7bc */
   --color-tab-new-fg: var(--color-neutral-500); /* #6b6660 */

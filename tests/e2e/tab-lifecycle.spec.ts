@@ -89,11 +89,53 @@ describe("TauTerm — Tab create and close lifecycle", () => {
       });
     }
 
-    // Give focus to the app window before sending keyboard shortcuts.
-    await $(Selectors.terminalGrid).click();
+    // Dispatch Ctrl+Shift+W directly via the DOM to ensure the Svelte keydown
+    // handler receives it, bypassing any WebDriver key-delivery quirks in
+    // WebKitGTK (browser.keys() reliably triggers Ctrl+Shift+T but may not
+    // reliably deliver Ctrl+Shift+W after a tab switch).
+    await browser.execute((): void => {
+      const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+      const target = grid ?? document.body;
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "W",
+          code: "KeyW",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
 
-    // Close the active tab.
-    await browser.keys(["Control", "Shift", "w"]);
+    // FS-PTY-008: InjectablePtyBackend never emits processExited, so the tab is
+    // always considered to have an active process → the close confirmation dialog
+    // will appear. Wait for it, then click "Close anyway".
+    //
+    // Strategy: poll for the confirm button's existence (by text content) rather
+    // than relying on a specific dialog role or portal selector, then dispatch a
+    // native click event so Svelte 5's event listeners fire correctly.
+    await browser.waitUntil(
+      async () => {
+        return browser.execute((): boolean => {
+          for (const btn of document.querySelectorAll("button")) {
+            if ((btn.textContent ?? "").trim() === "Close anyway") return true;
+          }
+          return false;
+        });
+      },
+      { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not appear within 3 s" }
+    );
+    await browser.execute((): void => {
+      for (const btn of document.querySelectorAll("button")) {
+        if ((btn.textContent ?? "").trim() === "Close anyway") {
+          (btn as HTMLButtonElement).dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true })
+          );
+          break;
+        }
+      }
+    });
 
     // Wait for the tab count to drop back to one.
     await browser.waitUntil(
@@ -125,11 +167,21 @@ describe("TauTerm — Tab create and close lifecycle", () => {
       { timeout: 3_000, timeoutMsg: "Expected 1 tab before last-tab close test" }
     );
 
-    // Give focus to the app window before sending keyboard shortcuts.
-    await $(Selectors.terminalGrid).click();
-
-    // Attempt to close the only tab.
-    await browser.keys(["Control", "Shift", "w"]);
+    // Dispatch Ctrl+Shift+W via DOM to ensure the Svelte handler receives it.
+    await browser.execute((): void => {
+      const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+      const target = grid ?? document.body;
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "W",
+          code: "KeyW",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
 
     // Wait a moment for any crash to manifest.
     await browser.pause(500);

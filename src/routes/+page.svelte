@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Tooltip } from 'bits-ui';
   import TerminalView from '$lib/components/TerminalView.svelte';
   import { initLocale } from '$lib/state/locale.svelte';
 
@@ -10,9 +11,12 @@
   });
 </script>
 
-<div class="app-shell">
-  <TerminalView />
-</div>
+<!-- Tooltip.Provider is required by bits-ui v2 for all Tooltip.Root descendants -->
+<Tooltip.Provider>
+  <div class="app-shell">
+    <TerminalView />
+  </div>
+</Tooltip.Provider>
 
 <style>
   .app-shell {

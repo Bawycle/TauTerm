@@ -13,6 +13,21 @@ const config = {
     adapter: adapter({
       fallback: "index.html",
     }),
+    // Bundle all JS and CSS into a single entry per route instead of code-splitting.
+    //
+    // With the default "split" strategy, Vite emits separate .css chunks and loads
+    // them via a modulepreload polyfill that creates <link crossOrigin=""> elements
+    // and awaits their load/error events. Under tauri://localhost (WebKitGTK custom
+    // protocol + WebDriver), these events are never fired — the Promise hangs
+    // forever, blocking kit.start() and preventing the Svelte app from mounting.
+    //
+    // "inline" bundles CSS into JS (injected at runtime) and removes the preload
+    // mechanism entirely. Trade-off: slightly larger initial JS payload and a brief
+    // flash before CSS is injected. Both are negligible for a bundled desktop app
+    // where all assets are embedded in the binary and served locally.
+    output: {
+      bundleStrategy: "inline",
+    },
   },
 };
 

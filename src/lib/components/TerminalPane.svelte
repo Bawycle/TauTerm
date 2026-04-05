@@ -159,7 +159,9 @@
 
   const currentCursorShape = $derived(cursorShape(cursor.shape));
   const currentCursorBlinks = $derived(cursor.blink && cursorBlinks(cursor.shape));
-  const showScrollbar = $derived(scrollbarVisible || scrollOffset > 0 || scrollbarHover || scrollbarDragging);
+  const showScrollbar = $derived(
+    scrollbarVisible || scrollOffset > 0 || scrollbarHover || scrollbarDragging,
+  );
 
   const scrollbarThumbHeightPct = $derived(
     scrollbackLines > 0

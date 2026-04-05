@@ -46,6 +46,12 @@
     oninput,
   }: Props = $props();
 
+  // Stable per-instance fallback ID computed once at instantiation.
+  // Used when the caller does not pass `id`, so aria-describedby always points
+  // to a valid, unique element — never the literal string "undefined-error".
+  const _fallbackId = `ti-${Math.random().toString(36).slice(2, 8)}`;
+  const uid = $derived(id ?? _fallbackId);
+
   const baseInputClasses =
     'w-full h-[44px] px-3 text-[13px] text-(--color-text-primary) bg-(--term-bg) rounded-[2px] border placeholder:text-(--color-text-tertiary) focus:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) disabled:cursor-not-allowed';
 
@@ -56,7 +62,7 @@
   );
 
   const describedBy = $derived(
-    error ? `${id}-error` : helper ? `${id}-helper` : undefined,
+    error ? `${uid}-error` : helper ? `${uid}-helper` : undefined,
   );
 </script>
 
@@ -82,8 +88,8 @@
   />
 
   {#if error}
-    <p id="{id}-error" class="text-[12px] text-(--color-error-text) mt-1">{error}</p>
+    <p id="{uid}-error" class="text-[12px] text-(--color-error-text) mt-1">{error}</p>
   {:else if helper}
-    <p id="{id}-helper" class="text-[12px] text-(--color-text-secondary) mt-1">{helper}</p>
+    <p id="{uid}-helper" class="text-[12px] text-(--color-text-secondary) mt-1">{helper}</p>
   {/if}
 </div>

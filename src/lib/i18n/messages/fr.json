@@ -163,5 +163,12 @@
 
   "dialog_close": "Fermer la boîte de dialogue",
 
-  "ssh_credential_password_for": "Mot de passe pour {username}@{host} :"
+  "ssh_credential_password_for": "Mot de passe pour {username}@{host} :",
+
+  "tab_bar_tabs_aria_label": "Onglets du terminal",
+  "tab_bar_ssh_badge_aria_label": "Session SSH",
+  "terminal_pane_aria_label": "Panneau de terminal",
+  "terminal_output_aria_label": "Sortie du terminal",
+  "terminal_view_aria_label": "Terminal TauTerm",
+  "connection_actions_aria_label": "Actions de connexion"
 }

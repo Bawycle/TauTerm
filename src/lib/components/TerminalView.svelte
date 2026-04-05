@@ -442,7 +442,7 @@
 <div
   class="terminal-view"
   role="application"
-  aria-label="TauTerm terminal"
+  aria-label={m.terminal_view_aria_label()}
   onkeydown={handleGlobalKeydown}
 >
   <!-- Tab bar: renders tabs from session state -->

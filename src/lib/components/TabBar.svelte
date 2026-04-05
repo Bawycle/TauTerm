@@ -83,7 +83,7 @@
   }
 </script>
 
-<div class="tab-bar" role="tablist" aria-label="Terminal tabs">
+<div class="tab-bar" role="tablist" aria-label={m.tab_bar_tabs_aria_label()}>
   <div class="tab-bar__tabs">
     {#each sortedTabs as tab (tab.id)}
       {@const isActive = tab.id === activeTabId}
@@ -104,7 +104,7 @@
       >
         <!-- SSH badge (UXD §7.1.7) -->
         {#if isSSHTab(tab)}
-          <span class="tab-bar__ssh-badge" aria-label="SSH session">
+          <span class="tab-bar__ssh-badge" aria-label={m.tab_bar_ssh_badge_aria_label()}>
             <Network size={12} aria-hidden="true" />
           </span>
         {/if}

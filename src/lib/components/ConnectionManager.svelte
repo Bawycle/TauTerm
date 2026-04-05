@@ -273,7 +273,7 @@
                 <div
                   class="connection-manager__item-actions"
                   role="group"
-                  aria-label="Connection actions"
+                  aria-label={m.connection_actions_aria_label()}
                 >
                   <button
                     class="connection-manager__action-btn"

@@ -595,7 +595,7 @@
   class:terminal-pane--active={active}
   data-pane-id={paneId}
   role="region"
-  aria-label="Terminal pane"
+  aria-label={m.terminal_pane_aria_label()}
 >
   <!-- ContextMenu wraps the viewport so right-click opens it -->
   <ContextMenu
@@ -616,7 +616,7 @@
       tabindex={active ? 0 : -1}
       role="textbox"
       aria-multiline="true"
-      aria-label="Terminal output"
+      aria-label={m.terminal_output_aria_label()}
       aria-readonly="false"
       onkeydown={handleKeydown}
       oninput={handleInput}

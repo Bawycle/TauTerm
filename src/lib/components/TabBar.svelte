@@ -38,9 +38,24 @@
     onTabClick: (tabId: string) => void;
     onTabClose: (tabId: string) => void;
     onNewTab: () => void;
+    /**
+     * Set to the tab ID to start rename mode on that tab programmatically
+     * (e.g. from the F2 global shortcut in TerminalView).
+     * TabBar reacts to changes and clears it after acting.
+     */
+    requestedRenameTabId?: string | null;
+    onRenameHandled?: () => void;
   }
 
-  const { tabs, activeTabId, onTabClick, onTabClose, onNewTab }: Props = $props();
+  const {
+    tabs,
+    activeTabId,
+    onTabClick,
+    onTabClose,
+    onNewTab,
+    requestedRenameTabId = null,
+    onRenameHandled,
+  }: Props = $props();
 
   // Sort tabs by order field
   const sortedTabs = $derived([...tabs].sort((a, b) => a.order - b.order));
@@ -86,6 +101,15 @@
       renameInputEl.focus();
       renameInputEl.select();
     }
+  });
+
+  // React to an external rename request (e.g. F2 global shortcut from TerminalView).
+  $effect(() => {
+    if (requestedRenameTabId === null || requestedRenameTabId === undefined) return;
+    const tab = sortedTabs.find((t) => t.id === requestedRenameTabId);
+    if (!tab) return;
+    startRename(tab.id, tabDisplayTitle(tab));
+    onRenameHandled?.();
   });
 
   // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────

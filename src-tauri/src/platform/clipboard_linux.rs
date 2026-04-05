@@ -50,7 +50,7 @@ impl ClipboardBackend for LinuxClipboard {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{ClipboardBackend as _, LinuxClipboard};
 
     // -----------------------------------------------------------------------
     // TEST-SPRINT-002 — FS-CLIP-004: X11 PRIMARY selection write

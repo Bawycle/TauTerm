@@ -126,5 +126,19 @@
   "process_terminated_pane_title": "Process terminated",
 
   "locale_en": "English",
-  "locale_fr": "French"
+  "locale_fr": "French",
+
+  "preferences_sections_nav": "Preferences sections",
+  "preferences_cursor_shape_block": "Block",
+  "preferences_cursor_shape_underline": "Underline",
+  "preferences_cursor_shape_bar": "Bar",
+  "preferences_bell_type_visual": "Visual",
+  "preferences_bell_type_audible": "Audible",
+  "preferences_bell_type_disabled": "Disabled",
+
+  "shortcut_recorder_aria_label": "Keyboard shortcut",
+  "tab_context_menu_aria_label": "Tab context menu",
+
+  "connection_duplicate_label_suffix": "{label} (copy)",
+  "connection_group_ungrouped": "Ungrouped"
 }

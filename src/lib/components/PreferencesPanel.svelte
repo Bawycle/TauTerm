@@ -113,17 +113,17 @@
   // Terminal behavior
   // ---------------------------------------------------------------------------
 
-  const cursorShapeOptions = [
-    { value: 'block', label: 'Block' },
-    { value: 'underline', label: 'Underline' },
-    { value: 'bar', label: 'Bar' },
-  ];
+  const cursorShapeOptions = $derived([
+    { value: 'block', label: m.preferences_cursor_shape_block() },
+    { value: 'underline', label: m.preferences_cursor_shape_underline() },
+    { value: 'bar', label: m.preferences_cursor_shape_bar() },
+  ]);
 
-  const bellTypeOptions = [
-    { value: 'visual', label: 'Visual' },
-    { value: 'audible', label: 'Audible' },
-    { value: 'disabled', label: 'Disabled' },
-  ];
+  const bellTypeOptions = $derived([
+    { value: 'visual', label: m.preferences_bell_type_visual() },
+    { value: 'audible', label: m.preferences_bell_type_audible() },
+    { value: 'disabled', label: m.preferences_bell_type_disabled() },
+  ]);
 
   function handleScrollbackChange(val: string) {
     const n = parseInt(val, 10);
@@ -160,7 +160,7 @@
     <Dialog.Overlay class="fixed inset-0 z-[49] bg-(--color-bg-overlay)/60" />
 
     <Dialog.Content
-      class="preferences-panel fixed z-[40] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+      class="preferences-panel fixed z-[50] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
              w-[640px] max-w-[90vw] max-h-[80vh]
              bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
@@ -187,7 +187,7 @@
         <!-- Section navigation -->
         <nav
           class="w-[180px] flex-shrink-0 border-r border-(--color-border) py-2"
-          aria-label="Preferences sections"
+          aria-label={m.preferences_sections_nav()}
         >
           {#each sections as section (section.id)}
             <button

@@ -156,7 +156,7 @@
     <!-- Invisible trigger — parent controls open state via right-click handler -->
     <DropdownMenu.Trigger
       class="sr-only"
-      aria-label="Tab context menu"
+      aria-label={m.tab_context_menu_aria_label()}
     />
 
     <DropdownMenu.Portal>

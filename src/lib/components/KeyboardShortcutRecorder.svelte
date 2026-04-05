@@ -150,7 +150,7 @@
   <div
     role="textbox"
     tabindex={disabled ? -1 : 0}
-    aria-label="Keyboard shortcut"
+    aria-label={m.shortcut_recorder_aria_label()}
     aria-readonly={recorderState !== 'recording'}
     class="shortcut-recorder__field"
     class:shortcut-recorder__field--recording={recorderState === 'recording'}

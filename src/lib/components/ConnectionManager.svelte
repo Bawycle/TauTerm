@@ -46,6 +46,13 @@
     ondelete?: (connectionId: string) => void;
     onopen?: (args: OpenTarget) => void;
     onclose?: () => void;
+    /**
+     * Called after save when auth method is "password" and a password was entered.
+     * The password must be stored via SecretService (SEC-CRED-004) — it is never
+     * persisted in SshConnectionConfig or transmitted over IPC as part of the config.
+     * The parent is responsible for calling the appropriate credential-store IPC command.
+     */
+    onstorepassword?: (connectionId: string, password: string) => void;
   }
 
   const {
@@ -55,6 +62,7 @@
     ondelete,
     onopen,
     onclose,
+    onstorepassword,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -97,7 +105,7 @@
   const groupedConnections = $derived(() => {
     const groups = new Map<string, SshConnectionConfig[]>();
     for (const conn of connections) {
-      const g = (conn as SshConnectionConfig & { group?: string }).group ?? 'Ungrouped';
+      const g = (conn as SshConnectionConfig & { group?: string }).group ?? m.connection_group_ungrouped();
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g)!.push(conn);
     }
@@ -137,17 +145,24 @@
   }
 
   function handleSave() {
-    const port = parseInt(formPort, 10);
+    const rawPort = parseInt(formPort, 10);
+    // Clamp port to valid TCP range [1, 65535] (Bug 3 fix)
+    const port = Math.max(1, Math.min(65535, isNaN(rawPort) ? 22 : rawPort));
     const config: SshConnectionConfig = {
       id: editingId ?? '',
       label: formLabel,
       host: formHost,
-      port: isNaN(port) ? 22 : port,
+      port,
       username: formUsername,
       identityFile: formAuthMethod === 'identity' ? formIdentityFile : undefined,
       allowOsc52Write: formAllowOsc52,
     };
     onsave?.(config);
+    // If password auth, emit to parent for SecretService storage (SEC-CRED-004).
+    // The password is never stored in SshConnectionConfig.
+    if (formAuthMethod === 'password' && formPassword) {
+      onstorepassword?.(config.id, formPassword);
+    }
     // Clear password from component state immediately (SEC-UI-002)
     formPassword = '';
     showForm = false;
@@ -166,7 +181,9 @@
     const duped: SshConnectionConfig = {
       ...conn,
       id: '',
-      label: conn.label ? `${conn.label} (copy)` : '',
+      label: conn.label
+        ? m.connection_duplicate_label_suffix({ label: conn.label })
+        : '',
     };
     onsave?.(duped);
   }

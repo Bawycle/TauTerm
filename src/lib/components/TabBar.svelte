@@ -315,6 +315,7 @@
         aria-selected={isActive}
         tabindex={isActive ? 0 : -1}
         data-tab-id={tab.id}
+        data-tab-index={index}
         draggable="true"
         onclick={() => {
           if (!isRenaming) onTabClick(tab.id);

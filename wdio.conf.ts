@@ -7,19 +7,13 @@ import type { Options } from "@wdio/types";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-// Respect TAURI_BUILD_TYPE env var — defaults to "debug" for faster iteration.
-// Set TAURI_BUILD_TYPE=release to test the release binary.
-const buildType = (process.env.TAURI_BUILD_TYPE ?? "debug") as
-  | "debug"
-  | "release";
-
-const binaryPath = path.resolve(
-  __dirname,
-  "src-tauri",
-  "target",
-  buildType,
-  "tau-term"
-);
+// Path to the Tauri binary to test.
+// Override with TAUTERM_BINARY_PATH to point at a custom build location.
+// Default: the debug binary produced by `cargo build --features e2e-testing`
+// (run from src-tauri/).
+const binaryPath =
+  process.env.TAUTERM_BINARY_PATH ??
+  path.resolve(__dirname, "src-tauri", "target", "debug", "tau-term");
 
 const tauriDriverPath = path.resolve(
   os.homedir(),
@@ -64,7 +58,18 @@ export const config: Options.Testrunner = {
   },
 
   // Start tauri-driver before the session; it in turn starts WebKitWebDriver.
-  beforeSession: () => {
+  // Also validates that the E2E binary exists, giving an actionable error if not.
+  beforeSession: async (_config, _capabilities) => {
+    const fs = await import("fs/promises");
+    try {
+      await fs.access(binaryPath);
+    } catch {
+      throw new Error(
+        `E2E binary not found at: ${binaryPath}\n` +
+          `Build it with: cd src-tauri && cargo build --features e2e-testing\n` +
+          `Or set TAUTERM_BINARY_PATH to point to an existing binary.`
+      );
+    }
     tauriDriver = spawn(tauriDriverPath, [], {
       stdio: [null, process.stdout, process.stderr],
     });

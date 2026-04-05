@@ -76,6 +76,9 @@ dirs = "6"
 # Desktop notifications (D-Bus org.freedesktop.Notifications on Linux)
 notify-rust = { version = "4", default-features = false, features = ["d"] }
 
+[features]
+e2e-testing = []
+
 [dev-dependencies]
 # Temporary files and directories for tests
 tempfile = "3"

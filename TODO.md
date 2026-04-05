@@ -28,7 +28,7 @@
 ### Tests manquants (blocages environnement)
 
 ~~- [ ] **SecretService integration test**~~ ✅ Tests écrits (`src-tauri/tests/credentials_integration.rs`, SEC-CRED-INT-001 à 005). Environnement Podman fourni (`Containerfile.keyring-test` + `scripts/run-keyring-tests.sh`). Lancer avec `./scripts/run-keyring-tests.sh`.
-- [ ] **E2E tests** — `pty-roundtrip.spec.ts` + `tab-lifecycle.spec.ts` bloqués sur le wiring PTY SSH → screen-update → DOM.
+~~- [ ] **E2E tests**~~ ✅ Specs débloquées : sélecteurs BEM corrigés, attribut `data-screen-generation` pour la synchronisation, `InjectablePtyBackend` + commande `inject_pty_output` derrière le feature flag `e2e-testing` (ADR-0015). `TEST-PTY-RT-002` reécrit pour utiliser `inject_pty_output` au lieu du clavier. Lancer avec `cargo build --features e2e-testing && pnpm wdio`.
 
 ---
 

@@ -87,6 +87,11 @@ pub struct SessionRegistry {
     app: AppHandle,
     /// Weak self-reference so read tasks can call back into the registry.
     self_ref: std::sync::Weak<SessionRegistry>,
+    /// Injectable output registry — present only in e2e-testing builds.
+    /// Stores the mpsc senders keyed by PaneId so that `inject_pty_output`
+    /// can push synthetic bytes into the VT pipeline.
+    #[cfg(feature = "e2e-testing")]
+    injectable_registry: std::sync::Arc<crate::platform::pty_injectable::InjectableRegistry>,
 }
 
 struct RegistryInner {
@@ -106,12 +111,20 @@ impl RegistryInner {
 }
 
 impl SessionRegistry {
-    pub fn new(pty_backend: Arc<dyn PtyBackend>, app: AppHandle) -> Arc<Self> {
+    pub fn new(
+        pty_backend: Arc<dyn PtyBackend>,
+        app: AppHandle,
+        #[cfg(feature = "e2e-testing")] injectable_registry: std::sync::Arc<
+            crate::platform::pty_injectable::InjectableRegistry,
+        >,
+    ) -> Arc<Self> {
         Arc::new_cyclic(|weak| Self {
             inner: RwLock::new(RegistryInner::new()),
             pty_backend,
             app,
             self_ref: weak.clone(),
+            #[cfg(feature = "e2e-testing")]
+            injectable_registry,
         })
     }
 
@@ -183,6 +196,13 @@ impl SessionRegistry {
         // To avoid coupling the registry to the Linux type, we use a helper trait.
         let reader_handle = get_reader_handle(&*pty_box);
 
+        // Extract the injectable sender BEFORE pty_box is moved into pane.pty_session.
+        // This must happen here so the PaneId is already known (it was generated above)
+        // and before the Box<dyn PtySession> value is consumed by the assignment below.
+        // See ADR-0015-implementation-notes.md §5.3.
+        #[cfg(feature = "e2e-testing")]
+        let injectable_tx = pty_box.injectable_sender();
+
         if let Some(reader) = reader_handle
             && let Some(registry) = self.self_ref.upgrade()
         {
@@ -197,6 +217,13 @@ impl SessionRegistry {
         }
 
         pane.pty_session = Some(pty_box);
+
+        // Register the injectable sender under the real PaneId, now that both
+        // the PaneId and the sender are available.
+        #[cfg(feature = "e2e-testing")]
+        if let Some(tx) = injectable_tx {
+            self.injectable_registry.register(pane_id.clone(), tx);
+        }
 
         let pane_state = pane.to_state();
 
@@ -343,6 +370,12 @@ impl SessionRegistry {
         new_pane.lifecycle = PaneLifecycleState::Running;
 
         let reader_handle = get_reader_handle(&*pty_box);
+
+        // Extract the injectable sender BEFORE pty_box is moved into new_pane.pty_session.
+        // See ADR-0015-implementation-notes.md §5.3 (split_pane variant).
+        #[cfg(feature = "e2e-testing")]
+        let injectable_tx = pty_box.injectable_sender();
+
         if let Some(reader) = reader_handle
             && let Some(registry) = self.self_ref.upgrade()
         {
@@ -356,6 +389,12 @@ impl SessionRegistry {
             new_pane.pty_task = Some(task);
         }
         new_pane.pty_session = Some(pty_box);
+
+        // Register the injectable sender under the real new_pane_id.
+        #[cfg(feature = "e2e-testing")]
+        if let Some(tx) = injectable_tx {
+            self.injectable_registry.register(new_pane_id.clone(), tx);
+        }
 
         let new_pane_state = new_pane.to_state();
         entry.panes.insert(new_pane_id.clone(), new_pane);
@@ -399,6 +438,13 @@ impl SessionRegistry {
         let entry = inner.tabs.get_mut(&tab_id).unwrap();
         // Dropping the PaneSession also drops the PtyTaskHandle, which aborts the read task.
         entry.panes.remove(&pane_id);
+
+        // Deregister the injectable sender so its drop triggers EOF in the read task.
+        // Must happen after panes.remove() (which drops PaneSession and PtyTaskHandle)
+        // so the read task is not racing against a live sender reference.
+        // See ADR-0015-implementation-notes.md §5.4 and §10.3.
+        #[cfg(feature = "e2e-testing")]
+        self.injectable_registry.remove(&pane_id);
 
         if entry.panes.is_empty() {
             // Last pane — remove the tab.

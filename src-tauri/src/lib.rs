@@ -55,11 +55,38 @@ pub fn run() {
         .setup(|app| {
             // `SessionRegistry` needs an `AppHandle` to emit events from PTY read tasks.
             // We create it inside `setup` where the `AppHandle` is available.
-            let pty_backend = Arc::from(platform::create_pty_backend());
-            let registry = SessionRegistry::new(pty_backend, app.handle().clone());
+
+            // In e2e-testing builds: use the injectable backend and manage the registry
+            // as Tauri state so `inject_pty_output` can push bytes into pane channels.
+            // In production builds: use the real platform PTY backend.
+            #[cfg(not(feature = "e2e-testing"))]
+            let pty_backend: Arc<dyn platform::PtyBackend> =
+                Arc::from(platform::create_pty_backend());
+
+            #[cfg(feature = "e2e-testing")]
+            let injectable_registry = Arc::new(platform::pty_injectable::InjectableRegistry::new());
+
+            #[cfg(feature = "e2e-testing")]
+            let pty_backend: Arc<dyn platform::PtyBackend> = Arc::new(
+                platform::create_injectable_pty_backend(injectable_registry.clone()),
+            );
+
+            #[cfg(feature = "e2e-testing")]
+            app.manage(injectable_registry.clone());
+
+            let registry = SessionRegistry::new(
+                pty_backend,
+                app.handle().clone(),
+                #[cfg(feature = "e2e-testing")]
+                injectable_registry,
+            );
             app.manage(registry);
             Ok(())
         })
+        // E2E testing commands — only compiled and registered when e2e-testing feature is active.
+        // `generate_handler![]` supports `#[cfg]` on individual entries in Tauri 2.
+        // If that ever stops working, use the duplicate-handler approach from
+        // ADR-0015-implementation-notes.md §7.2.
         .invoke_handler(tauri::generate_handler![
             // Session commands
             commands::session_cmds::create_tab,
@@ -101,6 +128,9 @@ pub fn run() {
             commands::system_cmds::get_clipboard,
             commands::system_cmds::open_url,
             commands::system_cmds::mark_context_menu_used,
+            // E2E testing commands (compiled only with --features e2e-testing)
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_pty_output,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -200,7 +200,10 @@ mod tests {
         assert_eq!(prefs.terminal.scrollback_lines, 10_000);
         assert!(!prefs.terminal.allow_osc52_write);
         assert_eq!(prefs.terminal.bell_type, BellType::Visual);
-        assert!(prefs.terminal.confirm_multiline_paste, "FS-CLIP-009: default must be true");
+        assert!(
+            prefs.terminal.confirm_multiline_paste,
+            "FS-CLIP-009: default must be true"
+        );
     }
 
     #[test]

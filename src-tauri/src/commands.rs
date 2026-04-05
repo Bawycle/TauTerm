@@ -13,6 +13,9 @@ pub mod ssh_cmds;
 pub mod ssh_prompt_cmds;
 pub mod system_cmds;
 
+#[cfg(feature = "e2e-testing")]
+pub mod testing;
+
 pub use connection_cmds::*;
 pub use input_cmds::*;
 pub use preferences_cmds::*;
@@ -20,3 +23,6 @@ pub use session_cmds::*;
 pub use ssh_cmds::*;
 pub use ssh_prompt_cmds::*;
 pub use system_cmds::*;
+
+#[cfg(feature = "e2e-testing")]
+pub use testing::*;

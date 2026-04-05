@@ -145,6 +145,8 @@
   let pasteConfirmOpen = $state(false);
   let pasteConfirmText = $state('');
 
+  let screenGeneration = $state(0);
+
   let unlistenScreenUpdate: (() => void) | null = null;
   let unlistenScrollPos: (() => void) | null = null;
   let unlistenModeState: (() => void) | null = null;
@@ -234,6 +236,7 @@
       }
       // Trigger Svelte reactivity on the grid array
       grid = grid.slice();
+      screenGeneration++;
     });
 
     unlistenScrollPos = await listen<ScrollPositionChangedEvent>(
@@ -749,6 +752,7 @@
   class="terminal-pane"
   class:terminal-pane--active={active}
   data-pane-id={paneId}
+  data-active={active ? 'true' : undefined}
   role="region"
   aria-label={m.terminal_pane_aria_label()}
 >
@@ -768,6 +772,7 @@
     <div
       bind:this={viewportEl}
       class="terminal-pane__viewport terminal-grid"
+      data-screen-generation={screenGeneration}
       tabindex={active ? 0 : -1}
       role="textbox"
       aria-multiline="true"

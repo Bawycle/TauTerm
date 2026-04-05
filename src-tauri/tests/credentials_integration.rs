@@ -6,8 +6,8 @@
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use tau_term_lib::platform::credentials_linux::LinuxCredentialStore;
     use tau_term_lib::platform::CredentialStore;
+    use tau_term_lib::platform::credentials_linux::LinuxCredentialStore;
 
     // -----------------------------------------------------------------------
     // RAII cleanup guard — guarantees keyring entries are removed even on
@@ -61,11 +61,7 @@ mod linux {
         store.delete(KEY).expect("delete() must succeed");
 
         let after_delete = store.get(KEY).expect("get() after delete must succeed");
-        assert_eq!(
-            after_delete,
-            None,
-            "get() after delete must return None"
-        );
+        assert_eq!(after_delete, None, "get() after delete must return None");
     }
 
     // -----------------------------------------------------------------------

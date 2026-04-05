@@ -17,6 +17,12 @@ pub mod notifications_linux;
 pub mod pty_linux;
 pub mod validation;
 
+#[cfg(feature = "e2e-testing")]
+pub mod pty_injectable;
+
+#[cfg(feature = "e2e-testing")]
+pub use pty_injectable::{InjectablePtyBackend, InjectableRegistry, create_injectable_pty_backend};
+
 // Future platform stubs (currently unreachable in v1).
 pub mod clipboard_macos;
 pub mod credentials_macos;
@@ -72,6 +78,16 @@ pub trait PtySession: Send + Sync {
     fn reader_handle(
         &self,
     ) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Read + Send>>>> {
+        None
+    }
+
+    /// Return the injectable sender for this session, if this is an
+    /// `InjectablePtySession`.
+    ///
+    /// The default returns `None`. Only `InjectablePtySession` returns `Some`.
+    /// This method only exists when the `e2e-testing` feature is active.
+    #[cfg(feature = "e2e-testing")]
+    fn injectable_sender(&self) -> Option<tokio::sync::mpsc::UnboundedSender<Vec<u8>>> {
         None
     }
 }

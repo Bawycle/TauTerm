@@ -646,6 +646,90 @@ Author role: security-expert
 
 ---
 
+### 2.8 UI Component Security (Sprint session h)
+
+New components introduced in sprint 2026-04-05 session h expose the following additional attack surfaces. Scenarios below are numbered SEC-UI-001 through SEC-UI-006.
+
+#### SEC-UI-001
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-UI-001 |
+| **STRIDE** | Spoofing / Tampering |
+| **FS requirement(s)** | FS-SSH-030, FS-SEC-003 |
+| **Threat** | A user enters `<script>alert(1)</script>` as a hostname in the ConnectionManager edit form. If the hostname is rendered via `{@html}` anywhere (connection list display, status bar, SSH badge), it executes as JavaScript in the WebView. |
+| **Test method** | Unit/component test: save a connection with `host = '<script>alert(1)</script>'`. Render the connection list. Assert that the hostname is rendered as escaped text, not executed script. Verify no `{@html}` is used in ConnectionManager or StatusBar for the host field. |
+| **Expected mitigation** | Svelte's template interpolation (`{host}`) escapes HTML by default. No `{@html}` used for user-supplied connection fields. The static security scanner (SEC-CSP-003 pattern) should catch any `{@html}` introduction. |
+| **Priority** | High |
+| **Environment** | Component test; no network. |
+
+#### SEC-UI-002
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-UI-002 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-CRED-001, FS-CRED-004 |
+| **Threat** | The ConnectionManager stores the password entered in the edit form in Svelte component state (a `$state` variable). If the component is inspected via browser devtools or a memory dump, the password is readable. Additionally, if the password value is passed to a `console.log()` or Tauri IPC debug trace, it is disclosed. |
+| **Test method** | Code review: verify that the password field value in ConnectionManager is NOT stored in a persistent rune (`$state` at module level). It should be cleared after `provide_credentials` IPC call. Verify no `console.log` of the password value. Verify the `provide_credentials` IPC payload does not appear in any debug event log. |
+| **Expected mitigation** | Password captured in a local `$state` variable scoped to the form lifecycle. Cleared immediately after IPC call to `provide_credentials`. No logging at any level. |
+| **Priority** | Critical |
+| **Environment** | Code review + component test. |
+
+#### SEC-UI-003
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-UI-003 |
+| **STRIDE** | Denial of Service |
+| **FS requirement(s)** | FS-SEARCH-003 |
+| **Threat** | The SearchOverlay passes user input directly to the `search_pane` IPC as a regex string (when regex mode is enabled). A crafted ReDoS pattern (e.g., `(a+)+$`) causes the Rust regex engine to consume excessive CPU, blocking the backend command handler for seconds. |
+| **Test method** | Unit test (Rust): call `VtProcessor::search()` with a ReDoS pattern on a 1000-line buffer. Assert completion within 200ms. Verify that the `regex` crate (used in `vt/search.rs`) is configured with a time/complexity limit or uses a linear-time engine. Frontend: verify that the `regex` flag in `SearchQuery` is only sent when the user explicitly enables regex mode toggle. |
+| **Expected mitigation** | The `regex` crate in Rust uses a linear-time NFA engine and does not support catastrophic backtracking. No additional throttling required, but the regex flag should default to `false` and require explicit user opt-in. Frontend debounce (≥150ms) on keystrokes additionally limits query frequency. |
+| **Priority** | Medium |
+| **Environment** | Rust unit test; no network. |
+
+#### SEC-UI-004
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-UI-004 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-PREF-001, FS-SEC-003 |
+| **Threat** | The PreferencesPanel sends font family and font size values directly to `update_preferences` IPC. A crafted font family string (`'; DROP TABLE users; --`) or an extreme font size (e.g., 999999999) is persisted and applied, potentially breaking the UI rendering or causing memory issues. |
+| **Test method** | Component test: enter a font size of `0`, `-1`, `999999`, and a font family containing `<script>`. Assert that the frontend validates and clamps values before emitting the update event. Assert font family is validated to only contain safe characters (no HTML, no control chars). Also test that the Rust backend validates on receipt (FS-SEC-003). |
+| **Expected mitigation** | Frontend clamps font size to [8, 32] per UXD §7.6.3. Font family sanitized to alphanumeric plus common safe chars. Backend schema validation (FS-SEC-003) provides second line of defense. |
+| **Priority** | Medium |
+| **Environment** | Component test; no network. |
+
+#### SEC-UI-005
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-UI-005 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-CLIP, FS-A11Y-006 |
+| **Threat** | The ContextMenu has a "Paste" item. If the component reads clipboard content on menu open (to display a preview or to pre-check content), sensitive clipboard data may be exposed in DOM, accessible to any JavaScript executing in the WebView. |
+| **Test method** | Code review + component test: verify that the ContextMenu does NOT call `get_clipboard` or read clipboard content until the user explicitly clicks Paste. The Paste menu item is always enabled regardless of clipboard content (no clipboard read on open). |
+| **Expected mitigation** | Clipboard is only read via `get_clipboard` IPC at Paste action time, not at menu render time. The menu item does not display clipboard content. |
+| **Priority** | High |
+| **Environment** | Component test; code review. |
+
+#### SEC-UI-006
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-UI-006 |
+| **STRIDE** | Tampering / Spoofing |
+| **FS requirement(s)** | FS-PTY-005 |
+| **Threat** | The ProcessTerminatedPane renders the exit code from a `session-state-changed` IPC event payload. If the exit code value is a string or object (due to a type coercion bug or malicious event crafting), interpolating it as `{exitCode}` could produce unexpected rendered content. Extreme values (e.g., `exitCode = 2^53`) may cause display anomalies. |
+| **Test method** | Component test: mount `ProcessTerminatedPane` with `exitCode = NaN`, `exitCode = Infinity`, `exitCode = -1`, `exitCode = 2147483647`. Assert that the component renders gracefully (no exception, no `{@html}`, exit code displayed as a bounded number string). Verify TypeScript type safety ensures `exitCode` is always `number`. |
+| **Expected mitigation** | TypeScript typing enforces `exitCode: number`. The component renders `{exitCode}` (text interpolation, not `{@html}`). Extreme values are displayed as-is (they are unlikely in practice but not harmful when rendered as text). |
+| **Priority** | Low |
+| **Environment** | Component test. |
+
+---
+
 ## 3. Penetration Test Checklist
 
 This checklist consolidates the manual and integration tests that cannot be fully automated. It must be executed before each major release (MINOR or MAJOR version).

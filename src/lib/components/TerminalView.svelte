@@ -28,6 +28,9 @@
   import TabBar from './TabBar.svelte';
   import StatusBar from './StatusBar.svelte';
   import TerminalPane from './TerminalPane.svelte';
+  import SearchOverlay from './SearchOverlay.svelte';
+  import PreferencesPanel from './PreferencesPanel.svelte';
+  import type { Preferences, PreferencesPatch, SearchQuery, SearchMatch } from '$lib/ipc/types';
   import type {
     SessionState,
     SessionStateChangedEvent,
@@ -42,6 +45,15 @@
 
   let tabs = $state<TabState[]>([]);
   let activeTabId = $state<string>('');
+
+  // SearchOverlay state
+  let searchOpen = $state(false);
+  let searchMatches = $state<SearchMatch[]>([]);
+  let searchCurrentIdx = $state(0);
+
+  // PreferencesPanel state
+  let prefsOpen = $state(false);
+  let preferences = $state<Preferences | undefined>(undefined);
 
   let unlistenSessionState: (() => void) | null = null;
 
@@ -79,6 +91,13 @@
       activeTabId = state.activeTabId;
     } catch {
       // Backend not ready — will be populated by first session-state-changed event
+    }
+
+    // Fetch preferences for PreferencesPanel
+    try {
+      preferences = await invoke('get_preferences');
+    } catch {
+      // Non-fatal — panel will use defaults
     }
 
     // Listen for topology changes
@@ -178,7 +197,61 @@
           event.preventDefault();
           if (activeTabId) handleTabClose(activeTabId);
           break;
+        case 'F':
+        case 'f':
+          event.preventDefault();
+          searchOpen = true;
+          break;
       }
+    }
+    // Ctrl+, — open preferences (FS-KBD-003)
+    if (event.ctrlKey && !event.shiftKey && event.key === ',') {
+      event.preventDefault();
+      prefsOpen = true;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Search
+  // -------------------------------------------------------------------------
+
+  async function handleSearch(query: SearchQuery) {
+    const activePaneId = activeTab?.activePaneId;
+    if (!activePaneId) return;
+    try {
+      searchMatches = await invoke<SearchMatch[]>('search_pane', { paneId: activePaneId, query });
+      searchCurrentIdx = searchMatches.length > 0 ? 1 : 0;
+    } catch {
+      searchMatches = [];
+      searchCurrentIdx = 0;
+    }
+  }
+
+  function handleSearchNext() {
+    if (searchMatches.length === 0) return;
+    searchCurrentIdx = (searchCurrentIdx % searchMatches.length) + 1;
+  }
+
+  function handleSearchPrev() {
+    if (searchMatches.length === 0) return;
+    searchCurrentIdx = searchCurrentIdx <= 1 ? searchMatches.length : searchCurrentIdx - 1;
+  }
+
+  function handleSearchClose() {
+    searchOpen = false;
+    searchMatches = [];
+    searchCurrentIdx = 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // Preferences
+  // -------------------------------------------------------------------------
+
+  async function handlePreferencesUpdate(patch: PreferencesPatch) {
+    try {
+      preferences = await invoke<Preferences>('update_preferences', { patch });
+    } catch {
+      // Non-fatal
     }
   }
 </script>
@@ -228,12 +301,36 @@
 
   <!-- Status bar: reflects active pane state -->
   <StatusBar activePaneState={activePaneState} />
+
+  <!-- SearchOverlay: positioned relative to pane area (FS-SEARCH-007, UXD §7.4) -->
+  {#if activePanes.length > 0}
+    <div class="terminal-view__search-container">
+      <SearchOverlay
+        bind:open={searchOpen}
+        matchCount={searchMatches.length}
+        currentMatch={searchCurrentIdx}
+        onsearch={handleSearch}
+        onnext={handleSearchNext}
+        onprev={handleSearchPrev}
+        onclose={handleSearchClose}
+      />
+    </div>
+  {/if}
+
+  <!-- PreferencesPanel: modal dialog (FS-PREF-005, UXD §7.6) -->
+  <PreferencesPanel
+    bind:open={prefsOpen}
+    {preferences}
+    onclose={() => { prefsOpen = false; }}
+    onupdate={handlePreferencesUpdate}
+  />
 </div>
 
 <style>
   .terminal-view {
     display: flex;
     flex-direction: column;
+    position: relative;
     width: 100%;
     height: 100%;
     overflow: hidden;
@@ -252,6 +349,21 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+  }
+
+  .terminal-view__search-container {
+    position: absolute;
+    top: 44px; /* below tab bar */
+    right: 0;
+    left: 0;
+    bottom: 28px; /* above status bar */
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  /* Allow SearchOverlay itself to receive pointer events */
+  :global(.terminal-view__search-container > *) {
+    pointer-events: auto;
   }
 
   .terminal-view__empty {

@@ -156,7 +156,7 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-05 (session g)
+Last updated: 2026-04-05 (session h)
 
 ### Done
 
@@ -169,7 +169,7 @@ Last updated: 2026-04-05 (session g)
 | **IPC types (TypeScript)** | ✅ Done | `src/lib/ipc/types.ts` — full contract mirroring Rust structs; 18 inconsistencies found and corrected |
 | **Svelte component stubs** | ✅ Superseded | Initial stubs replaced by full implementations (see session f) |
 | **Rust tests (nextest)** | ✅ Done | 220 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation, LinuxPtySession + PTY integration harness |
-| **Frontend tests (vitest)** | ✅ Done | 238 tests pass — ipc/types, locale, keyboard, selection, split-tree, theming/validate, color, screen, input-security, TabBar logic, StatusBar logic |
+| **Frontend tests (vitest)** | ✅ Done | 238 tests pass (initial) — ipc/types, locale, keyboard, selection, split-tree, theming/validate, color, screen, input-security, TabBar logic, StatusBar logic; grown to 402 by sessions g+h |
 | **Security hardening (P0/P1)** | ✅ Done | CSP configured in `tauri.conf.json`; `private_key_path` redacted in Debug; `send_input` 64 KiB size limit; path traversal validation for SSH identity file |
 | **PreferencesStore::load_or_default()** | ✅ Done | Fallback to `Preferences::default()` on any disk/parse error — Language enum stays strict at serde boundary |
 | **Path traversal validation** | ✅ Done | `platform::validation`: `validate_ssh_identity_path()` (wired into `open_ssh_connection`) + `validate_shell_path()` (wired into `create_tab()` via `CreateTabConfig.shell`) |
@@ -230,6 +230,24 @@ Last updated: 2026-04-05 (session g)
 | **Base UI tests (vitest)** | ✅ Done | `src/lib/ui/__tests__/`: 7 fichiers, 107 nouveaux tests passants (345 total, 0 régressions); `security-static.test.ts` (UIBC-SEC-014/006 statiques); 16 scénarios E2E-deferred (Bits UI portails, interactions pointer/focus); `vitest.config.ts` : `resolve.conditions: ['browser']` ajouté pour Svelte SSR fix |
 | **Test report** | ✅ Done | `docs/test-reports/ui-base-components-2026-04-05.md` |
 | **Bits UI API divergences** | ✅ Resolved | `Select.Value` absent en v2.17.0 → trigger label calculé via `$derived`; `Select.Trigger` utilise le pattern `{#snippet child({ props })}` (WithChild); `Tooltip` nécessite `Tooltip.Provider` en wrapper de test; `Dialog.Root` : `bind:open` via `$bindable()` |
+
+### Done (added 2026-04-05 session h)
+
+| Area | Status | Details |
+|---|---|---|
+| **ProcessTerminatedPane** | ✅ Done | `src/lib/components/ProcessTerminatedPane.svelte` — exit banner with exit code + optional signal name; success/error icon variants; `onrestart` + `onclose` callbacks; `role="status"` + `aria-live="polite"`; 12 tests pass |
+| **ContextMenu** | ✅ Done | `src/lib/components/ContextMenu.svelte` — `terminal` variant (Bits UI `ContextMenu`) + `tab` variant (Bits UI `DropdownMenu`); copy/paste/search/split/close items; 8 tests (5 pass + 3 E2E-deferred for portal ARIA) |
+| **KeyboardShortcutRecorder** | ✅ Done | `src/lib/components/KeyboardShortcutRecorder.svelte` — inline recorder with states inactive/recording/captured/conflict; conflict detection against `existingShortcuts`; Meta/Super excluded; `prefers-reduced-motion` pulse animation; 7 tests pass (required `flushSync` for Svelte 5 reactivity) |
+| **PreferencesPanel** | ✅ Done | `src/lib/components/PreferencesPanel.svelte` — Bits UI `Dialog`-based modal; 4 sections (Keyboard, Appearance, Terminal Behavior, Connections); 8 default shortcuts via `KeyboardShortcutRecorder`; font/language/cursor/scrollback/bell controls; Language enum enforced at TypeScript level; 11 tests (5 pass + 6 E2E-deferred for Dialog portal) |
+| **ConnectionManager** | ✅ Done | `src/lib/components/ConnectionManager.svelte` — standalone + inline modes; SSH connection list with group collapse; CRUD edit form (host, port, username, identity/password auth); `type="password"` masking; password cleared on save; action buttons with `aria-label`; 11 tests pass |
+| **SearchOverlay** | ✅ Done | `src/lib/components/SearchOverlay.svelte` — absolute overlay on pane; 150ms debounce; Enter/Shift+Enter/Escape keyboard nav; match count display; `role="search"` + `aria-live`; 44px hit targets; real `search_pane` IPC wired; 17 tests pass |
+| **TerminalPane integration** | ✅ Done | `TerminalPane.svelte` updated: `ContextMenu` wraps viewport; `ProcessTerminatedPane` conditionally rendered; `hasSelection` state tracked; context menu copy/paste handlers via `copy_to_clipboard`/`get_clipboard` IPC |
+| **TerminalView integration** | ✅ Done | `TerminalView.svelte` updated: `SearchOverlay` + `PreferencesPanel` wired; `Ctrl+Shift+F` → search; `Ctrl+,` → preferences; `get_preferences` on mount; search IPC calls (`search_pane`) |
+| **i18n keys (session h)** | ✅ Done | ~45 new keys added to `en.json` + `fr.json` covering context menu actions, preferences sections/fields, keyboard shortcut names, search UI strings, connection form labels |
+| **Test protocol (session h)** | ✅ Done | `docs/test-protocols/ui-process-terminated-context-preferences-connections-search.md` — ~120 scenarios (functional, accessibility, i18n, security) |
+| **Security protocol update** | ✅ Done | `docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md` §2.8 — 6 new UI component scenarios (SEC-UI-001..006) |
+| **Frontend tests (vitest)** | ✅ Done | 57 new tests across 5 files; full suite: **402 passed, 25 todo, 0 failing** (was 345+16); `flushSync` pattern established for Svelte 5 post-event DOM assertions; `Object.defineProperty` pattern for JSDOM clipboard mock |
+| **Test report** | ✅ Done | `docs/test-reports/ui-process-terminated-context-preferences-connections-search-2026-04-05.md` |
 
 ### Not Yet Implemented (stubs only)
 

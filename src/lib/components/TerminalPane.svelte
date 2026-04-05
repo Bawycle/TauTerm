@@ -47,13 +47,38 @@
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
   import { SelectionManager } from '$lib/terminal/selection.js';
   import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
+  import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
+  import ContextMenu from './ContextMenu.svelte';
 
   interface Props {
     paneId: PaneId;
     active: boolean;
+    /** Set to true when the PTY process has exited (from session-state-changed event). */
+    terminated?: boolean;
+    exitCode?: number;
+    signalName?: string;
+    /** Whether there is more than one pane (controls Close Pane visibility). */
+    canClosePane?: boolean;
+    onrestart?: () => void;
+    onclosepane?: () => void;
+    onsearch?: () => void;
+    onsplitH?: () => void;
+    onsplitV?: () => void;
   }
 
-  const { paneId, active }: Props = $props();
+  const {
+    paneId,
+    active,
+    terminated = false,
+    exitCode = 0,
+    signalName,
+    canClosePane = true,
+    onrestart,
+    onclosepane,
+    onsearch,
+    onsplitH,
+    onsplitV,
+  }: Props = $props();
 
   // -------------------------------------------------------------------------
   // Reactive state
@@ -78,6 +103,10 @@
   let scrollbarFadeTimer: ReturnType<typeof setTimeout> | null = null;
 
   let viewportEl: HTMLDivElement | undefined = $state();
+
+  // Context menu state
+  let contextMenuOpen = $state(false);
+  let hasSelection = $state(false);
 
   let unlistenScreenUpdate: (() => void) | null = null;
   let unlistenScrollPos: (() => void) | null = null;
@@ -321,10 +350,31 @@
     selectionRange = selection.getSelection();
     if (selectionRange) {
       const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
-      if (text.length > 0) {
+      hasSelection = text.length > 0;
+      if (hasSelection) {
         try { await invoke('copy_to_clipboard', { text }); } catch { /* non-fatal */ }
       }
+    } else {
+      hasSelection = false;
     }
+  }
+
+  async function handleContextMenuCopy() {
+    if (!selectionRange) return;
+    const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
+    if (text) {
+      try { await invoke('copy_to_clipboard', { text }); } catch { /* non-fatal */ }
+    }
+  }
+
+  async function handleContextMenuPaste() {
+    try {
+      const text: string = await invoke('get_clipboard');
+      if (text) {
+        const data = Array.from(new TextEncoder().encode(text));
+        await invoke('send_input', { paneId, data });
+      }
+    } catch { /* non-fatal */ }
   }
 
   // -------------------------------------------------------------------------
@@ -365,6 +415,18 @@
   role="region"
   aria-label="Terminal pane"
 >
+  <!-- ContextMenu wraps the viewport so right-click opens it -->
+  <ContextMenu
+    variant="terminal"
+    {hasSelection}
+    {canClosePane}
+    oncopy={handleContextMenuCopy}
+    onpaste={handleContextMenuPaste}
+    onsearch={onsearch}
+    onsplitH={onsplitH}
+    onsplitV={onsplitV}
+    onclosepane={onclosepane}
+  >
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     bind:this={viewportEl}
@@ -422,6 +484,17 @@
         style:top="{scrollbarThumbTopPct}%"
       ></div>
     </div>
+  {/if}
+  </ContextMenu>
+
+  <!-- ProcessTerminatedPane banner — shown when PTY process exits (FS-PTY-005/006) -->
+  {#if terminated}
+    <ProcessTerminatedPane
+      {exitCode}
+      {signalName}
+      onrestart={onrestart}
+      onclose={onclosepane}
+    />
   {/if}
 </div>
 

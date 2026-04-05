@@ -11,9 +11,15 @@
     onTabClose  — callback when a tab close button is clicked
     onNewTab    — callback when the new-tab button is clicked
 
+  Features:
+    - Inline rename: double-click or F2 on focused tab (FS-TAB-006)
+    - Right-click context menu → Rename (FS-TAB-006, UXD §7.8.2)
+    - Drag-and-drop reorder via HTML5 DnD (FS-TAB-005)
+
   Libraries:
     - lucide-svelte: X, Plus, Bell, CheckCircle, XCircle, Network icons
     - bits-ui Tooltip: new-tab tooltip with 300ms delay (UXD §7.1.5, §7.10)
+    - ContextMenu: tab context menu
 
   Security:
     - Tab titles via Svelte text interpolation only — no {@html} (TUITC-SEC-010)
@@ -21,8 +27,10 @@
 <script lang="ts">
   import { Plus, X, Bell, CheckCircle, XCircle, Network } from 'lucide-svelte';
   import { Tooltip } from 'bits-ui';
+  import { invoke } from '@tauri-apps/api/core';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
+  import ContextMenu from './ContextMenu.svelte';
 
   interface Props {
     tabs: TabState[];
@@ -36,6 +44,166 @@
 
   // Sort tabs by order field
   const sortedTabs = $derived([...tabs].sort((a, b) => a.order - b.order));
+
+  // ── Inline rename state (FS-TAB-006) ────────────────────────────────────────
+  // ID of the tab currently being renamed, or null.
+  let renamingTabId = $state<string | null>(null);
+  // Current value of the rename input.
+  let renameValue = $state('');
+  // Reference to the input element so we can focus it programmatically.
+  let renameInputEl = $state<HTMLInputElement | null>(null);
+
+  /** Enter rename mode for the given tab. */
+  function startRename(tabId: string, currentTitle: string) {
+    renamingTabId = tabId;
+    renameValue = currentTitle;
+    // Focus is applied via the bind:this + $effect below.
+  }
+
+  /** Confirm rename: send IPC, then exit rename mode. */
+  async function confirmRename(tabId: string) {
+    if (renamingTabId !== tabId) return;
+    // Empty value → clear label and revert to OSC/process title.
+    const label: string | null = renameValue.trim() === '' ? null : renameValue.trim();
+    try {
+      await invoke('rename_tab', { tabId, label });
+    } catch {
+      // IPC errors are non-fatal for the UI; the title will stay unchanged on next state update.
+    }
+    renamingTabId = null;
+    renameValue = '';
+  }
+
+  /** Cancel rename without saving. */
+  function cancelRename() {
+    renamingTabId = null;
+    renameValue = '';
+  }
+
+  // Focus the input whenever rename mode activates.
+  $effect(() => {
+    if (renamingTabId !== null && renameInputEl !== null) {
+      renameInputEl.focus();
+      renameInputEl.select();
+    }
+  });
+
+  // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────
+  // ID of the tab currently being dragged.
+  let dragTabId = $state<string | null>(null);
+  // Index (in sortedTabs) where the drop indicator is shown — between tabs.
+  // 0 = before first tab, N = after last tab.
+  let dropIndicatorIndex = $state<number | null>(null);
+
+  function handleDragStart(event: DragEvent, tabId: string) {
+    dragTabId = tabId;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      // Store the tab ID so we can identify the source on drop.
+      event.dataTransfer.setData('text/plain', tabId);
+    }
+  }
+
+  function handleDragOver(event: DragEvent, index: number) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dropIndicatorIndex = index;
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    // Only clear the indicator when leaving the tab bar entirely.
+    const relatedTarget = event.relatedTarget as Node | null;
+    const bar = (event.currentTarget as HTMLElement).closest('.tab-bar__tabs');
+    if (bar && relatedTarget && bar.contains(relatedTarget)) return;
+    dropIndicatorIndex = null;
+  }
+
+  async function handleDrop(event: DragEvent, targetIndex: number) {
+    event.preventDefault();
+    const sourceId = event.dataTransfer?.getData('text/plain') ?? dragTabId;
+    if (!sourceId) {
+      resetDrag();
+      return;
+    }
+    const sorted = sortedTabs;
+    const sourceIdx = sorted.findIndex((t) => t.id === sourceId);
+    if (sourceIdx === -1 || sourceIdx === targetIndex || sourceIdx + 1 === targetIndex) {
+      resetDrag();
+      return;
+    }
+
+    // Compute new_order for the Rust backend.
+    // The tab will be inserted at position targetIndex in the sorted list
+    // (after removing the source). We derive the desired order value from
+    // neighbours in the remaining list.
+    const remaining = sorted.filter((t) => t.id !== sourceId);
+    let newOrder: number;
+    if (targetIndex === 0) {
+      // Drop before all tabs: use a value lower than the first remaining tab.
+      newOrder = remaining.length > 0 ? remaining[0].order - 1 : 0;
+    } else {
+      // Drop after index (targetIndex - 1) in the remaining list.
+      // Adjust targetIndex for the removed element.
+      const insertAfter = sourceIdx < targetIndex ? targetIndex - 1 : targetIndex;
+      const clampedInsert = Math.min(insertAfter, remaining.length - 1);
+      if (clampedInsert < remaining.length - 1) {
+        // Between two tabs: midpoint.
+        newOrder = Math.floor(
+          (remaining[clampedInsert].order + remaining[clampedInsert + 1].order) / 2,
+        );
+        // If midpoint equals one of the neighbours (integers too close), use neighbour + 1.
+        if (newOrder === remaining[clampedInsert].order) {
+          newOrder = remaining[clampedInsert].order + 1;
+        }
+      } else {
+        // After last remaining tab.
+        newOrder = remaining[clampedInsert].order + 1;
+      }
+    }
+
+    try {
+      await invoke('reorder_tab', { tabId: sourceId, newOrder });
+    } catch {
+      // Non-fatal; the backend is the source of truth.
+    }
+    resetDrag();
+  }
+
+  function handleDragEnd() {
+    resetDrag();
+  }
+
+  function resetDrag() {
+    dragTabId = null;
+    dropIndicatorIndex = null;
+  }
+
+  // ── Tab context menu state (UXD §7.8.2) ─────────────────────────────────────
+  // ID of the tab whose context menu is open, or null.
+  let contextMenuTabId = $state<string | null>(null);
+  // Position for the DropdownMenu content — used as a CSS anchor override.
+  // Bits UI DropdownMenu doesn't natively support anchor-to-pointer positioning,
+  // so we place an absolutely-positioned trigger at the pointer location.
+  let contextMenuX = $state(0);
+  let contextMenuY = $state(0);
+
+  function handleTabContextMenu(event: MouseEvent, tabId: string) {
+    event.preventDefault();
+    contextMenuX = event.clientX;
+    contextMenuY = event.clientY;
+    contextMenuTabId = tabId;
+  }
+
+  function handleContextMenuClose() {
+    contextMenuTabId = null;
+  }
+
+  function handleContextMenuRename(tabId: string, title: string) {
+    contextMenuTabId = null;
+    startRename(tabId, title);
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
   /** Extract the root (first leaf) pane state from a tab's layout tree. */
   function getRootPane(tab: TabState): PaneState | null {
@@ -61,8 +229,13 @@
   }
 
   /** Keyboard handler for tab items (TUITC-UX-111 to 113). */
-  function handleTabKeydown(event: KeyboardEvent, tabId: string) {
-    if (event.key === 'Enter' || event.key === ' ') {
+  function handleTabKeydown(event: KeyboardEvent, tabId: string, title: string) {
+    if (renamingTabId === tabId) return; // Let the input handle keys.
+
+    if (event.key === 'F2') {
+      event.preventDefault();
+      startRename(tabId, title);
+    } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       onTabClick(tabId);
     } else if (event.key === 'Delete') {
@@ -81,26 +254,57 @@
       nextEl?.focus();
     }
   }
+
+  /** Keyboard handler for the rename input field. */
+  function handleRenameKeydown(event: KeyboardEvent, tabId: string) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      confirmRename(tabId);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelRename();
+    }
+  }
 </script>
 
 <div class="tab-bar" role="tablist" aria-label={m.tab_bar_tabs_aria_label()}>
-  <div class="tab-bar__tabs">
-    {#each sortedTabs as tab (tab.id)}
+  <div class="tab-bar__tabs" ondragleave={handleDragLeave} role="presentation">
+    {#each sortedTabs as tab, index (tab.id)}
       {@const isActive = tab.id === activeTabId}
       {@const notification = tabNotification(tab)}
       {@const title = tabDisplayTitle(tab)}
+      {@const isRenaming = renamingTabId === tab.id}
+      {@const isDragging = dragTabId === tab.id}
+
+      <!-- Drop indicator: shown before this tab -->
+      {#if dropIndicatorIndex === index && dragTabId !== null}
+        <div class="tab-bar__drop-indicator" aria-hidden="true"></div>
+      {/if}
 
       <!-- Tab item — TUITC-UX-010 to 016 -->
       <!-- svelte-ignore a11y_interactive_supports_focus -->
       <div
         class="tab-bar__tab"
         class:tab-bar__tab--active={isActive}
+        class:tab-bar__tab--dragging={isDragging}
         role="tab"
         aria-selected={isActive}
         tabindex={isActive ? 0 : -1}
         data-tab-id={tab.id}
-        onclick={() => onTabClick(tab.id)}
-        onkeydown={(e) => handleTabKeydown(e, tab.id)}
+        draggable="true"
+        onclick={() => {
+          if (!isRenaming) onTabClick(tab.id);
+        }}
+        ondblclick={(e) => {
+          e.preventDefault();
+          startRename(tab.id, title);
+        }}
+        oncontextmenu={(e) => handleTabContextMenu(e, tab.id)}
+        onkeydown={(e) => handleTabKeydown(e, tab.id, title)}
+        ondragstart={(e) => handleDragStart(e, tab.id)}
+        ondragover={(e) => handleDragOver(e, index)}
+        ondrop={(e) => handleDrop(e, index)}
+        ondragend={handleDragEnd}
       >
         <!-- SSH badge (UXD §7.1.7) -->
         {#if isSSHTab(tab)}
@@ -109,11 +313,25 @@
           </span>
         {/if}
 
-        <!-- Title: text interpolation — NEVER {@html} (TUITC-SEC-010/011) -->
-        <span class="tab-bar__tab-title">{title}</span>
+        <!-- Inline rename input (UXD §7.1.6) -->
+        {#if isRenaming}
+          <input
+            bind:this={renameInputEl}
+            class="tab-bar__rename-input"
+            type="text"
+            aria-label={m.tab_bar_rename_input_aria_label()}
+            bind:value={renameValue}
+            onkeydown={(e) => handleRenameKeydown(e, tab.id)}
+            onblur={() => confirmRename(tab.id)}
+            onclick={(e) => e.stopPropagation()}
+          />
+        {:else}
+          <!-- Title: text interpolation — NEVER {@html} (TUITC-SEC-010/011) -->
+          <span class="tab-bar__tab-title">{title}</span>
+        {/if}
 
         <!-- Activity indicator (TUITC-UX-020 to 024) — only on inactive tabs -->
-        {#if !isActive && notification}
+        {#if !isActive && notification && !isRenaming}
           <span class="tab-bar__activity" aria-hidden="true">
             {#if notification.type === 'backgroundOutput'}
               <span class="tab-bar__activity-dot"></span>
@@ -130,28 +348,58 @@
         {/if}
 
         <!-- Close button — TUITC-UX-030 to 034 (44×44 hit area) -->
-        <button
-          class="tab-bar__close"
-          type="button"
-          aria-label={m.tab_bar_close_tab()}
-          tabindex={-1}
-          onclick={(e) => {
-            e.stopPropagation();
-            onTabClose(tab.id);
-          }}
-          onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
+        {#if !isRenaming}
+          <button
+            class="tab-bar__close"
+            type="button"
+            aria-label={m.tab_bar_close_tab()}
+            tabindex={-1}
+            onclick={(e) => {
               e.stopPropagation();
               onTabClose(tab.id);
-            }
-          }}
-        >
-          <X size={14} aria-hidden="true" />
-        </button>
+            }}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onTabClose(tab.id);
+              }
+            }}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        {/if}
       </div>
     {/each}
+
+    <!-- Drop indicator: shown after the last tab -->
+    {#if dropIndicatorIndex === sortedTabs.length && dragTabId !== null}
+      <div class="tab-bar__drop-indicator" aria-hidden="true"></div>
+    {/if}
   </div>
+
+  <!-- Tab context menu (UXD §7.8.2) — DropdownMenu anchored to pointer position.
+       Rendered once; controlled by contextMenuTabId. The ContextMenu trigger is
+       fixed-positioned at the right-click coordinates via anchorX/anchorY. -->
+  {#if contextMenuTabId !== null}
+    {@const ctxTab = sortedTabs.find((t) => t.id === contextMenuTabId)}
+    {#if ctxTab}
+      {@const ctxTitle = tabDisplayTitle(ctxTab)}
+      <ContextMenu
+        variant="tab"
+        open={true}
+        anchorX={contextMenuX}
+        anchorY={contextMenuY}
+        onclose={handleContextMenuClose}
+        onnewtab={onNewTab}
+        onrename={() => handleContextMenuRename(ctxTab.id, ctxTitle)}
+        onclosetab={() => {
+          handleContextMenuClose();
+          onTabClose(ctxTab.id);
+        }}
+      />
+    {/if}
+  {/if}
 
   <!-- New tab button with Bits UI Tooltip (TUITC-UX-040 to 043, UXD §7.1.5) -->
   <Tooltip.Root delayDuration={300}>
@@ -215,6 +463,18 @@
     flex-shrink: 0;
     outline: none;
     user-select: none;
+    position: relative;
+  }
+
+  .tab-bar__tab[draggable='true'] {
+    cursor: grab;
+  }
+
+  /* Dragging state: lifted appearance (UXD §8.4) */
+  .tab-bar__tab--dragging {
+    opacity: 0.9;
+    box-shadow: var(--shadow-raised);
+    cursor: grabbing;
   }
 
   .tab-bar__tab:hover:not(.tab-bar__tab--active) {
@@ -240,6 +500,24 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+
+  /* Inline rename input (UXD §7.1.6) */
+  .tab-bar__rename-input {
+    flex: 1;
+    min-width: 0;
+    height: calc(var(--size-tab-height) - var(--space-2) * 2);
+    padding: 0 var(--space-1);
+    background-color: var(--term-bg);
+    border: 1px solid var(--color-focus-ring);
+    border-radius: var(--radius-sm);
+    color: var(--color-tab-active-fg);
+    font-size: var(--font-size-ui-base);
+    font-family: var(--font-ui);
+    font-weight: var(--font-weight-normal);
+    outline: none;
+    cursor: text;
+    user-select: text;
   }
 
   /* SSH badge */
@@ -367,5 +645,15 @@
     box-shadow: var(--shadow-raised);
     z-index: var(--z-tooltip, 60);
     white-space: nowrap;
+  }
+
+  /* Drop insertion indicator (UXD §8.4) — 2px vertical bar in accent color */
+  .tab-bar__drop-indicator {
+    width: 2px;
+    height: 100%;
+    background-color: var(--color-accent);
+    flex-shrink: 0;
+    align-self: stretch;
+    pointer-events: none;
   }
 </style>

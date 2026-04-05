@@ -168,6 +168,8 @@
 
   "tab_bar_tabs_aria_label": "Onglets du terminal",
   "tab_bar_ssh_badge_aria_label": "Session SSH",
+  "tab_bar_rename_input_aria_label": "Renommer l'onglet",
+  "tab_bar_rename_confirm": "Confirmer le renommage",
   "terminal_pane_aria_label": "Panneau de terminal",
   "terminal_output_aria_label": "Sortie du terminal",
   "terminal_view_aria_label": "Terminal TauTerm",

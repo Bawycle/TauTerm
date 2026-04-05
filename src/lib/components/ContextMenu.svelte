@@ -46,6 +46,9 @@
     hasSelection?: boolean;
     canClosePane?: boolean;
     open?: boolean;
+    /** When provided, the invisible tab context menu trigger is positioned at these viewport coordinates. */
+    anchorX?: number;
+    anchorY?: number;
     onclose?: () => void;
     oncopy?: () => void;
     onpaste?: () => void;
@@ -64,6 +67,8 @@
     hasSelection = false,
     canClosePane = true,
     open = false,
+    anchorX,
+    anchorY,
     onclose,
     oncopy,
     onpaste,
@@ -77,11 +82,25 @@
     children,
   }: Props = $props();
 
+  /**
+   * When anchorX/anchorY are provided, the trigger is rendered at the given
+   * viewport coordinates so that Bits UI can anchor the menu content to the
+   * right-click position. Without this, the sr-only trigger is offscreen and
+   * the menu would appear at the wrong location.
+   */
+  const triggerStyle = $derived(
+    anchorX !== undefined && anchorY !== undefined
+      ? `position: fixed; left: ${anchorX}px; top: ${anchorY}px; width: 0; height: 0; overflow: visible; clip: unset; white-space: unset;`
+      : undefined,
+  );
+
   // svelte-ignore state_referenced_locally -- intentional: local mutable copy needed
   // because onOpenChange mutates internalOpen internally; $derived would be read-only.
   // $effect keeps it in sync when the parent changes the `open` prop.
   let internalOpen = $state(open);
-  $effect(() => { internalOpen = open; });
+  $effect(() => {
+    internalOpen = open;
+  });
 
   const menuContentClass =
     'z-[30] min-w-[180px] max-w-[280px] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) py-1';
@@ -107,7 +126,9 @@
         <ContextMenu.Item
           class={menuItemClass}
           disabled={!hasSelection}
-          onSelect={() => { if (hasSelection) oncopy?.(); }}
+          onSelect={() => {
+            if (hasSelection) oncopy?.();
+          }}
         >
           <Copy size={16} aria-hidden="true" />
           {m.action_copy()}
@@ -149,25 +170,26 @@
       </ContextMenu.Content>
     </ContextMenu.Portal>
   </ContextMenu.Root>
-
 {:else}
   <!-- Tab context menu: DropdownMenu with controlled open state -->
   <DropdownMenu.Root
     open={internalOpen}
-    onOpenChange={(o) => { internalOpen = o; if (!o) onclose?.(); }}
+    onOpenChange={(o) => {
+      internalOpen = o;
+      if (!o) onclose?.();
+    }}
   >
-    <!-- Invisible trigger — parent controls open state via right-click handler -->
+    <!-- Invisible trigger — parent controls open state via right-click handler.
+         When anchorX/anchorY are provided the trigger is fixed-positioned at the
+         pointer location so Bits UI anchors the menu content correctly. -->
     <DropdownMenu.Trigger
-      class="sr-only"
+      class={triggerStyle ? undefined : 'sr-only'}
+      style={triggerStyle}
       aria-label={m.tab_context_menu_aria_label()}
     />
 
     <DropdownMenu.Portal>
-      <DropdownMenu.Content
-        class={menuContentClass}
-        align="start"
-        sideOffset={4}
-      >
+      <DropdownMenu.Content class={menuContentClass} align="start" sideOffset={4}>
         <!-- New Tab -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onnewtab?.()}>
           <Plus size={16} aria-hidden="true" />

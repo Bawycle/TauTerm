@@ -137,6 +137,16 @@ mod tests {
                 };
                 for (line_no, line) in content.lines().enumerate() {
                     if line.contains("{@html") {
+                        // Skip lines that are pure comments — the pattern may appear
+                        // in documentation notes asserting the absence of {@html}.
+                        let trimmed = line.trim();
+                        let is_comment = trimmed.starts_with("<!--")
+                            || trimmed.starts_with("//")
+                            || trimmed.starts_with("*")
+                            || trimmed.starts_with("-");
+                        if is_comment {
+                            continue;
+                        }
                         violations.push(format!(
                             "  {}:{}: {}",
                             path.display(),

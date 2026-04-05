@@ -156,7 +156,7 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-05 (session e)
+Last updated: 2026-04-05 (session f)
 
 ### Done
 
@@ -167,9 +167,9 @@ Last updated: 2026-04-05 (session e)
 | **Frontend design tokens** | ✅ Done | Umbra theme via Tailwind 4 `@theme` in `src/app.css` — full color, typography, spacing, ANSI 16 tokens |
 | **i18n (Paraglide JS)** | ✅ Done | `project.inlang/settings.json`, `en.json` + `fr.json` catalogues, `locale.svelte.ts` reactive state |
 | **IPC types (TypeScript)** | ✅ Done | `src/lib/ipc/types.ts` — full contract mirroring Rust structs; 18 inconsistencies found and corrected |
-| **Svelte component stubs** | ✅ Done | `TerminalView`, `TerminalPane`, `TabBar`, `StatusBar` in `src/lib/components/` |
-| **Rust tests (nextest)** | ✅ Done | 186 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation, LinuxPtySession + PTY integration harness |
-| **Frontend tests (vitest)** | ✅ Done | 110 tests pass — ipc/types, locale, keyboard, selection, split-tree, theming/validate |
+| **Svelte component stubs** | ✅ Superseded | Initial stubs replaced by full implementations (see session f) |
+| **Rust tests (nextest)** | ✅ Done | 220 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation, LinuxPtySession + PTY integration harness |
+| **Frontend tests (vitest)** | ✅ Done | 238 tests pass — ipc/types, locale, keyboard, selection, split-tree, theming/validate, color, screen, input-security, TabBar logic, StatusBar logic |
 | **Security hardening (P0/P1)** | ✅ Done | CSP configured in `tauri.conf.json`; `private_key_path` redacted in Debug; `send_input` 64 KiB size limit; path traversal validation for SSH identity file |
 | **PreferencesStore::load_or_default()** | ✅ Done | Fallback to `Preferences::default()` on any disk/parse error — Language enum stays strict at serde boundary |
 | **Path traversal validation** | ✅ Done | `platform::validation`: `validate_ssh_identity_path()` (wired into `open_ssh_connection`) + `validate_shell_path()` (wired into `create_tab()` via `CreateTabConfig.shell`) |
@@ -207,12 +207,25 @@ Last updated: 2026-04-05 (session e)
 | **CredentialManager wiring** | ✅ Done | `credentials.rs` now delegates to `platform::create_credential_store()` — `LinuxCredentialStore` on Linux; `is_available()` probes D-Bus; `store_password`/`get_password`/`delete_password` fully wired |
 | **SshError::Transport** | ✅ Done | Added `From<russh::Error> for SshError` — required by `russh::client::Handler::Error` bound |
 
+### Done (added 2026-04-05 session f)
+
+| Area | Status | Details |
+|---|---|---|
+| **TerminalPane (full implementation)** | ✅ Done | DOM cell grid (rows×cells), cursor overlay (DECSCUSR shapes, DECTCEM visibility, 530ms blink), selection highlighting (`SelectionManager`), scrollbar overlay, keyboard handler (`keyEventToVtSequence` + app-shortcut filtering), ResizeObserver (50ms debounce), IPC: `get_pane_screen_snapshot`, `listen('screen-update'/'scroll-position-changed'/'mode-state-changed')`, `invoke('send_input'/'resize_pane'/'scroll_pane')` |
+| **TabBar (full implementation)** | ✅ Done | Session-state-driven tab list sorted by `order`; title from `tab.label ?? processTitle`; SSH badge (lucide-svelte Network); activity indicators (dot/CheckCircle/XCircle/Bell); 44×44px close button; Bits UI `Tooltip.Root delayDuration={300}` on new-tab; arrow-key keyboard nav |
+| **StatusBar (full implementation)** | ✅ Done | LOCAL label; SSH indicator (Network/WifiOff/XCircle icons, per-state colors, spin/pulse animations, `prefers-reduced-motion` disable); process title (center); CWD with title tooltip (right) |
+| **TerminalView (full implementation)** | ✅ Done | `get_session_state` on mount; `listen('session-state-changed')` with all 6 changeTypes; `collectLeafPanes(PaneNode)` tree traversal; single/multi-pane layout; Ctrl+Shift+T/W app shortcuts |
+| **`lib/terminal/color.ts`** | ✅ Done | `ANSI_16_VARS`, `resolve256Color`, `resolveColorDto`, `resolveColor`, `cursorShape`, `cursorBlinks` — 20 tests |
+| **`lib/terminal/screen.ts`** | ✅ Done | `CellStyle`, `cellStyleFromSnapshot`, `cellStyleFromUpdate`, `buildGridFromSnapshot`, `applyUpdates` — 30 tests |
+| **Terminal UI test protocol** | ✅ Done | `docs/test-protocols/ui-terminal-components.md` — 91 scenarios (TUITC-FN, TUITC-UX, TUITC-SEC) |
+| **SEC-CSP-003 scanner fix** | ✅ Done | `security_static_checks.rs`: comment lines (`<!--`, `//`, `*`, `-` prefixed) excluded from `{@html}` scan to eliminate false-positives from doc notes |
+| **Test report** | ✅ Done | `docs/test-reports/ui-terminal-components-2026-04-05.md` |
+
 ### Not Yet Implemented (stubs only)
 
-- PTY I/O wiring to screen-update events — `LinuxPtySession::write` implemented but the output pipeline (read task → VtProcessor → emit) is not yet wired to a live frontend session
 - SSH PTY channel (FS-SSH-013) — `channel_open_session` + `request_pty` + `shell` deferred until PTY pipeline is wired
 - SSH reconnect (FS-SSH-040) — `reconnect_ssh` guard is present; full credential re-injection deferred
 - SecretService integration test (store/get/delete round-trip) — requires D-Bus + keyring daemon
-- Scroll offset state per pane (`scroll_pane` returns the requested offset without tracking it)
-- `set_active_pane` event emission wiring (command implemented; `session-state-changed` emitted but frontend not wired)
-- E2E scenarios: `pty-roundtrip.spec.ts` (2 scenarios) + `tab-lifecycle.spec.ts` (4 scenarios) fail — blocked on PTY pipeline wiring and `create_tab` frontend integration
+- Scroll offset state per pane (`scroll_pane` returns the requested offset without tracking it; no persistence across tab switches)
+- E2E scenarios: `pty-roundtrip.spec.ts` (2 scenarios) + `tab-lifecycle.spec.ts` (4 scenarios) fail — blocked on PTY pipeline wiring and live `create_tab` session round-trip
+- Inactive tab title contrast — `--color-tab-inactive-fg` on `--color-tab-bg` ≈ 2.5:1, below WCAG AA 4.5:1; flagged as TUITC-UX-060, requires design decision

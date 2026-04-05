@@ -111,7 +111,7 @@
   --color-tab-active-bg: var(--color-neutral-900); /* #16140f — matches terminal bg */
   --color-tab-active-fg: var(--color-neutral-200); /* #e8e3d8 */
   --color-tab-inactive-bg: transparent;
-  --color-tab-inactive-fg: var(--color-neutral-500); /* #6b6660 */
+  --color-tab-inactive-fg: var(--color-neutral-400); /* #9c9890 — raised from neutral-500 for WCAG AA 4.5:1 on normal text (~6.0:1) */
   --color-tab-hover-bg: var(--color-neutral-750); /* #2c2921 */
   --color-tab-hover-fg: var(--color-neutral-400); /* #9c9890 */
   --color-tab-close-fg: var(--color-neutral-500); /* #6b6660 */

@@ -38,6 +38,10 @@ export default defineConfig({
         find: /^@tauri-apps\/api\/core$/,
         replacement: path.resolve(__dirname, 'src/__mocks__/tauri-core.ts'),
       },
+      {
+        find: /^@tauri-apps\/api\/event$/,
+        replacement: path.resolve(__dirname, 'src/__mocks__/tauri-event.ts'),
+      },
     ],
   },
 });

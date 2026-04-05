@@ -136,8 +136,8 @@ Primitive tokens use the `--umbra-` prefix to avoid collision with Tailwind 4's 
 | `--umbra-neutral-750` | `#2c2921` | Raised surface (menus, dropdowns, tooltips, hover backgrounds) |
 | `--umbra-neutral-700` | `#35312a` | Border, divider, active background |
 | `--umbra-neutral-600` | `#4a4640` | Scrollbar thumb, inactive tab text background reference |
-| `--umbra-neutral-500` | `#6b6660` | Placeholder text, disabled elements, inactive tab text |
-| `--umbra-neutral-400` | `#9c9890` | Secondary text, inactive labels, icons default |
+| `--umbra-neutral-500` | `#6b6660` | Placeholder text, disabled elements |
+| `--umbra-neutral-400` | `#9c9890` | Secondary text, inactive labels, icons default, inactive tab text |
 | `--umbra-neutral-300` | `#ccc7bc` | Primary UI text, terminal foreground |
 | `--umbra-neutral-200` | `#e8e3d8` | Emphasized text, active tab title |
 | `--umbra-neutral-100` | `#f5f2ea` | High-emphasis text (rare), ANSI bright white |
@@ -261,7 +261,7 @@ Component tokens specialize semantic tokens for individual UI components.
 | `--color-tab-active-bg` | `#16140f` | Active tab background (matches terminal bg) |
 | `--color-tab-active-fg` | `#e8e3d8` | Active tab title text |
 | `--color-tab-inactive-bg` | `transparent` | Inactive tab background |
-| `--color-tab-inactive-fg` | `#6b6660` | Inactive tab title text |
+| `--color-tab-inactive-fg` | `#9c9890` | Inactive tab title text |
 | `--color-tab-hover-bg` | `#2c2921` | Tab hover background |
 | `--color-tab-hover-fg` | `#9c9890` | Tab hover title text |
 | `--color-tab-close-fg` | `#6b6660` | Close button icon resting |
@@ -529,7 +529,7 @@ All color pairings used in the UI meet WCAG 2.1 AA minimums:
 |------|-----------|------------|-------|-----------|--------|
 | Primary UI text on surface | `#ccc7bc` | `#242118` | 8.1:1 | 4.5:1 (normal text) | Pass |
 | Active tab on active-bg | `#e8e3d8` | `#16140f` | 10.3:1 | 4.5:1 (normal text) | Pass |
-| Inactive tab on tab-bg | `#6b6660` | `#242118` | 3.1:1 | 3:1 (UI component) | Pass |
+| Inactive tab on tab-bg | `#9c9890` | `#242118` | 6.0:1 | 4.5:1 (normal text) | Pass |
 | Tab hover text on hover-bg | `#9c9890` | `#2c2921` | 4.6:1 | 4.5:1 (normal text) | Pass |
 | Accent text on bg-base | `#7ab3d3` | `#0e0d0b` | 7.8:1 | 4.5:1 (normal text) | Pass |
 | Error text on error-bg | `#d97878` | `#3d1212` | 4.9:1 | 4.5:1 (normal text) | Pass |
@@ -543,7 +543,7 @@ All color pairings used in the UI meet WCAG 2.1 AA minimums:
 | Search active fg on active-bg | `#e8e3d8` | `#6b5c22` | 5.2:1 | 4.5:1 (normal text) | Pass |
 | Search match fg on match-bg | `#e8b060` | `#4d3000` | 5.4:1 | 4.5:1 (normal text) | Pass |
 
-**Note on inactive tab text:** `#6b6660` on `#242118` at 3.1:1 meets the 3:1 UI component threshold but not 4.5:1 for normal text. This is intentional — inactive tab labels are interface chrome, not content text. The visual hierarchy benefit (active tabs are clearly dominant) justifies using the component threshold. Users needing higher contrast can create a custom theme. (AD.md §8.2)
+**Inactive tab text (corrected, TUITC-UX-060):** `--color-tab-inactive-fg` was previously `#6b6660` (neutral-500) at 3.1:1 on `#242118`. WCAG 1.4.3 applies to tab title text (normal text, not non-text component) — the 3:1 exemption is inapplicable. Token raised to `#9c9890` (neutral-400), achieving ~6.0:1. Visual hierarchy is preserved by font-weight difference (active = 600, inactive = 400) and background surface difference (active bg `#16140f` vs inactive bg `#242118`).
 
 ---
 
@@ -668,7 +668,7 @@ When only one pane exists in a tab, no pane border is drawn (the terminal area i
 | State | Background | Text Color | Text Weight | Border |
 |-------|-----------|------------|-------------|--------|
 | Active | `--color-tab-active-bg` (`#16140f`) | `--color-tab-active-fg` (`#e8e3d8`) | `--font-weight-semibold` (600) | none (seamless with terminal) |
-| Inactive | `--color-tab-inactive-bg` (transparent) | `--color-tab-inactive-fg` (`#6b6660`) | `--font-weight-normal` (400) | none |
+| Inactive | `--color-tab-inactive-bg` (transparent) | `--color-tab-inactive-fg` (`#9c9890`) | `--font-weight-normal` (400) | none |
 | Hover (inactive) | `--color-tab-hover-bg` (`#2c2921`) | `--color-tab-hover-fg` (`#9c9890`) | `--font-weight-normal` (400) | none |
 | Focus (keyboard) | Same as inactive + focus ring | Same as inactive | `--font-weight-normal` (400) | 2px solid `--color-focus-ring`, offset 2px inset |
 
@@ -1721,7 +1721,7 @@ Activity dots (§7.1.3) are CSS-rendered filled circles, not Lucide icons. They 
 All color pairings used in the UI are documented in §5.4 with measured contrast ratios. Summary:
 
 - **All normal text** (under 18px): meets 4.5:1 minimum. Lowest ratio: tab hover text on hover-bg at 4.6:1.
-- **All UI components** (borders, icons, non-text): meets 3:1 minimum. Lowest ratio: inactive tab text on tab-bg at 3.1:1 (intentional, documented in §5.4).
+- **All UI components** (borders, icons, non-text): meets 3:1 minimum. Lowest ratio: placeholder/disabled text on surface at 3.1:1.
 - **All ANSI palette colors** (indices 1-7, 9-15): meet 4.5:1 minimum against `--term-bg`. Lowest ratio: ANSI Green normal at 4.6:1.
 - **Focus ring** (`--color-focus-ring` on `--color-bg-base`): 5.9:1, exceeds the 3:1 UI component minimum.
 

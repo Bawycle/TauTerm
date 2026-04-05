@@ -273,8 +273,12 @@
 
   async function handleNewTab() {
     try {
+      // First tab (no existing tabs) gets a login shell so ~/.bash_profile /
+      // ~/.zprofile are sourced (FS-PTY-013). Subsequent tabs use a normal
+      // interactive shell.
+      const login = tabs.length === 0;
       const newTab: TabState = await invoke('create_tab', {
-        config: { cols: 80, rows: 24 },
+        config: { cols: 80, rows: 24, login },
       });
       tabs = [...tabs, newTab];
       activeTabId = newTab.id;

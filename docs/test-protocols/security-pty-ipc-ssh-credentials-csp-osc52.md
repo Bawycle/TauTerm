@@ -878,6 +878,145 @@ New scenarios covering the `accept_host_key` / `reject_host_key` / `provide_cred
 
 ---
 
+---
+
+### 2.10 Sprint Security — Major Sprint 2026-04-05
+
+New attack surfaces introduced by the thirteen features shipped in sprint 2026-04-05. Scenarios SEC-SPRINT-001 through SEC-SPRINT-010 extend the existing taxonomy.
+
+#### SEC-SPRINT-001
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-001 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-TAB-006 |
+| **Threat** | A user enters a tab name containing HTML/script markup (e.g. `<script>alert(1)</script>` or `<img src=x onerror=alert(1)>`). If the inline-rename input or the tab label renderer uses `{@html}` or `innerHTML` for the label, the script executes in the WebView context and gains full Tauri IPC access. |
+| **Test method** | Component test: mount `TabBar` and simulate a rename to `<script>alert(1)</script>`. Assert the tab label renders the literal text, not executed markup. Assert no `{@html}` binding is used in the tab label path. Static analysis: search `.svelte` files for `{@html` in tab-label related components — zero occurrences expected. |
+| **Expected mitigation** | Svelte's default template interpolation (`{label}`) escapes HTML. The tab label is never passed through `{@html}`. The rename input treats its value as plain text. |
+| **Priority** | High |
+| **Environment** | Component test; no network. |
+
+#### SEC-SPRINT-002
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-002 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-TAB-005 |
+| **Threat** | The tab drag-and-drop reorder operation updates the `TabState` array in `SessionRegistry`. If the frontend sends the new tab order as an IPC command (e.g. `reorder_tabs([id2, id1, id3])`), a script in the WebView could send a crafted payload that: (a) references tab IDs from other windows/sessions, (b) duplicates a tab ID to create phantom tabs, or (c) sends an empty array to clear all tabs. |
+| **Test method** | Unit test: call `reorder_tabs` with a payload containing an unknown `TabId`. Assert `TauTermError::InvalidTabId` is returned and the registry is unchanged. Unit test: send a payload with a duplicate `TabId`. Assert rejection. Unit test: send a payload with a subset of the current tab IDs (missing one tab). Assert rejection — reorder requires exactly the same set of IDs, permuted. |
+| **Expected mitigation** | `reorder_tabs` validates that the payload is a permutation of the current tab IDs: same set, same count, no duplicates. Any deviation returns `TauTermError` with no state mutation. |
+| **Priority** | High |
+| **Environment** | Unit test (Rust); no network. |
+
+#### SEC-SPRINT-003
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-003 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-THEME-003, FS-THEME-004 |
+| **Threat** | The theme editor allows users to set arbitrary CSS color values for theme tokens. A crafted token value such as `url('javascript:...')`, `expression(alert(1))` (IE legacy), or an oversized string could be injected into a CSS custom property and applied to the WebView DOM. If the CSS engine evaluates the injected value, it could exfiltrate data or cause execution. |
+| **Test method** | Unit test (frontend): pass `"url('javascript:alert(1)')"` as the value for `--color-bg` to the theme validator. Assert validation fails with an "unsafe CSS value" error. Pass `"expression(alert(1))"` — assert failure. Pass a valid color `"#1a1a2e"` — assert success. Integration test: apply a theme containing a `url()` token value to the DOM via `applyTheme()`. Assert no network request is emitted. Assert no script execution. Verify `CSS.supports('color', value)` is used as the validation gate. |
+| **Expected mitigation** | Theme token validation uses `CSS.supports('color', value)` (or the appropriate CSS property type) to reject any value that is not a valid CSS color. `url()`, `expression()`, and other non-color constructs fail this check. Validation runs in `theming/validate.ts` before any `setProperty()` call. |
+| **Priority** | High |
+| **Environment** | Frontend unit test. No network. |
+
+#### SEC-SPRINT-004
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-004 |
+| **STRIDE** | Tampering / Information Disclosure |
+| **FS requirement(s)** | FS-THEME-004, FS-THEME-006 |
+| **Threat** | The theme persistence path writes user-defined themes to `preferences.json`. A crafted theme name containing path traversal sequences (e.g. `../../.bashrc`) or null bytes could be used as a lookup key and cause unexpected file writes if the theme name is ever used in a file path computation. Additionally, an oversized theme name (e.g. 100 000 characters) could cause excessive memory allocation during serialization. |
+| **Test method** | Unit test (Rust): call `save_theme` with a theme name of `"../../.bashrc"`. Assert the name is rejected or sanitized (no path separators or null bytes permitted in theme names). Call `save_theme` with a 100 000-character name. Assert rejection with a length limit error (suggested limit: 256 characters). Call `save_theme` with a name containing `\x00`. Assert rejection. |
+| **Expected mitigation** | Theme names are validated: maximum 256 characters, no path separators (`/`, `..`), no null bytes, printable characters only. Validation runs in the `save_theme` command handler before any persistence operation. |
+| **Priority** | Medium |
+| **Environment** | Unit test (Rust). No filesystem writes required for the validation path. |
+
+#### SEC-SPRINT-005
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-005 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-KBD-002, FS-PREF-001 |
+| **Threat** | A tampered `preferences.json` contains a shortcut binding with a crafted key combo value such as `"\x1b[31;5A"` (a raw escape sequence) or a multi-thousand-character string. If the key combo is used as a lookup key in the shortcut dispatcher without sanitization, it could cause ambiguous matching or memory issues. Additionally, binding a shortcut to `"Ctrl+C"` could intercept SIGINT, preventing users from terminating runaway processes. |
+| **Test method** | Unit test (Rust): call `update_preferences` with `shortcuts.splitHorizontal = "\x1b[31;5A"` (raw escape). Assert rejection (shortcuts must be in canonical human-readable format: `"Modifier+Key"`). Call with a 10 000-character shortcut string. Assert rejection. Call with `"Ctrl+C"` bound to a custom action that would shadow the PTY SIGINT path. Assert either rejection (protected shortcut) or that the PTY SIGINT path remains functional. Integration test: load a preferences file with a crafted shortcut. Assert defaults are applied and a WARN log is emitted. |
+| **Expected mitigation** | Shortcut values are validated against a canonical format (`/^(Ctrl\+)?(Alt\+)?(Shift\+)?[A-Za-z0-9F][0-9]?$/` or equivalent). Raw escape sequences are rejected. Protected shortcuts (Ctrl+C, Ctrl+Z — PTY signal paths) cannot be rebound. |
+| **Priority** | Medium |
+| **Environment** | Unit test (Rust). No PTY required. |
+
+#### SEC-SPRINT-006
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-006 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-I18N-006, CLAUDE.md constraints |
+| **Threat** | The `update_preferences` command receives a `PreferencesPatch` where `bellType` is set to an unknown string (e.g. `"ultrasonic"`) or `userTheme` contains a theme name not present in the user's theme library. If these enum/reference fields are deserialized as free strings rather than validated variants, invalid application state is persisted and could cause rendering crashes or unexpected behaviour when the value is later used in match arms. |
+| **Test method** | Unit test (Rust): send `{"terminal": {"bellType": "ultrasonic"}}` to `update_preferences`. Assert serde rejects the unknown variant at deserialization; preferences are not modified. Send `{"appearance": {"activeTheme": "nonexistent-theme-id"}}`. Assert either: (a) the backend validates that the theme ID exists in the user's theme library and returns `TauTermError::UnknownTheme`, or (b) the unknown ID is silently ignored and the default theme is kept. Document which behaviour is chosen. |
+| **Expected mitigation** | `BellType` is a `#[serde(rename_all = "camelCase")]` enum — unknown variants fail at deserialization. `activeTheme` is validated against the current theme library at update time. Invalid references are rejected with `TauTermError`. |
+| **Priority** | Medium |
+| **Environment** | Unit test (Rust). No external dependencies. |
+
+#### SEC-SPRINT-007
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-007 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-CLIP-004 |
+| **Threat** | The X11 PRIMARY selection write path in `platform/clipboard_linux.rs` may call `setenv()` or interact with environment variables that affect X11 display selection (e.g. `DISPLAY`). A malicious process running in a pane could manipulate `DISPLAY` to redirect PRIMARY selection writes to a fake X11 server under its control, silently capturing every text selection the user makes in TauTerm. |
+| **Test method** | Code review: verify that `write_primary_selection` in `platform/clipboard_linux.rs` uses the display connection inherited at TauTerm startup (not a runtime `DISPLAY` env read). Verify the `arboard` (or equivalent) X11 connection is established once at startup with the environment at that time and is not re-read from `DISPLAY` on each selection write. |
+| **Expected mitigation** | The X11 display connection for clipboard operations is established once at Tauri app startup and held for the application's lifetime. The `DISPLAY` environment variable is not re-read per selection event. Changes to `DISPLAY` by child processes do not affect the clipboard backend. |
+| **Priority** | Medium |
+| **Environment** | Code review. No external dependencies. |
+
+#### SEC-SPRINT-008
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-008 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-PANE-001, FS-PANE-003 |
+| **Threat** | The `split_pane` and `close_pane` IPC commands accept a `PaneId`. A deeply nested split tree (e.g. 100 levels of recursive splits) could cause stack overflow in a recursive tree traversal algorithm in `split-tree.ts` or in the Rust `PaneNode` serialization. Alternatively, a crafted `close_pane` call that closes panes in a specific order could leave the tree in an inconsistent state (orphaned `SplitNode` with zero children) that crashes on the next access. |
+| **Test method** | Unit test (Rust): programmatically build a pane tree with 50 levels of nesting via repeated `split_pane` calls. Serialize the resulting `SessionState` to JSON. Assert no stack overflow (use `stacker` crate or iterative traversal). Assert the JSON is well-formed. Frontend unit test: build an equivalent 50-level tree in `split-tree.ts`. Assert `getRootNode()` completes without exceeding the JS call stack. Unit test (Rust): close panes in adversarial orders (close a parent before a child via two IDs). Assert the registry rejects or safely handles the race. |
+| **Expected mitigation** | Tree traversal in both Rust and TypeScript uses an iterative algorithm (or explicit stack) rather than system-stack recursion. `close_pane` validates that a `SplitNode` always retains at least one child after any close; degenerate split nodes are promoted/collapsed atomically. |
+| **Priority** | Medium |
+| **Environment** | Unit tests (Rust + frontend). No PTY or network. |
+
+#### SEC-SPRINT-009
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-009 |
+| **STRIDE** | Denial of Service |
+| **FS requirement(s)** | FS-PTY-007, FS-PTY-008 |
+| **Threat** | The close-confirmation dialog is triggered by TauTerm checking whether a running process exists in the pane. If the PTY child process detection mechanism (e.g. checking for child PIDs of the shell process) is slow or blocks the async runtime, a malicious process could spawn a large number of child processes to delay the close dialog by seconds, causing the user to believe TauTerm has hung. |
+| **Test method** | Integration test (when PTY is implemented): in a pane shell, run a command that forks 1000 child processes (`for i in $(seq 1 1000); do sleep 1 & done`). Trigger tab close. Assert the confirmation dialog appears within 200ms of the close shortcut. Assert the process detection call is non-blocking (runs in a `spawn_blocking` or equivalent, does not block the Tokio event loop). |
+| **Expected mitigation** | Process detection runs in `tokio::task::spawn_blocking`. The async command handler returns the dialog trigger event within the Tauri IPC response time budget (< 200ms). The detection algorithm does not enumerate all descendants — it checks only the immediate child process(es) of the PTY slave. |
+| **Priority** | Medium |
+| **Environment** | Integration test. Blocked on PTY implementation. |
+| **Stub dependency** | `LinuxPtySession::write` and process detection logic. |
+
+#### SEC-SPRINT-010
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SPRINT-010 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-SSH-031, FS-SSH-032 |
+| **Threat** | The ConnectionManager component displays saved SSH connection details (host, port, username, identity file path). If any of these fields are rendered via `{@html}` or displayed in a tooltip that uses `innerHTML`, a crafted connection entry (from a tampered `preferences.json`) containing HTML or script markup could execute in the WebView. |
+| **Test method** | Component test: create a saved connection with `host = '<img src=x onerror="alert(1)">'` and render the ConnectionManager list. Assert no script execution and no network request. Assert the host value is rendered as escaped text. Static analysis: search the ConnectionManager `.svelte` file for any `{@html` usage — zero occurrences expected for connection fields. |
+| **Expected mitigation** | All connection fields in ConnectionManager are rendered via Svelte's default text interpolation (`{host}`, `{username}`, etc.). No `{@html}` is used for user-supplied fields. This follows the same mitigation pattern as SEC-UI-001. |
+| **Priority** | High |
+| **Environment** | Component test; no network. |
+
+---
+
 ## 3. Penetration Test Checklist
 
 This checklist consolidates the manual and integration tests that cannot be fully automated. It must be executed before each major release (MINOR or MAJOR version).
@@ -976,6 +1115,9 @@ The following security tests cannot currently be executed because the underlying
 | SEC-SSH-CH-005, SEC-SSH-CH-006 | Pending credentials state map not implemented | `ssh_prompt_cmds.rs: provide_credentials` |
 | SEC-SSH-CH-007 | Reconnect credential re-injection not implemented | `SshManager::reconnect` (FS-SSH-040) |
 | SEC-SSH-CH-008, SEC-SSH-CH-009 | SSH PTY channel read loop not implemented | SSH channel (FS-SSH-013) |
+| SEC-SPRINT-002 | `reorder_tabs` IPC command not yet implemented | Tab drag-and-drop (FS-TAB-005) |
+| SEC-SPRINT-007 | `write_primary_selection` not yet implemented | PRIMARY selection (FS-CLIP-004) |
+| SEC-SPRINT-009 | PTY process detection not yet implemented | Close confirmation (FS-PTY-007, FS-PTY-008) |
 
 ### 4.4 Continuous Security Checks (CI)
 

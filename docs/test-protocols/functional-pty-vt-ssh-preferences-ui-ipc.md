@@ -192,6 +192,19 @@ Before any E2E test results are considered authoritative, the following checklis
 | Security hardening | vt/osc, platform/ | theming/validate.ts | ipc_type_coherence | E2E-SEC | FS-SEC-001–005 |
 | i18n | preferences/schema (Language enum) | state/locale.svelte.ts | preferences_roundtrip | E2E-I18N | FS-I18N-001–007 |
 | Distribution | — | — | — | E2E-DIST (smoke) | FS-DIST-001–006 |
+| Login shell (first tab) | session/lifecycle | — | — | TEST-SPRINT-001 | FS-PTY-013 |
+| X11 PRIMARY selection | — | terminal/selection.ts | — | TEST-SPRINT-002 | FS-CLIP-004 |
+| Double-click / triple-click select | — | terminal/selection.ts | — | TEST-SPRINT-003 | FS-CLIP-002, FS-CLIP-003 |
+| Close confirmation dialog | session/registry | — | — | TEST-SPRINT-004 | FS-PTY-007, FS-PTY-008 |
+| Tab inline rename | — | — | — | TEST-SPRINT-005 | FS-TAB-006 |
+| Tab drag-and-drop | session/registry | — | session_registry_topology | TEST-SPRINT-006 | FS-TAB-005 |
+| Pane shortcuts intercept | — | terminal/keyboard.ts | — | TEST-SPRINT-007 | FS-KBD-003 |
+| Shortcuts persistence | preferences/schema | preferences/shortcuts.ts | preferences_roundtrip | TEST-SPRINT-008 | FS-KBD-002 |
+| Cursor shape / bell type / blink rate | vt/processor, vt/modes | — | — | TEST-SPRINT-009 | FS-PREF-003, FS-PREF-006 |
+| ConnectionManager UI | — | — | — | TEST-SPRINT-010 | FS-SSH-031, FS-SSH-032 |
+| Theme editor UI | — | theming/validate.ts | preferences_roundtrip | TEST-SPRINT-011 | FS-THEME-003–006 |
+| IPC type coherence (Language, BellType, UserTheme) | preferences/schema | lib/ipc/types.ts | ipc_type_coherence | TEST-SPRINT-012 | FS-I18N-006, FS-PREF-006 |
+| Split layout arborescent + draggable dividers | session/registry | layout/split-tree.ts | session_registry_topology | TEST-SPRINT-013 | FS-PANE-001, FS-PANE-003 |
 
 ---
 
@@ -1946,6 +1959,326 @@ Mapping of pending items above to their authoritative SEC-* IDs:
 
 ---
 
+---
+
+## 4.8 Sprint Scenarios — Major Sprint 2026-04-05
+
+New scenarios for the thirteen features shipped in the major sprint of 2026-04-05. Each ID is prefixed `TEST-SPRINT-` to make the sprint boundary unambiguous. Coverage spans all three test layers (Rust unit via nextest, frontend unit via vitest, E2E via WebdriverIO).
+
+---
+
+#### TEST-SPRINT-001
+**FS requirements:** FS-PTY-013
+**Layer:** E2E
+**Priority:** Must
+
+**Preconditions:** User's `$SHELL` env var points to an installed shell (e.g. `/bin/bash`). No `login_shell` override set in preferences.
+
+**Steps:**
+1. Launch TauTerm. Observe the initial tab.
+2. Inside the initial tab's PTY, run `shopt login_shell` (bash) or equivalent (`[[ -o login ]]` for zsh, `status is-login` for fish).
+3. Open a second tab via Ctrl+Shift+T.
+4. Run the same login-shell detection command in the second tab.
+
+**Expected result:**
+- Initial tab: shell reports it is a login shell (e.g. bash prints `login_shell on`). `~/.bash_profile` (or equivalent) is sourced.
+- Second tab: shell reports it is an interactive non-login shell. Profile file is not re-sourced.
+
+**Note:** [BLOCKED: stub] — requires PTY spawn with `login` flag to be implemented (`create_tab` must pass `argv[0] = "-bash"` for the first tab).
+
+---
+
+#### TEST-SPRINT-002
+**FS requirements:** FS-CLIP-004
+**Layer:** Unit (Rust) + E2E
+**Priority:** Must
+
+**Preconditions (unit):** `arboard` is available; a fake X11 display is running (Xvfb in CI).
+**Preconditions (E2E):** TauTerm running on X11. A second application that can read the PRIMARY selection (e.g. `xclip -selection primary -o`).
+
+**Steps (unit — Rust):**
+1. Call `write_primary_selection("hello primary")` from the clipboard backend.
+2. Read the X11 PRIMARY selection via `arboard` or `xclip`. Assert the value equals `"hello primary"`.
+
+**Steps (E2E):**
+1. In a TauTerm pane, click and drag to select the text "hello world".
+2. In a second terminal (outside TauTerm), run `xclip -selection primary -o`.
+3. Verify the output is `hello world`.
+4. Middle-click inside another TauTerm pane.
+5. Verify the text `hello world` is pasted into that pane.
+
+**Expected result (unit):** X11 PRIMARY selection is written immediately on any text selection. (E2E) Middle-click paste of the TauTerm selection works. Ctrl+Shift+V still pastes from CLIPBOARD (not PRIMARY).
+
+**Note:** [BLOCKED: stub] — requires `write_primary_selection` path in `platform/clipboard_linux.rs` to be wired.
+
+---
+
+#### TEST-SPRINT-003
+**FS requirements:** FS-CLIP-002 (word select), FS-CLIP-003 (line select implied by triple-click)
+**Layer:** Frontend Unit + E2E
+**Priority:** Must
+
+**Preconditions (unit):** `selection.ts` module loaded with a mock grid.
+**Preconditions (E2E):** TauTerm open with a line of text `foo bar/baz_qux` in a pane.
+
+**Steps (unit):**
+1. Feed the test grid with cells for `foo bar/baz_qux`.
+2. Simulate a double-click on the cell containing `b` in `bar`. Assert the selection spans `bar` (space is a delimiter; `/` is not by default).
+3. Simulate a double-click on the cell containing `b` in `baz_qux`. Assert the selection spans `baz_qux` (underscore is not a delimiter by default).
+4. Simulate a triple-click anywhere on the line. Assert the selection spans the entire line from column 0 to the last non-empty cell.
+
+**Steps (E2E):**
+1. Double-click on `bar` in the terminal. Verify only `bar` is selected (highlighted).
+2. Double-click on `baz_qux`. Verify the full token `baz_qux` is selected.
+3. Triple-click. Verify the entire line `foo bar/baz_qux` is selected.
+
+**Expected result:** Double-click selects a word using the default delimiter set (space, tab, common punctuation; but not `/`, `.`, `-`, `_`). Triple-click selects the full line.
+
+---
+
+#### TEST-SPRINT-004
+**FS requirements:** FS-PTY-007, FS-PTY-008
+**Layer:** E2E
+**Priority:** Must
+
+**Preconditions:** TauTerm open with one pane running `sleep 3600`.
+
+**Steps:**
+1. Attempt to close the tab (Ctrl+Shift+W) or the pane (Ctrl+Shift+Q).
+2. Observe whether a confirmation dialog appears.
+3. Click "Cancel". Verify the pane is still open with `sleep 3600` still running.
+4. Attempt close again. Click "Close anyway".
+5. Verify the pane closes and the process is terminated (no zombie process).
+
+**Expected result:** A confirmation dialog always appears when a process is running. Cancel preserves the session. "Close anyway" terminates the process and closes the pane/tab. If no process is running (pane in Terminated state), no dialog is shown — pane closes immediately.
+
+**Note:** [BLOCKED: stub] — requires PTY process-detection to be implemented (reading the child PID state).
+
+---
+
+#### TEST-SPRINT-005
+**FS requirements:** FS-TAB-006
+**Layer:** E2E
+**Priority:** Must
+
+**Preconditions:** TauTerm open with one tab whose title is "bash".
+
+**Steps:**
+1. Double-click the tab title. Verify an inline text input appears in place of the label.
+2. Type "My Session" and press Enter. Verify the tab now shows "My Session".
+3. Run `printf "\033]0;Override\007"` in the terminal. Verify the custom label "My Session" still takes precedence.
+4. Double-click the tab title again. Clear all text (Backspace) and press Enter.
+5. Verify the tab reverts to the process-driven title ("Override" or "bash").
+6. Right-click the tab. Select "Rename". Verify the inline input appears. Press F2 while the tab is focused. Verify the inline input also appears.
+7. While the inline input is open, press Escape. Verify the input closes without modifying the label.
+
+**Expected result:** All three entry points (double-click, F2, context-menu Rename) trigger inline rename. User label takes precedence over process title. Clearing the label reverts to process title. Escape cancels without side effects.
+
+---
+
+#### TEST-SPRINT-006
+**FS requirements:** FS-TAB-005
+**Layer:** E2E
+**Priority:** Must
+
+**Preconditions:** Three tabs open in order: Tab A, Tab B, Tab C.
+
+**Steps:**
+1. Drag Tab C (by its label area) leftward past Tab B. Verify the drag ghost is visible.
+2. Drop Tab C between Tab A and Tab B. Verify the order becomes Tab A, Tab C, Tab B.
+3. Drag Tab A to the rightmost position. Verify order becomes Tab C, Tab B, Tab A.
+4. Verify that after each reorder, the active pane content (PTY session) follows its tab and remains interactive.
+5. Reorder via keyboard: focus Tab B via Tab key, press Alt+Shift+Left. Verify Tab B moves one position left.
+
+**Expected result:** Tab drag-and-drop updates order in `SessionRegistry` and re-renders the tab bar. The PTY session follows its tab. No data loss occurs. Keyboard reorder also works.
+
+---
+
+#### TEST-SPRINT-007
+**FS requirements:** FS-KBD-003
+**Layer:** Frontend Unit
+**Priority:** Must
+
+**Preconditions:** The shortcut-intercept module is active in a simulated TerminalPane context.
+
+**Steps:**
+1. Simulate Ctrl+Shift+D keydown. Assert the event is consumed (not sent to PTY). Assert the split-horizontal action fires.
+2. Simulate Ctrl+Shift+E keydown. Assert consumed. Assert split-vertical action fires.
+3. Simulate Ctrl+Shift+Q keydown. Assert consumed. Assert close-pane action fires.
+4. Simulate Ctrl+Shift+Right keydown. Assert consumed. Assert focus-next-pane action fires.
+5. Simulate Ctrl+Shift+Left keydown. Assert consumed. Assert focus-prev-pane action fires.
+6. Simulate Ctrl+Tab keydown. Assert consumed. Assert next-tab action fires.
+7. Simulate F2 keydown while a tab is focused. Assert consumed. Assert inline-rename action fires.
+8. For each shortcut above, verify the encoded byte sequence is NOT sent to `send_input`.
+
+**Expected result:** All seven pane-management shortcuts are consumed before PTY encoding. The PTY receives no bytes for any of these key combinations.
+
+---
+
+#### TEST-SPRINT-008
+**FS requirements:** FS-KBD-002
+**Layer:** Frontend Unit + Integration
+**Priority:** Must
+
+**Preconditions (unit):** `preferences/shortcuts.ts` conflict detection module.
+**Preconditions (integration):** A `PreferencesStore` with a custom shortcut map.
+
+**Steps (unit — conflict detection):**
+1. Define two shortcuts both bound to Ctrl+Shift+D. Assert `detectConflicts()` returns a conflict report naming both actions.
+2. Bind the same key to Ctrl+Shift+T for a user-defined action. Assert a conflict is reported against the built-in new-tab shortcut.
+3. Resolve conflicts and call `normalizeShortcuts()`. Assert canonical form (sorted modifiers, consistent case).
+
+**Steps (integration — persistence):**
+1. Call `update_preferences` with a `shortcuts` patch containing `{ "splitHorizontal": "Ctrl+Shift+H" }`.
+2. Call `get_preferences`. Assert `shortcuts.splitHorizontal` equals `"Ctrl+Shift+H"`.
+3. Write `preferences.json` directly. Reload via `PreferencesStore::load_or_default()`. Assert the custom shortcut survives the round-trip.
+4. Write `preferences.json` with an invalid shortcut value `{ "splitHorizontal": 99 }`. Assert load replaces it with the default and emits a WARN log.
+
+**Expected result:** Conflict detection prevents overlapping bindings. Custom shortcuts persist through the IPC round-trip and through file load. Invalid shortcut values fall back to defaults without crashing.
+
+---
+
+#### TEST-SPRINT-009
+**FS requirements:** FS-PREF-003, FS-PREF-006
+**Layer:** Integration + E2E
+**Priority:** Must
+
+**Preconditions (integration):** A `VtProcessor` initialized with a `TerminalPrefs` struct.
+**Preconditions (E2E):** TauTerm open. Preferences panel accessible.
+
+**Steps (integration — cursor shape):**
+1. Create a `VtProcessor` with `cursor_shape = CursorShape::Underline`.
+2. Inspect `ModeState::cursor_shape`. Assert it equals `Underline`.
+3. Feed `\x1b[2 q` (CSI 2 SP q — steady block). Assert `ModeState::cursor_shape` is now `SteadyBlock` (VT sequence overrides preference mid-session).
+4. Reset the terminal (soft reset `\x1bc`). Assert cursor shape reverts to the preference value `Underline`.
+
+**Steps (integration — bell type):**
+1. Create a `VtProcessor` with `bell_type = BellType::Audible`.
+2. Feed `\x07` (BEL). Assert the bell action is `BellAction::Audible`.
+3. Create a `VtProcessor` with `bell_type = BellType::None`.
+4. Feed `\x07`. Assert no bell action is triggered (neither visual nor audible).
+
+**Steps (integration — cursor blink rate):**
+1. Create a `VtProcessor` with `cursor_blink_rate = 400` (ms).
+2. Assert the `ModeState::cursor_blink_interval_ms` equals 400.
+
+**Steps (E2E):**
+1. Open Preferences → Terminal Behavior. Change Cursor Shape to "Underline". Observe the active pane cursor immediately.
+2. Change Bell Type to "Audible". Press Ctrl+G in the terminal. Verify the system emits an audible bell (or at minimum the bell action is fired).
+3. Change Bell Type to "Visual". Press Ctrl+G. Verify a visual flash occurs instead.
+4. Change Bell Type to "None". Press Ctrl+G. Verify no bell action occurs.
+5. Change Cursor Blink Rate to 800ms. Observe the cursor blinking at a noticeably slower rate.
+
+**Expected result:** All three preference settings are wired end-to-end. Changes apply immediately to all open panes without restart. VT sequences can override cursor shape mid-session; soft reset restores the preference value.
+
+---
+
+#### TEST-SPRINT-010
+**FS requirements:** FS-SSH-031, FS-SSH-032
+**Layer:** E2E
+**Priority:** Must
+
+**Preconditions:** TauTerm is open. The ConnectionManager UI component is mounted in TerminalView.
+
+**Steps:**
+1. Verify the ConnectionManager panel is accessible from the main TerminalView (e.g. via a sidebar toggle button or the "SSH" entry in the status bar).
+2. Open the ConnectionManager. Verify the list of saved connections is displayed.
+3. Click "New connection". Fill in host, port, username. Save. Verify the new entry appears in the list.
+4. Click "Connect" on the saved entry. Verify a new tab opens and transitions through the SSH connection states.
+5. Open the ConnectionManager while a tab is in SSH Connected state. Verify the active connection is visually marked.
+6. Close the ConnectionManager. Verify no layout shift in the TerminalView (panes retain their sizes).
+
+**Expected result:** ConnectionManager is correctly mounted and renders without errors. CRUD operations work. Opening a connection creates a new tab. The panel can be opened and closed without disturbing existing panes.
+
+**Note:** [BLOCKED: stub] — SSH connect flow requires full SSH lifecycle implementation. CRUD operations on saved connections can be tested independently.
+
+---
+
+#### TEST-SPRINT-011
+**FS requirements:** FS-THEME-003, FS-THEME-004, FS-THEME-005, FS-THEME-006
+**Layer:** E2E + Frontend Unit
+**Priority:** Must
+
+**Preconditions (E2E):** TauTerm open with Preferences panel accessible.
+**Preconditions (unit):** `theming/validate.ts` module.
+
+**Steps (E2E):**
+1. Open Preferences → Themes. Verify the Umbra default theme is listed and cannot be deleted.
+2. Click "New theme". Verify a theme editor opens with all required token fields (background, foreground, cursor, selection, 16 ANSI palette colors, plus UI chrome tokens).
+3. Set background to `#1a1a2e` and foreground to `#eaeaea`. Click "Save as…" with the name "Test Theme". Verify the theme appears in the list.
+4. Click "Apply". Verify the terminal rendering updates immediately (background and foreground color change). No restart required.
+5. Click "Edit" on "Test Theme". Change the cursor color. Click "Save". Verify the change applies immediately.
+6. Click "Duplicate" on "Test Theme". Verify a copy "Test Theme (copy)" appears.
+7. Delete "Test Theme (copy)". Verify it disappears from the list.
+8. Attempt to delete the Umbra default theme. Verify a delete action is absent or disabled.
+
+**Steps (unit — validator):**
+1. Construct a theme object with all required tokens present and valid CSS colors. Assert validation passes.
+2. Remove the `--color-bg` token. Assert validation fails with a "missing required token" error.
+3. Set `--color-bg` to `not-a-color`. Assert validation fails with an "invalid CSS color" error.
+4. Set `--color-bg` to a hardcoded hex `#000000` bypassing the token system. If the validator checks that values reference tokens rather than raw values, assert it fails; otherwise this is a documentation note that the token layer enforces this at design time.
+
+**Expected result:** Theme editor allows full CRUD on user-defined themes. Default theme cannot be deleted. Changes apply immediately. Validator correctly rejects incomplete or malformed themes.
+
+---
+
+#### TEST-SPRINT-012
+**FS requirements:** FS-I18N-006 (Language enum), FS-PREF-006 (BellType enum), FS-THEME-001 (UserTheme)
+**Layer:** Integration (Rust) + Frontend Unit
+**Priority:** Must
+
+**Preconditions:** `ipc_type_coherence.rs` integration test file in `src-tauri/tests/`.
+
+**Steps (Rust — serde serialization coherence):**
+1. Serialize `Language::En` → assert JSON is `"en"`.
+2. Serialize `Language::Fr` → assert JSON is `"fr"`.
+3. Deserialize `"en"` → assert `Language::En`. Deserialize `"de"` → assert deserialization fails (unknown variant, not silently mapped to default).
+4. Serialize `BellType::Audible` → assert JSON is `"audible"`.
+5. Serialize `BellType::Visual` → assert JSON is `"visual"`.
+6. Serialize `BellType::None` → assert JSON is `"none"`.
+7. Deserialize `"laser"` into `BellType` → assert deserialization fails with an unknown variant error.
+8. Serialize a `UserTheme` struct containing `name = "Test"` and a valid `tokens` map → verify JSON has keys `name` and `tokens` at the top level (no extra nesting, no snake_case/camelCase drift).
+9. Deserialize the JSON produced in step 8 back into `UserTheme`. Assert all fields survive the round-trip without mutation.
+
+**Steps (Frontend — TypeScript shape):**
+1. Mock `invoke('get_preferences')` to return the JSON from step 8.
+2. Assert that the TypeScript type `Language` accepts `"en"` and `"fr"` and rejects anything else at compile time (enforced by the `Language` union type, not a string).
+3. Assert that the TypeScript type `BellType` accepts `"audible"`, `"visual"`, `"none"` only.
+
+**Expected result:** All three enum/struct types serialize to their exact expected JSON shape. Unknown variants are rejected at deserialization — no silent coercion. TypeScript types are structurally consistent with the Rust JSON output.
+
+---
+
+#### TEST-SPRINT-013
+**FS requirements:** FS-PANE-001, FS-PANE-003
+**Layer:** Frontend Unit + E2E
+**Priority:** Must
+
+**Preconditions (unit):** `layout/split-tree.ts` loaded with a mock pane state.
+**Preconditions (E2E):** TauTerm open with one tab.
+
+**Steps (unit — split-tree.ts):**
+1. Create a tree with a single leaf (pane A). Assert `getRootNode()` returns a `LeafNode`.
+2. Split pane A horizontally (left/right). Assert the root is now a `SplitNode` with `direction: "horizontal"` and two `LeafNode` children with ratios summing to 1.0.
+3. Split the right child (pane B) vertically. Assert the tree is `SplitNode(horizontal) → [LeafNode(A), SplitNode(vertical) → [LeafNode(B), LeafNode(C)]]`.
+4. Drag the horizontal divider to ratio 0.3/0.7. Assert `updateRatio(nodeId, 0.3)` updates the split node and clamps to [0.1, 0.9].
+5. Close pane C. Assert the parent vertical split is removed and pane B is promoted to a leaf in its place. Assert the resulting tree is `SplitNode(horizontal) → [LeafNode(A), LeafNode(B)]`.
+6. Close pane B. Assert the root becomes `LeafNode(A)` (no dangling split node).
+
+**Steps (E2E):**
+1. Press Ctrl+Shift+D. Verify two panes appear side-by-side.
+2. Focus the right pane. Press Ctrl+Shift+E. Verify the right pane splits into top and bottom.
+3. Drag the vertical divider between the two right panes. Verify both panes resize and the PTY sessions within them resize accordingly (verified by running `tput cols` / `tput lines`).
+4. Drag the horizontal divider. Verify the left pane and the right pane group resize together.
+5. Close the bottom-right pane (Ctrl+Shift+Q). Verify the top-right pane expands to fill the freed space. Verify the left pane is unaffected.
+6. Verify all pane borders use the correct design tokens (`--color-pane-border-active` for focus, `--color-pane-border-inactive` otherwise).
+
+**Expected result (unit):** `split-tree.ts` manages the arborescent layout correctly for all mutation operations (split, resize, close, promote). (E2E) The visual layout matches the tree state. Draggable dividers correctly propagate resize to PTY sessions. No orphaned split nodes.
+
+**Note:** [BLOCKED: partial stub] — E2E drag-divider steps require the layout renderer to be wired to `split-tree.ts`. Unit tests on `split-tree.ts` alone are unblocked.
+
+---
+
 ## 5. Regression Policy
 
 ### 5.1 Pre-commit Gate
@@ -2052,3 +2385,5 @@ All tests marked **[BLOCKED: stub]** are tracked as open CI issues. When the cor
 | TEST-SSH-001–010 (most) | SSH lifecycle implementation | SSH milestone |
 | TEST-CRED-001–003 | Secret Service integration | Credentials milestone |
 | All E2E tests | Production build functional | Build milestone |
+| TEST-SPRINT-001–004, TEST-SPRINT-007–008 | PTY spawn / process detection | PTY milestone |
+| TEST-SPRINT-013 | Split layout arborescent renderer wired | Layout milestone |

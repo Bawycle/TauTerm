@@ -1562,10 +1562,51 @@ When an SSH connection is established and the negotiated host key algorithm is d
 
 ### 8.3 Scroll Behavior
 
+#### 8.3.1 Scroll Policy
+
+TauTerm uses a **position-freeze + passive indicator** scroll policy.
+
 - **Mouse wheel in terminal:** Scrolls scrollback buffer. Scroll direction matches system setting. Scroll amount: 3 lines per wheel tick (configurable by OS).
-- **Viewport restoration:** When the user scrolls up into scrollback and new output arrives, the viewport stays at the scrolled position (does not auto-scroll to bottom). A "scroll to bottom" indicator appears at the bottom-right of the pane.
-- **"Scroll to bottom" indicator:** Lucide `ArrowDown` in a pill (`--radius-full`), background `--color-bg-raised`, border 1px solid `--color-border`. Click or press Escape to scroll to bottom instantly. Disappears when the viewport is at the bottom.
-- **Smooth vs. instant:** Programmatic scrolling (search navigation, scroll-to-bottom) is instant (no smooth scroll). User scrolling (mouse wheel, scrollbar drag) is handled natively by the OS.
+- **Position freeze during output:** When `scroll_offset > 0` (the user has scrolled into the scrollback) and new output arrives from the PTY, the viewport stays at its current position. No auto-scroll occurs. This allows reading historical output without interruption (FS-SB-009).
+- **Automatic return to live on PTY input:** When the user sends keyboard input to the PTY while `scroll_offset > 0`, the backend resets `scroll_offset` to 0 and emits a `scroll-position-changed` event. The frontend receives this event and scrolls the viewport to the bottom instantly. No user action is required (FS-SB-010).
+- **Manual return to live:** Click `ScrollToBottomButton` or press `End` to reset `scroll_offset` to 0 immediately.
+- **Smooth vs. instant:** Programmatic scrolling (search navigation, scroll-to-bottom, PTY-input auto-return) is instant (no smooth scroll). User scrolling (mouse wheel, scrollbar drag) is handled natively by the OS.
+
+**Not in v1:** line-count badge on the button, tail-mode toggle, auto-scroll on output, Escape interception (deferred — potential conflict with vim and alternate-screen applications).
+
+#### 8.3.2 ScrollToBottomButton Component
+
+A passive indicator that appears whenever `scroll_offset > 0` to signal that the viewport is not at the live bottom.
+
+**Position and shape:**
+- `position: absolute`, anchored to bottom-right of the terminal viewport
+- Offset from each edge: `var(--space-3)`
+- `z-index: var(--z-scrollbar)` (15)
+- `border-radius: var(--radius-full)` (pill shape)
+- Minimum size: 33×33px
+
+**Anatomy:** Lucide `ArrowDown` icon at 16px. No text label.
+
+**Visibility:** Rendered only when `scroll_offset > 0`. Hidden (not merely transparent) when `scroll_offset === 0`.
+
+**Entrance / exit transition:**
+- Appearance: `opacity` 0 → 1, `var(--duration-fast) ease-out`
+- Disappearance: `opacity` 1 → 0, `var(--duration-fast) ease-out`
+- `prefers-reduced-motion: reduce`: transition suppressed entirely (instant show/hide).
+
+**Visual states:**
+
+| State | Background | Border | Icon color | Shadow |
+|-------|-----------|--------|-----------|--------|
+| Idle | `var(--color-bg-raised)` | `1px solid var(--color-border)` | `var(--color-icon-default)` | `var(--shadow-raised)` |
+| Hover | `var(--color-hover-bg)` | `1px solid var(--color-border)` | `var(--color-icon-active)` | `var(--shadow-raised)` |
+| Active | `var(--color-active-bg)` | `1px solid var(--color-border)` | `var(--color-icon-active)` | none |
+| Focus | `var(--color-bg-raised)` | `1px solid var(--color-border)` | `var(--color-icon-active)` | `var(--shadow-raised)` + focus ring 2px `var(--color-focus-ring)` offset `var(--color-focus-ring-offset)` |
+
+**Accessibility:**
+- `role="button"`, `tabindex="0"`
+- `aria-label` bound to i18n key `scroll_to_bottom`
+- Minimum hit target: 33×33px (the pill itself); surrounding spacing brings the effective touch area to ≥ 44px when combined with the `var(--space-3)` offset from the viewport edge
 
 ### 8.4 Drag & Drop
 

@@ -111,6 +111,50 @@ impl PreferencesStore {
         self.save_to_disk(&updated)
     }
 
+    /// Save or update an SSH connection config.
+    pub fn save_connection(
+        &self,
+        config: crate::ssh::SshConnectionConfig,
+    ) -> Result<(), PreferencesError> {
+        let mut prefs = self.prefs.write();
+        if let Some(existing) = prefs.connections.iter_mut().find(|c| c.id == config.id) {
+            *existing = config;
+        } else {
+            prefs.connections.push(config);
+        }
+        let updated = prefs.clone();
+        drop(prefs);
+        self.save_to_disk(&updated)
+    }
+
+    /// Delete an SSH connection config by ID.
+    pub fn delete_connection(
+        &self,
+        id: &crate::session::ids::ConnectionId,
+    ) -> Result<(), PreferencesError> {
+        let mut prefs = self.prefs.write();
+        prefs.connections.retain(|c| &c.id != id);
+        let updated = prefs.clone();
+        drop(prefs);
+        self.save_to_disk(&updated)
+    }
+
+    /// Mark that the context menu hint has been shown to the user.
+    ///
+    /// This is a one-way latch — it never resets to `false` once set.
+    /// Idempotent: calling it multiple times is safe.
+    pub fn mark_context_menu_used(&self) -> Result<(), PreferencesError> {
+        let mut prefs = self.prefs.write();
+        if prefs.appearance.context_menu_hint_shown {
+            // Already set — avoid unnecessary disk write.
+            return Ok(());
+        }
+        prefs.appearance.context_menu_hint_shown = true;
+        let updated = prefs.clone();
+        drop(prefs);
+        self.save_to_disk(&updated)
+    }
+
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------

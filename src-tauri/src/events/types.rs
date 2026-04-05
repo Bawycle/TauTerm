@@ -81,6 +81,12 @@ pub struct ScreenUpdateEvent {
     pub cells: Vec<CellUpdate>,
     /// Cursor position after processing.
     pub cursor: CursorState,
+    /// Total scrollback lines available after this update.
+    ///
+    /// Allows the frontend to keep the scrollbar accurate when new lines are
+    /// appended to the scrollback buffer while the user is scrolled up
+    /// (scroll-freeze policy).
+    pub scrollback_lines: usize,
 }
 
 /// A single updated cell in the screen buffer.

@@ -147,14 +147,17 @@ export interface SshStateChangedEvent {
  * Emitted by the PTY read task after processing terminal output.
  *
  * Mirrors Rust ScreenUpdateEvent:
- *   pane_id: PaneId     → paneId
+ *   pane_id: PaneId        → paneId
  *   cells: Vec<CellUpdate> → cells
- *   cursor: CursorState → cursor
+ *   cursor: CursorState    → cursor
+ *   scrollback_lines: usize → scrollbackLines
  */
 export interface ScreenUpdateEvent {
   paneId: PaneId;
   cells: CellUpdate[];
   cursor: CursorState;
+  /** Total scrollback lines available — kept in sync on every screen update. */
+  scrollbackLines: number;
 }
 
 /**

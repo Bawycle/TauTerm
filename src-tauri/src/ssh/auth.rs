@@ -13,8 +13,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use russh::client::{AuthResult, Handle};
-use russh::keys::PrivateKeyWithHashAlg;
 use russh::keys;
+use russh::keys::PrivateKeyWithHashAlg;
 
 use crate::error::SshError;
 
@@ -91,10 +91,7 @@ mod tests {
         // We cannot construct a real russh Handle without a server, so we test
         // the key-loading path directly via the underlying function.
         // load_secret_key with a nonexistent path must fail gracefully.
-        let result = russh::keys::load_secret_key(
-            Path::new("/nonexistent/path/to/key"),
-            None,
-        );
+        let result = russh::keys::load_secret_key(Path::new("/nonexistent/path/to/key"), None);
         assert!(
             result.is_err(),
             "load_secret_key on nonexistent path must return an error"
@@ -109,7 +106,8 @@ mod tests {
         let key_path = dir.path().join("not_a_key.pem");
         {
             let mut f = std::fs::File::create(&key_path).expect("create");
-            f.write_all(b"this is not a valid SSH key\n").expect("write");
+            f.write_all(b"this is not a valid SSH key\n")
+                .expect("write");
         }
 
         let result = russh::keys::load_secret_key(&key_path, None);

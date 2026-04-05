@@ -61,19 +61,13 @@ pub async fn save_connection(
         validate_identity_file_path(path)?;
     }
     let id = config.id.clone();
-    // Patch preferences to add/update the connection.
-    let mut preferences = prefs.read().get();
-    if let Some(existing) = preferences
-        .connections
-        .iter_mut()
-        .find(|c| c.id == config.id)
-    {
-        *existing = config;
-    } else {
-        preferences.connections.push(config);
-    }
-    // Persist by applying a patch with the full connections list.
-    // TODO: add a dedicated `set_connections` method to PreferencesStore for cleaner API.
+    prefs.read().save_connection(config).map_err(|e| {
+        TauTermError::with_detail(
+            "PREFERENCES_ERROR",
+            "Failed to save connection.",
+            e.to_string(),
+        )
+    })?;
     Ok(id)
 }
 
@@ -82,8 +76,11 @@ pub async fn delete_connection(
     connection_id: ConnectionId,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<(), TauTermError> {
-    let mut preferences = prefs.read().get();
-    preferences.connections.retain(|c| c.id != connection_id);
-    // TODO: persist.
-    Ok(())
+    prefs.read().delete_connection(&connection_id).map_err(|e| {
+        TauTermError::with_detail(
+            "PREFERENCES_ERROR",
+            "Failed to delete connection.",
+            e.to_string(),
+        )
+    })
 }

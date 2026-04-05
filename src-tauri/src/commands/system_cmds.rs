@@ -7,9 +7,11 @@
 
 use std::sync::Arc;
 
+use parking_lot::RwLock;
 use tauri::State;
 
 use crate::error::TauTermError;
+use crate::preferences::PreferencesStore;
 use crate::session::{SessionRegistry, SessionState};
 
 /// Maximum clipboard text size: 16 MiB.
@@ -50,7 +52,9 @@ pub async fn copy_to_clipboard(text: String) -> Result<(), TauTermError> {
         })
     })
     .await
-    .map_err(|e| TauTermError::with_detail("INTERNAL_ERROR", "Clipboard task failed.", e.to_string()))?
+    .map_err(|e| {
+        TauTermError::with_detail("INTERNAL_ERROR", "Clipboard task failed.", e.to_string())
+    })?
 }
 
 #[tauri::command]
@@ -72,22 +76,35 @@ pub async fn get_clipboard() -> Result<String, TauTermError> {
         })
     })
     .await
-    .map_err(|e| TauTermError::with_detail("INTERNAL_ERROR", "Clipboard task failed.", e.to_string()))?
+    .map_err(|e| {
+        TauTermError::with_detail("INTERNAL_ERROR", "Clipboard task failed.", e.to_string())
+    })?
 }
 
 /// Open a URL in the system browser. Scheme is validated (§8.1).
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), TauTermError> {
     validate_url_scheme(&url)?;
-    // TODO: open_url via tauri-plugin-opener.
-    let _ = url;
-    Ok(())
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| {
+        TauTermError::with_detail(
+            "OPEN_URL_FAILED",
+            "Failed to open URL in browser.",
+            e.to_string(),
+        )
+    })
 }
 
 #[tauri::command]
-pub async fn mark_context_menu_used() -> Result<(), TauTermError> {
-    // TODO: persist "context menu hint shown" flag in preferences.
-    Ok(())
+pub async fn mark_context_menu_used(
+    prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
+) -> Result<(), TauTermError> {
+    prefs.read().mark_context_menu_used().map_err(|e| {
+        TauTermError::with_detail(
+            "PREFERENCES_ERROR",
+            "Failed to persist context menu flag.",
+            e.to_string(),
+        )
+    })
 }
 
 /// Validate that a URL scheme is whitelisted (§8.1).

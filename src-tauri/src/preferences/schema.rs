@@ -40,6 +40,10 @@ pub struct AppearancePrefs {
     pub opacity: f32,
     /// UI language (FS-I18N-006: enum, not free String).
     pub language: Language,
+    /// Whether the context menu hint has been shown at least once.
+    /// Used to suppress the first-use onboarding hint after the user has seen it.
+    #[serde(default)]
+    pub context_menu_hint_shown: bool,
 }
 
 impl Default for AppearancePrefs {
@@ -52,6 +56,7 @@ impl Default for AppearancePrefs {
             theme_name: "umbra".to_string(),
             opacity: 1.0,
             language: Language::default(),
+            context_menu_hint_shown: false,
         }
     }
 }

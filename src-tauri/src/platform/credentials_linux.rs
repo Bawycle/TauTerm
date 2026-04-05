@@ -57,11 +57,7 @@ impl LinuxCredentialStore {
             Err(_) => return false,
         };
 
-        rt.block_on(async {
-            SecretService::connect(EncryptionType::Plain)
-                .await
-                .is_ok()
-        })
+        rt.block_on(async { SecretService::connect(EncryptionType::Plain).await.is_ok() })
     }
 }
 
@@ -79,9 +75,11 @@ impl CredentialStore for LinuxCredentialStore {
             .map_err(|e| CredentialError::Io(e.to_string()))?;
 
         rt.block_on(async {
-            let ss = SecretService::connect(EncryptionType::Dh).await.map_err(|e| {
-                CredentialError::Unavailable(format!("Secret Service unavailable: {e}"))
-            })?;
+            let ss = SecretService::connect(EncryptionType::Dh)
+                .await
+                .map_err(|e| {
+                    CredentialError::Unavailable(format!("Secret Service unavailable: {e}"))
+                })?;
 
             let collection = ss
                 .get_default_collection()
@@ -122,9 +120,11 @@ impl CredentialStore for LinuxCredentialStore {
             .map_err(|e| CredentialError::Io(e.to_string()))?;
 
         rt.block_on(async {
-            let ss = SecretService::connect(EncryptionType::Dh).await.map_err(|e| {
-                CredentialError::Unavailable(format!("Secret Service unavailable: {e}"))
-            })?;
+            let ss = SecretService::connect(EncryptionType::Dh)
+                .await
+                .map_err(|e| {
+                    CredentialError::Unavailable(format!("Secret Service unavailable: {e}"))
+                })?;
 
             let mut attributes: HashMap<&str, &str> = HashMap::new();
             attributes.insert(ATTR_SERVICE, ATTR_SERVICE_VALUE);
@@ -168,9 +168,11 @@ impl CredentialStore for LinuxCredentialStore {
             .map_err(|e| CredentialError::Io(e.to_string()))?;
 
         rt.block_on(async {
-            let ss = SecretService::connect(EncryptionType::Dh).await.map_err(|e| {
-                CredentialError::Unavailable(format!("Secret Service unavailable: {e}"))
-            })?;
+            let ss = SecretService::connect(EncryptionType::Dh)
+                .await
+                .map_err(|e| {
+                    CredentialError::Unavailable(format!("Secret Service unavailable: {e}"))
+                })?;
 
             let mut attributes: HashMap<&str, &str> = HashMap::new();
             attributes.insert(ATTR_SERVICE, ATTR_SERVICE_VALUE);

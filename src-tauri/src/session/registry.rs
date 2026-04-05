@@ -181,12 +181,8 @@ impl SessionRegistry {
         let reader_handle = get_reader_handle(&mut pty_box);
 
         if let Some(reader) = reader_handle {
-            let task = spawn_pty_read_task(
-                pane_id.clone(),
-                pane.vt.clone(),
-                self.app.clone(),
-                reader,
-            );
+            let task =
+                spawn_pty_read_task(pane_id.clone(), pane.vt.clone(), self.app.clone(), reader);
             pane.pty_task = Some(task);
         }
 
@@ -400,7 +396,12 @@ impl SessionRegistry {
     }
 
     /// Write input bytes to the pane's PTY.
-    pub fn send_input(&self, pane_id: PaneId, data: Vec<u8>) -> Result<(), SessionError> {
+    ///
+    /// Returns `((), did_reset_scroll)` where `did_reset_scroll` is `true` when
+    /// the pane was scrolled up and has been snapped back to the live view.
+    /// The command handler is responsible for emitting `scroll-position-changed`
+    /// in that case, because `SessionRegistry` does not hold an `AppHandle`.
+    pub fn send_input(&self, pane_id: PaneId, data: Vec<u8>) -> Result<bool, SessionError> {
         let mut inner = self.inner.write();
         let tab = inner
             .tabs
@@ -411,28 +412,49 @@ impl SessionRegistry {
             .panes
             .get_mut(&pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-        pane.write_input(&data)
+
+        pane.write_input(&data)?;
+
+        // Snap back to live view on any PTY input (scroll-freeze policy).
+        let did_reset_scroll = pane.scroll_offset > 0;
+        if did_reset_scroll {
+            pane.scroll_offset = 0;
+        }
+        Ok(did_reset_scroll)
     }
 
-    /// Scroll the pane's scrollback by `offset` lines (negative = up).
+    /// Scroll the pane's scrollback by `delta` lines (negative = scroll up, positive = scroll down).
+    ///
+    /// The resulting offset is clamped to `[0, scrollback_lines]` where 0 is the live view
+    /// and `scrollback_lines` is the furthest scrolled-up position.
     pub fn scroll_pane(
         &self,
         pane_id: PaneId,
-        offset: i64,
+        delta: i64,
     ) -> Result<ScrollPositionState, SessionError> {
-        let inner = self.inner.read();
+        let mut inner = self.inner.write();
         let tab = inner
             .tabs
-            .values()
+            .values_mut()
             .find(|e| e.panes.contains_key(&pane_id))
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-        let pane = tab.panes.get(&pane_id).unwrap();
-        let vt = pane.vt.read();
-        let snap = vt.get_snapshot();
-        let scrollback_lines = snap.scrollback_lines;
-        // TODO: maintain scroll offset state per pane.
+        let pane = tab
+            .panes
+            .get_mut(&pane_id)
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+
+        let scrollback_lines = {
+            let vt = pane.vt.read();
+            vt.get_snapshot().scrollback_lines
+        };
+
+        // Positive delta = scroll down (towards live), negative = scroll up (into scrollback).
+        // Stored offset: 0 = live view, increasing values = scrolled further up.
+        let new_offset = (pane.scroll_offset - delta).clamp(0, scrollback_lines as i64);
+        pane.scroll_offset = new_offset;
+
         Ok(ScrollPositionState {
-            offset,
+            offset: new_offset,
             scrollback_lines,
         })
     }
@@ -482,6 +504,33 @@ impl SessionRegistry {
         entry.state.active_pane_id = pane_id;
 
         Ok(entry.state.clone())
+    }
+
+    /// Get the `VtProcessor` Arc for a pane (used by SSH connection to wire the read task).
+    pub fn get_pane_vt(
+        &self,
+        pane_id: &PaneId,
+    ) -> Result<Arc<parking_lot::RwLock<crate::vt::VtProcessor>>, SessionError> {
+        let inner = self.inner.read();
+        let pane = inner
+            .tabs
+            .values()
+            .find_map(|e| e.panes.get(pane_id))
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        Ok(pane.vt.clone())
+    }
+
+    /// Get the current dimensions (cols, rows) of a pane.
+    pub fn get_pane_dims(&self, pane_id: &PaneId) -> Result<(u16, u16), SessionError> {
+        let inner = self.inner.read();
+        let pane = inner
+            .tabs
+            .values()
+            .find_map(|e| e.panes.get(pane_id))
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        let vt = pane.vt.read();
+        let snap = vt.get_snapshot();
+        Ok((snap.cols, snap.rows))
     }
 
     /// Get a full screen snapshot for `get_pane_screen_snapshot`.

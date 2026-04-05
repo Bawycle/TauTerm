@@ -99,7 +99,8 @@ pub fn spawn_pty_read_task(
 /// Build a `ScreenUpdateEvent` from the dirty region returned by `VtProcessor::process()`.
 ///
 /// Takes a snapshot and extracts cells for each dirty row.
-fn build_screen_update_event(
+/// `pub(crate)` so `session::ssh_task` can reuse it without duplication.
+pub(crate) fn build_screen_update_event(
     pane_id: &PaneId,
     vt: &Arc<RwLock<VtProcessor>>,
     dirty: &DirtyRegion,
@@ -163,10 +164,13 @@ fn build_screen_update_event(
         blink: false, // cursor_blink not yet tracked in VtProcessor snapshot
     };
 
+    let scrollback_lines = snapshot.scrollback_lines;
+
     ScreenUpdateEvent {
         pane_id: pane_id.clone(),
         cells,
         cursor,
+        scrollback_lines,
     }
 }
 

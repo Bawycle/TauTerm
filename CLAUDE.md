@@ -156,104 +156,46 @@ This rule applies equally to all agents. Reading a section takes a few hundred l
 
 ## Bootstrap Progress
 
-Last updated: 2026-04-05 (session h)
+Last updated: 2026-04-05 (session j)
 
-### Done
+### État courant
 
-| Area | Status | Details |
-|---|---|---|
-| **Rust modules** | ✅ Done | `error`, `vt`, `session`, `ssh`, `preferences`, `platform`, `events`, `commands` — all with stubs, `cargo check` green |
-| **Cargo dependencies** | ✅ Done | `portable-pty 0.9`, `vte 0.15`, `russh 0.60`, `secret-service 5`, `toml 1`, `tokio`, `thiserror`, `tracing`, etc. |
-| **Frontend design tokens** | ✅ Done | Umbra theme via Tailwind 4 `@theme` in `src/app.css` — full color, typography, spacing, ANSI 16 tokens |
-| **i18n (Paraglide JS)** | ✅ Done | `project.inlang/settings.json`, `en.json` + `fr.json` catalogues, `locale.svelte.ts` reactive state |
-| **IPC types (TypeScript)** | ✅ Done | `src/lib/ipc/types.ts` — full contract mirroring Rust structs; 18 inconsistencies found and corrected |
-| **Svelte component stubs** | ✅ Superseded | Initial stubs replaced by full implementations (see session f) |
-| **Rust tests (nextest)** | ✅ Done | 220 tests pass — VT, OSC, mouse, session, SSH state machine, preferences, security, path validation, LinuxPtySession + PTY integration harness |
-| **Frontend tests (vitest)** | ✅ Done | 238 tests pass (initial) — ipc/types, locale, keyboard, selection, split-tree, theming/validate, color, screen, input-security, TabBar logic, StatusBar logic; grown to 402 by sessions g+h |
-| **Security hardening (P0/P1)** | ✅ Done | CSP configured in `tauri.conf.json`; `private_key_path` redacted in Debug; `send_input` 64 KiB size limit; path traversal validation for SSH identity file |
-| **PreferencesStore::load_or_default()** | ✅ Done | Fallback to `Preferences::default()` on any disk/parse error — Language enum stays strict at serde boundary |
-| **Path traversal validation** | ✅ Done | `platform::validation`: `validate_ssh_identity_path()` (wired into `open_ssh_connection`) + `validate_shell_path()` (wired into `create_tab()` via `CreateTabConfig.shell`) |
-| **Frontend modules (P1)** | ✅ Done | `lib/terminal/keyboard.ts`, `lib/terminal/selection.ts`, `lib/layout/split-tree.ts`, `lib/theming/validate.ts` |
-| **LinuxPtySession::write/resize** | ✅ Done | `portable-pty` integration: real PTY allocation, child spawn, write, resize (TIOCSWINSZ + SIGWINCH), close (SIGHUP via fd drop) |
-| **PTY read task + screen-update events** | ✅ Done | `session/pty_task.rs`: `spawn_pty_read_task` reads PTY output on `spawn_blocking`, processes via `VtProcessor`, emits `screen-update` events via `AppHandle` |
-| **SessionRegistry PTY wiring** | ✅ Done | `create_tab` spawns real PTY, starts read task; `send_input` writes to PTY; `resize_pane` wired to `PaneSession::resize`; `AppHandle` + `PtyBackend` injected via `setup` hook |
-| **CreateTabConfig.shell + shell validation wiring** | ✅ Done | `CreateTabConfig.shell: Option<String>` added; `resolve_shell_path()` validates via `validate_shell_path()`, falls back to `$SHELL` then `/bin/sh` (FS-PTY-014) |
-| **Login shell flag** | ✅ Done | `CreateTabConfig.login: bool` — first tab passes `--login` to the shell command (FS-PTY-013) |
+**Rust backend — 221 tests nextest, clippy clean**
 
-### Corrections from sprint 2026-04-04
+| Domaine | État |
+|---|---|
+| Modules (`error`, `vt`, `session`, `ssh`, `preferences`, `platform`, `events`, `commands`) | ✅ |
+| PTY local : allocation, write, resize, SIGHUP, SIGWINCH, login shell, shell validation | ✅ |
+| VT parser : SGR, OSC, mouse, modes, UTF-8, wide chars, screen buffer, scrollback | ✅ |
+| SessionRegistry : create_tab, close_tab, rename/reorder, split/close pane, set_active_pane, send_input, resize_pane, scroll_pane (avec scroll_offset clamped + reset sur send_input) | ✅ |
+| SSH : TCP→handshake→auth (pubkey→password), TOFU (KnownHostsStore), keepalive, canal PTY (channel_open_session→request_pty→request_shell→read loop→screen-update), prompt commands (accept/reject host key, provide_credentials, reconnect), persistance connexions | ✅ |
+| Preferences : CRUD, thèmes, persistance disque, Language enum strict, context_menu_hint_shown | ✅ |
+| Sécurité : CSP, send_input 64 KiB limit, path traversal, OSC52 guard, credentials redactés dans Debug, clipboard 16 MiB limit | ✅ |
+| Notifications Bell (D-Bus, fallback gracieux), open_url (tauri-plugin-opener), clipboard (arboard) | ✅ |
+| IPC events : ScreenUpdateEvent (incl. scrollback_lines), scroll-position-changed, session-state-changed, ssh-state-changed, host-key-prompt | ✅ |
 
-- `PreferencesStore::save()` was listed as "pending" — **incorrect**. `save_to_disk()` is implemented and called by `apply_patch`, `save_theme`, and `delete_theme`. Preferences persist fully.
-- `set_active_tab`, `copy_selection`, `paste_to_pane`, `set_locale`, `get_locale` were listed as "P1 IPC gaps" — **removed from backlog**. None are in the canonical IPC contract (`ARCHITECTURE.md` §4.2). `set_active_tab` is not a command (frontend-local); `set_locale`/`get_locale` are covered by `update_preferences`/`get_preferences`; `copy_selection`/`paste_to_pane` are covered by `copy_to_clipboard` + `get_clipboard` + `send_input`.
-- PTY round-trip integration tests — **done** (session 2026-04-05).
+**Frontend — 415 tests vitest, pnpm check 0 erreurs**
 
-### Done (added 2026-04-05)
+| Domaine | État |
+|---|---|
+| Design tokens Umbra (Tailwind 4 @theme), i18n Paraglide JS (en/fr) | ✅ |
+| IPC types TypeScript (`src/lib/ipc/types.ts`) | ✅ |
+| Composants terminal : TerminalPane, TabBar, StatusBar, TerminalView | ✅ |
+| Bibliothèque UI : Button, TextInput, Toggle, Dropdown, Tooltip, Dialog | ✅ |
+| Composants overlay : ContextMenu, ProcessTerminatedPane, SearchOverlay, ScrollToBottomButton | ✅ |
+| Panels : PreferencesPanel (4 sections), ConnectionManager, KeyboardShortcutRecorder | ✅ |
+| Modules lib : keyboard, selection, split-tree, theming/validate, color, screen | ✅ |
+| Politique scroll : gel position, ScrollToBottomButton, reset automatique sur send_input | ✅ |
 
-| Area | Status | Details |
-|---|---|---|
-| **PTY integration harness** | ✅ Done | `pty_linux.rs`: env var tests (FPL-S-004/009), round-trip read (FPL-W-003/004), SIGHUP on close (FPL-C-001), SIGWINCH on resize (FPL-R-005) — 10 new tests, 186 Rust total |
-| **set_active_pane** | ✅ Done | `SessionRegistry::set_active_pane()` implemented; command handler emits `session-state-changed` with `ActivePaneChanged` |
-| **Clipboard commands** | ✅ Done | `copy_to_clipboard` + `get_clipboard` implemented via `arboard` + `spawn_blocking`; `MAX_CLIPBOARD_LEN = 16 MiB` guard; 4 unit tests; `clipboard-all` Tauri permission NOT required (arboard is direct Rust) |
-| **SPL load security tests** | ✅ Done | `security_load.rs`: `spl_rm_001` (fd leak baseline, `#[serial]`), `spl_sz_004` (timing + boundary) — all 3 tests run without `#[ignore]` as part of `cargo nextest run`; `serial_test 3` added to dev-dependencies |
-| **known_hosts TOFU** | ✅ Done | `ssh/known_hosts.rs`: `KnownHostsStore` with `load()`, `lookup()` (Unknown/Trusted/Mismatch), `add_entry()` (0600 perms), `import_from()`; 8 unit tests; hashed entries skipped (ADR-0007) |
-| **SecretService credential store** | ✅ Done | `platform/credentials_linux.rs`: real D-Bus probe + graceful fallback; `store()`/`get()`/`delete()` via `secret-service 5.1.0`; 4 unit tests; `is_available()` no longer hardcoded false |
-| **SshManager guard conditions** | ✅ Done | `ssh/manager.rs`: `connection_count()` utility; 6 unit tests — duplicate rejection, unknown pane errors, open→close cleanup, Connecting initial state |
-| **E2E scaffolding (WebdriverIO)** | ✅ Executed | `pnpm tauri build` succeeded (1m38s); `pnpm wdio` ran 3 spec files — 2 passed (app.spec.ts: window title + main view), 6 failed (pty-roundtrip: `.terminal-grid` absent — PTY stub; tab-lifecycle: `create_tab` IPC not implemented). Failures are expected given current stub state. |
+**Protocoles de tests**
+- `docs/test-protocols/` : 5 protocoles (PTY/VT/SSH/prefs/UI, base UI, terminal UI, composants h, backend SSH gaps) + protocole sécurité (§2.1–2.9)
 
-### Done (added 2026-04-05 session e)
+### Non implémenté
 
-| Area | Status | Details |
-|---|---|---|
-| **SSH connection lifecycle** | ✅ Done | `auth.rs`: `authenticate_password` + `authenticate_pubkey` against live `russh::client::Handle`; `keepalive.rs`: `make_client_config()` exposes `SSH_KEEPALIVE_INTERVAL` (30s) + `SSH_KEEPALIVE_MAX_MISSES` (3) via russh native keepalive (FS-SSH-020); `connection.rs`: `TauTermSshHandler` implements `russh::client::Handler` — TOFU `check_server_key` + `disconnected` event emission; `manager.rs`: full async connect task (TCP → russh handshake → auth order pubkey→password → Connected state) |
-| **CredentialManager wiring** | ✅ Done | `credentials.rs` now delegates to `platform::create_credential_store()` — `LinuxCredentialStore` on Linux; `is_available()` probes D-Bus; `store_password`/`get_password`/`delete_password` fully wired |
-| **SshError::Transport** | ✅ Done | Added `From<russh::Error> for SshError` — required by `russh::client::Handler::Error` bound |
+- **SecretService integration test** — round-trip D-Bus requiert keyring daemon actif
+- **E2E** — `pty-roundtrip.spec.ts` + `tab-lifecycle.spec.ts` bloqués sur wiring E2E complet (PTY SSH → screen-update → DOM)
+- **Inactive tab title contrast** — ≈ 2.5:1, sous WCAG AA ; décision design requise (TUITC-UX-060)
 
-### Done (added 2026-04-05 session f)
+### Erratum spec
 
-| Area | Status | Details |
-|---|---|---|
-| **TerminalPane (full implementation)** | ✅ Done | DOM cell grid (rows×cells), cursor overlay (DECSCUSR shapes, DECTCEM visibility, 530ms blink), selection highlighting (`SelectionManager`), scrollbar overlay, keyboard handler (`keyEventToVtSequence` + app-shortcut filtering), ResizeObserver (50ms debounce), IPC: `get_pane_screen_snapshot`, `listen('screen-update'/'scroll-position-changed'/'mode-state-changed')`, `invoke('send_input'/'resize_pane'/'scroll_pane')` |
-| **TabBar (full implementation)** | ✅ Done | Session-state-driven tab list sorted by `order`; title from `tab.label ?? processTitle`; SSH badge (lucide-svelte Network); activity indicators (dot/CheckCircle/XCircle/Bell); 44×44px close button; Bits UI `Tooltip.Root delayDuration={300}` on new-tab; arrow-key keyboard nav |
-| **StatusBar (full implementation)** | ✅ Done | LOCAL label; SSH indicator (Network/WifiOff/XCircle icons, per-state colors, spin/pulse animations, `prefers-reduced-motion` disable); process title (center); CWD with title tooltip (right) |
-| **TerminalView (full implementation)** | ✅ Done | `get_session_state` on mount; `listen('session-state-changed')` with all 6 changeTypes; `collectLeafPanes(PaneNode)` tree traversal; single/multi-pane layout; Ctrl+Shift+T/W app shortcuts |
-| **`lib/terminal/color.ts`** | ✅ Done | `ANSI_16_VARS`, `resolve256Color`, `resolveColorDto`, `resolveColor`, `cursorShape`, `cursorBlinks` — 20 tests |
-| **`lib/terminal/screen.ts`** | ✅ Done | `CellStyle`, `cellStyleFromSnapshot`, `cellStyleFromUpdate`, `buildGridFromSnapshot`, `applyUpdates` — 30 tests |
-| **Terminal UI test protocol** | ✅ Done | `docs/test-protocols/ui-terminal-components.md` — 91 scenarios (TUITC-FN, TUITC-UX, TUITC-SEC) |
-| **SEC-CSP-003 scanner fix** | ✅ Done | `security_static_checks.rs`: comment lines (`<!--`, `//`, `*`, `-` prefixed) excluded from `{@html}` scan to eliminate false-positives from doc notes |
-| **Test report** | ✅ Done | `docs/test-reports/ui-terminal-components-2026-04-05.md` |
-
-### Done (added 2026-04-05 session g)
-
-| Area | Status | Details |
-|---|---|---|
-| **Base UI components** | ✅ Done | `src/lib/ui/`: `Button` (4 variantes: primary/secondary/ghost/destructive), `TextInput` (label, placeholder, error, helper, disabled), `Toggle` (switch sémantique, states checked/disabled), `Dropdown` (Bits UI `Select`, keyboard nav, 44px items), `Tooltip` (Bits UI `Tooltip`, delayDuration=300ms), `Dialog` (Bits UI `Dialog`, focus trap, Escape, `aria-modal`); barrel export via `index.ts`; SPDX headers; `pnpm check` 0 erreurs |
-| **Base UI test protocol** | ✅ Done | `docs/test-protocols/ui-base-components.md` — 159 scénarios (fonctionnels, accessibilité WCAG 2.1 AA, i18n, sécurité UIBC-SEC-001 à SEC-015, design tokens, reduced motion); security sign-off intégré |
-| **Base UI tests (vitest)** | ✅ Done | `src/lib/ui/__tests__/`: 7 fichiers, 107 nouveaux tests passants (345 total, 0 régressions); `security-static.test.ts` (UIBC-SEC-014/006 statiques); 16 scénarios E2E-deferred (Bits UI portails, interactions pointer/focus); `vitest.config.ts` : `resolve.conditions: ['browser']` ajouté pour Svelte SSR fix |
-| **Test report** | ✅ Done | `docs/test-reports/ui-base-components-2026-04-05.md` |
-| **Bits UI API divergences** | ✅ Resolved | `Select.Value` absent en v2.17.0 → trigger label calculé via `$derived`; `Select.Trigger` utilise le pattern `{#snippet child({ props })}` (WithChild); `Tooltip` nécessite `Tooltip.Provider` en wrapper de test; `Dialog.Root` : `bind:open` via `$bindable()` |
-
-### Done (added 2026-04-05 session h)
-
-| Area | Status | Details |
-|---|---|---|
-| **ProcessTerminatedPane** | ✅ Done | `src/lib/components/ProcessTerminatedPane.svelte` — exit banner with exit code + optional signal name; success/error icon variants; `onrestart` + `onclose` callbacks; `role="status"` + `aria-live="polite"`; 12 tests pass |
-| **ContextMenu** | ✅ Done | `src/lib/components/ContextMenu.svelte` — `terminal` variant (Bits UI `ContextMenu`) + `tab` variant (Bits UI `DropdownMenu`); copy/paste/search/split/close items; 8 tests (5 pass + 3 E2E-deferred for portal ARIA) |
-| **KeyboardShortcutRecorder** | ✅ Done | `src/lib/components/KeyboardShortcutRecorder.svelte` — inline recorder with states inactive/recording/captured/conflict; conflict detection against `existingShortcuts`; Meta/Super excluded; `prefers-reduced-motion` pulse animation; 7 tests pass (required `flushSync` for Svelte 5 reactivity) |
-| **PreferencesPanel** | ✅ Done | `src/lib/components/PreferencesPanel.svelte` — Bits UI `Dialog`-based modal; 4 sections (Keyboard, Appearance, Terminal Behavior, Connections); 8 default shortcuts via `KeyboardShortcutRecorder`; font/language/cursor/scrollback/bell controls; Language enum enforced at TypeScript level; 11 tests (5 pass + 6 E2E-deferred for Dialog portal) |
-| **ConnectionManager** | ✅ Done | `src/lib/components/ConnectionManager.svelte` — standalone + inline modes; SSH connection list with group collapse; CRUD edit form (host, port, username, identity/password auth); `type="password"` masking; password cleared on save; action buttons with `aria-label`; 11 tests pass |
-| **SearchOverlay** | ✅ Done | `src/lib/components/SearchOverlay.svelte` — absolute overlay on pane; 150ms debounce; Enter/Shift+Enter/Escape keyboard nav; match count display; `role="search"` + `aria-live`; 44px hit targets; real `search_pane` IPC wired; 17 tests pass |
-| **TerminalPane integration** | ✅ Done | `TerminalPane.svelte` updated: `ContextMenu` wraps viewport; `ProcessTerminatedPane` conditionally rendered; `hasSelection` state tracked; context menu copy/paste handlers via `copy_to_clipboard`/`get_clipboard` IPC |
-| **TerminalView integration** | ✅ Done | `TerminalView.svelte` updated: `SearchOverlay` + `PreferencesPanel` wired; `Ctrl+Shift+F` → search; `Ctrl+,` → preferences; `get_preferences` on mount; search IPC calls (`search_pane`) |
-| **i18n keys (session h)** | ✅ Done | ~45 new keys added to `en.json` + `fr.json` covering context menu actions, preferences sections/fields, keyboard shortcut names, search UI strings, connection form labels |
-| **Test protocol (session h)** | ✅ Done | `docs/test-protocols/ui-process-terminated-context-preferences-connections-search.md` — ~120 scenarios (functional, accessibility, i18n, security) |
-| **Security protocol update** | ✅ Done | `docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md` §2.8 — 6 new UI component scenarios (SEC-UI-001..006) |
-| **Frontend tests (vitest)** | ✅ Done | 57 new tests across 5 files; full suite: **402 passed, 25 todo, 0 failing** (was 345+16); `flushSync` pattern established for Svelte 5 post-event DOM assertions; `Object.defineProperty` pattern for JSDOM clipboard mock |
-| **Test report** | ✅ Done | `docs/test-reports/ui-process-terminated-context-preferences-connections-search-2026-04-05.md` |
-
-### Not Yet Implemented (stubs only)
-
-- SSH PTY channel (FS-SSH-013) — `channel_open_session` + `request_pty` + `shell` deferred until PTY pipeline is wired
-- SSH reconnect (FS-SSH-040) — `reconnect_ssh` guard is present; full credential re-injection deferred
-- SecretService integration test (store/get/delete round-trip) — requires D-Bus + keyring daemon
-- Scroll offset state per pane (`scroll_pane` returns the requested offset without tracking it; no persistence across tab switches)
-- E2E scenarios: `pty-roundtrip.spec.ts` (2 scenarios) + `tab-lifecycle.spec.ts` (4 scenarios) fail — blocked on PTY pipeline wiring and live `create_tab` session round-trip
-- Inactive tab title contrast — `--color-tab-inactive-fg` on `--color-tab-bg` ≈ 2.5:1, below WCAG AA 4.5:1; flagged as TUITC-UX-060, requires design decision
+- **FS-SSH-013** — opcodes VKILL/VEOF inversés dans le doc. RFC 4254 fait autorité : VKILL=4, VEOF=5. Implémentation correcte ; `docs/FS.md` à corriger.

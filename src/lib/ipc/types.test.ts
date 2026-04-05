@@ -123,13 +123,15 @@ describe('IPC types — structural smoke tests', () => {
     expect(typeof attrs.underline).toBe('number');
   });
 
-  it('ScreenUpdateEvent has cells and cursor', () => {
+  it('ScreenUpdateEvent has cells, cursor, and scrollbackLines', () => {
     const event: ScreenUpdateEvent = {
       paneId: 'p1',
       cells: [],
       cursor: { row: 0, col: 0, visible: true, shape: 1, blink: false },
+      scrollbackLines: 42,
     };
     expect(event.cursor.row).toBe(0);
+    expect(event.scrollbackLines).toBe(42);
   });
 
   it('ScrollPositionChangedEvent has offset and scrollbackLines', () => {

@@ -122,6 +122,11 @@ mod tests {
     }
 
     /// Recursively collect all `{@html` occurrences in `.svelte` files.
+    ///
+    /// Lines inside HTML block comments (`<!-- ... -->`, possibly multi-line)
+    /// and lines inside TypeScript/JavaScript line comments (`//`) or block
+    /// comments (`/* ... */`) are excluded, as they may legitimately mention
+    /// `{@html}` to assert its absence.
     fn find_at_html_in_svelte_files(dir: &std::path::Path) -> Vec<String> {
         let mut violations = Vec::new();
         let Ok(entries) = std::fs::read_dir(dir) else {
@@ -135,25 +140,53 @@ mod tests {
                 let Ok(content) = std::fs::read_to_string(&path) else {
                     continue;
                 };
+                // Track whether we are inside a block comment.
+                let mut in_html_comment = false;
+                let mut in_js_block_comment = false;
                 for (line_no, line) in content.lines().enumerate() {
-                    if line.contains("{@html") {
-                        // Skip lines that are pure comments — the pattern may appear
-                        // in documentation notes asserting the absence of {@html}.
-                        let trimmed = line.trim();
-                        let is_comment = trimmed.starts_with("<!--")
-                            || trimmed.starts_with("//")
-                            || trimmed.starts_with("*")
-                            || trimmed.starts_with("-");
-                        if is_comment {
-                            continue;
-                        }
-                        violations.push(format!(
-                            "  {}:{}: {}",
-                            path.display(),
-                            line_no + 1,
-                            line.trim()
-                        ));
+                    // Update HTML comment state.
+                    // A line may both open and close a comment (<!-- ... -->).
+                    if !in_html_comment && line.contains("<!--") {
+                        in_html_comment = true;
                     }
+                    let was_in_html_comment = in_html_comment;
+                    if in_html_comment && line.contains("-->") {
+                        in_html_comment = false;
+                    }
+
+                    // Update JS/TS block comment state.
+                    if !in_js_block_comment && line.contains("/*") {
+                        in_js_block_comment = true;
+                    }
+                    let was_in_js_block_comment = in_js_block_comment;
+                    if in_js_block_comment && line.contains("*/") {
+                        in_js_block_comment = false;
+                    }
+
+                    if !line.contains("{@html") {
+                        continue;
+                    }
+
+                    // Skip lines inside block comments.
+                    if was_in_html_comment || was_in_js_block_comment {
+                        continue;
+                    }
+
+                    // Skip single-line comments.
+                    let trimmed = line.trim();
+                    let is_line_comment = trimmed.starts_with("//")
+                        || trimmed.starts_with("*")
+                        || trimmed.starts_with("-");
+                    if is_line_comment {
+                        continue;
+                    }
+
+                    violations.push(format!(
+                        "  {}:{}: {}",
+                        path.display(),
+                        line_no + 1,
+                        line.trim()
+                    ));
                 }
             }
         }

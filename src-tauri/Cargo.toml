@@ -70,6 +70,9 @@ base64 = "0.22"
 # Platform directories (config, data, cache paths)
 dirs = "6"
 
+# Desktop notifications (D-Bus org.freedesktop.Notifications on Linux)
+notify-rust = { version = "4", default-features = false, features = ["d"] }
+
 [dev-dependencies]
 # Temporary files and directories for tests
 tempfile = "3"

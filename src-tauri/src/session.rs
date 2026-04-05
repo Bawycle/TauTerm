@@ -12,6 +12,7 @@ pub mod pane;
 pub mod pty_task;
 pub mod registry;
 pub mod resize;
+pub mod ssh_task;
 pub mod tab;
 
 pub use ids::{ConnectionId, PaneId, TabId};

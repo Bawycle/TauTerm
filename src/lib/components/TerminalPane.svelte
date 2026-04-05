@@ -49,6 +49,7 @@
   import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
   import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
   import ContextMenu from './ContextMenu.svelte';
+  import ScrollToBottomButton from './ScrollToBottomButton.svelte';
 
   interface Props {
     paneId: PaneId;
@@ -177,6 +178,10 @@
       if (update.paneId !== paneId) return;
       applyUpdates(grid, update.cells, cols);
       cursor = update.cursor;
+      // Keep scrollbackLines in sync so the scrollbar stays accurate
+      if (typeof update.scrollbackLines === 'number') {
+        scrollbackLines = update.scrollbackLines;
+      }
       // Trigger Svelte reactivity on the grid array
       grid = grid.slice();
     });
@@ -301,6 +306,16 @@
     } catch {
       // PTY may have closed
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Scroll-to-bottom button handler
+  // -------------------------------------------------------------------------
+
+  async function handleScrollToBottom() {
+    try {
+      await invoke('scroll_pane', { paneId, offset: 0 });
+    } catch { /* non-fatal */ }
   }
 
   // -------------------------------------------------------------------------
@@ -484,6 +499,11 @@
         style:top="{scrollbarThumbTopPct}%"
       ></div>
     </div>
+  {/if}
+
+  <!-- Scroll-to-bottom button — shown when scrolled up into scrollback history -->
+  {#if scrollOffset > 0}
+    <ScrollToBottomButton onclick={handleScrollToBottom} />
   {/if}
   </ContextMenu>
 

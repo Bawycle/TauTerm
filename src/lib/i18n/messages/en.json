@@ -140,5 +140,7 @@
   "tab_context_menu_aria_label": "Tab context menu",
 
   "connection_duplicate_label_suffix": "{label} (copy)",
-  "connection_group_ungrouped": "Ungrouped"
+  "connection_group_ungrouped": "Ungrouped",
+
+  "scroll_to_bottom": "Go to bottom"
 }

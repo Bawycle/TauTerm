@@ -71,8 +71,7 @@ mod tests {
             "Default config must use SSH_KEEPALIVE_INTERVAL"
         );
         assert_eq!(
-            config.keepalive_max,
-            SSH_KEEPALIVE_MAX_MISSES as usize,
+            config.keepalive_max, SSH_KEEPALIVE_MAX_MISSES as usize,
             "Default config must use SSH_KEEPALIVE_MAX_MISSES"
         );
     }

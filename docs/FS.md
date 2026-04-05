@@ -409,6 +409,8 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-SB-006 | When returning to the normal screen buffer, the scrollback MUST be navigable with all previously accumulated content intact. | Must |
 | FS-SB-007 | The user MUST be able to scroll the scrollback using the mouse wheel, keyboard shortcuts, and a visible scrollbar. | Must |
 | FS-SB-008 | The scrollback buffer MUST distinguish between hard newlines (actual line breaks in the output) and soft wraps (line breaks introduced by terminal width). | Must |
+| FS-SB-009 | When `scroll_offset > 0` and the PTY process produces new output, the viewport position MUST be maintained. The system MUST NOT auto-scroll to the bottom. | Must |
+| FS-SB-010 | When the user sends keyboard input to the PTY while `scroll_offset > 0`, the backend MUST reset `scroll_offset` to 0 and emit a `scroll-position-changed` event. The frontend MUST scroll the viewport to the bottom upon receiving this event. | Must |
 
 **Acceptance criteria:**
 - FS-SB-001: Two panes have independent scrollback histories.
@@ -417,6 +419,8 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-SB-004: Running tmux (which uses a partial scroll region for the status bar), scrolling in the tmux pane does not add the tmux status bar to TauTerm's scrollback.
 - FS-SB-005: With vim open, scrolling in TauTerm does not navigate the scrollback.
 - FS-SB-006: After exiting vim, all pre-vim scrollback content is accessible.
+- FS-SB-009: While scrolled 50 lines into the scrollback, a command producing output does not move the viewport. The user's reading position is preserved.
+- FS-SB-010: While scrolled 50 lines into the scrollback, pressing any key that sends input to the PTY causes the viewport to jump to the bottom instantly. No additional scroll action is required.
 
 ---
 

@@ -140,5 +140,7 @@
   "tab_context_menu_aria_label": "Menu contextuel de l'onglet",
 
   "connection_duplicate_label_suffix": "{label} (copie)",
-  "connection_group_ungrouped": "Sans groupe"
+  "connection_group_ungrouped": "Sans groupe",
+
+  "scroll_to_bottom": "Aller en bas"
 }

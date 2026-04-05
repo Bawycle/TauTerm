@@ -11,6 +11,7 @@ use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
 use crate::preferences::PreferencesStore;
+use crate::session::SessionRegistry;
 use crate::session::ids::{ConnectionId, PaneId};
 use crate::ssh::SshManager;
 
@@ -20,6 +21,7 @@ pub async fn open_ssh_connection(
     connection_id: ConnectionId,
     ssh_manager: State<'_, Arc<SshManager>>,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
+    registry: State<'_, Arc<SessionRegistry>>,
     app: AppHandle,
 ) -> Result<(), TauTermError> {
     let config = {
@@ -37,9 +39,15 @@ pub async fn open_ssh_connection(
             })?
     };
 
+    // Retrieve the pane's VtProcessor and dimensions for the SSH read task.
+    let vt = registry.get_pane_vt(&pane_id).map_err(TauTermError::from)?;
+    let (cols, rows) = registry
+        .get_pane_dims(&pane_id)
+        .map_err(TauTermError::from)?;
+
     // Path validation is performed inside SshManager::open_connection (FINDING-004).
     ssh_manager
-        .open_connection(pane_id, &config, None, app)
+        .open_connection(pane_id, &config, None, app, vt, cols, rows)
         .await
         .map_err(TauTermError::from)
 }
@@ -59,9 +67,16 @@ pub async fn close_ssh_connection(
 pub async fn reconnect_ssh(
     pane_id: PaneId,
     ssh_manager: State<'_, Arc<SshManager>>,
+    registry: State<'_, Arc<SessionRegistry>>,
+    app: AppHandle,
 ) -> Result<(), TauTermError> {
+    let vt = registry.get_pane_vt(&pane_id).map_err(TauTermError::from)?;
+    let (cols, rows) = registry
+        .get_pane_dims(&pane_id)
+        .map_err(TauTermError::from)?;
+
     ssh_manager
-        .reconnect(pane_id)
+        .reconnect(pane_id, app, vt, cols, rows)
         .await
         .map_err(TauTermError::from)
 }

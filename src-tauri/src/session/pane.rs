@@ -15,8 +15,10 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
 use crate::platform::PtySession;
+use crate::session::ssh_task::SshTaskHandle;
 use crate::session::{ids::PaneId, lifecycle::PaneLifecycleState, pty_task::PtyTaskHandle};
 use crate::ssh::SshLifecycleState;
+use crate::ssh::connection::SshChannelArc;
 use crate::vt::VtProcessor;
 
 /// Serializable pane state — sent to the frontend via IPC.
@@ -29,6 +31,8 @@ pub struct PaneState {
     pub title: Option<String>,
     /// SSH session state. `None` for local PTY panes.
     pub ssh_state: Option<SshLifecycleState>,
+    /// Current scroll offset in scrollback lines (0 = bottom/live view).
+    pub scroll_offset: i64,
 }
 
 /// Live pane session data (not serialized — kept in the registry).
@@ -44,6 +48,12 @@ pub struct PaneSession {
     pub pty_session: Option<Box<dyn PtySession>>,
     /// Handle to the running PTY read task. Dropped to abort the task.
     pub pty_task: Option<PtyTaskHandle>,
+    /// SSH channel, present only for SSH panes (mutually exclusive with `pty_session`).
+    pub ssh_channel: Option<SshChannelArc>,
+    /// Handle to the running SSH read task (for SSH panes). Dropped to abort.
+    pub ssh_task: Option<SshTaskHandle>,
+    /// Current scroll offset in scrollback lines (0 = bottom/live view, positive = scrolled up).
+    pub scroll_offset: i64,
 }
 
 impl PaneSession {
@@ -56,6 +66,9 @@ impl PaneSession {
             ssh_state: None,
             pty_session: None,
             pty_task: None,
+            ssh_channel: None,
+            ssh_task: None,
+            scroll_offset: 0,
             id,
         }
     }
@@ -67,6 +80,7 @@ impl PaneSession {
             lifecycle: self.lifecycle.clone(),
             title: self.title.clone(),
             ssh_state: self.ssh_state.clone(),
+            scroll_offset: self.scroll_offset,
         }
     }
 

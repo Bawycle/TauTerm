@@ -135,12 +135,16 @@ impl From<SessionError> for TauTermError {
             SessionError::PtyIo(msg) => {
                 TauTermError::with_detail("PTY_IO_ERROR", "Terminal I/O error.", msg)
             }
-            SessionError::InvalidShellPath(msg) => {
-                TauTermError::with_detail("INVALID_SHELL_PATH", "Invalid shell executable path.", msg)
-            }
-            SessionError::PtySpawn(msg) => {
-                TauTermError::with_detail("PTY_SPAWN_FAILED", "Failed to start the shell process.", msg)
-            }
+            SessionError::InvalidShellPath(msg) => TauTermError::with_detail(
+                "INVALID_SHELL_PATH",
+                "Invalid shell executable path.",
+                msg,
+            ),
+            SessionError::PtySpawn(msg) => TauTermError::with_detail(
+                "PTY_SPAWN_FAILED",
+                "Failed to start the shell process.",
+                msg,
+            ),
         }
     }
 }

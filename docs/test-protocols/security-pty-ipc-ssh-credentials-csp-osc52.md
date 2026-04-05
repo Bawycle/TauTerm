@@ -20,6 +20,8 @@ Author role: security-expert
    - 2.5 [WebView / CSP](#25-webview--csp)
    - 2.6 [OSC 52 Clipboard](#26-osc-52-clipboard)
    - 2.7 [Path and Input Validation](#27-path-and-input-validation)
+   - 2.8 [UI Component Security](#28-ui-component-security-sprint-session-h)
+   - 2.9 [SSH Channel & TOFU Prompt Security](#29-ssh-channel--tofu-prompt-security)
 3. [Penetration Test Checklist](#3-penetration-test-checklist)
 4. [Security Regression Policy](#4-security-regression-policy)
 
@@ -730,6 +732,152 @@ New components introduced in sprint 2026-04-05 session h expose the following ad
 
 ---
 
+### 2.9 SSH Channel & TOFU Prompt Security
+
+New scenarios covering the `accept_host_key` / `reject_host_key` / `provide_credentials` prompt commands and the upcoming SSH PTY channel. These commands are currently stubs (`ssh_prompt_cmds.rs`) — scenarios are pre-implementation requirements that MUST be verified before the stubs are promoted to full implementations.
+
+#### SEC-SSH-CH-001
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-001 |
+| **STRIDE** | Tampering / Elevation of Privilege |
+| **FS requirement(s)** | FS-SSH-011 |
+| **Threat** | `accept_host_key` is called by the frontend for a `pane_id` that has no pending TOFU confirmation (the pane is Connected, Disconnected, or unknown). The stub currently accepts any `pane_id` with `Ok(())`. When implemented, this means a frontend script or a race condition can silently write an arbitrary host key into `KnownHostsStore` for an unrelated pane. |
+| **Test method** | Unit test: call `accept_host_key` with a `pane_id` that is absent from the SSH manager, and separately with a `pane_id` whose connection is in `Connected` state (no pending TOFU). Assert both return `Err(TauTermError)` with code `NO_PENDING_TOFU`. Assert `KnownHostsStore` is not written. |
+| **Expected mitigation** | `accept_host_key` checks the SSH manager for a pending TOFU entry keyed by `pane_id`. The entry is only created by `check_server_key` when it emits a `host-key-prompt` event. No entry → immediate error return with no side effects. |
+| **Priority** | Critical |
+| **Environment** | Unit test; no network required. Blocked on stub implementation. |
+| **Stub dependency** | `ssh_prompt_cmds.rs: accept_host_key` — currently a no-op. |
+
+#### SEC-SSH-CH-002
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-002 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-SSH-011, FS-CRED-006 |
+| **Threat** | The key bytes written to `KnownHostsStore` upon `accept_host_key` come from the pending TOFU entry cached in process memory — they are not re-supplied by the frontend. However, if the implementation passes `key_bytes` through any deserialization step (e.g., re-reading them from an IPC payload), a malicious frontend could substitute a different key to be stored, bypassing TOFU and registering an attacker-controlled key as trusted for a legitimate host. |
+| **Test method** | Code review: verify that `accept_host_key` extracts the key material exclusively from the in-process TOFU pending map (populated by `check_server_key`). Assert the IPC command signature for `accept_host_key` accepts only `pane_id` — no `key_bytes`, `key_type`, or `fingerprint` parameters that could be tampered by the caller. Unit test: confirm that the stored entry in `KnownHostsStore` matches the exact bytes originally received from `russh` in `check_server_key`. |
+| **Expected mitigation** | The TOFU pending map stores `(host, key_type, key_bytes)` keyed by `pane_id` at the time `check_server_key` runs. `accept_host_key` looks up the entry by `pane_id` and passes the stored bytes to `KnownHostsStore::add_entry()` — no re-supply from the IPC caller. |
+| **Priority** | Critical |
+| **Environment** | Code review + unit test. Blocked on stub implementation. |
+| **Stub dependency** | `ssh_prompt_cmds.rs: accept_host_key` — requires TOFU pending map. |
+
+#### SEC-SSH-CH-003
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-003 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-SSH-011 |
+| **Threat** | The user double-clicks "Accept" in the TOFU confirmation UI, causing two concurrent `accept_host_key` IPC calls for the same `pane_id`. Depending on timing, both calls read the pending entry before either removes it, resulting in two writes to `KnownHostsStore` — which is benign for idempotent writes but could cause a TOCTOU window if the pending entry is consumed and replaced between the two reads. More critically, the first acceptance could be for the legitimate key and the second for a different key if `check_server_key` fires again on a reconnect attempt in the same time window. |
+| **Test method** | Concurrency unit test: insert a TOFU pending entry, spawn two concurrent `accept_host_key` calls for the same `pane_id`. Assert exactly one write to `KnownHostsStore` succeeds. Assert the second call returns `Err(TauTermError::NoPendingTofu)` (the entry is consumed atomically on the first call). Use a `tokio::test` with `join!` to create the race. |
+| **Expected mitigation** | The TOFU pending map uses an atomic remove (`DashMap::remove` returns the entry and removes it in one operation). The first `accept_host_key` call consumes the entry; any subsequent call for the same `pane_id` finds no entry and returns an error. |
+| **Priority** | High |
+| **Environment** | Concurrency unit test (`tokio::test`). Blocked on stub implementation. |
+| **Stub dependency** | `ssh_prompt_cmds.rs: accept_host_key` — requires atomic TOFU pending map. |
+
+#### SEC-SSH-CH-004
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-004 |
+| **STRIDE** | Tampering / Elevation of Privilege |
+| **FS requirement(s)** | FS-SSH-011 |
+| **Threat** | `accept_host_key` is called for a Mismatch case (key changed, potential MITM). The implementation treats Unknown and Mismatch identically — it writes the new key over the old one. For the Mismatch case, the write should require a more deliberate user action and should log an auditable event. If the Mismatch variant silently replaces the stored key with the attacker's key, the MITM protection of TOFU is permanently disabled for that host without any persistent warning. |
+| **Test method** | Unit test: simulate a Mismatch TOFU pending entry (key changed for a known host). Call `accept_host_key`. Assert that `KnownHostsStore::add_entry()` is called and replaces the old key. Assert that a structured `tracing::warn!` event is emitted with the host, both the old and new fingerprints, and the `pane_id`. Verify the warning event is NOT emitted for the Unknown (first-connection) case. |
+| **Expected mitigation** | `accept_host_key` inspects the TOFU pending entry variant. For Mismatch, it emits an auditable `tracing::warn!` log entry in addition to writing the new key. The frontend already shows a stronger warning for Mismatch (via `is_changed: true` in `HostKeyPromptEvent`). The backend-side audit log ensures the acceptance is traceable even if the frontend is compromised. |
+| **Priority** | High |
+| **Environment** | Unit test. Blocked on stub implementation. |
+| **Stub dependency** | `ssh_prompt_cmds.rs: accept_host_key` — requires TOFU pending map with variant discrimination. |
+
+#### SEC-SSH-CH-005
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-005 |
+| **STRIDE** | Elevation of Privilege / Spoofing |
+| **FS requirement(s)** | FS-SSH-012, FS-CRED-001 |
+| **Threat** | `provide_credentials` is called by the frontend for a `pane_id` that is not in the `AwaitingCredentials` state (e.g., a pane that is already Connected, or an unknown pane). The current stub accepts and discards any call. When implemented, if the backend does not verify the state, an attacker (malicious script in the WebView) can inject credentials into an already-authenticated session or into a pane owned by another connection. |
+| **Test method** | Unit test: call `provide_credentials` for a pane in `Connected` state. Assert `Err(TauTermError)` is returned with code `NO_PENDING_CREDENTIALS`. Unit test: call `provide_credentials` for an unknown `pane_id`. Assert `Err(TauTermError::PaneNotFound)`. Unit test: call `provide_credentials` for a pane in `AwaitingCredentials` state — assert it is accepted and forwarded to the auth flow. |
+| **Expected mitigation** | `provide_credentials` checks the SSH manager for a pane in `AwaitingCredentials` state. The credentials are forwarded to the waiting auth task via a `tokio::sync::oneshot` channel that is created and stored in the pending credentials map when the auth flow requests credentials. The pending entry is consumed (oneshot sends exactly once). |
+| **Priority** | Critical |
+| **Environment** | Unit test. Blocked on stub implementation. |
+| **Stub dependency** | `ssh_prompt_cmds.rs: provide_credentials` — requires pending credentials state map. |
+
+#### SEC-SSH-CH-006
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-006 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-CRED-004 |
+| **Threat** | The `Credentials` struct received by `provide_credentials` is passed through an async pipeline (oneshot channel, auth task). At any point in this pipeline, a `tracing::debug!` or `tracing::error!` call formats the struct with `{:?}`, exposing the password or private key path. The existing `Debug` impl on `Credentials` redacts these fields — but if the struct is ever wrapped in a tuple, a `Result`, or another struct that derives `Debug`, the redaction is bypassed. |
+| **Test method** | Static analysis: search `src-tauri/src/` for any `tracing::` call whose argument contains a `Credentials` value, directly or wrapped in a `Result` or tuple. Unit test: format `Ok(credentials)` with `{:?}` and assert the output does not contain the password value. Format `Err(SshError::Auth(...))` containing credential data and assert no password leaks. |
+| **Expected mitigation** | `Credentials` custom `Debug` impl redacts sensitive fields (already implemented in `manager.rs`). All `tracing::` calls that log results containing `Credentials` must be audited. Result and Option wrapping of `Credentials` must not be logged at any level without explicit redaction. |
+| **Priority** | Critical |
+| **Environment** | Static analysis + unit test. Partially covered by SEC-IPC-003 and the existing `sec_cred_003_*` tests — this scenario extends the coverage to wrapper types and the async pipeline. |
+| **Stub dependency** | `ssh_prompt_cmds.rs: provide_credentials` — full auth pipeline required to audit all log call sites. |
+
+#### SEC-SSH-CH-007
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-007 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-CRED-001, FS-SSH-040 |
+| **Threat** | The reconnect flow (`SshManager::reconnect`) will need to re-supply credentials to the SSH auth sequence. If the original `Credentials` struct is stored in-memory on the `SshConnection` entry between disconnection and reconnect, the password remains in process heap for an unbounded duration — potentially hours if the network is flaky. A memory snapshot of the TauTerm process at any point during this window recovers the password in clear. |
+| **Test method** | Code review: verify that `SshConnection` does NOT store a `Credentials` field. Verify that the reconnect flow re-fetches credentials from `CredentialManager` (Secret Service) at reconnect time, not from a cached in-memory copy. Integration test (when reconnect is implemented): disconnect an SSH session, wait 60 seconds, reconnect — assert the credential is retrieved from the keychain, not from memory. |
+| **Expected mitigation** | `SshConnection` stores only the `SshConnectionConfig` (host, port, username, identity file path — no password). On reconnect, `CredentialManager::get_password()` is called to retrieve the credential from the OS keychain at reconnect time. The `Credentials` struct lifetime is scoped to the single `connect_task` call and does not outlive authentication. |
+| **Priority** | High |
+| **Environment** | Code review. Integration test blocked on reconnect implementation (FS-SSH-040). |
+| **Stub dependency** | `SshManager::reconnect` — currently a stub returning `Ok(())` without credential re-injection. |
+
+#### SEC-SSH-CH-008
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-008 |
+| **STRIDE** | Tampering |
+| **FS requirement(s)** | FS-VT-075, FS-SSH-013 |
+| **Threat** | The SSH PTY channel read loop (FS-SSH-013, not yet implemented) will pipe server output through `VtProcessor`. The `allow_osc52_write` flag on `SshConnectionConfig` controls whether OSC 52 clipboard writes are permitted for that connection. If the read loop constructs the `VtProcessor` without passing this flag — or uses the global preference value instead of the per-connection value — a server that has not been granted OSC 52 write permission can silently overwrite the user's clipboard. |
+| **Test method** | Code review (at implementation time): verify that the SSH channel read loop retrieves `allow_osc52_write` from `SshConnectionConfig` (not from `AppearancePrefs`) and constructs the `VtProcessor` session policy accordingly. Unit test (extends SEC-OSC-002): create a `VtProcessor` configured with `allow_osc52_write = false` (SSH session, policy from `SshConnectionConfig`). Feed an OSC 52 write sequence. Assert `OscAction::Ignore`. |
+| **Expected mitigation** | The `VtProcessor` session policy is configured at channel creation time from the `SshConnectionConfig::allow_osc52_write` field. The global `AppearancePrefs` OSC 52 setting applies only to local PTY sessions. Per-connection override is enforced in the SSH read task, not in the VtProcessor logic itself. |
+| **Priority** | High |
+| **Environment** | Code review + unit test. Blocked on SSH PTY channel implementation (FS-SSH-013). |
+| **Stub dependency** | SSH PTY channel read loop — not yet implemented. |
+
+#### SEC-SSH-CH-009
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-009 |
+| **STRIDE** | Denial of Service |
+| **FS requirement(s)** | FS-SSH-013, FS-SEC-005 |
+| **Threat** | The SSH PTY channel read loop reads data from the `russh` channel in a `spawn_blocking` task. If the server sends a very large burst (e.g., a 64 MiB `cat /dev/zero` equivalent over SSH), the read buffer grows unboundedly before `VtProcessor::process()` can consume it. This causes excessive heap allocation in the Tokio thread pool, potentially triggering OOM in the Tauri process. |
+| **Test method** | Integration test (when SSH channel is implemented): connect to a mock SSH server that immediately sends 64 MiB of output at maximum speed. Assert TauTerm's memory usage does not exceed a defined threshold (suggested: 32 MiB of buffered SSH output maximum). Assert the pane continues to render partial output rather than hanging. Assert the read task does not panic or OOM. |
+| **Expected mitigation** | The SSH channel read task imposes a per-read buffer limit (suggested: 64 KiB per `channel.data()` call, consistent with the PTY read task). Excess data triggers back-pressure via `tokio`'s async channel bounding. The screen buffer itself is bounded by the viewport row count and the scrollback limit (FS-VT-023). |
+| **Priority** | High |
+| **Environment** | Integration test. Blocked on SSH PTY channel implementation. |
+| **Stub dependency** | SSH PTY channel read loop — not yet implemented. |
+
+#### SEC-SSH-CH-010
+
+| Field | Value |
+|-------|-------|
+| **ID** | SEC-SSH-CH-010 |
+| **STRIDE** | Information Disclosure |
+| **FS requirement(s)** | FS-SSH-011, FS-CRED-004 |
+| **Threat** | The `disconnected()` handler in `TauTermSshHandler` formats `SshError` values with `{e:?}` and places them in the `reason` field of the `SshStateChangedEvent`. This event is serialized to JSON and sent to the frontend via Tauri's event system. If an `SshError` variant ever wraps a `Credentials` struct, a `String` containing a password (e.g., from an error message that includes the auth payload), or a file path, sensitive information is emitted to the WebView renderer process. |
+| **Test method** | Code review: audit all `SshError` variants for fields that could contain sensitive data. Verify `SshError` does not wrap `Credentials` or `String` values that originate from credential or private key material. Unit test: construct each `SshError` variant that appears in `reason_str` paths and format it with `{:?}`. Assert the output contains no password or key path strings. Also verify the `SshStateChangedEvent::reason` field on the frontend TypeScript side: confirm it is rendered as plain text (not `{@html}`) in all UI components that display SSH error messages. |
+| **Expected mitigation** | `SshError` variants contain only safe diagnostic strings — no credential material. The `format!("Connection lost: {e:?}")` pattern in `disconnected()` is safe as long as this invariant holds. A CI static check on `SshError` variants (similar to the `{@html}` audit) is added to §4.4. |
+| **Priority** | High |
+| **Environment** | Code review + unit test. No external dependencies. |
+| **Stub dependency** | None — `SshError` and `disconnected()` are already implemented. This scenario can be executed immediately. |
+
+---
+
 ## 3. Penetration Test Checklist
 
 This checklist consolidates the manual and integration tests that cannot be fully automated. It must be executed before each major release (MINOR or MAJOR version).
@@ -824,6 +972,10 @@ The following security tests cannot currently be executed because the underlying
 | SEC-CRED-001, SEC-CRED-002, SEC-CRED-005 | Secret Service not implemented | `credentials_linux.rs` |
 | SEC-CSP-001 | CSP is `null` in `tauri.conf.json` | CSP must be configured |
 | SEC-OSC-002 | Per-connection OSC 52 policy resolution not wired | Policy resolver in `VtProcessor` setup |
+| SEC-SSH-CH-001, SEC-SSH-CH-002, SEC-SSH-CH-003, SEC-SSH-CH-004 | TOFU pending map not implemented | `ssh_prompt_cmds.rs: accept_host_key` |
+| SEC-SSH-CH-005, SEC-SSH-CH-006 | Pending credentials state map not implemented | `ssh_prompt_cmds.rs: provide_credentials` |
+| SEC-SSH-CH-007 | Reconnect credential re-injection not implemented | `SshManager::reconnect` (FS-SSH-040) |
+| SEC-SSH-CH-008, SEC-SSH-CH-009 | SSH PTY channel read loop not implemented | SSH channel (FS-SSH-013) |
 
 ### 4.4 Continuous Security Checks (CI)
 

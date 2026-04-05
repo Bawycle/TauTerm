@@ -16,22 +16,39 @@
 //! accept silently.
 
 use std::future::Future;
+use std::sync::Arc;
 
 use russh::keys::{HashAlg, PublicKeyBase64};
 use tauri::AppHandle;
 
 use crate::error::SshError;
-use crate::events::{emit_host_key_prompt, emit_ssh_state_changed};
 use crate::events::{HostKeyPromptEvent, SshStateChangedEvent};
+use crate::events::{emit_host_key_prompt, emit_ssh_state_changed};
 use crate::session::ids::PaneId;
-use crate::ssh::{SshConnectionConfig, SshLifecycleState};
+use crate::session::ssh_task::SshTaskHandle;
 use crate::ssh::known_hosts::{KnownHostLookup, KnownHostsStore};
+use crate::ssh::{SshConnectionConfig, SshLifecycleState};
+
+/// Write-side of an SSH PTY channel, shared between the connection and the pane.
+///
+/// Wrapped in `Arc<tokio::sync::Mutex<...>>` because:
+/// - The read task needs the full `Channel` (via `wait()`).
+/// - The write path needs it too (via `data()`).
+///
+/// Both hold the same Arc; writes are serialized by the async mutex.
+pub type SshChannelArc = Arc<tokio::sync::Mutex<russh::Channel<russh::client::Msg>>>;
 
 /// An active or pending SSH connection for one pane.
 pub struct SshConnection {
     pub pane_id: PaneId,
     pub config: SshConnectionConfig,
     state: parking_lot::Mutex<SshLifecycleState>,
+    /// The russh client handle — kept alive to prevent connection teardown.
+    pub handle: tokio::sync::Mutex<Option<russh::client::Handle<TauTermSshHandler>>>,
+    /// Shared SSH channel — `None` until the PTY channel is opened.
+    pub channel: Option<SshChannelArc>,
+    /// Handle to the async read task. Dropped to abort it.
+    pub read_task: Option<SshTaskHandle>,
 }
 
 impl SshConnection {
@@ -40,6 +57,9 @@ impl SshConnection {
             pane_id,
             config,
             state: parking_lot::Mutex::new(SshLifecycleState::Connecting),
+            handle: tokio::sync::Mutex::new(None),
+            channel: None,
+            read_task: None,
         }
     }
 
@@ -52,6 +72,32 @@ impl SshConnection {
     pub fn set_state(&self, new_state: SshLifecycleState) {
         *self.state.lock() = new_state;
     }
+
+    /// Send bytes to the remote PTY via the SSH channel.
+    ///
+    /// Returns `Err` if no channel is open or if the send fails.
+    pub async fn send_input(&self, data: Vec<u8>) -> Result<(), SshError> {
+        let channel = self
+            .channel
+            .as_ref()
+            .ok_or_else(|| SshError::Connection("SSH channel not open.".to_string()))?;
+        let ch = channel.lock().await;
+        ch.data(data.as_slice())
+            .await
+            .map_err(|e| SshError::Connection(format!("channel write error: {e}")))
+    }
+
+    /// Send a window-resize request to the remote PTY.
+    pub async fn resize(&self, cols: u16, rows: u16, px_w: u16, px_h: u16) -> Result<(), SshError> {
+        let channel = self
+            .channel
+            .as_ref()
+            .ok_or_else(|| SshError::Connection("SSH channel not open.".to_string()))?;
+        let ch = channel.lock().await;
+        ch.window_change(cols as u32, rows as u32, px_w as u32, px_h as u32)
+            .await
+            .map_err(|e| SshError::Connection(format!("window_change error: {e}")))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +108,10 @@ impl SshConnection {
 ///
 /// Holds the pane ID and `AppHandle` needed to emit events. The known-hosts
 /// store path is passed at construction time.
+///
+/// `manager` is an `Arc<SshManager>` weak reference used to store pending host
+/// key verifications in the manager's `pending_host_keys` map, so that
+/// `accept_host_key` / `reject_host_key` command handlers can retrieve them.
 pub struct TauTermSshHandler {
     pub pane_id: PaneId,
     pub host: String,
@@ -69,6 +119,8 @@ pub struct TauTermSshHandler {
     /// Path to TauTerm's known-hosts file. Uses `KnownHostsStore::default_path()`
     /// if not overridden (only overridden in tests).
     pub known_hosts_path: Option<std::path::PathBuf>,
+    /// Weak reference to the SSH manager for storing pending host key prompts.
+    pub manager: Option<std::sync::Weak<crate::ssh::manager::SshManager>>,
 }
 
 impl TauTermSshHandler {
@@ -78,7 +130,14 @@ impl TauTermSshHandler {
             host: config.host.clone(),
             app,
             known_hosts_path: None,
+            manager: None,
         }
+    }
+
+    /// Attach a weak reference to the SSH manager for pending host key storage.
+    pub fn with_manager(mut self, manager: &Arc<crate::ssh::manager::SshManager>) -> Self {
+        self.manager = Some(Arc::downgrade(manager));
+        self
     }
 }
 
@@ -101,6 +160,7 @@ impl russh::client::Handler for TauTermSshHandler {
         let host = self.host.clone();
         let app = self.app.clone();
         let known_hosts_path = self.known_hosts_path.clone();
+        let manager_weak = self.manager.clone();
 
         // Compute fingerprint (SHA-256) and key type for the prompt event.
         let fingerprint = server_public_key.fingerprint(HashAlg::Sha256).to_string();
@@ -129,8 +189,21 @@ impl russh::client::Handler for TauTermSshHandler {
                     Ok(true)
                 }
                 KnownHostLookup::Unknown => {
-                    // First connection — emit TOFU prompt and reject.
-                    // The user must confirm via UI and reconnect.
+                    // First connection — store pending host key and emit TOFU prompt.
+                    // The user must confirm via UI (`accept_host_key`) and reconnect.
+                    if let Some(ref weak) = manager_weak
+                        && let Some(mgr) = weak.upgrade()
+                    {
+                        mgr.pending_host_keys.insert(
+                            pane_id.clone(),
+                            crate::ssh::manager::PendingHostKey {
+                                host: host.clone(),
+                                key_type: key_type.clone(),
+                                key_bytes: key_bytes.clone(),
+                                is_mismatch: false,
+                            },
+                        );
+                    }
                     emit_host_key_prompt(
                         &app,
                         HostKeyPromptEvent {
@@ -144,8 +217,21 @@ impl russh::client::Handler for TauTermSshHandler {
                     Ok(false)
                 }
                 KnownHostLookup::Mismatch { .. } => {
-                    // Key changed — potential MITM. Emit warning and reject.
+                    // Key changed — potential MITM. Store pending key and emit warning.
                     // Default action is Reject (FS-SSH-011).
+                    if let Some(ref weak) = manager_weak
+                        && let Some(mgr) = weak.upgrade()
+                    {
+                        mgr.pending_host_keys.insert(
+                            pane_id.clone(),
+                            crate::ssh::manager::PendingHostKey {
+                                host: host.clone(),
+                                key_type: key_type.clone(),
+                                key_bytes: key_bytes.clone(),
+                                is_mismatch: true,
+                            },
+                        );
+                    }
                     emit_host_key_prompt(
                         &app,
                         HostKeyPromptEvent {

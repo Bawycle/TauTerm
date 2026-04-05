@@ -171,12 +171,7 @@ impl KnownHostsStore {
     ///
     /// The file is created with permissions 0600 if it does not exist.
     /// The parent directory is created with 0700 if needed.
-    pub fn add_entry(
-        &self,
-        hostname: &str,
-        key_type: &str,
-        key_bytes: &[u8],
-    ) -> io::Result<()> {
+    pub fn add_entry(&self, hostname: &str, key_type: &str, key_bytes: &[u8]) -> io::Result<()> {
         // Ensure the parent directory exists with restrictive permissions.
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
@@ -199,6 +194,37 @@ impl KnownHostsStore {
             .open(&self.path)?;
 
         file.write_all(line.as_bytes())?;
+        Ok(())
+    }
+
+    /// Remove all entries for a given hostname from the known-hosts file.
+    ///
+    /// Used when accepting a new key for a host whose key has changed (Mismatch case):
+    /// the old entry is removed before the new one is added.
+    pub fn remove_entries_for_host(&self, hostname: &str) -> io::Result<()> {
+        let (entries, _) = self.load()?;
+        let remaining: Vec<_> = entries
+            .into_iter()
+            .filter(|e| e.hostname != hostname)
+            .collect();
+
+        // Re-write the file with the filtered entries.
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&self.path)?;
+
+        for entry in &remaining {
+            let key_b64 = BASE64.encode(&entry.key_bytes);
+            writeln!(file, "{} {} {}", entry.hostname, entry.key_type, key_b64)?;
+        }
+
         Ok(())
     }
 
@@ -247,7 +273,9 @@ mod tests {
     /// Parse an ED25519 known_hosts entry.
     #[test]
     fn known_hosts_parse_ed25519_entry() {
-        let key_bytes = vec![0u8, 0, 0, 11, 115, 115, 104, 45, 101, 100, 50, 53, 53, 49, 57];
+        let key_bytes = vec![
+            0u8, 0, 0, 11, 115, 115, 104, 45, 101, 100, 50, 53, 53, 49, 57,
+        ];
         let key_b64 = BASE64.encode(&key_bytes);
         let content = format!("example.com ssh-ed25519 {key_b64}\n");
 
@@ -373,7 +401,11 @@ mod tests {
         let store = KnownHostsStore::new(path);
 
         let (entries, skipped) = store.load().expect("load");
-        assert_eq!(entries.len(), 1, "Only the non-comment entry should be parsed");
+        assert_eq!(
+            entries.len(),
+            1,
+            "Only the non-comment entry should be parsed"
+        );
         assert_eq!(skipped, 0);
     }
 

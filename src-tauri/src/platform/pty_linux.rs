@@ -222,7 +222,11 @@ mod tests {
     fn fpl_w_001_write_small_payload_succeeds() {
         let mut session = open_sh_session(80, 24).expect("open session");
         let result = session.write(b"ls\n");
-        assert!(result.is_ok(), "write small payload must succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "write small payload must succeed: {:?}",
+            result.err()
+        );
     }
 
     // --- FPL-W-002: write 64 KiB payload succeeds ---
@@ -231,7 +235,11 @@ mod tests {
         let mut session = open_sh_session(80, 24).expect("open session");
         let payload = vec![b'a'; 65_536];
         let result = session.write(&payload);
-        assert!(result.is_ok(), "write 64 KiB must succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "write 64 KiB must succeed: {:?}",
+            result.err()
+        );
     }
 
     // --- FPL-R-001: resize returns Ok ---
@@ -247,7 +255,11 @@ mod tests {
     fn fpl_r_002_resize_with_pixel_dims_succeeds() {
         let mut session = open_sh_session(80, 24).expect("open session");
         let result = session.resize(80, 24, 960, 480);
-        assert!(result.is_ok(), "resize with pixel dims must succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "resize with pixel dims must succeed: {:?}",
+            result.err()
+        );
     }
 
     // --- FPL-R-003: degenerate resize (0,0) succeeds without panic ---
@@ -274,7 +286,9 @@ mod tests {
                 let jh = tokio::spawn(async {
                     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                 });
-                let handle = PtyTaskHandle { abort: jh.abort_handle() };
+                let handle = PtyTaskHandle {
+                    abort: jh.abort_handle(),
+                };
                 drop(handle);
                 jh.await
             });
@@ -362,7 +376,8 @@ mod tests {
             &[("TERM", "xterm-256color"), ("COLORTERM", "truecolor")],
         );
         let reader = session.reader_handle();
-        let output = read_until_timeout(reader, "xterm-256color", std::time::Duration::from_secs(5));
+        let output =
+            read_until_timeout(reader, "xterm-256color", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
             "FPL-S-004: TERM=xterm-256color must appear in child process output"
@@ -596,10 +611,8 @@ mod tests {
         use std::path::PathBuf;
 
         // Unique marker file for this test run.
-        let marker_path = PathBuf::from(format!(
-            "/tmp/tauterm_fpl_c_001_{}.txt",
-            std::process::id()
-        ));
+        let marker_path =
+            PathBuf::from(format!("/tmp/tauterm_fpl_c_001_{}.txt", std::process::id()));
         // Cleanup if left from a previous failed run.
         let _ = std::fs::remove_file(&marker_path);
 
@@ -626,7 +639,10 @@ mod tests {
 
         // Wait for "READY" to confirm the shell trap is installed.
         let ready = read_until_timeout(reader.clone(), "READY", std::time::Duration::from_secs(5));
-        assert!(ready.is_some(), "FPL-C-001: child must print READY before we close");
+        assert!(
+            ready.is_some(),
+            "FPL-C-001: child must print READY before we close"
+        );
 
         // Explicitly drop the reader Arc so it releases its cloned master fd.
         // All master-side fds must be closed for SIGHUP to be delivered.
@@ -694,12 +710,11 @@ mod tests {
         let reader = session.reader_handle();
 
         // Wait for the child to signal it's ready (trap is installed).
-        let ready = read_until_timeout(
-            reader.clone(),
-            "READY",
-            std::time::Duration::from_secs(5),
+        let ready = read_until_timeout(reader.clone(), "READY", std::time::Duration::from_secs(5));
+        assert!(
+            ready.is_some(),
+            "FPL-R-005: child must print READY before resize"
         );
-        assert!(ready.is_some(), "FPL-R-005: child must print READY before resize");
 
         // Brief pause to ensure the shell has started its wait loop before we resize.
         std::thread::sleep(std::time::Duration::from_millis(100));

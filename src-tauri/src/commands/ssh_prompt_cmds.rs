@@ -4,38 +4,130 @@
 //!
 //! Commands: provide_credentials, accept_host_key, reject_host_key,
 //!           dismiss_ssh_algorithm_warning.
+//!
+//! Security note (SEC-SSH-CH-002): `accept_host_key` does NOT accept key bytes
+//! from the IPC payload. Key bytes are retrieved from `SshManager::pending_host_keys`
+//! where they were stored by the Rust-side `check_server_key` callback. This
+//! prevents a hostile frontend from injecting arbitrary key data.
+
+use std::sync::Arc;
+
+use tauri::State;
 
 use crate::error::TauTermError;
+use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
 use crate::session::ids::PaneId;
+use crate::ssh::known_hosts::KnownHostsStore;
 use crate::ssh::manager::Credentials;
+use crate::ssh::{SshLifecycleState, SshManager};
 
 #[tauri::command]
 pub async fn provide_credentials(
     pane_id: PaneId,
     credentials: Credentials,
+    ssh_manager: State<'_, Arc<SshManager>>,
 ) -> Result<(), TauTermError> {
-    // TODO: forward credentials to the pending SSH auth flow for this pane.
-    let _ = (pane_id, credentials);
-    Ok(())
+    ssh_manager
+        .provide_credentials(&pane_id, credentials)
+        .map_err(|e| {
+            TauTermError::with_detail(
+                "SSH_CREDENTIALS_ERROR",
+                "Failed to deliver credentials to SSH auth flow.",
+                e.to_string(),
+            )
+        })
 }
 
+/// Accept the host key for a pane that is pending TOFU verification.
+///
+/// ## Security (SEC-SSH-CH-002)
+/// The key bytes are retrieved from `SshManager::pending_host_keys` — they were
+/// stored by the Rust-side `check_server_key` callback and are NOT taken from the
+/// IPC payload. This prevents a hostile frontend from accepting an arbitrary key.
+///
+/// After persisting the key to `known_hosts`, returns `Ok(())`. The frontend
+/// must then call `open_ssh_connection` again to reconnect (two-phase TOFU).
 #[tauri::command]
-pub async fn accept_host_key(pane_id: PaneId) -> Result<(), TauTermError> {
-    // TODO: record host key in known_hosts and resume connection.
-    let _ = pane_id;
+pub async fn accept_host_key(
+    pane_id: PaneId,
+    ssh_manager: State<'_, Arc<SshManager>>,
+) -> Result<(), TauTermError> {
+    // Retrieve the pending host key — key bytes come from Rust, NOT from IPC.
+    let (_, pending) = ssh_manager
+        .pending_host_keys
+        .remove(&pane_id)
+        .ok_or_else(|| {
+            TauTermError::new(
+                "NO_PENDING_HOST_KEY",
+                "No pending host key verification for this pane.",
+            )
+        })?;
+
+    let store_path = KnownHostsStore::default_path().ok_or_else(|| {
+        TauTermError::new(
+            "CONFIG_DIR_UNAVAILABLE",
+            "Cannot determine known_hosts path.",
+        )
+    })?;
+    let store = KnownHostsStore::new(store_path);
+
+    // For mismatch: remove old entry first.
+    if pending.is_mismatch {
+        store.remove_entries_for_host(&pending.host).map_err(|e| {
+            TauTermError::with_detail(
+                "KNOWN_HOSTS_IO_ERROR",
+                "Failed to remove old host key entry.",
+                e.to_string(),
+            )
+        })?;
+    }
+
+    // Persist the new key.
+    store
+        .add_entry(&pending.host, &pending.key_type, &pending.key_bytes)
+        .map_err(|e| {
+            TauTermError::with_detail(
+                "KNOWN_HOSTS_IO_ERROR",
+                "Failed to save host key.",
+                e.to_string(),
+            )
+        })?;
+
+    // The frontend must call open_ssh_connection again (two-phase TOFU reconnect).
     Ok(())
 }
 
+/// Reject the host key for a pane — abort the pending connection.
 #[tauri::command]
-pub async fn reject_host_key(pane_id: PaneId) -> Result<(), TauTermError> {
-    // TODO: abort the connection for this pane.
-    let _ = pane_id;
+pub async fn reject_host_key(
+    pane_id: PaneId,
+    ssh_manager: State<'_, Arc<SshManager>>,
+    app: tauri::AppHandle,
+) -> Result<(), TauTermError> {
+    // Discard the pending host key.
+    ssh_manager.pending_host_keys.remove(&pane_id);
+
+    // Emit a Closed state so the frontend knows the connection is dead.
+    emit_ssh_state_changed(
+        &app,
+        SshStateChangedEvent {
+            pane_id,
+            state: SshLifecycleState::Closed,
+            reason: Some("Host key rejected by user.".to_string()),
+        },
+    );
+
     Ok(())
 }
 
+/// Dismiss an SSH algorithm warning for a pane.
+///
+/// This command is a no-op in v1 — the warning is purely informational and
+/// requires no server-side action. It exists so the frontend can call it and
+/// receive an Ok without causing an IPC error.
 #[tauri::command]
 pub async fn dismiss_ssh_algorithm_warning(pane_id: PaneId) -> Result<(), TauTermError> {
-    // TODO: clear the algorithm warning for this pane.
+    // No persistent state to clear — the warning is UI-only.
     let _ = pane_id;
     Ok(())
 }

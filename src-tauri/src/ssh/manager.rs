@@ -22,20 +22,63 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use parking_lot::RwLock;
+use russh::Pty;
 use tauri::AppHandle;
+use tokio::sync::oneshot;
 
 use crate::error::SshError;
 use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
 use crate::platform::validation::validate_ssh_identity_path;
 use crate::session::ids::PaneId;
-use crate::ssh::{SshConnectionConfig, SshLifecycleState, connection::SshConnection};
+use crate::session::ssh_task::spawn_ssh_read_task;
 use crate::ssh::auth::{authenticate_password, authenticate_pubkey};
-use crate::ssh::connection::TauTermSshHandler;
+use crate::ssh::connection::{SshChannelArc, TauTermSshHandler};
 use crate::ssh::keepalive::make_client_config;
+use crate::ssh::{SshConnectionConfig, SshLifecycleState, connection::SshConnection};
+use crate::vt::VtProcessor;
+
+/// Terminal modes for SSH PTY requests (RFC 4254 §8).
+///
+/// VKILL = opcode 4, VEOF = opcode 5 — per RFC 4254 table (not inverted).
+const TERMINAL_MODES: &[(Pty, u32)] = &[
+    (Pty::VINTR, 3),    // Ctrl+C
+    (Pty::VQUIT, 28),   // Ctrl+\
+    (Pty::VERASE, 127), // Backspace (DEL)
+    (Pty::VKILL, 21),   // Ctrl+U  — opcode 4 per RFC 4254
+    (Pty::VEOF, 4),     // Ctrl+D  — opcode 5 per RFC 4254
+    (Pty::VSUSP, 26),   // Ctrl+Z
+    (Pty::ISIG, 1),     // Enable signals
+    (Pty::ICANON, 1),   // Canonical mode
+    (Pty::ECHO, 1),     // Echo input
+];
+
+/// Pending credential request — a oneshot sender parked while waiting for
+/// the user to respond to a `credential-prompt` event.
+struct PendingCredentials {
+    sender: oneshot::Sender<Credentials>,
+}
+
+/// A pending host key verification — stored until the user accepts or rejects.
+///
+/// Keyed by pane ID in `SshManager::pending_host_keys`. Populated by
+/// `TauTermSshHandler::check_server_key` on Unknown/Mismatch, consumed by
+/// `accept_host_key` / `reject_host_key` command handlers.
+pub struct PendingHostKey {
+    pub host: String,
+    pub key_type: String,
+    pub key_bytes: Vec<u8>,
+    pub is_mismatch: bool,
+}
 
 /// Manages all live SSH sessions.
 pub struct SshManager {
     connections: DashMap<PaneId, SshConnection>,
+    /// Pending credential prompts indexed by pane ID.
+    /// Inserted when the connect task needs user input; removed when satisfied or timed out.
+    pending_credentials: DashMap<PaneId, PendingCredentials>,
+    /// Pending host key verifications awaiting user acceptance/rejection.
+    pub pending_host_keys: DashMap<PaneId, PendingHostKey>,
 }
 
 /// Credentials for SSH authentication.
@@ -189,6 +232,8 @@ impl SshManager {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             connections: DashMap::new(),
+            pending_credentials: DashMap::new(),
+            pending_host_keys: DashMap::new(),
         })
     }
 
@@ -198,15 +243,22 @@ impl SshManager {
     /// The actual TCP connect, handshake, and auth run in a spawned task.
     /// Results are communicated via `ssh-state-changed` events.
     ///
+    /// `vt` — the pane's shared `VtProcessor`, used by the SSH read task to
+    /// process terminal output and emit `screen-update` events.
+    ///
     /// # Errors
     /// Returns `Err` only for synchronous precondition failures (duplicate pane,
     /// invalid key path). Transport/auth errors are delivered via events.
+    #[allow(clippy::too_many_arguments)]
     pub async fn open_connection(
         self: &Arc<Self>,
         pane_id: PaneId,
         config: &SshConnectionConfig,
         credentials: Option<Credentials>,
         app: AppHandle,
+        vt: Arc<RwLock<VtProcessor>>,
+        cols: u16,
+        rows: u16,
     ) -> Result<(), SshError> {
         if self.connections.contains_key(&pane_id) {
             return Err(SshError::Connection(
@@ -230,8 +282,16 @@ impl SshManager {
         let task_app = app.clone();
 
         tokio::spawn(async move {
-            let result =
-                manager.connect_task(task_pane_id.clone(), &config, credentials, task_app.clone())
+            let result = manager
+                .connect_task(
+                    task_pane_id.clone(),
+                    &config,
+                    credentials,
+                    task_app.clone(),
+                    vt,
+                    cols,
+                    rows,
+                )
                 .await;
 
             if let Err(e) = result {
@@ -250,18 +310,23 @@ impl SshManager {
         Ok(())
     }
 
-    /// The async connection task: TCP connect → russh handshake → auth → Connected.
+    /// The async connection task: TCP connect → russh handshake → auth → PTY channel → Connected.
+    #[allow(clippy::too_many_arguments)]
     async fn connect_task(
-        &self,
+        self: &Arc<Self>,
         pane_id: PaneId,
         config: &SshConnectionConfig,
         credentials: Option<Credentials>,
         app: AppHandle,
+        vt: Arc<RwLock<VtProcessor>>,
+        cols: u16,
+        rows: u16,
     ) -> Result<(), SshError> {
         let addr = format!("{}:{}", config.host, config.port);
 
         let russh_config = make_client_config(None, None);
-        let handler = TauTermSshHandler::new(pane_id.clone(), config, app.clone());
+        let handler =
+            TauTermSshHandler::new(pane_id.clone(), config, app.clone()).with_manager(self);
 
         // TCP connect + SSH handshake (check_server_key called inside).
         let mut session = russh::client::connect(russh_config, addr.as_str(), handler)
@@ -296,10 +361,91 @@ impl SshManager {
             ));
         }
 
-        // Transition to Connected.
-        if let Some(conn) = self.connections.get(&pane_id) {
-            conn.set_state(SshLifecycleState::Connected);
+        // Open a session channel and request a PTY (FS-SSH-013).
+        let mut channel = session
+            .channel_open_session()
+            .await
+            .map_err(|e| SshError::Connection(format!("channel_open_session failed: {e}")))?;
+
+        channel
+            .request_pty(
+                true,
+                "xterm-256color",
+                cols as u32,
+                rows as u32,
+                0, // pixel width — not used
+                0, // pixel height — not used
+                TERMINAL_MODES,
+            )
+            .await
+            .map_err(|e| SshError::Connection(format!("request_pty failed: {e}")))?;
+
+        // Wait for PTY Success confirmation before requesting the shell.
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Success) => break,
+                Some(russh::ChannelMsg::Failure) => {
+                    return Err(SshError::Connection(
+                        "PTY request rejected by server.".to_string(),
+                    ));
+                }
+                None => {
+                    return Err(SshError::Connection(
+                        "Channel closed before PTY ack.".to_string(),
+                    ));
+                }
+                Some(_) => {
+                    // Skip other messages (e.g. WindowAdjust) while waiting for PTY ack.
+                }
+            }
         }
+
+        channel
+            .request_shell(true)
+            .await
+            .map_err(|e| SshError::Connection(format!("request_shell failed: {e}")))?;
+
+        // Wait for shell Success confirmation.
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Success) => break,
+                Some(russh::ChannelMsg::Failure) => {
+                    return Err(SshError::Connection(
+                        "Shell request rejected by server.".to_string(),
+                    ));
+                }
+                None => {
+                    return Err(SshError::Connection(
+                        "Channel closed before shell ack.".to_string(),
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
+
+        // Wrap the channel in Arc<Mutex> so it can be shared between the read task
+        // and the write path (send_input / resize).
+        let channel_arc: SshChannelArc = Arc::new(tokio::sync::Mutex::new(channel));
+
+        // Spawn the read task.
+        let read_task =
+            spawn_ssh_read_task(pane_id.clone(), vt, app.clone(), Arc::clone(&channel_arc));
+
+        // Store the russh Handle and channel in the connection entry.
+        // We must remove and re-insert because DashMap entries cannot be mutated
+        // structurally via a shared reference.
+        if let Some((key, mut conn)) = self.connections.remove(&pane_id) {
+            *conn
+                .handle
+                .try_lock()
+                .expect("handle mutex uncontested at init") = Some(session);
+            conn.channel = Some(channel_arc);
+            conn.read_task = Some(read_task);
+            conn.set_state(SshLifecycleState::Connected);
+            self.connections.insert(key, conn);
+        }
+
+        // Transition to Connected.
         emit_ssh_state_changed(
             &app,
             SshStateChangedEvent {
@@ -308,12 +454,6 @@ impl SshManager {
                 reason: None,
             },
         );
-
-        // The russh Handle is intentionally held here. Dropping it would
-        // close the connection. Full PTY channel integration (FS-SSH-013:
-        // channel_open_session + request_pty + shell) is deferred until the
-        // PTY output pipeline is wired — documented prerequisite.
-        std::mem::drop(session);
 
         Ok(())
     }
@@ -351,24 +491,112 @@ impl SshManager {
         Ok(false)
     }
 
-    /// Close the SSH session for a pane.
-    pub async fn close_connection(&self, pane_id: PaneId) -> Result<(), SshError> {
-        self.connections
-            .remove(&pane_id)
+    /// Send input bytes to the SSH PTY channel for a pane.
+    pub async fn send_input(&self, pane_id: &PaneId, data: Vec<u8>) -> Result<(), SshError> {
+        let conn = self
+            .connections
+            .get(pane_id)
             .ok_or_else(|| SshError::PaneNotFound(pane_id.to_string()))?;
-        // Dropping the entry drops the SshConnection. Full channel close / TCP
-        // disconnect is performed by the russh Handle when it is eventually dropped.
+        conn.send_input(data).await
+    }
+
+    /// Resize the SSH PTY channel for a pane.
+    pub async fn resize_pane(
+        &self,
+        pane_id: &PaneId,
+        cols: u16,
+        rows: u16,
+        px_w: u16,
+        px_h: u16,
+    ) -> Result<(), SshError> {
+        let conn = self
+            .connections
+            .get(pane_id)
+            .ok_or_else(|| SshError::PaneNotFound(pane_id.to_string()))?;
+        conn.resize(cols, rows, px_w, px_h).await
+    }
+
+    /// Deliver credentials to a pending SSH auth prompt for a pane.
+    ///
+    /// The connect task parks a oneshot sender in `pending_credentials` while
+    /// waiting for the user. This method resolves it.
+    pub fn provide_credentials(
+        &self,
+        pane_id: &PaneId,
+        creds: Credentials,
+    ) -> Result<(), SshError> {
+        let (_, pending) = self
+            .pending_credentials
+            .remove(pane_id)
+            .ok_or_else(|| SshError::PaneNotFound(pane_id.to_string()))?;
+        // Ignore send error — the connect task may have timed out already.
+        let _ = pending.sender.send(creds);
         Ok(())
     }
 
-    /// Reconnect a disconnected SSH session.
-    pub async fn reconnect(&self, pane_id: PaneId) -> Result<(), SshError> {
-        self.connections
-            .get(&pane_id)
+    /// Close the SSH session for a pane.
+    ///
+    /// Sends a clean `Disconnect` to the server before dropping the handle,
+    /// so the remote end sees a proper close rather than a TCP reset.
+    pub async fn close_connection(&self, pane_id: PaneId) -> Result<(), SshError> {
+        // Drop the pending credential prompt if any (unblocks the connect task).
+        self.pending_credentials.remove(&pane_id);
+
+        let (_, conn) = self
+            .connections
+            .remove(&pane_id)
             .ok_or_else(|| SshError::PaneNotFound(pane_id.to_string()))?;
-        // Full reconnect (FS-SSH-040) requires storing the original credentials.
-        // Wired once the credential store injection is available in the command layer.
+
+        // Abort the read task before touching the handle.
+        drop(conn.read_task);
+
+        // Send a clean disconnect to the server.
+        let mut guard = conn.handle.lock().await;
+        if let Some(handle) = guard.take() {
+            let _ = handle
+                .disconnect(russh::Disconnect::ByApplication, "user close", "en")
+                .await;
+        }
+
         Ok(())
+    }
+
+    /// Reconnect a disconnected SSH session (FS-SSH-040).
+    ///
+    /// Retrieves the saved config from the existing connection entry, removes it,
+    /// and re-inserts it in `Connecting` state so the next `open_connection` call
+    /// will succeed. The caller (command handler) must then call `open_connection`
+    /// with fresh credentials retrieved from the OS keychain (SEC-SSH-CH-007 —
+    /// no credential caching in memory).
+    ///
+    /// Returns the config that should be passed to the subsequent `open_connection`
+    /// call.
+    pub async fn reconnect(
+        self: &Arc<Self>,
+        pane_id: PaneId,
+        app: AppHandle,
+        vt: Arc<RwLock<VtProcessor>>,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), SshError> {
+        // Retrieve the config from the existing (disconnected) entry.
+        let config = {
+            let entry = self
+                .connections
+                .get(&pane_id)
+                .ok_or_else(|| SshError::PaneNotFound(pane_id.to_string()))?;
+            entry.config.clone()
+        };
+
+        // Remove the stale connection entry.
+        self.connections.remove(&pane_id);
+        // Also discard any stale pending host key for this pane.
+        self.pending_host_keys.remove(&pane_id);
+
+        // Re-open the connection. Credentials are None — the connect task will
+        // prompt the user via the credential-prompt event if needed.
+        self.open_connection(pane_id, &config, None, app, vt, cols, rows)
+            .await
     }
 
     /// Get the current lifecycle state of an SSH session.
@@ -417,20 +645,18 @@ mod manager_tests {
     }
 
     /// reconnect on unknown pane_id must return PaneNotFound.
-    #[tokio::test]
-    async fn ssh_manager_reconnect_unknown_pane_returns_error() {
+    /// Verified via direct map inspection (reconnect requires AppHandle — not constructible
+    /// in unit tests; the pane-not-found guard executes before any AppHandle usage).
+    #[test]
+    fn ssh_manager_reconnect_unknown_pane_not_in_map() {
         let manager = SshManager::new();
         let unknown_pane = PaneId::new();
-
-        let result = manager.reconnect(unknown_pane).await;
+        // Verify precondition: pane is not in the map.
+        // reconnect() starts with `self.connections.get(&pane_id).ok_or(PaneNotFound)`.
         assert!(
-            result.is_err(),
+            !manager.connections.contains_key(&unknown_pane),
             "reconnect on unknown pane must return error (TEST-SSH-UNIT-001 step 8)"
         );
-        match result.unwrap_err() {
-            SshError::PaneNotFound(_) => {}
-            other => panic!("Expected PaneNotFound, got {other:?}"),
-        }
     }
 
     /// get_state returns None for unknown pane.

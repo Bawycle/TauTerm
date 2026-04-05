@@ -7,9 +7,10 @@
 
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
+use crate::events::{ScrollPositionChangedEvent, emit_scroll_position_changed};
 use crate::session::{SessionRegistry, ids::PaneId, registry::ScrollPositionState};
 use crate::vt::{SearchMatch, SearchQuery, screen_buffer::ScreenSnapshot};
 
@@ -33,14 +34,34 @@ fn validate_input_size(data: &[u8]) -> Result<(), TauTermError> {
 
 #[tauri::command]
 pub async fn send_input(
+    app: AppHandle,
     pane_id: PaneId,
     data: Vec<u8>,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<(), TauTermError> {
     validate_input_size(&data)?;
-    registry
-        .send_input(pane_id, data)
-        .map_err(TauTermError::from)
+    let did_reset_scroll = registry
+        .send_input(pane_id.clone(), data)
+        .map_err(TauTermError::from)?;
+
+    if did_reset_scroll {
+        // Fetch the current scrollback_lines to build a complete event.
+        let scrollback_lines = registry
+            .get_pane_snapshot(&pane_id)
+            .map(|s| s.scrollback_lines)
+            .unwrap_or(0);
+
+        emit_scroll_position_changed(
+            &app,
+            ScrollPositionChangedEvent {
+                pane_id,
+                offset: 0,
+                scrollback_lines,
+            },
+        );
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

@@ -75,12 +75,6 @@
 - [ ] **~25 occurrences `text-[Npx]`** hardcodées — remplacer par `text-(--font-size-ui-*)`
   - `text-[13px]` → `text-(--font-size-ui-base)`, `text-[12px]` → `text-(--font-size-ui-sm)`, etc.
   - Fichiers : `ConnectionManager`, `PreferencesPanel`, `Dialog`, `TextInput`, `Dropdown`, `ContextMenu`, `Tooltip`
-- [ ] **Implémenter SSH Deprecated Algorithm Banner** (UXD §7.21)
-  - Le type IPC `dismiss_deprecated_algorithm_banner` existe dans `ipc/types.ts` mais aucun composant ne l'affiche
-- [ ] **Implémenter SSH Reconnection Separator** (UXD §7.19)
-  - Séparateur visuel injecté dans le scrollback à la reconnexion
-- [ ] **Middle-click tab close** (UXD §7.1.2)
-  - `onmousedown` avec `button === 1` dans `TabBar.svelte`
 
 ### Tests
 

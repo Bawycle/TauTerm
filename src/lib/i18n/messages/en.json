@@ -72,7 +72,10 @@
 
   "ssh_reconnect": "Reconnect",
   "ssh_banner_disconnected": "Session disconnected: {reason}",
-  "ssh_banner_deprecated_algorithm": "Warning: deprecated algorithm in use: {algorithm}",
+  "ssh_banner_deprecated_algorithm": "Connection uses deprecated algorithm: {algorithm}. The server should be updated to use a modern key exchange algorithm.",
+  "ssh_banner_deprecated_algorithm_dismiss": "Dismiss deprecated algorithm warning",
+  "ssh_reconnection_separator_label": "reconnected",
+  "ssh_reconnection_separator_label_at": "reconnected {time}",
 
   "error_generic": "An error occurred",
   "error_connection_failed": "Connection failed",

@@ -540,6 +540,13 @@
           e.preventDefault();
           startRename(tab.id, title);
         }}
+        onmousedown={(e) => {
+          // Middle-click (button 1) closes the tab (UXD §7.1.2)
+          if (e.button === 1) {
+            e.preventDefault();
+            onTabClose(tab.id);
+          }
+        }}
         oncontextmenu={(e) => handleTabContextMenu(e, tab.id)}
         onkeydown={(e) => handleTabKeydown(e, tab.id, title)}
         ondragstart={(e) => handleDragStart(e, tab.id)}
@@ -674,7 +681,6 @@
       />
     {/if}
   {/if}
-
 </div>
 
 <style>

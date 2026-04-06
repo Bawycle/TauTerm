@@ -837,6 +837,32 @@ export type AcceptHostKeyCommand = (args: { paneId: PaneId }) => Promise<void>;
 export type RejectHostKeyCommand = (args: { paneId: PaneId }) => Promise<void>;
 
 /**
+ * Emitted when a deprecated SSH algorithm is detected during the connection handshake.
+ *
+ * Mirrors Rust SshWarningEvent (events/types.rs).
+ * Event name: "ssh-warning"
+ */
+export interface SshWarningEvent {
+  paneId: PaneId;
+  /** The deprecated algorithm name, e.g. "ssh-rsa" or "ssh-dss". */
+  algorithm: string;
+  /** Human-readable explanation of why this algorithm is deprecated. */
+  reason: string;
+}
+
+/**
+ * Emitted immediately after a successful SSH reconnect.
+ *
+ * Mirrors Rust SshReconnectedEvent (events/types.rs).
+ * Event name: "ssh-reconnected"
+ */
+export interface SshReconnectedEvent {
+  paneId: PaneId;
+  /** Unix timestamp in milliseconds at the moment of reconnection. */
+  timestampMs: number;
+}
+
+/**
  * Dismiss deprecated-algorithm banner.
  * @command dismiss_ssh_algorithm_warning
  */

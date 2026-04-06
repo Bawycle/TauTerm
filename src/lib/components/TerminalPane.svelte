@@ -44,6 +44,8 @@
     NotificationChangedEvent,
     CursorState,
     SshLifecycleState,
+    SshWarningEvent,
+    SshReconnectedEvent,
     SearchMatch,
     BellType,
   } from '$lib/ipc/types';
@@ -53,6 +55,8 @@
   import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
   import { pasteToBytes } from '$lib/terminal/paste.js';
   import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
+  import SshDeprecatedAlgorithmBanner from './SshDeprecatedAlgorithmBanner.svelte';
+  import SshReconnectionSeparator from './SshReconnectionSeparator.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import ScrollToBottomButton from './ScrollToBottomButton.svelte';
   import Dialog from '$lib/ui/Dialog.svelte';
@@ -209,8 +213,20 @@
   let unlistenBell: (() => void) | null = null;
   let unlistenNotification: (() => void) | null = null;
   let unlistenCursorStyle: (() => void) | null = null;
+  let unlistenSshWarning: (() => void) | null = null;
+  let unlistenSshReconnected: (() => void) | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── SSH deprecated algorithm banner state (FS-SSH-014, UXD §7.21) ───────────
+  // Stores the algorithm name if a warning was received and not yet dismissed.
+  // `null` means no banner is shown.
+  let deprecatedAlgorithm = $state<string | null>(null);
+
+  // ── SSH reconnection separator state (FS-SSH-042, UXD §7.19) ────────────────
+  // List of timestamps injected as visual separators into the terminal overlay.
+  // Each entry represents one reconnect event. Stored newest-last.
+  let reconnectionSeparators = $state<number[]>([]);
 
   // -------------------------------------------------------------------------
   // Derived
@@ -431,6 +447,20 @@
       },
     );
 
+    // FS-SSH-014: deprecated SSH algorithm warning banner.
+    unlistenSshWarning = await listen<SshWarningEvent>('ssh-warning', (event) => {
+      const ev = event.payload;
+      if (ev.paneId !== paneId) return;
+      deprecatedAlgorithm = ev.algorithm;
+    });
+
+    // FS-SSH-042: SSH reconnection separator injected into the scrollback overlay.
+    unlistenSshReconnected = await listen<SshReconnectedEvent>('ssh-reconnected', (event) => {
+      const ev = event.payload;
+      if (ev.paneId !== paneId) return;
+      reconnectionSeparators = [...reconnectionSeparators, ev.timestampMs];
+    });
+
     // Note: cursor blink timer is managed by the $effect below (responds to
     // cursorBlinkMs changes). No need to start it here explicitly.
 
@@ -447,6 +477,8 @@
     unlistenCursorStyle?.();
     unlistenBell?.();
     unlistenNotification?.();
+    unlistenSshWarning?.();
+    unlistenSshReconnected?.();
     stopCursorBlink();
     if (bellFlashTimer) clearTimeout(bellFlashTimer);
     if (borderPulseTimer) clearTimeout(borderPulseTimer);
@@ -793,6 +825,16 @@
     }
   }
 
+  /** Dismiss the deprecated algorithm banner for this pane session (UXD §7.21.3). */
+  async function handleDismissAlgorithmBanner() {
+    deprecatedAlgorithm = null;
+    try {
+      await invoke('dismiss_ssh_algorithm_warning', { paneId });
+    } catch {
+      /* non-fatal — UI already dismissed */
+    }
+  }
+
   async function handleContextMenuCopy() {
     if (!selectionRange) return;
     await copySelectionToClipboard();
@@ -1047,6 +1089,14 @@
     ? m.terminal_pane_n_aria_label({ n: paneNumber })
     : m.terminal_pane_aria_label()}
 >
+  <!-- Deprecated SSH algorithm banner — displaces terminal content downward (UXD §7.21) -->
+  {#if deprecatedAlgorithm !== null}
+    <SshDeprecatedAlgorithmBanner
+      algorithm={deprecatedAlgorithm}
+      ondismiss={handleDismissAlgorithmBanner}
+    />
+  {/if}
+
   <!-- ContextMenu wraps the viewport so right-click opens it -->
   <ContextMenu
     variant="terminal"
@@ -1157,6 +1207,18 @@
       </div>
     {/if}
   </ContextMenu>
+
+  <!-- SSH reconnection separators — UI overlay injected at the bottom of the terminal
+       at the moment of each reconnection (FS-SSH-042, UXD §7.19).
+       Rendered after the ContextMenu so they appear above terminal content.
+       Not interactive; aria-hidden (purely decorative). -->
+  {#if reconnectionSeparators.length > 0}
+    <div class="terminal-pane__reconnection-separators" aria-hidden="true">
+      {#each reconnectionSeparators as ts (ts)}
+        <SshReconnectionSeparator timestampMs={ts} />
+      {/each}
+    </div>
+  {/if}
 
   <!-- ProcessTerminatedPane banner — shown when PTY process exits (FS-PTY-005/006) -->
   {#if terminated}
@@ -1396,6 +1458,19 @@
     .terminal-pane__scrollbar-thumb {
       transition: none;
     }
+  }
+
+  /* SSH reconnection separators container (FS-SSH-042, UXD §7.19) */
+  .terminal-pane__reconnection-separators {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    /* Separators sit above the terminal grid but below interactive overlays */
+    z-index: calc(var(--z-overlay, 20) - 1);
   }
 
   /* SSH disconnected banner (FS-SSH-040/041) */

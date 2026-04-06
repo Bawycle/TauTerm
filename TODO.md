@@ -41,12 +41,6 @@
   - Cible : aucun composant > 250L de logique réactive (spec `docs/arch/05-frontend.md §11.2`)
 ### UX/UI
 
-- [ ] **Implémenter SSH Deprecated Algorithm Banner** (UXD §7.21)
-  - Le type IPC `dismiss_deprecated_algorithm_banner` existe dans `ipc/types.ts` mais aucun composant ne l'affiche
-- [ ] **Implémenter SSH Reconnection Separator** (UXD §7.19)
-  - Séparateur visuel injecté dans le scrollback à la reconnexion
-- [ ] **Middle-click tab close** (UXD §7.1.2)
-  - `onmousedown` avec `button === 1` dans `TabBar.svelte`
 
 ---
 

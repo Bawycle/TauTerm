@@ -72,7 +72,10 @@
 
   "ssh_reconnect": "Reconnecter",
   "ssh_banner_disconnected": "Session déconnectée : {reason}",
-  "ssh_banner_deprecated_algorithm": "Attention : algorithme déprécié utilisé : {algorithm}",
+  "ssh_banner_deprecated_algorithm": "La connexion utilise un algorithme déprécié : {algorithm}. Le serveur devrait être mis à jour pour utiliser un algorithme d'échange de clés moderne.",
+  "ssh_banner_deprecated_algorithm_dismiss": "Ignorer l'avertissement d'algorithme déprécié",
+  "ssh_reconnection_separator_label": "reconnecté",
+  "ssh_reconnection_separator_label_at": "reconnecté {time}",
 
   "error_generic": "Une erreur est survenue",
   "error_connection_failed": "Échec de la connexion",

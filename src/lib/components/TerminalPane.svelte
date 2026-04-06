@@ -6,21 +6,12 @@
   selection highlighting, and scrollbar. Handles keyboard input, mouse events,
   and resize observation.
 
+  Reactive logic is extracted to TerminalPane.svelte.ts (composable, §11.2).
+  This file contains only template markup and DOM event binding.
+
   Props:
     paneId  — unique pane identifier (PaneId from IPC contract)
     active  — whether this pane currently has focus
-
-  IPC sources:
-    - invoke('get_pane_screen_snapshot') on mount → initial screen state
-    - listen('screen-update')            → ScreenUpdateEvent (incremental updates)
-    - listen('scroll-position-changed')  → ScrollPositionChangedEvent
-    - listen('mode-state-changed')       → ModeStateChangedEvent (DECCKM)
-  IPC commands:
-    - invoke('resize_pane')       on viewport resize (debounced, TUITC-FN-072/073)
-    - invoke('send_input')        on keyboard input
-    - invoke('scroll_pane')       on mouse wheel
-    - invoke('copy_to_clipboard') on selection complete
-    - invoke('scroll_to_bottom')  on new output when at bottom
 
   Security:
     - No {@html} — all cell content uses Svelte text interpolation (textContent path)
@@ -28,32 +19,12 @@
     - Resize dimensions clamped to minimum 1 (TUITC-SEC-050)
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { invoke } from '@tauri-apps/api/core';
+  import { onMount, onDestroy } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import type {
-    PaneId,
-    TabId,
-    ScreenSnapshot,
-    ScreenUpdateEvent,
-    ScrollPositionChangedEvent,
-    ModeStateChangedEvent,
-    CursorStyleChangedEvent,
-    BellTriggeredEvent,
-    NotificationChangedEvent,
-    CursorState,
-    SshLifecycleState,
-    SshWarningEvent,
-    SshReconnectedEvent,
-    SearchMatch,
-    BellType,
-  } from '$lib/ipc/types';
-  import { buildGridFromSnapshot, applyUpdates, type CellStyle } from '$lib/terminal/screen.js';
+  import { invoke } from '@tauri-apps/api/core';
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
-  import { SelectionManager } from '$lib/terminal/selection.js';
-  import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
-  import { pasteToBytes } from '$lib/terminal/paste.js';
+  import { useTerminalPane } from '$lib/composables/useTerminalPane.svelte';
   import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
   import SshDeprecatedAlgorithmBanner from './SshDeprecatedAlgorithmBanner.svelte';
   import SshReconnectionSeparator from './SshReconnectionSeparator.svelte';
@@ -63,12 +34,24 @@
   import Button from '$lib/ui/Button.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import * as m from '$lib/paraglide/messages';
+  import type {
+    PaneId,
+    TabId,
+    SshLifecycleState,
+    SshWarningEvent,
+    SshReconnectedEvent,
+    SearchMatch,
+    BellType,
+  } from '$lib/ipc/types';
 
   interface Props {
     paneId: PaneId;
     tabId: TabId;
     active: boolean;
-    /** 1-based pane number used to generate a unique aria-label ("Terminal 1", "Terminal 2", …). */
+    /**
+     * 1-based pane number for differentiated aria-label in multi-pane layouts.
+     * When undefined, a generic label is used (single-pane case).
+     */
     paneNumber?: number;
     /** Set to true when the PTY process has exited (from session-state-changed event). */
     terminated?: boolean;
@@ -150,680 +133,34 @@
     ondimensionschange,
   }: Props = $props();
 
-  // -------------------------------------------------------------------------
-  // Reactive state
-  // -------------------------------------------------------------------------
-
-  let cols = $state(80);
-  let rows = $state(24);
-  let grid = $state<CellStyle[]>([]);
-  let cursor = $state<CursorState>({ row: 0, col: 0, visible: true, shape: 0, blink: true });
-  let scrollOffset = $state(0);
-  let scrollbackLines = $state(0);
-  let decckm = $state(false);
-  let deckpam = $state(false);
-  let mouseReporting = $state<'none' | 'x10' | 'normal' | 'buttonEvent' | 'anyEvent'>('none');
-  let mouseEncoding = $state<'x10' | 'sgr' | 'urxvt'>('x10');
-  let focusEventsActive = $state(false);
-  let bracketedPasteActive = $state(false);
-
-  let cursorVisible = $state(true);
-  let blinkTimer: ReturnType<typeof setInterval> | null = null;
-
-  const selection = new SelectionManager();
-  let selectionRange = $state(selection.getSelection());
-  let isSelecting = $state(false);
-
-  let scrollbarVisible = $state(false);
-  let scrollbarFadeTimer: ReturnType<typeof setTimeout> | null = null;
-  let scrollbarDragging = $state(false);
-  let scrollbarHover = $state(false);
-  let scrollbarDragStartY = 0;
-  let scrollbarDragStartOffset = 0;
-
-  let viewportEl: HTMLDivElement | undefined = $state();
-  let scrollbarEl: HTMLDivElement | undefined = $state();
-
-  // Context menu state
-  let hasSelection = $state(false);
-
-  // FS-CLIP-009: Multiline paste confirmation dialog state.
-  let pasteConfirmOpen = $state(false);
-  let pasteConfirmText = $state('');
-
-  let screenGeneration = $state(0);
-
-  // Visual bell flash state (FS-VT-090)
-  let bellFlashing = $state(false);
-  let bellFlashTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Pane border activity pulse state (UXD §7.2.1) — inactive panes only.
-  // 'output' → green pulse 800ms, 'bell' → amber pulse 800ms, 'exit' → red persistent
-  type BorderPulse = 'output' | 'bell' | 'exit' | null;
-  let borderPulse = $state<BorderPulse>(null);
-  let borderPulseTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Copy flash state (UXD §7.12) — flashes the selection background for 80ms on auto-copy.
-  let selectionFlashing = $state(false);
-  let selectionFlashTimer: ReturnType<typeof setTimeout> | null = null;
-
-  let unlistenScreenUpdate: (() => void) | null = null;
-  let unlistenScrollPos: (() => void) | null = null;
-  let unlistenModeState: (() => void) | null = null;
-  let unlistenBell: (() => void) | null = null;
-  let unlistenNotification: (() => void) | null = null;
-  let unlistenCursorStyle: (() => void) | null = null;
-  let unlistenSshWarning: (() => void) | null = null;
-  let unlistenSshReconnected: (() => void) | null = null;
-  let resizeObserver: ResizeObserver | null = null;
-  let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // ── SSH deprecated algorithm banner state (FS-SSH-014, UXD §7.21) ───────────
-  // Stores the algorithm name if a warning was received and not yet dismissed.
-  // `null` means no banner is shown.
+  // ── SSH deprecated algorithm banner state (FS-SSH-014, UXD §7.21) ─────────
+  // Local state: stays in the component as it is purely per-pane UI state.
   let deprecatedAlgorithm = $state<string | null>(null);
 
-  // ── SSH reconnection separator state (FS-SSH-042, UXD §7.19) ────────────────
-  // List of timestamps injected as visual separators into the terminal overlay.
-  // Each entry represents one reconnect event. Stored newest-last.
+  // ── SSH reconnection separator state (FS-SSH-042, UXD §7.19) ──────────────
   let reconnectionSeparators = $state<number[]>([]);
 
-  // -------------------------------------------------------------------------
-  // Derived
-  // -------------------------------------------------------------------------
-
-  /**
-   * Set of "row:col" keys for non-active search matches (O(1) lookup).
-   * SearchMatch.scrollbackRow is 0-based from the oldest scrollback line.
-   * We convert to screen row: screenRow = scrollbackRow - (scrollbackLines - scrollOffset) + ?
-   *
-   * The backend stores scrollback as lines above the visible screen.
-   * scrollbackLines = total scrollback count, scrollOffset = how many lines above bottom.
-   * The visible screen starts at scrollback index: (scrollbackLines - scrollOffset).
-   * So: screenRow = scrollbackRow - (scrollbackLines - scrollOffset)
-   * A match is visible if screenRow is in [0, rows - 1].
-   */
-  const searchMatchSet = $derived.by(() => {
-    const set = new Set<string>();
-    if (searchMatches.length === 0) return set;
-    const screenStart = scrollbackLines - scrollOffset;
-    for (let i = 0; i < searchMatches.length; i++) {
-      const m = searchMatches[i];
-      const screenRow = m.scrollbackRow - screenStart;
-      if (screenRow < 0 || screenRow >= rows) continue;
-      for (let c = m.colStart; c < m.colEnd; c++) {
-        set.add(`${screenRow}:${c}`);
-      }
-    }
-    return set;
-  });
-
-  /**
-   * Set of "row:col" keys for the active search match (1-based index).
-   */
-  const activeSearchMatchSet = $derived.by(() => {
-    const set = new Set<string>();
-    if (searchMatches.length === 0 || activeSearchMatchIndex <= 0) return set;
-    const m = searchMatches[activeSearchMatchIndex - 1];
-    if (!m) return set;
-    const screenStart = scrollbackLines - scrollOffset;
-    const screenRow = m.scrollbackRow - screenStart;
-    if (screenRow < 0 || screenRow >= rows) return set;
-    for (let c = m.colStart; c < m.colEnd; c++) {
-      set.add(`${screenRow}:${c}`);
-    }
-    return set;
-  });
-
-  const currentCursorShape = $derived(cursorShape(cursor.shape));
-  const currentCursorBlinks = $derived(cursor.blink && cursorBlinks(cursor.shape));
-  const showScrollbar = $derived(
-    scrollbarVisible || scrollOffset > 0 || scrollbarHover || scrollbarDragging,
-  );
-
-  const scrollbarThumbHeightPct = $derived(
-    scrollbackLines > 0
-      ? Math.max((32 / (rows * 16 || 400)) * 100, (rows / (rows + scrollbackLines)) * 100)
-      : 0,
-  );
-
-  const scrollbarThumbTopPct = $derived(
-    scrollbackLines > 0 && scrollOffset > 0
-      ? ((scrollbackLines - scrollOffset) / (scrollbackLines + rows)) * 100
-      : scrollOffset === 0
-        ? 100 - scrollbarThumbHeightPct
-        : 0,
-  );
-
-  // Build rendered grid rows
-  const gridRows = $derived(
-    Array.from({ length: rows }, (_, r) =>
-      Array.from({ length: cols }, (_, c) => {
-        const cell = grid[r * cols + c];
-        return (
-          cell ??
-          ({
-            content: ' ',
-            fg: undefined,
-            bg: undefined,
-            width: 1,
-            bold: false,
-            dim: false,
-            italic: false,
-            underline: 0,
-            blink: false,
-            inverse: false,
-            hidden: false,
-            strikethrough: false,
-            underlineColor: undefined,
-            hyperlink: undefined,
-          } satisfies CellStyle)
-        );
-      }),
-    ),
-  );
-
-  // -------------------------------------------------------------------------
-  // FS-UX-003: Auto-focus — give the active, non-terminated terminal keyboard focus
-  // without requiring a mouse click (on mount, tab switch, new tab).
-  // -------------------------------------------------------------------------
-
-  $effect(() => {
-    if (active && !terminated) {
-      viewportEl?.focus({ preventScroll: true });
-    }
-  });
-
-  // -------------------------------------------------------------------------
-  // Mount / destroy
-  // -------------------------------------------------------------------------
+  // Subscribe to SSH warning and reconnected events for this pane.
+  let unlistenSshWarning: (() => void) | null = null;
+  let unlistenSshReconnected: (() => void) | null = null;
 
   onMount(async () => {
-    try {
-      const snapshot: ScreenSnapshot = await invoke('get_pane_screen_snapshot', { paneId });
-      cols = snapshot.cols;
-      rows = snapshot.rows;
-      grid = buildGridFromSnapshot(snapshot.cells, snapshot.rows, snapshot.cols);
-      cursor = {
-        row: snapshot.cursorRow,
-        col: snapshot.cursorCol,
-        visible: snapshot.cursorVisible,
-        shape: snapshot.cursorShape,
-        blink: cursorBlinks(snapshot.cursorShape),
-      };
-      scrollOffset = snapshot.scrollOffset;
-      scrollbackLines = snapshot.scrollbackLines;
-    } catch {
-      // Backend not ready — grid populated by first screen-update event
-    }
-
-    unlistenScreenUpdate = await listen<ScreenUpdateEvent>('screen-update', (event) => {
-      const update = event.payload;
-      if (update.paneId !== paneId) return;
-      applyUpdates(grid, update.cells, cols);
-      cursor = update.cursor;
-      // Keep scrollbackLines in sync so the scrollbar stays accurate
-      if (typeof update.scrollbackLines === 'number') {
-        scrollbackLines = update.scrollbackLines;
-      }
-      // Trigger Svelte reactivity on the grid array
-      grid = grid.slice();
-      screenGeneration++;
-    });
-
-    unlistenScrollPos = await listen<ScrollPositionChangedEvent>(
-      'scroll-position-changed',
-      (event) => {
-        const pos = event.payload;
-        if (pos.paneId !== paneId) return;
-        scrollOffset = pos.offset;
-        scrollbackLines = pos.scrollbackLines;
-        scrollbarVisible = true;
-        if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
-        if (scrollOffset === 0) {
-          scrollbarFadeTimer = setTimeout(() => {
-            scrollbarVisible = false;
-          }, 1500);
-        }
-      },
-    );
-
-    unlistenModeState = await listen<ModeStateChangedEvent>('mode-state-changed', (event) => {
-      const mode = event.payload;
-      if (mode.paneId !== paneId) return;
-      decckm = mode.decckm;
-      deckpam = mode.deckpam;
-      mouseReporting = mode.mouseReporting;
-      mouseEncoding = mode.mouseEncoding;
-      focusEventsActive = mode.focusEvents;
-      bracketedPasteActive = mode.bracketedPaste;
-    });
-
-    // FS-VT-030: cursor shape changed by DECSCUSR escape.
-    unlistenCursorStyle = await listen<CursorStyleChangedEvent>('cursor-style-changed', (event) => {
-      const ev = event.payload;
-      if (ev.paneId !== paneId) return;
-      cursor = { ...cursor, shape: ev.shape, blink: cursorBlinks(ev.shape) };
-      // Restart blink timer so the new period takes effect immediately.
-      startCursorBlink();
-    });
-
-    // FS-VT-090/093: bell notification.
-    unlistenBell = await listen<BellTriggeredEvent>('bell-triggered', (event) => {
-      const ev = event.payload;
-      if (ev.paneId !== paneId) return;
-      handleBell();
-    });
-
-    // UXD §7.2.1: pane border activity pulse for inactive panes.
-    unlistenNotification = await listen<NotificationChangedEvent>(
-      'notification-changed',
-      (event) => {
-        const ev = event.payload;
-        if (ev.paneId !== paneId) return;
-        // Only pulse on inactive panes — active pane has full focus, no indicator needed.
-        if (active) return;
-        if (ev.notification === null) {
-          // Notification cleared: clear any pending pulse (unless it is a persistent exit).
-          if (borderPulse !== 'exit') {
-            clearTimeout(borderPulseTimer ?? undefined);
-            borderPulseTimer = null;
-            borderPulse = null;
-          }
-          return;
-        }
-        switch (ev.notification.type) {
-          case 'backgroundOutput':
-            triggerBorderPulse('output', 800);
-            break;
-          case 'bell':
-            triggerBorderPulse('bell', 800);
-            break;
-          case 'processExited':
-            // Persistent: stays red until the pane becomes active.
-            triggerBorderPulse('exit', 1500);
-            break;
-        }
-      },
-    );
-
-    // FS-SSH-014: deprecated SSH algorithm warning banner.
     unlistenSshWarning = await listen<SshWarningEvent>('ssh-warning', (event) => {
       const ev = event.payload;
       if (ev.paneId !== paneId) return;
       deprecatedAlgorithm = ev.algorithm;
     });
-
-    // FS-SSH-042: SSH reconnection separator injected into the scrollback overlay.
     unlistenSshReconnected = await listen<SshReconnectedEvent>('ssh-reconnected', (event) => {
       const ev = event.payload;
       if (ev.paneId !== paneId) return;
       reconnectionSeparators = [...reconnectionSeparators, ev.timestampMs];
     });
-
-    // Note: cursor blink timer is managed by the $effect below (responds to
-    // cursorBlinkMs changes). No need to start it here explicitly.
-
-    if (viewportEl) {
-      resizeObserver = new ResizeObserver(() => scheduleSendResize());
-      resizeObserver.observe(viewportEl);
-    }
   });
 
   onDestroy(() => {
-    unlistenScreenUpdate?.();
-    unlistenScrollPos?.();
-    unlistenModeState?.();
-    unlistenCursorStyle?.();
-    unlistenBell?.();
-    unlistenNotification?.();
     unlistenSshWarning?.();
     unlistenSshReconnected?.();
-    stopCursorBlink();
-    if (bellFlashTimer) clearTimeout(bellFlashTimer);
-    if (borderPulseTimer) clearTimeout(borderPulseTimer);
-    if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
-    resizeObserver?.disconnect();
-    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
-    if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
   });
-
-  // -------------------------------------------------------------------------
-  // Cursor blink (FS-VT-032, TUITC-FN-004)
-  // -------------------------------------------------------------------------
-
-  function startCursorBlink() {
-    stopCursorBlink();
-    blinkTimer = setInterval(() => {
-      cursorVisible = currentCursorBlinks ? !cursorVisible : true;
-    }, cursorBlinkMs);
-  }
-
-  function stopCursorBlink() {
-    if (blinkTimer) {
-      clearInterval(blinkTimer);
-      blinkTimer = null;
-    }
-    cursorVisible = true;
-  }
-
-  // Restart blink timer when cursorBlinkMs prop changes (FS-VT-032).
-  // This effect also handles the initial timer start after first render.
-  // stopCursorBlink inside startCursorBlink clears the previous timer before
-  // creating a new one, so no double-timer is possible.
-  $effect(() => {
-    // Tracking cursorBlinkMs makes this effect re-run whenever it changes.
-    const interval = cursorBlinkMs;
-    stopCursorBlink();
-    blinkTimer = setInterval(() => {
-      cursorVisible = currentCursorBlinks ? !cursorVisible : true;
-    }, interval);
-    return () => {
-      stopCursorBlink();
-    };
-  });
-
-  // -------------------------------------------------------------------------
-  // Resize (TUITC-FN-072/073, TUITC-SEC-050)
-  // -------------------------------------------------------------------------
-
-  function scheduleSendResize() {
-    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
-    // Notify immediately with current dims for instant visual feedback (status bar),
-    // without waiting for the debounce or the IPC round-trip.
-    ondimensionschange?.(cols, rows);
-    resizeDebounceTimer = setTimeout(sendResize, 50);
-  }
-
-  async function sendResize() {
-    if (!viewportEl) return;
-    const rect = viewportEl.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    // Measure cell size from a real character span if available; fallback to estimate
-    const testSpan = viewportEl.querySelector('.terminal-pane__cell') as HTMLElement | null;
-    const cellW = testSpan ? testSpan.offsetWidth : Math.max(1, rect.width / cols);
-    const cellH = testSpan ? testSpan.offsetHeight : Math.max(1, rect.height / rows);
-
-    // TUITC-SEC-050: clamp to minimum 1
-    const newCols = Math.max(1, Math.floor(rect.width / cellW));
-    const newRows = Math.max(1, Math.floor(rect.height / cellH));
-    const pixelWidth = Math.max(1, Math.floor(rect.width));
-    const pixelHeight = Math.max(1, Math.floor(rect.height));
-
-    // Notify immediately with computed dimensions — no need to wait for the IPC
-    // round-trip since newCols/newRows are derived locally from viewport geometry.
-    ondimensionschange?.(newCols, newRows);
-    try {
-      await invoke('resize_pane', {
-        paneId,
-        cols: newCols,
-        rows: newRows,
-        pixelWidth,
-        pixelHeight,
-      });
-      cols = newCols;
-      rows = newRows;
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Keyboard input (TUITC-FN-040 to 048)
-  // -------------------------------------------------------------------------
-
-  function handleKeydown(event: KeyboardEvent) {
-    // Application shortcuts (Ctrl+Shift+*) are handled at the TerminalView level
-    // Do NOT intercept them here — let them bubble
-    if (event.ctrlKey && event.shiftKey) return;
-    if (event.ctrlKey && event.key === ',') return; // Ctrl+, = preferences
-    // Let the IME composition pipeline finish before we consume the event
-    if (event.isComposing) return;
-
-    const sequence = keyEventToVtSequence(event, decckm, deckpam);
-    if (sequence !== null) {
-      event.preventDefault();
-      sendBytes(sequence);
-    }
-  }
-
-  async function sendBytes(bytes: Uint8Array) {
-    const data = Array.from(bytes);
-    try {
-      await invoke('send_input', { paneId, data });
-    } catch {
-      // PTY may have closed
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Scroll-to-bottom button handler
-  // -------------------------------------------------------------------------
-
-  async function handleScrollToBottom() {
-    try {
-      await invoke('scroll_pane', { paneId, offset: 0 });
-    } catch {
-      /* non-fatal */
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Mouse wheel (TUITC-FN-052, FS-VT-085)
-  // -------------------------------------------------------------------------
-
-  async function handleWheel(event: WheelEvent) {
-    event.preventDefault();
-    // FS-VT-085: Shift+Wheel always scrolls TauTerm's scrollback
-    if (!event.shiftKey && mouseReporting !== 'none') {
-      const button = event.deltaY < 0 ? 64 : 65;
-      const cell = pixelToCell(event);
-      await sendMouseEvent(button, cell.col, cell.row, event, false);
-      return;
-    }
-    const newOffset = Math.max(0, scrollOffset + (event.deltaY > 0 ? -3 : 3));
-    try {
-      await invoke('scroll_pane', { paneId, offset: newOffset });
-    } catch {
-      /* non-fatal */
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Mouse reporting (FS-VT-080 to 086)
-  // -------------------------------------------------------------------------
-
-  async function sendMouseEvent(
-    button: number,
-    col: number,
-    row: number,
-    event: MouseEvent,
-    release: boolean,
-  ) {
-    const modBits = (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0) | (event.ctrlKey ? 16 : 0);
-    const cb = button | modBits;
-    const cx = col + 1;
-    const cy = row + 1;
-    let seq: string;
-    if (mouseEncoding === 'sgr') {
-      const suffix = release ? 'm' : 'M';
-      seq = `\x1b[<${cb};${cx};${cy}${suffix}`;
-    } else {
-      const clamp = (n: number) => Math.min(n + 32, 255);
-      seq = `\x1b[M${String.fromCharCode(clamp(cb), clamp(cx), clamp(cy))}`;
-    }
-    await sendBytes(new TextEncoder().encode(seq));
-  }
-
-  function mouseButtonCode(event: MouseEvent): number {
-    switch (event.button) {
-      case 0:
-        return 0;
-      case 1:
-        return 1;
-      case 2:
-        return 2;
-      default:
-        return 3;
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Selection (TUITC-FN-060/061/062, FS-CLIP-002, FS-CLIP-003)
-  // -------------------------------------------------------------------------
-
-  function pixelToCell(event: MouseEvent): { row: number; col: number } {
-    if (!viewportEl) return { row: 0, col: 0 };
-    const rect = viewportEl.getBoundingClientRect();
-    const cw = Math.max(1, rect.width / cols);
-    const ch = Math.max(1, rect.height / rows);
-    return {
-      col: Math.max(0, Math.min(cols - 1, Math.floor((event.clientX - rect.left) / cw))),
-      row: Math.max(0, Math.min(rows - 1, Math.floor((event.clientY - rect.top) / ch))),
-    };
-  }
-
-  /** Copy the current selection to clipboard and update hasSelection. */
-  async function copySelectionToClipboard() {
-    const sel = selection.getSelection();
-    if (sel) {
-      const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
-      hasSelection = text.length > 0;
-      if (hasSelection) {
-        try {
-          await invoke('copy_to_clipboard', { text });
-          // UXD §7.12: flash the selection for 80ms to confirm auto-copy.
-          triggerSelectionFlash();
-        } catch {
-          /* non-fatal */
-        }
-      }
-    } else {
-      hasSelection = false;
-    }
-    selectionRange = sel;
-  }
-
-  async function handleMousedown(event: MouseEvent) {
-    // set_active_pane on click
-    if (!active) {
-      try {
-        await invoke('set_active_pane', { paneId });
-      } catch {
-        /* non-fatal */
-      }
-    }
-    if (event.button !== 0) return;
-
-    const cell = pixelToCell(event);
-
-    // FS-VT-071: Ctrl+Click on a hyperlink cell → open URL in system browser.
-    // Takes precedence over mouse reporting and selection (Ctrl is a user override).
-    if (event.ctrlKey && event.detail === 1) {
-      const hyperlink = grid[cell.row * cols + cell.col]?.hyperlink;
-      if (hyperlink) {
-        try {
-          await invoke('open_url', { url: hyperlink, paneId });
-        } catch {
-          /* non-fatal — invalid scheme silently rejected by backend */
-        }
-        return;
-      }
-    }
-
-    // FS-VT-082/083: mouse reporting active + not Shift → send to PTY, skip selection
-    if (mouseReporting !== 'none' && !event.shiftKey) {
-      await sendMouseEvent(mouseButtonCode(event), cell.col, cell.row, event, false);
-      return;
-    }
-
-    // Triple-click (detail >= 3): select full line (FS-CLIP-003)
-    if (event.detail >= 3) {
-      isSelecting = false;
-      selection.selectLineAt(cell.row, cols);
-      await copySelectionToClipboard();
-      return;
-    }
-
-    // Double-click (detail === 2): select word (FS-CLIP-002)
-    if (event.detail === 2) {
-      isSelecting = false;
-      selection.selectWordAt(
-        cell.col,
-        cell.row,
-        (r, c) => grid[r * cols + c]?.content ?? '',
-        cols,
-        wordDelimiters,
-      );
-      await copySelectionToClipboard();
-      return;
-    }
-
-    // Single click: start drag selection
-    isSelecting = true;
-    selection.startSelection(cell);
-    selectionRange = selection.getSelection();
-  }
-
-  async function handleMousemove(event: MouseEvent) {
-    if (
-      (mouseReporting === 'buttonEvent' && event.buttons !== 0) ||
-      mouseReporting === 'anyEvent'
-    ) {
-      if (!event.shiftKey) {
-        const cell = pixelToCell(event);
-        const motionBtn = event.buttons !== 0 ? 32 + mouseButtonCode(event) : 35;
-        await sendMouseEvent(motionBtn, cell.col, cell.row, event, false);
-        return;
-      }
-    }
-    if (!isSelecting) return;
-    selection.extendSelection(pixelToCell(event));
-    selectionRange = selection.getSelection();
-  }
-
-  async function handleMouseup(event: MouseEvent) {
-    if (mouseReporting !== 'none' && mouseReporting !== 'x10' && !event.shiftKey) {
-      const cell = pixelToCell(event);
-      const releaseBtn = mouseEncoding === 'sgr' ? mouseButtonCode(event) : 3;
-      await sendMouseEvent(releaseBtn, cell.col, cell.row, event, true);
-      return;
-    }
-    if (!isSelecting) return;
-    isSelecting = false;
-    selection.extendSelection(pixelToCell(event));
-    await copySelectionToClipboard();
-  }
-
-  // -------------------------------------------------------------------------
-  // Focus events (FS-VT-084, DECSET 1004)
-  // -------------------------------------------------------------------------
-
-  async function handleFocus() {
-    if (!active) return;
-    if (focusEventsActive) {
-      await sendBytes(new TextEncoder().encode('\x1b[I'));
-    }
-  }
-
-  async function handleBlur() {
-    if (focusEventsActive) {
-      await sendBytes(new TextEncoder().encode('\x1b[O'));
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // SSH reconnect (FS-SSH-040/041)
-  // -------------------------------------------------------------------------
-
-  async function handleReconnect() {
-    try {
-      await invoke('reconnect_ssh', { paneId });
-    } catch {
-      /* non-fatal */
-    }
-  }
 
   /** Dismiss the deprecated algorithm banner for this pane session (UXD §7.21.3). */
   async function handleDismissAlgorithmBanner() {
@@ -831,257 +168,46 @@
     try {
       await invoke('dismiss_ssh_algorithm_warning', { paneId });
     } catch {
-      /* non-fatal — UI already dismissed */
+      // Non-fatal — UI already dismissed.
     }
   }
 
-  async function handleContextMenuCopy() {
-    if (!selectionRange) return;
-    await copySelectionToClipboard();
-  }
-
-  async function handleContextMenuPaste() {
-    try {
-      const text: string = await invoke('get_clipboard');
-      if (text) {
-        await pasteText(text);
-      }
-    } catch {
-      /* non-fatal */
-    }
-  }
-
-  /**
-   * Paste text with bracketed paste support (FS-CLIP-008, SEC-BLK-012/014).
-   * Delegates to pasteToBytes() which handles wrapping and sanitization.
-   * When bracketed paste is inactive and text contains newlines, shows a
-   * confirmation dialog first (FS-CLIP-009), unless disabled via preference.
-   */
-  async function pasteText(text: string) {
-    const hasNewlines = text.includes('\n');
-    if (!bracketedPasteActive && hasNewlines && confirmMultilinePaste) {
-      pasteConfirmText = text;
-      pasteConfirmOpen = true;
-      return;
-    }
-    const encoded = pasteToBytes(text, bracketedPasteActive);
-    if (encoded) await sendBytes(encoded);
-  }
-
-  /** Confirmed paste from the FS-CLIP-009 dialog. */
-  async function handlePasteConfirm() {
-    const text = pasteConfirmText;
-    pasteConfirmOpen = false;
-    pasteConfirmText = '';
-    const encoded = pasteToBytes(text, bracketedPasteActive);
-    if (encoded) await sendBytes(encoded);
-  }
-
-  function handlePasteCancel() {
-    pasteConfirmOpen = false;
-    pasteConfirmText = '';
-  }
-
-  // -------------------------------------------------------------------------
-  // Scrollbar interaction (FS-SB-007)
-  // -------------------------------------------------------------------------
-
-  /**
-   * Convert a pointer Y position on the scrollbar track to a scroll offset.
-   * The scrollbar thumb represents the visible viewport within total content height.
-   */
-  function scrollbarYToOffset(clientY: number): number {
-    if (!scrollbarEl) return scrollOffset;
-    const rect = scrollbarEl.getBoundingClientRect();
-    const fraction = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    // fraction 0 = top of scrollback, fraction 1 = bottom (offset 0)
-    // scrollbackLines = total lines above current view
-    const totalLines = rows + scrollbackLines;
-    const targetLine = Math.round(fraction * totalLines);
-    // Convert to offset: offset is lines above visible area (0 = at bottom)
-    return Math.max(0, Math.min(scrollbackLines, scrollbackLines - targetLine + rows));
-  }
-
-  async function scrollToOffset(offset: number) {
-    const clamped = Math.max(0, Math.min(scrollbackLines, offset));
-    try {
-      await invoke('scroll_pane', { paneId, offset: clamped });
-    } catch {
-      /* non-fatal */
-    }
-  }
-
-  function handleScrollbarPointerdown(event: PointerEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-    // Capture pointer to receive events outside the element
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-
-    const thumbEl = (event.currentTarget as HTMLElement).querySelector(
-      '.terminal-pane__scrollbar-thumb',
-    ) as HTMLElement | null;
-    const thumbRect = thumbEl?.getBoundingClientRect();
-
-    // Determine if click landed on the thumb or on the track
-    if (thumbRect && event.clientY >= thumbRect.top && event.clientY <= thumbRect.bottom) {
-      // Click on thumb: start drag
-      scrollbarDragging = true;
-      scrollbarDragStartY = event.clientY;
-      scrollbarDragStartOffset = scrollOffset;
-    } else {
-      // Click on track: jump to position
-      const newOffset = scrollbarYToOffset(event.clientY);
-      scrollToOffset(newOffset);
-    }
-  }
-
-  function handleScrollbarPointermove(event: PointerEvent) {
-    if (!scrollbarDragging) return;
-    event.preventDefault();
-    const deltaY = event.clientY - scrollbarDragStartY;
-    if (!scrollbarEl) return;
-    const trackHeight = scrollbarEl.getBoundingClientRect().height;
-    const totalLines = rows + scrollbackLines;
-    // Delta in lines: proportional to track height
-    const deltaLines = Math.round((deltaY / trackHeight) * totalLines);
-    // Dragging down = scrolling toward bottom = reducing offset
-    const newOffset = Math.max(0, Math.min(scrollbackLines, scrollbarDragStartOffset - deltaLines));
-    scrollToOffset(newOffset);
-  }
-
-  function handleScrollbarPointerup(event: PointerEvent) {
-    if (!scrollbarDragging) return;
-    event.preventDefault();
-    scrollbarDragging = false;
-    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-  }
-
-  function handleScrollbarWheel(event: WheelEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-    const newOffset = Math.max(0, scrollOffset + (event.deltaY > 0 ? -3 : 3));
-    scrollToOffset(newOffset);
-  }
-
-  // -------------------------------------------------------------------------
-  // Cell rendering helpers
-  // -------------------------------------------------------------------------
-
-  function cellStyle(cell: CellStyle): string {
-    const parts: string[] = [];
-    const fg = cell.inverse ? cell.bg : cell.fg;
-    const bg = cell.inverse ? cell.fg : cell.bg;
-    if (fg) parts.push(`color:${fg}`);
-    if (bg) parts.push(`background-color:${bg}`);
-    if (cell.bold) parts.push('font-weight:bold');
-    if (cell.italic) parts.push('font-style:italic');
-    if (cell.dim) parts.push('opacity:0.5');
-    if (cell.hidden) parts.push('color:transparent');
-    const dec: string[] = [];
-    if (cell.underline > 0) dec.push('underline');
-    if (cell.strikethrough) dec.push('line-through');
-    if (dec.length) parts.push(`text-decoration:${dec.join(' ')}`);
-    return parts.join(';');
-  }
-
-  function isSelected(row: number, col: number): boolean {
-    if (!selectionRange) return false;
-    const { start, end } = selectionRange;
-    if (row < start.row || row > end.row) return false;
-    if (row === start.row && col < start.col) return false;
-    if (row === end.row && col > end.col) return false;
-    return true;
-  }
-
-  // -------------------------------------------------------------------------
-  // Bell handler (FS-VT-090/093)
-  // -------------------------------------------------------------------------
-
-  function handleBell() {
-    if (bellType === 'none') return;
-
-    if (bellType === 'visual' || bellType === 'both') {
-      // Flash the pane border for 80ms using --color-indicator-bell.
-      if (bellFlashTimer) clearTimeout(bellFlashTimer);
-      bellFlashing = true;
-      bellFlashTimer = setTimeout(() => {
-        bellFlashing = false;
-        bellFlashTimer = null;
-      }, 80);
-    }
-
-    if (bellType === 'audio' || bellType === 'both') {
-      // Short 440 Hz beep via AudioContext (avoids needing an audio file).
-      try {
-        const ctx = new AudioContext();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 440;
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.08);
-        osc.onended = () => ctx.close();
-      } catch {
-        // AudioContext may be unavailable (e.g. in test environments) — non-fatal.
-      }
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Pane border activity pulse (UXD §7.2.1)
-  // -------------------------------------------------------------------------
-
-  /**
-   * Trigger a border pulse on this inactive pane.
-   * 'exit' holds for durationMs then clears; 'output'/'bell' clear after durationMs.
-   * A new notification replaces any ongoing non-exit pulse.
-   */
-  function triggerBorderPulse(type: BorderPulse, durationMs: number) {
-    // Do not override a persistent exit indicator with a lower-priority event.
-    if (borderPulse === 'exit' && type !== 'exit') return;
-    if (borderPulseTimer) clearTimeout(borderPulseTimer);
-    borderPulse = type;
-    borderPulseTimer = setTimeout(() => {
-      borderPulse = null;
-      borderPulseTimer = null;
-    }, durationMs);
-  }
-
-  // Clear border pulse when this pane becomes active (UXD §7.2.1).
-  $effect(() => {
-    if (active && borderPulse !== null) {
-      if (borderPulseTimer) clearTimeout(borderPulseTimer);
-      borderPulseTimer = null;
-      borderPulse = null;
-    }
+  // Props are passed as getter functions to preserve Svelte 5 reactivity
+  // across the composable boundary (§11.2 pattern).
+  const tp = useTerminalPane({
+    paneId: () => paneId,
+    active: () => active,
+    wordDelimiters: () => wordDelimiters,
+    confirmMultilinePaste: () => confirmMultilinePaste,
+    cursorBlinkMs: () => cursorBlinkMs,
+    bellType: () => bellType,
+    searchMatches: () => searchMatches,
+    activeSearchMatchIndex: () => activeSearchMatchIndex,
+    ondimensionschange: () => ondimensionschange,
+    ondisableConfirmMultilinePaste: () => ondisableConfirmMultilinePaste,
   });
 
-  // -------------------------------------------------------------------------
-  // Copy flash (UXD §7.12)
-  // -------------------------------------------------------------------------
+  function handleKeydown(event: KeyboardEvent) {
+    // Application shortcuts (Ctrl+Shift+*) are handled at the TerminalView level
+    if (event.ctrlKey && event.shiftKey) return;
+    if (event.ctrlKey && event.key === ',') return; // Ctrl+, = preferences
+    if (event.isComposing) return;
 
-  /** Trigger an 80ms flash on the selection layer to confirm auto-copy. */
-  function triggerSelectionFlash() {
-    if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
-    selectionFlashing = true;
-    selectionFlashTimer = setTimeout(() => {
-      selectionFlashing = false;
-      selectionFlashTimer = null;
-    }, 80);
+    const sequence = keyEventToVtSequence(event, tp.decckm, tp.deckpam);
+    if (sequence !== null) {
+      event.preventDefault();
+      tp.sendBytes(sequence);
+    }
   }
 </script>
 
 <div
   class="terminal-pane"
   class:terminal-pane--active={active}
-  class:terminal-pane--bell-flash={bellFlashing}
-  class:terminal-pane--pulse-output={!active && borderPulse === 'output'}
-  class:terminal-pane--pulse-bell={!active && borderPulse === 'bell'}
-  class:terminal-pane--pulse-exit={!active && borderPulse === 'exit'}
+  class:terminal-pane--bell-flash={tp.bellFlashing}
+  class:terminal-pane--pulse-output={!active && tp.borderPulse === 'output'}
+  class:terminal-pane--pulse-bell={!active && tp.borderPulse === 'bell'}
+  class:terminal-pane--pulse-exit={!active && tp.borderPulse === 'exit'}
   data-pane-id={paneId}
   data-active={active ? 'true' : undefined}
   role="region"
@@ -1100,10 +226,10 @@
   <!-- ContextMenu wraps the viewport so right-click opens it -->
   <ContextMenu
     variant="terminal"
-    {hasSelection}
+    hasSelection={tp.hasSelection}
     {canClosePane}
-    oncopy={handleContextMenuCopy}
-    onpaste={handleContextMenuPaste}
+    oncopy={tp.handleContextMenuCopy}
+    onpaste={tp.handleContextMenuPaste}
     {onsearch}
     {onsplitH}
     {onsplitV}
@@ -1111,9 +237,9 @@
   >
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
-      bind:this={viewportEl}
+      bind:this={tp.viewportEl}
       class="terminal-pane__viewport terminal-grid"
-      data-screen-generation={screenGeneration}
+      data-screen-generation={tp.screenGeneration}
       style={lineHeight != null ? `--line-height-terminal: ${lineHeight}` : undefined}
       tabindex={active ? 0 : -1}
       role="textbox"
@@ -1121,15 +247,15 @@
       aria-label={m.terminal_output_aria_label()}
       aria-readonly="false"
       onkeydown={handleKeydown}
-      onmousedown={handleMousedown}
-      onmousemove={handleMousemove}
-      onmouseup={handleMouseup}
-      onwheel={handleWheel}
-      onfocus={handleFocus}
-      onblur={handleBlur}
+      onmousedown={tp.handleMousedown}
+      onmousemove={tp.handleMousemove}
+      onmouseup={tp.handleMouseup}
+      onwheel={tp.handleWheel}
+      onfocus={tp.handleFocus}
+      onblur={tp.handleBlur}
     >
       <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
-      {#each gridRows as row, rowIdx}
+      {#each tp.gridRows as row, rowIdx}
         <div class="terminal-pane__row">
           {#each row as cell, colIdx}
             {#if cell.width !== 0}
@@ -1137,20 +263,20 @@
                 class="terminal-pane__cell"
                 class:terminal-pane__cell--wide={cell.width === 2}
                 class:terminal-pane__cell--hyperlink={cell.hyperlink != null}
-                class:terminal-pane__cell--selected={isSelected(rowIdx, colIdx) &&
+                class:terminal-pane__cell--selected={tp.isSelected(rowIdx, colIdx) &&
                   active &&
-                  !selectionFlashing}
-                class:terminal-pane__cell--selected-flash={isSelected(rowIdx, colIdx) &&
+                  !tp.selectionFlashing}
+                class:terminal-pane__cell--selected-flash={tp.isSelected(rowIdx, colIdx) &&
                   active &&
-                  selectionFlashing}
-                class:terminal-pane__cell--selected-inactive={isSelected(rowIdx, colIdx) && !active}
-                class:terminal-pane__cell--search-active={activeSearchMatchSet.has(
+                  tp.selectionFlashing}
+                class:terminal-pane__cell--selected-inactive={tp.isSelected(rowIdx, colIdx) && !active}
+                class:terminal-pane__cell--search-active={tp.activeSearchMatchSet.has(
                   `${rowIdx}:${colIdx}`,
                 )}
-                class:terminal-pane__cell--search-match={!activeSearchMatchSet.has(
+                class:terminal-pane__cell--search-match={!tp.activeSearchMatchSet.has(
                   `${rowIdx}:${colIdx}`,
-                ) && searchMatchSet.has(`${rowIdx}:${colIdx}`)}
-                style={cellStyle(cell)}>{cell.content === '' ? '\u00a0' : cell.content}</span
+                ) && tp.searchMatchSet.has(`${rowIdx}:${colIdx}`)}
+                style={tp.cellStyle(cell)}>{cell.content === '' ? '\u00a0' : cell.content}</span
               >
             {/if}
           {/each}
@@ -1158,60 +284,58 @@
       {/each}
 
       <!-- Cursor overlay (TUITC-FN-001 to 006, TUITC-UX-050 to 053) -->
-      {#if cursor.visible && (cursorVisible || !currentCursorBlinks)}
+      {#if tp.cursor.visible && (tp.cursorVisible || !tp.currentCursorBlinks)}
         <div
           class="terminal-pane__cursor"
-          class:terminal-pane__cursor--block={currentCursorShape === 'block'}
-          class:terminal-pane__cursor--underline={currentCursorShape === 'underline'}
-          class:terminal-pane__cursor--bar={currentCursorShape === 'bar'}
+          class:terminal-pane__cursor--block={tp.currentCursorShape === 'block'}
+          class:terminal-pane__cursor--underline={tp.currentCursorShape === 'underline'}
+          class:terminal-pane__cursor--bar={tp.currentCursorShape === 'bar'}
           class:terminal-pane__cursor--unfocused={!active}
-          style="--cursor-top:{cursor.row}lh; top:var(--cursor-top); left:{cursor.col}ch"
+          style="--cursor-top:{tp.cursor.row}lh; top:var(--cursor-top); left:{tp.cursor.col}ch"
           aria-hidden="true"
         ></div>
       {/if}
     </div>
 
     <!-- Scrollbar overlay — interactive (FS-SB-007, TUITC-UX-070 to 073) -->
-    {#if showScrollbar && scrollbackLines > 0}
+    {#if tp.showScrollbar && tp.scrollbackLines > 0}
       <div
-        bind:this={scrollbarEl}
+        bind:this={tp.scrollbarEl}
         class="terminal-pane__scrollbar"
         transition:fade={{ duration: 300 }}
-        class:terminal-pane__scrollbar--dragging={scrollbarDragging}
+        class:terminal-pane__scrollbar--dragging={tp.scrollbarDragging}
         aria-hidden="true"
-        onpointerdown={handleScrollbarPointerdown}
-        onpointermove={handleScrollbarPointermove}
-        onpointerup={handleScrollbarPointerup}
-        onpointerleave={handleScrollbarPointerup}
-        onwheel={handleScrollbarWheel}
+        onpointerdown={tp.handleScrollbarPointerdown}
+        onpointermove={tp.handleScrollbarPointermove}
+        onpointerup={tp.handleScrollbarPointerup}
+        onpointerleave={tp.handleScrollbarPointerup}
+        onwheel={tp.handleScrollbarWheel}
         onmouseenter={() => {
-          scrollbarHover = true;
+          tp.scrollbarHover = true;
         }}
         onmouseleave={() => {
-          scrollbarHover = false;
+          tp.scrollbarHover = false;
         }}
       >
         <div
           class="terminal-pane__scrollbar-thumb"
-          class:terminal-pane__scrollbar-thumb--hover={scrollbarHover || scrollbarDragging}
-          style:height="{scrollbarThumbHeightPct}%"
-          style:top="{scrollbarThumbTopPct}%"
+          class:terminal-pane__scrollbar-thumb--hover={tp.scrollbarHover || tp.scrollbarDragging}
+          style:height="{tp.scrollbarThumbHeightPct}%"
+          style:top="{tp.scrollbarThumbTopPct}%"
         ></div>
       </div>
     {/if}
 
     <!-- Scroll-to-bottom button — shown when scrolled up into scrollback history -->
-    {#if scrollOffset > 0}
+    {#if tp.scrollOffset > 0}
       <div transition:fade={{ duration: 150 }}>
-        <ScrollToBottomButton onclick={handleScrollToBottom} />
+        <ScrollToBottomButton onclick={tp.handleScrollToBottom} />
       </div>
     {/if}
   </ContextMenu>
 
-  <!-- SSH reconnection separators — UI overlay injected at the bottom of the terminal
-       at the moment of each reconnection (FS-SSH-042, UXD §7.19).
-       Rendered after the ContextMenu so they appear above terminal content.
-       Not interactive; aria-hidden (purely decorative). -->
+  <!-- SSH reconnection separators — UI overlay injected at reconnect events
+       (FS-SSH-042, UXD §7.19). Not interactive; aria-hidden (purely decorative). -->
   {#if reconnectionSeparators.length > 0}
     <div class="terminal-pane__reconnection-separators" aria-hidden="true">
       {#each reconnectionSeparators as ts (ts)}
@@ -1231,7 +355,7 @@
       <span class="terminal-pane__ssh-disconnected-label"
         >{m.ssh_banner_disconnected({ reason: '' })}</span
       >
-      <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={handleReconnect}
+      <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={tp.handleReconnect}
         >{m.ssh_reconnect()}</button
       >
     </div>
@@ -1240,14 +364,14 @@
 
 <!-- FS-CLIP-009: Multiline paste confirmation dialog -->
 <Dialog
-  open={pasteConfirmOpen}
+  open={tp.pasteConfirmOpen}
   title={m.paste_confirm_title()}
   size="small"
-  onclose={handlePasteCancel}
+  onclose={tp.handlePasteCancel}
 >
   {#snippet children()}
     <p class="text-[14px] text-(--color-text-secondary) leading-relaxed">
-      {m.paste_confirm_body({ lines: pasteConfirmText.split('\n').length })}
+      {m.paste_confirm_body({ lines: tp.pasteConfirmText.split('\n').length })}
     </p>
     <div class="mt-4">
       <Toggle
@@ -1260,8 +384,8 @@
     </div>
   {/snippet}
   {#snippet footer()}
-    <Button variant="ghost" onclick={handlePasteCancel}>{m.action_cancel()}</Button>
-    <Button variant="primary" onclick={handlePasteConfirm}>{m.paste_confirm_action()}</Button>
+    <Button variant="ghost" onclick={tp.handlePasteCancel}>{m.action_cancel()}</Button>
+    <Button variant="primary" onclick={tp.handlePasteConfirm}>{m.paste_confirm_action()}</Button>
   {/snippet}
 </Dialog>
 
@@ -1458,19 +582,6 @@
     .terminal-pane__scrollbar-thumb {
       transition: none;
     }
-  }
-
-  /* SSH reconnection separators container (FS-SSH-042, UXD §7.19) */
-  .terminal-pane__reconnection-separators {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    pointer-events: none;
-    /* Separators sit above the terminal grid but below interactive overlays */
-    z-index: calc(var(--z-overlay, 20) - 1);
   }
 
   /* SSH disconnected banner (FS-SSH-040/041) */

@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 @import 'tailwindcss';
 
+/* Explicit source configuration: restricts candidate scanning to src/ only.
+   Pairs with the Svelte virtual-module exclusion in vite.config.js. */
+@source "../src/**/*.{svelte,ts,html}";
+
 @theme {
   /* ===================================================
      PRIMITIVE COLOR SCALE

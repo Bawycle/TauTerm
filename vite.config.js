@@ -6,11 +6,66 @@ import { paraglideVitePlugin } from "@inlang/paraglide-js";
 
 const host = process.env.TAURI_DEV_HOST;
 
+/**
+ * Wrap @tailwindcss/vite plugins to exclude Svelte virtual CSS modules.
+ *
+ * Root cause: when the Svelte CSS compilation cache is not yet populated on
+ * initial request, `vite-plugin-svelte:load-compiled-css` returns undefined.
+ * Vite then falls back to reading the raw .svelte file from disk, which
+ * includes <script> blocks. Tailwind's `generate:serve` transformer receives
+ * this mixed content and Lightning CSS fails parsing JavaScript identifiers
+ * (e.g. `onMount`) as CSS declarations.
+ *
+ * No Svelte component in this project uses @apply or other Tailwind CSS
+ * directives — utility classes are applied via class attributes, scanned from
+ * app.css. Excluding Svelte virtual modules from Tailwind processing is
+ * therefore lossless.
+ */
+function tailwindExcludingSvelteVirtual() {
+  // Matches ?svelte&type=style&lang.css (and similar Svelte virtual IDs)
+  const svelteVirtual = /[?&]svelte[=&]/;
+  return tailwindcss().map((plugin) => {
+    if (!plugin?.transform || typeof plugin.transform !== "object") return plugin;
+    const t = plugin.transform;
+    // filter.id may be a string, RegExp, array, or an include/exclude object.
+    // Only augment the include/exclude object form — other forms have no exclude list.
+    const idFilter = t.filter?.id;
+    if (
+      !idFilter ||
+      typeof idFilter === "string" ||
+      idFilter instanceof RegExp ||
+      Array.isArray(idFilter)
+    ) {
+      return plugin;
+    }
+    return {
+      ...plugin,
+      transform: {
+        ...t,
+        filter: {
+          ...t.filter,
+          id: {
+            ...idFilter,
+            exclude: [
+              ...(Array.isArray(idFilter.exclude)
+                ? idFilter.exclude
+                : idFilter.exclude != null
+                  ? [idFilter.exclude]
+                  : []),
+              svelteVirtual,
+            ],
+          },
+        },
+      },
+    };
+  });
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [
     sveltekit(),
-    tailwindcss(),
+    tailwindExcludingSvelteVirtual(),
     paraglideVitePlugin({
       project: "./project.inlang",
       outdir: "./src/lib/paraglide",

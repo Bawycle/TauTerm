@@ -34,6 +34,11 @@ pub struct SshTaskHandle {
 }
 
 impl SshTaskHandle {
+    /// Wrap an `AbortHandle` in an `SshTaskHandle`.
+    pub fn from_abort_handle(abort: tokio::task::AbortHandle) -> Self {
+        Self { abort }
+    }
+
     /// Abort the SSH read task.
     pub fn abort(&self) {
         self.abort.abort();

@@ -161,6 +161,7 @@ mod security_tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use crate::vt::VtProcessor;
 
@@ -507,7 +508,7 @@ mod tests {
         let mut vt = make_vt(80, 24);
         // Feed OSC 0 ; followed by 5000 bytes without a terminator.
         let mut overflow_seq: Vec<u8> = b"\x1b]0;".to_vec();
-        overflow_seq.extend(std::iter::repeat(b'X').take(5000));
+        overflow_seq.extend(std::iter::repeat_n(b'X', 5000));
         // No BEL or ST — simulate abandonment. Then a valid sequence.
         vt.process(&overflow_seq);
         // Feed a valid sequence that follows — must not be corrupted.
@@ -573,7 +574,7 @@ mod tests {
         let mut vt = make_vt(80, 24);
         let long_title: Vec<u8> = std::iter::once(b'\x1b')
             .chain(b"]0;".iter().copied())
-            .chain(std::iter::repeat(b'A').take(300))
+            .chain(std::iter::repeat_n(b'A', 300))
             .chain(std::iter::once(b'\x07'))
             .collect();
         vt.process(&long_title);

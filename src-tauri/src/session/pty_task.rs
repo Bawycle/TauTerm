@@ -41,6 +41,11 @@ pub struct PtyTaskHandle {
 }
 
 impl PtyTaskHandle {
+    /// Wrap an `AbortHandle` in a `PtyTaskHandle`.
+    pub fn from_abort_handle(abort: tokio::task::AbortHandle) -> Self {
+        Self { abort }
+    }
+
     /// Abort the PTY read task.
     pub fn abort(&self) {
         self.abort.abort();

@@ -304,25 +304,22 @@ mod tests {
     // Integration test harness — PTY round-trip helpers
     // -----------------------------------------------------------------------
 
-    /// Open a real PTY session with the given command/args/env, returning the
-    /// concrete `LinuxPtySession` (not the trait object) so integration tests
-    /// can access `reader_handle()`.
+    /// Open a real PTY session with the given command/args/env.
+    ///
+    /// Returns `Box<dyn PtySession>`. Callers use `PtySession::reader_handle()`
+    /// (or `as_linux_pty()`) to access the underlying reader — no raw-pointer
+    /// downcast required.
     fn open_linux_session_with_env(
         cols: u16,
         rows: u16,
         command: &str,
         args: &[&str],
         env: &[(&str, &str)],
-    ) -> LinuxPtySession {
+    ) -> Box<dyn PtySession> {
         let backend = LinuxPtyBackend::new();
-        let boxed = backend
+        backend
             .open_session(cols, rows, command, args, env)
-            .expect("open_linux_session_with_env: open_session failed");
-        // Safety: on Linux, `LinuxPtyBackend::open_session` always returns a
-        // `LinuxPtySession`. The Box<dyn PtySession> is backed by this concrete type.
-        let raw = Box::into_raw(boxed);
-        // SAFETY: we know the concrete type is LinuxPtySession.
-        unsafe { *Box::from_raw(raw as *mut LinuxPtySession) }
+            .expect("open_linux_session_with_env: open_session failed")
     }
 
     /// Read bytes from a PTY reader until the `expected` substring appears in
@@ -379,7 +376,7 @@ mod tests {
             &["-c", "printenv TERM; exit"],
             &[("TERM", "xterm-256color"), ("COLORTERM", "truecolor")],
         );
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
         let output =
             read_until_timeout(reader, "xterm-256color", std::time::Duration::from_secs(5));
         assert!(
@@ -398,7 +395,7 @@ mod tests {
             &["-c", "printenv COLORTERM; exit"],
             &[("TERM", "xterm-256color"), ("COLORTERM", "truecolor")],
         );
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "truecolor", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -423,7 +420,7 @@ mod tests {
                 ("COLUMNS", &cols.to_string()),
             ],
         );
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "30", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -448,7 +445,7 @@ mod tests {
                 ("COLUMNS", &cols.to_string()),
             ],
         );
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "132", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -470,7 +467,7 @@ mod tests {
                 ("TERM_PROGRAM", "TauTerm"),
             ],
         );
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "TauTerm", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -494,7 +491,7 @@ mod tests {
                 ("TERM_PROGRAM_VERSION", version),
             ],
         );
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, version, std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -517,7 +514,7 @@ mod tests {
     #[test]
     fn fpl_w_003_read_after_child_exit_returns_eof_or_error() {
         let backend = LinuxPtyBackend::new();
-        let boxed = backend
+        let session = backend
             .open_session(
                 80,
                 24,
@@ -527,10 +524,7 @@ mod tests {
             )
             .expect("open session");
 
-        let raw = Box::into_raw(boxed);
-        // SAFETY: on Linux, LinuxPtyBackend always returns LinuxPtySession.
-        let session = unsafe { Box::from_raw(raw as *mut LinuxPtySession) };
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
 
         // The reader must eventually return EOF or EIO after the child exits.
         // We poll until we get a 0-byte read or an error.
@@ -571,7 +565,7 @@ mod tests {
     #[test]
     fn fpl_w_004_write_master_readable_via_reader_handle() {
         let backend = LinuxPtyBackend::new();
-        let boxed = backend
+        let session = backend
             .open_session(
                 80,
                 24,
@@ -581,10 +575,7 @@ mod tests {
             )
             .expect("open session");
 
-        let raw = Box::into_raw(boxed);
-        // SAFETY: on Linux, LinuxPtyBackend always returns LinuxPtySession.
-        let session = unsafe { Box::from_raw(raw as *mut LinuxPtySession) };
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
 
         let output = read_until_timeout(
             reader,
@@ -626,7 +617,7 @@ mod tests {
         );
 
         let backend = LinuxPtyBackend::new();
-        let boxed = backend
+        let session = backend
             .open_session(
                 80,
                 24,
@@ -636,10 +627,7 @@ mod tests {
             )
             .expect("open session");
 
-        let raw = Box::into_raw(boxed);
-        // SAFETY: on Linux, LinuxPtyBackend always returns LinuxPtySession.
-        let session = unsafe { Box::from_raw(raw as *mut LinuxPtySession) };
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
 
         // Wait for "READY" to confirm the shell trap is installed.
         let ready = read_until_timeout(reader.clone(), "READY", std::time::Duration::from_secs(5));
@@ -695,7 +683,7 @@ mod tests {
     #[test]
     fn fpl_r_005_resize_delivers_sigwinch_to_child() {
         let backend = LinuxPtyBackend::new();
-        let boxed = backend
+        let mut session = backend
             .open_session(
                 80,
                 24,
@@ -708,10 +696,7 @@ mod tests {
             )
             .expect("open session");
 
-        let raw = Box::into_raw(boxed);
-        // SAFETY: on Linux, LinuxPtyBackend always returns LinuxPtySession.
-        let mut session = unsafe { Box::from_raw(raw as *mut LinuxPtySession) };
-        let reader = session.reader_handle();
+        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
 
         // Wait for the child to signal it's ready (trap is installed).
         let ready = read_until_timeout(reader.clone(), "READY", std::time::Duration::from_secs(5));

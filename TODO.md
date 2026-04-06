@@ -40,8 +40,6 @@
   - Wrappers IPC créés : `ipc/commands.ts`, `ipc/events.ts`, `ipc/errors.ts`
   - Composables créés : `composables/useTerminalView.svelte.ts`, `composables/useTerminalPane.svelte.ts`
   - Résultat : TerminalView.svelte 32L script + TerminalPane.svelte 130L script (< 250L chacun)
-### UX/UI
-
 
 ---
 

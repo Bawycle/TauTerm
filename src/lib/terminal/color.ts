@@ -141,3 +141,23 @@ export function cursorBlinks(shapeCode: number): boolean {
   // Odd codes (1, 3, 5) blink; 0 (default) also blinks; even codes (2, 4, 6) are steady
   return shapeCode === 0 || shapeCode === 1 || shapeCode === 3 || shapeCode === 5;
 }
+
+/**
+ * Bold color promotion (FS-VT-020 bold-bright rule).
+ *
+ * When bold=true and the color is an ANSI 16-color index in [1, 7],
+ * return the bright variant (index + 8). All other cases return the
+ * color unchanged:
+ *   - Index 0 (black) is NOT promoted.
+ *   - Indices 8–15 are already bright — no double promotion.
+ *   - ansi256, rgb colors are NOT promoted.
+ *   - bold=false: no promotion.
+ */
+export function resolveAnsiColor(color: Color, bold: boolean): Color {
+  if (!bold) return color;
+  if (color.type !== 'ansi') return color;
+  if (color.index >= 1 && color.index <= 7) {
+    return { type: 'ansi', index: color.index + 8 };
+  }
+  return color;
+}

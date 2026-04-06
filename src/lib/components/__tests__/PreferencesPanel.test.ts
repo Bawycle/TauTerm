@@ -171,6 +171,60 @@ describe('UITCP-PREF-FN-005: scrollback shows memory estimate', () => {
 });
 
 // ---------------------------------------------------------------------------
+// F2: Scrollback memory estimate coefficient (5 500 bytes/line)
+// ---------------------------------------------------------------------------
+
+describe('UITCP-PREF-FN-005b: scrollback memory estimate uses 5 500 bytes/line', () => {
+  /**
+   * The scrollbackEstimateMb formula must use 5 500 bytes/line (arch/07 upper
+   * bound), not 200. With 10 000 lines: 10000 * 5500 / (1024 * 1024) ≈ 52.5 MB.
+   * We verify the displayed estimate is consistent with the 5 500 coefficient.
+   */
+  it('estimate text is consistent with 5 500 bytes/line for 10 000 lines', () => {
+    const { container, instance } = mountPanel({
+      preferences: makePrefs({
+        terminal: {
+          scrollbackLines: 10000,
+          allowOsc52Write: false,
+          wordDelimiters: ' ,;:.{}[]()"\`|\\/',
+          bellType: 'visual',
+          confirmMultilinePaste: true,
+        },
+      }),
+    });
+    instances.push(instance);
+    // Navigate to Terminal section
+    const navItems = Array.from(container.querySelectorAll('.preferences-panel__nav-item'));
+    const terminalBtn = navItems.find((b) => b.textContent?.match(/terminal/i));
+    (terminalBtn as HTMLElement)?.click();
+    // Find the helper text that shows MB estimate
+    const helperTexts = container.querySelectorAll('p');
+    const estimateEl = Array.from(helperTexts).find((p) => p.textContent?.match(/MB|Mo/i));
+    expect(estimateEl).not.toBeNull();
+    if (estimateEl) {
+      // With 5 500 bytes/line and 10 000 lines: ~52.5 MB
+      // With 200 bytes/line (wrong): ~1.9 MB
+      // We assert the estimate is ≥ 10 MB to distinguish the two coefficients.
+      const text = estimateEl.textContent ?? '';
+      const match = text.match(/(\d+(?:[.,]\d+)?)\s*M[Bo]/i);
+      if (match) {
+        const value = parseFloat(match[1].replace(',', '.'));
+        expect(value).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it('scrollbackEstimateMb formula uses coefficient 5 500 in source', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/PreferencesPanel.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    expect(source).toContain('* 5500');
+    expect(source).not.toContain('* 200');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Accessibility
 // ---------------------------------------------------------------------------
 

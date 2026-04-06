@@ -142,7 +142,9 @@
   --color-pane-border-inactive: var(--color-neutral-700); /* #35312a */
 
   /* Form inputs */
-  --color-bg-input: var(--color-neutral-900); /* #16140f — slightly recessed vs surface, creates inset effect */
+  --color-bg-input: var(
+    --color-neutral-900
+  ); /* #16140f — slightly recessed vs surface, creates inset effect */
 
   /* Scrollbar */
   --color-scrollbar-track: transparent;
@@ -155,6 +157,14 @@
 
   --term-bg: var(--color-neutral-900); /* #16140f */
   --term-fg: var(--color-neutral-300); /* #ccc7bc */
+
+  /* Terminal attribute rendering */
+  --term-dim-opacity: 0.5;
+  --term-blink-on-duration: 533ms;
+  --term-blink-off-duration: 266ms;
+  --term-strikethrough-position: 50%;
+  --term-strikethrough-thickness: 1px;
+  --term-underline-color-default: inherit;
 
   /* Cursor */
   --term-cursor-bg: var(--color-blue-300); /* #7ab3d3 — block cursor fill */
@@ -255,6 +265,7 @@
   --size-connection-manager-width: 400px;
   --size-cursor-underline-height: 2px;
   --size-cursor-bar-width: 2px;
+  --size-cursor-outline-width: 1px;
 
   /* ===================================================
      BORDER RADIUS TOKENS

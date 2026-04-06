@@ -89,11 +89,7 @@ import {
   clearTabNotification,
   isPaneProcessActive,
 } from '$lib/state/notifications.svelte';
-import {
-  preferences,
-  setPreferences,
-  setPreferencesFallback,
-} from '$lib/state/preferences.svelte';
+import { preferences, setPreferences, setPreferencesFallback } from '$lib/state/preferences.svelte';
 import { fullscreenState, setFullscreen } from '$lib/state/fullscreen.svelte';
 import { applyPreferencesUpdate } from '$lib/preferences/applyUpdate';
 import { applyLocaleChange } from '$lib/state/locale.svelte';
@@ -167,7 +163,8 @@ export function useTerminalView() {
   // -------------------------------------------------------------------------
 
   const activeThemeLineHeight = $derived(
-    preferences.value?.themes.find((t) => t.name === preferences.value?.appearance.themeName)?.lineHeight,
+    preferences.value?.themes.find((t) => t.name === preferences.value?.appearance.themeName)
+      ?.lineHeight,
   );
 
   // -------------------------------------------------------------------------

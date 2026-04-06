@@ -429,18 +429,33 @@ describe('TV-RISK-002: handleConnectionOpen rollback on open_ssh_connection fail
     const newTab = makeTab({ id: 'tab-new', order: 1 });
     let closeTabCount = 0;
 
-    const invokeSpy = vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === 'get_session_state') return { tabs: [makeTab()], activeTabId: 'tab-1' };
-      if (cmd === 'get_preferences') return basePrefs;
-      if (cmd === 'get_connections') return [{ id: 'conn-1', host: 'example.com', port: 22, username: 'user', authMethod: 'password', label: null, group: null, identityFile: null, allowOsc52Write: false }];
-      if (cmd === 'create_tab') return newTab;
-      if (cmd === 'open_ssh_connection') throw new Error('SSH failed');
-      if (cmd === 'close_tab') {
-        closeTabCount++;
+    const invokeSpy = vi
+      .spyOn(tauriCore, 'invoke')
+      .mockImplementation(async (cmd: string, args?: unknown) => {
+        if (cmd === 'get_session_state') return { tabs: [makeTab()], activeTabId: 'tab-1' };
+        if (cmd === 'get_preferences') return basePrefs;
+        if (cmd === 'get_connections')
+          return [
+            {
+              id: 'conn-1',
+              host: 'example.com',
+              port: 22,
+              username: 'user',
+              authMethod: 'password',
+              label: null,
+              group: null,
+              identityFile: null,
+              allowOsc52Write: false,
+            },
+          ];
+        if (cmd === 'create_tab') return newTab;
+        if (cmd === 'open_ssh_connection') throw new Error('SSH failed');
+        if (cmd === 'close_tab') {
+          closeTabCount++;
+          return undefined;
+        }
         return undefined;
-      }
-      return undefined;
-    });
+      });
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -476,7 +491,9 @@ describe('TV-RISK-002: handleConnectionOpen rollback on open_ssh_connection fail
     // Simulate the open event the ConnectionManager would emit.
     // We do that by directly triggering the ConnectionManager's onopen prop via its rendered button.
     const openNewTabBtns = Array.from(document.body.querySelectorAll('button')).filter(
-      (btn) => btn.textContent?.includes('Open in new tab') || btn.getAttribute('data-action') === 'open-new-tab',
+      (btn) =>
+        btn.textContent?.includes('Open in new tab') ||
+        btn.getAttribute('data-action') === 'open-new-tab',
     );
 
     if (openNewTabBtns.length > 0) {
@@ -503,7 +520,9 @@ describe('TV-RISK-002: handleConnectionOpen rollback on open_ssh_connection fail
 
     // The invokeSpy is set up so open_ssh_connection always throws.
     // Verify create_tab is registered as available.
-    const createTabResult = await (invokeSpy as ReturnType<typeof vi.spyOn>).getMockImplementation()?.('create_tab', {});
+    const createTabResult = await (
+      invokeSpy as ReturnType<typeof vi.spyOn>
+    ).getMockImplementation()?.('create_tab', {});
     expect(createTabResult).toBeDefined();
     expect((createTabResult as { id: string }).id).toBe('tab-new');
   });

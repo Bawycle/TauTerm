@@ -37,6 +37,19 @@ pub struct ScrollbackLine {
     pub soft_wrapped: bool,
 }
 
+/// A scrollback line returned by `VtProcessor::get_scrollback_line`.
+///
+/// Carries both the cell content and the `soft_wrapped` flag so that callers
+/// (e.g. IPC commands, selection copy) can join soft-wrapped lines correctly
+/// without producing spurious newlines (FS-SB-011).
+#[derive(Debug, Clone)]
+pub struct ScrollbackLineRef {
+    /// Cell content of the line (cloned from the ring).
+    pub cells: Vec<Cell>,
+    /// `true` if the line break was caused by auto-wrap rather than a hard newline.
+    pub soft_wrapped: bool,
+}
+
 /// The maximum number of scrollback lines (configurable via preferences in the
 /// full implementation; this constant is the hard upper bound).
 pub const MAX_SCROLLBACK_LINES: usize = 100_000;
@@ -57,7 +70,28 @@ pub struct ScreenSnapshot {
     pub scroll_offset: i64,
 }
 
-/// A single cell in a snapshot — serializable to the frontend.
+/// A single cell in a screen snapshot, serialized to the frontend for rendering.
+///
+/// # Frontend rendering contracts
+///
+/// The frontend MUST respect the following rules when interpreting a `SnapshotCell`:
+///
+/// ## Bold color promotion
+/// When `bold == true` and `fg` is `Color::Ansi { index }` with `index` in `[1, 7]`
+/// (the 7 non-black standard colors), the frontend MUST resolve the displayed color
+/// using `index + 8` (the bright variant). Index 0 (black) is **excluded** from
+/// promotion — bold black renders as ordinary black.
+///
+/// ## Dim (faint)
+/// When `dim == true`, the frontend MUST apply `opacity: var(--term-dim-opacity)`
+/// (design token value: 0.5) to the foreground color. Dim is independent of `bold`
+/// and applies after bold color promotion.
+///
+/// ## Reverse video
+/// When `inverse == true`, the frontend MUST swap the resolved foreground and
+/// background colors. The swap operates on the **resolved** values — i.e. after
+/// bold color promotion has been applied to `fg`, and after substituting terminal
+/// defaults for any `None` color.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnapshotCell {
@@ -226,7 +260,10 @@ impl ScreenBuffer {
         let top = top as usize;
         let bottom = bottom as usize;
 
-        if top >= bottom || top >= self.cells.len() {
+        // `top > bottom` is an invalid region; `top == bottom` is a single-row
+        // region (e.g. a 1-row terminal) which is valid and must still evict the
+        // row into scrollback.
+        if top > bottom || top >= self.cells.len() {
             return;
         }
 
@@ -311,7 +348,7 @@ impl ScreenBuffer {
 
     /// Scroll down by `count` lines within `[top, bottom]`.
     pub fn scroll_down(&mut self, top: u16, bottom: u16, count: u16) {
-        if self.cells.is_empty() || top >= bottom {
+        if self.cells.is_empty() || top > bottom {
             return;
         }
         let count = count as usize;
@@ -493,6 +530,24 @@ mod tests {
         let mut buf = ScreenBuffer::new(5, 5, 100);
         buf.scroll_up(1, 3, 1, false, false);
         assert_eq!(buf.scrollback_len(), 0);
+    }
+
+    #[test]
+    fn scroll_down_one_line_region_does_not_panic() {
+        // Regression: scroll_down with top == bottom (1-row region) must not
+        // panic. The old guard `top >= bottom` would early-return, preventing
+        // the scroll; the corrected guard `top > bottom` allows scroll_down to
+        // operate on a single row (clear it), which is the correct VT behaviour
+        // for CSI T (SD) targeting a 1-row region.
+        let mut buf = ScreenBuffer::new(5, 5, 100);
+        // Write a marker on row 2.
+        if let Some(cell) = buf.get_mut(2, 0) {
+            cell.grapheme = "X".to_string();
+        }
+        // scroll_down with a 1-row region [2, 2] — must not panic.
+        buf.scroll_down(2, 2, 1);
+        // The single row in the region is cleared to Cell::default().
+        assert_eq!(buf.get(2, 0).map(|c| c.grapheme.as_str()), Some(&*Cell::default().grapheme));
     }
 
     #[test]

@@ -34,15 +34,7 @@
     onchange?: (value: string) => void;
   }
 
-  const {
-    options,
-    value,
-    placeholder,
-    disabled = false,
-    label,
-    id,
-    onchange,
-  }: Props = $props();
+  const { options, value, placeholder, disabled = false, label, id, onchange }: Props = $props();
 
   // Stable per-instance fallback ID computed once at instantiation.
   // Used when the caller does not pass `id`, so label-for always points to a valid element.

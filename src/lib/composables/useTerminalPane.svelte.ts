@@ -44,6 +44,7 @@ import {
   reconnectSsh,
 } from '$lib/ipc/commands';
 import { buildGridFromSnapshot, applyUpdates } from '$lib/terminal/screen.js';
+import { measureCellDimensions } from '$lib/terminal/cell-dimensions.js';
 import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
 import { SelectionManager } from '$lib/terminal/selection.js';
 import { pasteToBytes } from '$lib/terminal/paste.js';
@@ -76,6 +77,12 @@ export interface TerminalPaneComposableProps {
   activeSearchMatchIndex: () => number;
   ondimensionschange: () => ((cols: number, rows: number) => void) | undefined;
   ondisableConfirmMultilinePaste: () => (() => void) | undefined;
+  /** CSS font-family for terminal text — used by Canvas cell measurement (F8). */
+  fontFamily?: () => string | undefined;
+  /** Font size in pixels — used by Canvas cell measurement (F8). */
+  fontSize?: () => number | undefined;
+  /** Line height multiplier — used by Canvas cell measurement (F8). */
+  lineHeight?: () => number | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +118,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // -------------------------------------------------------------------------
 
   let cursorVisible = $state(true);
-  let blinkTimer: ReturnType<typeof setInterval> | null = null;
+  let blinkPhaseTimer: ReturnType<typeof setTimeout> | null = null;
 
   // -------------------------------------------------------------------------
   // Selection
@@ -253,15 +260,41 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     }
   });
 
-  // Cursor blink timer — restarts when cursorBlinkMs changes
+  // Cursor blink timer — restarts when cursorBlinkMs or blink mode changes.
+  // Uses asymmetric 2:1 ratio: ON = cursorBlinkMs, OFF = cursorBlinkMs / 2.
+  // NOTE: currentCursorBlinks is read here (not inside startCursorBlink) so
+  // that this effect re-runs when the blink mode changes, AND to avoid
+  // startCursorBlink() becoming an implicit dependency via a nested read.
   $effect(() => {
-    const interval = props.cursorBlinkMs();
-    stopCursorBlink();
-    blinkTimer = setInterval(() => {
-      cursorVisible = currentCursorBlinks ? !cursorVisible : true;
-    }, interval);
+    const onMs = props.cursorBlinkMs();
+    const blinks = currentCursorBlinks;
+    // Cancel any running cycle — this is the only write to cursorVisible inside
+    // the effect body; writes to $state inside effects are allowed in Svelte 5.
+    if (blinkPhaseTimer) {
+      clearTimeout(blinkPhaseTimer);
+      blinkPhaseTimer = null;
+    }
+    cursorVisible = true;
+    if (!blinks) return;
+
+    const offMs = Math.round(onMs / 2);
+
+    function scheduleOffPhase() {
+      cursorVisible = false;
+      blinkPhaseTimer = setTimeout(() => {
+        cursorVisible = true;
+        blinkPhaseTimer = setTimeout(scheduleOffPhase, onMs);
+      }, offMs);
+    }
+
+    blinkPhaseTimer = setTimeout(scheduleOffPhase, onMs);
+
     return () => {
-      stopCursorBlink();
+      if (blinkPhaseTimer) {
+        clearTimeout(blinkPhaseTimer);
+        blinkPhaseTimer = null;
+      }
+      cursorVisible = true;
     };
   });
 
@@ -281,6 +314,17 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let resizeObserver: ResizeObserver | null = null;
   let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // F8 — re-measure and resize when font props change (family, size, line-height).
+  // Reading props.fontFamily/fontSize/lineHeight subscribes to them reactively;
+  // any change from the preferences panel triggers a new sendResize() call so that
+  // cols/rows are recomputed with the new cell dimensions.
+  $effect(() => {
+    props.fontFamily?.();
+    props.fontSize?.();
+    props.lineHeight?.();
+    scheduleSendResize();
+  });
+
   function scheduleSendResize() {
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     props.ondimensionschange()?.(cols, rows);
@@ -292,9 +336,21 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const rect = viewportEl.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
-    const testSpan = viewportEl.querySelector('.terminal-pane__cell') as HTMLElement | null;
-    const cellW = testSpan ? testSpan.offsetWidth : Math.max(1, rect.width / cols);
-    const cellH = testSpan ? testSpan.offsetHeight : Math.max(1, rect.height / rows);
+    // F8: measure cell dimensions via Canvas 2D (more precise than DOM offsetWidth).
+    // Falls back to grid-based estimate when OffscreenCanvas is unavailable (tests).
+    let cellW: number;
+    let cellH: number;
+    try {
+      const family = props.fontFamily?.() ?? 'monospace';
+      const size = props.fontSize?.() ?? 13;
+      const lh = props.lineHeight?.() ?? 1.2;
+      const dims = measureCellDimensions(family, size, lh);
+      cellW = dims.width > 0 ? dims.width : Math.max(1, rect.width / cols);
+      cellH = dims.height > 0 ? dims.height : Math.max(1, rect.height / rows);
+    } catch {
+      cellW = Math.max(1, rect.width / cols);
+      cellH = Math.max(1, rect.height / rows);
+    }
 
     const newCols = Math.max(1, Math.floor(rect.width / cellW));
     const newRows = Math.max(1, Math.floor(rect.height / cellH));
@@ -380,7 +436,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       await onCursorStyleChanged((ev) => {
         if (ev.paneId !== props.paneId()) return;
         cursor = { ...cursor, shape: ev.shape, blink: cursorBlinks(ev.shape) };
-        startCursorBlink();
+        // The blink $effect re-runs automatically when cursor.blink changes,
+        // restarting the cycle from scratch with the new mode.
       }),
     );
 
@@ -408,7 +465,6 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   onDestroy(() => {
     for (const unlisten of unlistens) unlisten();
     unlistens = [];
-    stopCursorBlink();
     if (bellFlashTimer) clearTimeout(bellFlashTimer);
     if (borderPulseTimer) clearTimeout(borderPulseTimer);
     if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
@@ -421,17 +477,11 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // Cursor blink helpers
   // -------------------------------------------------------------------------
 
-  function startCursorBlink() {
-    stopCursorBlink();
-    blinkTimer = setInterval(() => {
-      cursorVisible = currentCursorBlinks ? !cursorVisible : true;
-    }, props.cursorBlinkMs());
-  }
-
+  /** Cancel any running blink cycle and restore cursor to visible. */
   function stopCursorBlink() {
-    if (blinkTimer) {
-      clearInterval(blinkTimer);
-      blinkTimer = null;
+    if (blinkPhaseTimer) {
+      clearTimeout(blinkPhaseTimer);
+      blinkPhaseTimer = null;
     }
     cursorVisible = true;
   }
@@ -888,12 +938,29 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     if (bg) parts.push(`background-color:${bg}`);
     if (cell.bold) parts.push('font-weight:bold');
     if (cell.italic) parts.push('font-style:italic');
-    if (cell.dim) parts.push('opacity:0.5');
+    if (cell.dim) parts.push('opacity:var(--term-dim-opacity)');
     if (cell.hidden) parts.push('color:transparent');
-    const dec: string[] = [];
-    if (cell.underline > 0) dec.push('underline');
-    if (cell.strikethrough) dec.push('line-through');
-    if (dec.length) parts.push(`text-decoration:${dec.join(' ')}`);
+
+    // Build text-decoration (F6 — extended underline styles SGR 4:1–4:5).
+    // F9: strikethrough is rendered via .terminal-pane__cell--strikethrough CSS class
+    // (::after pseudo-element at 50% height) — not via text-decoration: line-through.
+    const decLines: string[] = [];
+    if (cell.underline > 0) decLines.push('underline');
+    if (decLines.length) parts.push(`text-decoration-line:${decLines.join(' ')}`);
+
+    if (cell.underline > 0) {
+      const underlineStyleMap: Record<number, string> = {
+        2: 'double',
+        3: 'wavy',
+        4: 'dotted',
+        5: 'dashed',
+      };
+      const underlineStyle = underlineStyleMap[cell.underline];
+      if (underlineStyle) parts.push(`text-decoration-style:${underlineStyle}`);
+      const underlineColor = cell.underlineColor ?? 'var(--term-underline-color-default)';
+      parts.push(`text-decoration-color:${underlineColor}`);
+    }
+
     return parts.join(';');
   }
 

@@ -19,5 +19,5 @@ pub mod sgr;
 pub use cell::{Cell, CellAttrs, Color, Hyperlink};
 pub use mouse::MouseEvent;
 pub use processor::VtProcessor;
-pub use screen_buffer::{DirtyRegion, ScreenSnapshot};
+pub use screen_buffer::{DirtyRegion, ScreenSnapshot, ScrollbackLineRef};
 pub use search::{SearchMatch, SearchQuery};

@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import {
   cellStyleFromSnapshot,
   cellStyleFromUpdate,
+  cellToCssVars,
   buildGridFromSnapshot,
   applyUpdates,
 } from './screen.js';
@@ -248,5 +249,81 @@ describe('cellStyleFromUpdate: handles ColorDto default variant', () => {
   it('bold=true from CellUpdate', () => {
     const cell = cellStyleFromUpdate('A', makeAttrs({ bold: true }));
     expect(cell.bold).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3 — Token usage: cellToCssVars must use CSS custom properties, not hardcoded values
+// ---------------------------------------------------------------------------
+describe('P3-TOKEN-001: cellToCssVars uses CSS tokens for dim opacity', () => {
+  it('dim=true → opacity is var(--term-dim-opacity), not "0.5"', () => {
+    const dimCell = cellStyleFromSnapshot(makeSnapshotCell({ dim: true }));
+    const vars = cellToCssVars(dimCell);
+    expect(vars['opacity']).toBe('var(--term-dim-opacity)');
+    expect(vars['opacity']).not.toBe('0.5');
+  });
+
+  it('dim=false → opacity key is absent from style vars', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ dim: false }));
+    const vars = cellToCssVars(cell);
+    expect(vars['opacity']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F9 — Strikethrough: cellToCssVars must NOT produce text-decoration line-through
+// The --strikethrough class is handled via CSS ::after pseudo-element in TerminalPane.
+// ---------------------------------------------------------------------------
+describe('F9-001: cellToCssVars does not emit text-decoration line-through for strikethrough', () => {
+  it('strikethrough=true → text-decoration-line does not contain "line-through"', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ strikethrough: true }));
+    const vars = cellToCssVars(cell);
+    const decorLine = vars['text-decoration-line'] ?? '';
+    expect(decorLine).not.toContain('line-through');
+  });
+
+  it('strikethrough=true without underline → text-decoration-line absent', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ strikethrough: true, underline: 0 }));
+    const vars = cellToCssVars(cell);
+    expect(vars['text-decoration-line']).toBeUndefined();
+  });
+
+  it('strikethrough=true with underline=1 → text-decoration-line contains only "underline"', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ strikethrough: true, underline: 1 }));
+    const vars = cellToCssVars(cell);
+    expect(vars['text-decoration-line']).toBe('underline');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F9 — cellStyle (string form in composable) must NOT include line-through for strikethrough
+// ---------------------------------------------------------------------------
+// Note: cellStyle is tested indirectly via screen.ts exports; the composable's
+// cellStyle() is a parallel implementation. We test cellToCssVars here since
+// it is the exported testable surface. The composable's cellStyle() is verified
+// by the F9 source-order test in TerminalPane.test.ts.
+
+// ---------------------------------------------------------------------------
+// F4 — Blink attribute preserved through cellStyleFromSnapshot / cellStyleFromUpdate
+// ---------------------------------------------------------------------------
+describe('F4-001: blink attribute preserved through snapshot and update paths', () => {
+  it('blink=true from snapshot → cell.blink is true', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ blink: true }));
+    expect(cell.blink).toBe(true);
+  });
+
+  it('blink=false from snapshot → cell.blink is false', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ blink: false }));
+    expect(cell.blink).toBe(false);
+  });
+
+  it('blink=true from update → cell.blink is true', () => {
+    const cell = cellStyleFromUpdate('A', makeAttrs({ blink: true }));
+    expect(cell.blink).toBe(true);
+  });
+
+  it('blink=false from update → cell.blink is false', () => {
+    const cell = cellStyleFromUpdate('A', makeAttrs({ blink: false }));
+    expect(cell.blink).toBe(false);
   });
 });

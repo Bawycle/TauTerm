@@ -210,6 +210,17 @@ Component tokens specialize semantic tokens for individual UI components.
 | `--term-hyperlink-fg` | `#7ab3d3` | Hyperlink text color |
 | `--term-hyperlink-underline` | `#4a92bf` | Hyperlink underline color |
 
+#### Text Attribute Rendering Tokens (FS-VT-024, FS-VT-025)
+
+| Token | Resolved Value | Description |
+|-------|---------------|-------------|
+| `--term-dim-opacity` | `0.5` | Opacity multiplier for SGR 2 (Dim/Faint) rendering |
+| `--term-underline-color-default` | `inherit` | Default underline color when SGR 58 is not set — inherits current foreground color |
+| `--term-strikethrough-position` | `50%` | Strikethrough line vertical position as percentage of cell height (measured from top) |
+| `--term-strikethrough-thickness` | `1px` | Strikethrough line thickness |
+| `--term-blink-on-duration` | `533ms` | Blink visible phase duration (SGR 5 and SGR 6) |
+| `--term-blink-off-duration` | `266ms` | Blink invisible phase duration — asymmetric 2:1 on/off ratio for legibility |
+
 ### 3.5 Typography Tokens
 
 | Token | Value | Description |
@@ -268,6 +279,7 @@ Base unit: 4px. All spacing values are multiples of 4px.
 | `--size-connection-manager-width` | `400px` | Connection manager panel width |
 | `--size-cursor-underline-height` | `2px` | Height of the underline cursor style |
 | `--size-cursor-bar-width` | `2px` | Width of the bar cursor style |
+| `--size-cursor-outline-width` | `1px` | Stroke width of the hollow cursor outline (unfocused pane) |
 
 ### 3.8 Border Radius Tokens
 
@@ -330,6 +342,39 @@ Base unit: 4px. All spacing values are multiples of 4px.
 **Line height:** `--line-height-terminal` (1.2). Tight enough for density; loose enough to prevent ascenders/descenders from touching across lines.
 
 **Rationale:** JetBrains Mono is the most commonly pre-installed developer font on Linux systems. The fallback chain covers common developer setups. `"Courier New"` is a last-resort fallback for bare systems. (AD.md §4.1)
+
+### 4.1.1 Cell Dimension Derivation
+
+The terminal grid is built from discrete cell units. Cell dimensions must be computed from the actual rendered font, not inferred from CSS values alone, because different fonts at the same nominal size have different advance widths and metrics.
+
+**`cell_width` — how to measure:**
+
+Measure the advance width of U+2588 FULL BLOCK (█) rendered at `--font-size-terminal` in the resolved `--font-terminal` stack using a Canvas 2D context (`ctx.measureText("█").width`). U+2588 is the canonical reference character for cell width in terminal emulators (used by xterm, kitty, WezTerm): it is guaranteed to be exactly one cell wide in any compliant monospace terminal font. The result is a floating-point pixel value; use it as-is for layout arithmetic. Do not round `cell_width` — accumulation of fractional-pixel rounding across a wide terminal causes visible column misalignment.
+
+**`cell_height` — how to compute:**
+
+`cell_height = Math.ceil(font_size_px * line_height)`
+
+For the default tokens: `Math.ceil(14 × 1.2) = Math.ceil(16.8) = 17px`.
+
+Ceil is used rather than floor or round to ensure the cell box always fully contains the font's descenders. Rounding down (16px) clips descenders at 14px font size with 1.2 line height. The 1-pixel loss is invisible; the clipped descender is not.
+
+**Wide characters (CJK, fullwidth):**
+
+Wide characters (Unicode East Asian Width = W or F) occupy exactly `2 × cell_width` pixels. The renderer places the second logical cell as a continuation cell with no glyph — the wide glyph from the first cell paints across both cells.
+
+**Emoji:**
+
+Emoji are treated as wide characters (2 cells) when the renderer receives a double-width hint from the VT parser. Emoji that arrive as single-width are rendered in one cell; visual overflow is clipped to the cell boundary.
+
+**When to recalculate:**
+
+Cell dimensions must be recalculated when:
+- The user changes the terminal font family (FS-PREF-006).
+- The user changes the terminal font size (FS-PREF-006).
+- On initial mount, before the first frame is painted.
+
+Cell dimension changes require a full PTY `resize` command to the backend with the new column/row counts derived from `floor(pane_pixel_width / cell_width)` and `floor(pane_pixel_height / cell_height)`.
 
 ### 4.2 UI Font
 

@@ -175,10 +175,10 @@
     onupdate?.({ terminal: { ...preferences.terminal, wordDelimiters: val } });
   }
 
-  /** Rough memory estimate: ~200 bytes per line per pane. */
+  /** Memory estimate: ~5 500 bytes per line per pane (upper bound per arch/07). */
   const scrollbackEstimateMb = $derived(
     preferences?.terminal?.scrollbackLines
-      ? Math.round(((preferences.terminal.scrollbackLines * 200) / (1024 * 1024)) * 10) / 10
+      ? Math.round(((preferences.terminal.scrollbackLines * 5500) / (1024 * 1024)) * 10) / 10
       : 0,
   );
 

@@ -179,7 +179,7 @@ The cursor style is determined by the running application via DECSCUSR (FS-VT-03
 | Style | Appearance | Token Usage |
 |-------|-----------|-------------|
 | Block (steady) | Filled rectangle covering the cell | Fill: `--term-cursor-bg` (`#7ab3d3`); character: `--term-cursor-fg` (`#16140f`) |
-| Block (blinking) | Same as steady, toggling visibility | On/off at configurable rate (default 530ms per FS-VT-032) |
+| Block (blinking) | Same as steady, toggling visibility | On/off at configurable rate (default 533ms on / 266ms off per FS-VT-032) |
 | Underline (steady) | `--size-cursor-underline-height` horizontal line at cell bottom | Color: `--term-cursor-bg` (`#7ab3d3`) |
 | Underline (blinking) | Same as steady, toggling visibility | On/off at configurable rate |
 | Bar (steady) | `--size-cursor-bar-width` vertical line at cell left edge | Color: `--term-cursor-bg` (`#7ab3d3`) |
@@ -187,16 +187,65 @@ The cursor style is determined by the running application via DECSCUSR (FS-VT-03
 
 **Unfocused state (FS-VT-034):** When the pane loses focus, the cursor renders as a hollow outline rectangle of the current shape in `--term-cursor-unfocused` (`#7ab3d3`). Never filled, never invisible.
 
+##### 7.3.1.1 Cursor Pixel Composition
+
+**Block cursor:**
+- The block cursor is an overlay layer painted on top of the cell background, before the character glyph.
+- Rendering order (back to front): cell background → cursor fill (`--term-cursor-bg`) → character glyph redrawn in `--term-cursor-fg`.
+- The character glyph is always redrawn on top of the cursor fill so that it remains legible. The cursor fill color and the character-under-cursor color form a guaranteed-contrast pair: `--term-cursor-bg` (`#7ab3d3`) and `--term-cursor-fg` (`#16140f`) achieve 8.7:1 contrast.
+- Cursor fill opacity: 1.0 — never partially transparent.
+
+**Underline cursor:**
+- A `--size-cursor-underline-height` (2px) horizontal bar aligned to the cell's baseline region — positioned at `cell_height - 2px` from the top of the cell (2px from the bottom edge).
+- The character glyph in the cell is not recolored; it renders with its normal fg/bg.
+- Color: `--term-cursor-bg` (`#7ab3d3`).
+
+**Bar cursor:**
+- A `--size-cursor-bar-width` (2px) vertical bar at the left edge of the cell.
+- The character glyph in the cell is not recolored.
+- Color: `--term-cursor-bg` (`#7ab3d3`).
+
+**Blinking behavior:**
+- Blink is a hard toggle: the cursor is fully visible (`opacity: 1`) for `--term-blink-on-duration` (533ms), then fully invisible (`opacity: 0`) for `--term-blink-off-duration` (266ms). No fade transition. The abrupt toggle matches terminal convention and maximizes position legibility at peripheral vision.
+- The blink cycle resets (cursor immediately becomes visible) when: the pane gains focus, the cursor moves, or the user types. This ensures the cursor is always visible immediately after an action.
+- When blinking is suspended (pane loses focus), the cursor transitions from its blinking state to the unfocused hollow outline without completing the current blink cycle.
+
+**Unfocused cursor:**
+- Rendered as a hollow outline rectangle matching the cursor style's outer boundary.
+- Stroke width: `--size-cursor-outline-width` (1px), color `--term-cursor-unfocused` (`#7ab3d3`).
+- For block cursor: full cell outline. For underline cursor: outline of the 2px bar's outer rectangle. For bar cursor: outline of the 2px bar's outer rectangle.
+- No fill. Blink is suspended.
+
+**Cursor during scrollback (scroll_offset > 0):**
+- The cursor is hidden when the viewport is scrolled above the cursor's row (i.e., the cursor row is not visible in the current viewport). It does not render off-screen.
+- When the viewport scrolls back to the cursor's row, the cursor reappears immediately.
+
 #### 7.3.2 Selection Highlight
 
 - **Focused pane:** Selected cells use `--term-selection-bg` (`#2e6f9c`) as background. Foreground is `--term-selection-fg` (`inherit` — preserves original text color).
 - **Unfocused pane:** Selected cells use `--term-selection-bg-inactive` (`#1a3a52`).
 - **Selection operates on cell boundaries** (FS-CLIP-001), not pixel boundaries.
 
+##### 7.3.2.1 Selection Layering and Edge Cases
+
+**Layer order (back to front):** cell background → selection background → text glyph (in its original color) → search highlight (when applicable) → cursor.
+
+The selection layer sits above the cell background but below the text glyph. This means the text glyph always paints over the selection color, ensuring readability without forced color inversion.
+
+**Selection background opacity:** 1.0 — never partially transparent, to prevent selection color contaminating underlying content visually.
+
+**Text color inside selection:** `--term-selection-fg` is `inherit` — the text glyph keeps its original foreground color. Forced inversion (swapping fg/bg inside selection) is not applied. Rationale: with `--term-selection-bg` at `#2e6f9c` (4.9:1 on `--term-bg`), the most common text colors (ANSI White at 8.4:1, neutral-300 at 8.4:1) achieve ≥ 3.5:1 on the selection background — sufficient for this transient overlay. Edge case: if a specific fg color falls below 3:1 contrast on the selection background, the text remains technically distinguishable against the non-selected adjacent cells; forced inversion for individual cells is not implemented (adds implementation complexity, creates visual noise on partial-word selections).
+
+**Cursor cell inside selection:** The cursor is drawn on top of the selection layer. For a block cursor: the cursor fill (`--term-cursor-bg`) covers the selection background on that one cell; the character is redrawn in `--term-cursor-fg`. The selection is visually "punched through" by the cursor on its cell, which is the standard behavior in kitty, WezTerm, and Alacritty.
+
+**Selection vs. search highlights:** Search match highlights and selection highlights can overlap. Priority: **selection takes precedence** over search highlights on any cell covered by the active selection. Rationale: the user's active selection is the current intent; obscuring it with a search match background would be confusing.
+
+**Legibility failure case (fg ≈ selection bg):** If a cell's foreground color is within a perceptual distance that makes it effectively invisible on `--term-selection-bg`, no automatic override is applied. This case is extremely rare with the Umbra ANSI palette and is documented as a known limitation. A future theme-validation warning (in the theme editor, §7.9) may flag low-contrast fg-on-selection-bg pairs.
+
 #### 7.3.3 Scrollbar
 
 - **Width:** `--size-scrollbar-width` (8px).
-- **Position:** Right edge of the pane, overlaying terminal content (no layout displacement).
+- **Position:** Right edge of the pane, overlaying terminal content (no layout displacement). The terminal grid always occupies 100% of the pane width — the scrollbar floats above it via `position: absolute` (or equivalent overlay positioning) with `z-index: var(--z-scrollbar)`. There is no layout reflow when the scrollbar appears or disappears.
 - **Track:** `--color-scrollbar-track` (transparent).
 - **Thumb:** `--color-scrollbar-thumb` (`#4a4640`), `--radius-full` (pill shape).
 - **Thumb min height:** 32px (ensures grabbable target even with large scrollback).
@@ -211,6 +260,82 @@ The cursor style is determined by the running application via DECSCUSR (FS-VT-03
 | Hover (over thumb) | `--color-scrollbar-thumb-hover` (`#6b6660`) | transparent | Visible |
 | Dragging | `--color-scrollbar-thumb-hover` (`#6b6660`) | transparent | Visible |
 | Hover (over scrollbar area) | `--color-scrollbar-thumb` (`#4a4640`) | transparent | Visible (thumb appears on hover in scrollbar zone) |
+
+#### 7.3.4 Text Attribute Rendering (FS-VT-024)
+
+SGR (Select Graphic Rendition) text attributes are rendered as follows. Each attribute is independent and composable unless noted.
+
+##### Bold (SGR 1) — FS-VT-026
+
+Rendered as `font-weight: bold` (700). The font stack (`--font-terminal`) includes fonts that have genuine bold faces (JetBrains Mono Bold, Fira Code Bold, Cascadia Code Bold). Synthetic bold (browser-generated stroke thickening) is acceptable as fallback when no bold face is available — the visual result is slightly degraded but not incorrect.
+
+**Bold + ANSI color interaction (color promotion):** When SGR 1 is active and the foreground color is an ANSI index from the normal range (indices 1–7), the color is promoted to its bright counterpart (indices 9–15). Index 0 (Black) is not promoted — bold black on a dark background has no useful rendering. This promotion matches the behavior of xterm, kitty, and WezTerm with `bold_is_bright = true`. The effect: bold text appears both heavier and brighter, reinforcing the emphasis signal through two channels (weight and luminance).
+
+Color promotion applies only to ANSI indexed colors 1–7. It does not apply to truecolor RGB values or to 256-color palette entries outside indices 1–7.
+
+##### Dim / Faint (SGR 2) — FS-VT-027
+
+Rendered by multiplying the cell's foreground color alpha by `--term-dim-opacity` (0.5). The background color is unaffected.
+
+This approach is preferred over darkening the color value because it works correctly with truecolor and does not require computing a modified color for every possible fg value. At 50% opacity, `--term-fg` (`#ccc7bc` at 8.4:1 on `--term-bg`) yields an effective contrast of approximately 4.2:1 — just below the WCAG 4.5:1 threshold for body text. This is an accepted trade-off: dim text is semantically "less important" content; the slight contrast reduction reinforces the semantic. The value 0.5 is chosen to remain above 3:1 (the WCAG threshold for non-text elements and large text) for the typical terminal fg color.
+
+If SGR 1 (Bold) and SGR 2 (Dim) are both active simultaneously, the bold face is applied and the dim opacity is applied on top. The two attributes do not cancel each other.
+
+##### Italic (SGR 3) — FS-VT-028
+
+Rendered as `font-style: italic`. Fonts in `--font-terminal` that have genuine italic faces (JetBrains Mono Italic, Fira Code — note: Fira Code has no italic; the browser will synthesize it) will use them. Browser-synthesized oblique (slanting) is acceptable as fallback. No special handling for fonts without italic.
+
+##### Blink — Normal (SGR 5) and Rapid (SGR 6) — FS-VT-029
+
+Both SGR 5 (Blink) and SGR 6 (Rapid Blink) are rendered identically: the text content of the cell toggles between `opacity: 1` and `opacity: 0` using CSS animation. The cycle: visible for `--term-blink-on-duration` (533ms), invisible for `--term-blink-off-duration` (266ms). The asymmetric 2:1 on/off ratio ensures the text is readable for the majority of each cycle.
+
+The blink animation uses a CSS `@keyframes` with `animation-timing-function: step-start` (immediate toggle, no easing). Only the text glyph blinks — the cell background does not. This makes it possible to read the text by waiting for the visible phase even without memorizing the content.
+
+The background color of a blinking cell is constant (the cell's normal background), providing a stable visual anchor at the cell position. This prevents the layout from appearing to "jump" as glyphs disappear.
+
+Blink animation is paused globally when the window loses focus (to avoid battery drain on background windows).
+
+**Rapid Blink (SGR 6):** Rendered identically to SGR 5. Distinguishing blink rates is not implemented — the visual difference is imperceptible in practice and adds implementation complexity for zero user benefit.
+
+##### Hidden / Invisible (SGR 8) — FS-VT-036
+
+The text glyph is not rendered (effectively `color: transparent` — the character occupies its cell space but is not visible). The cell background renders normally. Hidden text is not revealed visually under selection: `--term-selection-fg: inherit` means the text color (transparent) remains transparent even when the selection background is applied. This matches standard terminal behavior (FS-VT-036). To copy hidden text, the user selects the region; the underlying bytes are captured regardless of visibility.
+
+##### Strikethrough (SGR 9) — FS-VT-037
+
+A horizontal line drawn through the cell at `--term-strikethrough-position` (50% of `cell_height` from the top), with thickness `--term-strikethrough-thickness` (1px).
+
+Color: uses the current foreground color of the cell (same as the text). If SGR 58 (underline color) has been set, it is **not** applied to the strikethrough — SGR 58 controls underline color only, not strikethrough. The strikethrough line is a simple overlay on top of the text glyph.
+
+Position rationale: 50% (vertical midpoint) is the typographic standard for strikethrough in monospace rendering. At 14px font size, this places the line at approximately 8–9px from top, crossing the x-height of most glyphs. This matches kitty and WezTerm behavior.
+
+##### Reverse Video / Inverse (SGR 7) — FS-VT-038
+
+The cell's foreground and background colors are swapped. This applies to all color types:
+- Terminal default colors: `--term-fg` and `--term-bg` are swapped.
+- ANSI indexed colors: the indexed value is used as-is for the swapped position.
+- Truecolor RGB: the RGB values are used as-is for the swapped position.
+
+No additional adjustment is applied after the swap. If the result of a swap produces a low-contrast pairing (e.g., a truecolor fg that is dark on a dark bg after swap), no automatic correction is made — the application that set the colors is responsible for choosing values that are legible when inverted.
+
+If SGR 7 (Reverse) is combined with SGR 1 (Bold), color promotion (see Bold above) is applied after the swap — i.e., to the color that ends up in the foreground position after reversal.
+
+#### 7.3.5 Extended Underline Styles (FS-VT-025)
+
+SGR 4:2, 4:3, 4:4, and 4:5 define extended underline styles. These are a SHOULD-level requirement (FS-VT-025). The rendering approach uses CSS `text-decoration` or equivalent canvas-drawn lines.
+
+**Underline color:** When SGR 58 has been set for a cell, that color is used for all underline variants. When SGR 58 has not been set, `--term-underline-color-default` (`inherit`) is used — the underline adopts the cell's current foreground color.
+
+| SGR variant | Style name | Rendering |
+|-------------|------------|-----------|
+| SGR 4:0 | No underline | Line removed |
+| SGR 4:1 | Single underline (default) | Single solid line, 1px, positioned at bottom of descender zone (`cell_height - 1px`) |
+| SGR 4:2 | Double underline | Two solid lines, each 1px, with 1px gap between them, bottom-aligned in the same position as single underline (bottom line at `cell_height - 1px`, top line at `cell_height - 3px`) |
+| SGR 4:3 | Curly/wavy underline | CSS `text-decoration-style: wavy` if the renderer uses HTML/CSS; canvas: sine wave, amplitude 1.5px, period `2 × cell_width`, positioned at `cell_height - 2px` baseline |
+| SGR 4:4 | Dotted underline | Dots of 1px diameter with 2px spacing, aligned to the single underline position |
+| SGR 4:5 | Dashed underline | Dashes of `4px` length with `2px` gap, aligned to the single underline position |
+
+**Token usage:** All underline variants use `--term-underline-color-default` when no SGR 58 color is set. No per-variant color tokens are defined — the color source is always either the SGR 58 value or the cell foreground.
 
 ### 7.4 Search Overlay
 
@@ -357,7 +482,7 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 
 **Terminal Behavior section:**
 - Cursor shape selector (dropdown: Block, Underline, Bar).
-- Cursor blink rate (number input, ms, default 530).
+- Cursor blink rate (number input, ms — visible phase duration, default 533). The invisible phase is computed as half the visible phase (2:1 on/off ratio per FS-VT-032).
 - Scrollback buffer size (number input, lines, default 10000) with real-time memory estimate below the field (FS-SB-002). Estimate format: "~{N} MB per pane" in `--font-size-ui-sm`, `--color-text-secondary`.
 - Bell notification type (dropdown: Visual, Audible, Disabled).
 - Word delimiter set (text input, monospace font).

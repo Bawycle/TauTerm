@@ -2,7 +2,7 @@
 
 # TauTerm — Architecture Index
 
-> **Version:** 1.5.0
+> **Version:** 1.6.0
 > **Status:** Living document — update when architectural decisions change
 > **Author:** Software Architect — TauTerm team
 
@@ -20,6 +20,7 @@ The architecture documentation has been split into focused files. See below for 
 | [04-runtime-platform.md](04-runtime-platform.md) | §6 Concurrency Model (VT pipeline, PTY I/O task, write path, SSH I/O, back-pressure, state access patterns) + §7 Platform Abstraction Layer (PAL traits, Linux implementations, PAL injection, PreferencesStore load strategy) + §10 Build Architecture (pipeline, dev mode, profiles, i18n, AppImage distribution) |
 | [05-frontend.md](05-frontend.md) | §11 Frontend Architecture (module map, TerminalPane component split, keyboard shortcut interception) |
 | [06-appendix.md](06-appendix.md) | §8 Security Architecture (IPC boundary validation, PTY isolation, SSH security, CSP, terminal injection prevention) + §12 Future Extensibility (session persistence, plugin system, cloud sync, Kitty protocol, Windows/macOS port) + §13 ADR Index |
+| [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) | §14 Screen Buffer Data Model (cell layout, scrollback memory formula, soft/hard wrap representation, minimum terminal size constraint) |
 
 Testing strategy is in a separate document: [../testing/TESTING.md](../testing/TESTING.md).
 
@@ -74,7 +75,12 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | Content Security Policy | [06-appendix.md](06-appendix.md) §8.4 |
 | Terminal injection prevention (read-back sequences, paste) | [06-appendix.md](06-appendix.md) §8.5 |
 | Future extensibility (session persistence, plugins, cloud sync, Kitty, ports) | [06-appendix.md](06-appendix.md) §12 |
-| ADR index (ADR-0001 through ADR-0016) | [06-appendix.md](06-appendix.md) §13 |
+| ADR index (ADR-0001 through ADR-0017) | [06-appendix.md](06-appendix.md) §13 |
+| Cell struct layout and memory sizing | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.1 |
+| Scrollback memory estimate formula (5,500 bytes/line upper bound) | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.2 |
+| Soft wrap / hard newline storage (`soft_wrapped` flag) | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.3 |
+| `get_scrollback_line` API change (expose `soft_wrapped`) | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.3.1 |
+| Minimum terminal size (20×5), enforcement layer | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.4 |
 | Testing strategy (pyramid, unit, integration, VT conformance, E2E, security) | [../testing/TESTING.md](../testing/TESTING.md) |
 
 ---

@@ -44,9 +44,7 @@ export function onSshStateChanged(
   return listen<SshStateChangedEvent>('ssh-state-changed', (e) => handler(e.payload));
 }
 
-export function onHostKeyPrompt(
-  handler: (event: HostKeyPromptEvent) => void,
-): Promise<() => void> {
+export function onHostKeyPrompt(handler: (event: HostKeyPromptEvent) => void): Promise<() => void> {
   return listen<HostKeyPromptEvent>('host-key-prompt', (e) => handler(e.payload));
 }
 
@@ -80,9 +78,7 @@ export function onModeStateChanged(
 // Screen update events
 // ---------------------------------------------------------------------------
 
-export function onScreenUpdate(
-  handler: (event: ScreenUpdateEvent) => void,
-): Promise<() => void> {
+export function onScreenUpdate(handler: (event: ScreenUpdateEvent) => void): Promise<() => void> {
   return listen<ScreenUpdateEvent>('screen-update', (e) => handler(e.payload));
 }
 
@@ -98,9 +94,7 @@ export function onCursorStyleChanged(
   return listen<CursorStyleChangedEvent>('cursor-style-changed', (e) => handler(e.payload));
 }
 
-export function onBellTriggered(
-  handler: (event: BellTriggeredEvent) => void,
-): Promise<() => void> {
+export function onBellTriggered(handler: (event: BellTriggeredEvent) => void): Promise<() => void> {
   return listen<BellTriggeredEvent>('bell-triggered', (e) => handler(e.payload));
 }
 
@@ -111,7 +105,5 @@ export function onBellTriggered(
 export function onFullscreenStateChanged(
   handler: (event: FullscreenStateChangedEvent) => void,
 ): Promise<() => void> {
-  return listen<FullscreenStateChangedEvent>('fullscreen-state-changed', (e) =>
-    handler(e.payload),
-  );
+  return listen<FullscreenStateChangedEvent>('fullscreen-state-changed', (e) => handler(e.payload));
 }

@@ -276,8 +276,14 @@ describe('TPSC-FN-006: screen-update event is handled', () => {
               col: 0,
               content: 'A',
               attrs: {
-                bold: false, dim: false, italic: false, underline: 0,
-                blink: false, inverse: false, hidden: false, strikethrough: false,
+                bold: false,
+                dim: false,
+                italic: false,
+                underline: 0,
+                blink: false,
+                inverse: false,
+                hidden: false,
+                strikethrough: false,
               },
             },
           ],
@@ -380,9 +386,7 @@ describe('TPSC-MODE-001: mode-state-changed updates mode flags', () => {
   it('registers a mode-state-changed listener', async () => {
     await mountPane();
     const listenSpy = vi.mocked(tauriEvent.listen);
-    const modeListens = listenSpy.mock.calls.filter(
-      ([name]) => name === 'mode-state-changed',
-    );
+    const modeListens = listenSpy.mock.calls.filter(([name]) => name === 'mode-state-changed');
     expect(modeListens.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -427,9 +431,7 @@ describe('TPSC-CURSOR-001: cursor-style-changed is handled', () => {
   it('registers a cursor-style-changed listener', async () => {
     await mountPane();
     const listenSpy = vi.mocked(tauriEvent.listen);
-    const cursorListens = listenSpy.mock.calls.filter(
-      ([name]) => name === 'cursor-style-changed',
-    );
+    const cursorListens = listenSpy.mock.calls.filter(([name]) => name === 'cursor-style-changed');
     expect(cursorListens.length).toBeGreaterThanOrEqual(1);
   });
 

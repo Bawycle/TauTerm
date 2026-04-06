@@ -169,9 +169,7 @@ export function getActivePanes(): { paneId: PaneId; state: PaneState }[] {
  * Uses flat leaf order from collectLeafPanes: left/up = prev, right/down = next.
  * Returns null if there is no neighbour.
  */
-export function findNeighbourPaneId(
-  direction: 'left' | 'right' | 'up' | 'down',
-): PaneId | null {
+export function findNeighbourPaneId(direction: 'left' | 'right' | 'up' | 'down'): PaneId | null {
   const tab = getActiveTab();
   if (!tab) return null;
   const panes = collectLeafPanes(tab.layout);

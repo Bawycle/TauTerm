@@ -7,8 +7,10 @@
 //! - `CellAttrs`: SGR attributes (colors, bold, italic, etc.)
 //! - Width: 1 for normal, 2 for wide (CJK), 0 for the phantom cell that follows a wide char
 //!
-//! All types are `Copy` + `Clone` + `PartialEq` so they can be diffed efficiently
-//! for dirty-cell tracking and screen snapshot generation.
+//! Trait implementations by type:
+//! - `CellAttrs`: `Copy + Clone + PartialEq + Eq` — plain data, no heap allocation.
+//! - `Cell`: `Clone + PartialEq` only — owns a `String` (grapheme) and an `Option<Arc<str>>`
+//!   (hyperlink), so it is not `Copy`.
 
 use std::sync::Arc;
 
@@ -78,7 +80,9 @@ pub struct CellAttrs {
     /// Underline style: 0 = none, 1 = single, 2 = double, 3 = curly,
     /// 4 = dotted, 5 = dashed (SGR 4:0–4:5).
     pub underline: u8,
-    /// SGR 5 / SGR 6: blink (slow and rapid treated identically per §5.3).
+    /// Blink (SGR 5/6). Rendering: the frontend suppresses the blink animation
+    /// when the OS `prefers-reduced-motion` setting is active, via CSS
+    /// `@media (prefers-reduced-motion: reduce)`. No Rust-side handling required.
     pub blink: bool,
     /// SGR 7: reverse video.
     pub inverse: bool,

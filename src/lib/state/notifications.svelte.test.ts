@@ -58,9 +58,8 @@ describe('notifications.svelte.ts — applyNotificationChanged', () => {
   });
 
   it('clears both badge and terminated state on null notification', async () => {
-    const { applyNotificationChanged, tabNotifications, terminatedPanes } = await import(
-      './notifications.svelte'
-    );
+    const { applyNotificationChanged, tabNotifications, terminatedPanes } =
+      await import('./notifications.svelte');
 
     // First set terminated
     applyNotificationChanged({
@@ -83,9 +82,8 @@ describe('notifications.svelte.ts — applyNotificationChanged', () => {
 
 describe('notifications.svelte.ts — clearTabNotification', () => {
   it('removes the tab from the notification map', async () => {
-    const { applyNotificationChanged, clearTabNotification, tabNotifications } = await import(
-      './notifications.svelte'
-    );
+    const { applyNotificationChanged, clearTabNotification, tabNotifications } =
+      await import('./notifications.svelte');
     tabNotifications.clear();
 
     applyNotificationChanged({
@@ -108,9 +106,8 @@ describe('notifications.svelte.ts — isPaneProcessActive', () => {
   });
 
   it('returns false when pane is in terminatedPanes', async () => {
-    const { applyNotificationChanged, isPaneProcessActive } = await import(
-      './notifications.svelte'
-    );
+    const { applyNotificationChanged, isPaneProcessActive } =
+      await import('./notifications.svelte');
 
     applyNotificationChanged({
       tabId: 'tab-1',

@@ -55,6 +55,14 @@ pub struct ModeState {
 
     /// G1 designator.
     pub g1: Charset,
+
+    /// DECOM (DEC origin mode, DECSET/DECRST ?6).
+    ///
+    /// When `true`, cursor positioning commands (CUP, HVP) are relative to the
+    /// top of the active scroll region rather than the top-left corner of the
+    /// screen. The cursor is also constrained within the scroll region.
+    /// Saved/restored by DECSC/DECRC. Reset to `false` on alt-screen entry.
+    pub decom: bool,
 }
 
 impl ModeState {
@@ -73,6 +81,7 @@ impl ModeState {
             charset_slot: CharsetSlot::G0,
             g0: Charset::Ascii,
             g1: Charset::Ascii,
+            decom: false,
         }
     }
 

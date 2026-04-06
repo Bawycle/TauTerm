@@ -66,19 +66,38 @@ impl Perform for VtPerformBridge<'_> {
             0x0A..=0x0C => {
                 // A hard newline always clears the pending wrap flag — the line
                 // is terminated by an explicit LF, not by auto-wrap.
+                // Flush any pending emoji base (R6) and confirm any pending RI as
+                // narrow (R8): a newline changes the row, so an unpaired RI is narrow.
+                p.flush_pending_emoji(None);
+                p.flush_pending_ri_narrow();
                 p.wrap_pending = false;
                 let (top, bottom) = p.modes.scroll_region;
-                let is_full = top == 0 && bottom == p.rows.saturating_sub(1);
-                if row == bottom {
-                    // `soft_wrapped: false` — this is an explicit newline.
-                    p.active_buf_mut().scroll_up(top, bottom, 1, is_full, false);
+                // FS-VT-055: when the cursor is outside the active scroll region,
+                // move down one line without scrolling. If already at the last
+                // screen row, the LF is ignored entirely.
+                if row < top || row > bottom {
+                    if row < p.rows.saturating_sub(1) {
+                        p.active_cursor_mut().row = row + 1;
+                    }
+                    // else: last screen row outside region → no-op.
                 } else {
-                    p.active_cursor_mut().row = (row + 1).min(p.rows.saturating_sub(1));
+                    let is_full = top == 0 && bottom == p.rows.saturating_sub(1);
+                    if row == bottom {
+                        // `soft_wrapped: false` — this is an explicit newline.
+                        p.active_buf_mut().scroll_up(top, bottom, 1, is_full, false);
+                    } else {
+                        p.active_cursor_mut().row = (row + 1).min(p.rows.saturating_sub(1));
+                    }
                 }
             }
             // CR (0x0D)
             0x0D => {
                 // Carriage return cancels any pending wrap.
+                // Flush pending emoji (R6) and confirm pending RI as narrow (R8):
+                // CR moves the cursor to column 0, which is equivalent to a row
+                // boundary for RI-pair detection purposes.
+                p.flush_pending_emoji(None);
+                p.flush_pending_ri_narrow();
                 p.wrap_pending = false;
                 p.active_cursor_mut().col = 0;
             }
@@ -211,14 +230,20 @@ impl Perform for VtPerformBridge<'_> {
             }
             // CUP / HVP — cursor position
             ([], 'H') | ([], 'f') => {
-                let row = param0
-                    .max(1)
-                    .saturating_sub(1)
-                    .min(p.rows.saturating_sub(1));
+                // 1-based param, converted to 0-based.
+                let row_0 = param0.max(1).saturating_sub(1);
                 let col = param1
                     .max(1)
                     .saturating_sub(1)
                     .min(p.cols.saturating_sub(1));
+                // DECOM (origin mode): row is relative to the top of the scroll region,
+                // and constrained within [top, bottom].
+                let row = if p.modes.decom {
+                    let (top, bottom) = p.modes.scroll_region;
+                    (top + row_0).clamp(top, bottom)
+                } else {
+                    row_0.min(p.rows.saturating_sub(1))
+                };
                 p.active_cursor_mut().row = row;
                 p.active_cursor_mut().col = col;
             }
@@ -284,6 +309,7 @@ impl Perform for VtPerformBridge<'_> {
                     let prev_bracketed_paste = p.modes.bracketed_paste;
                     match mode {
                         1 => p.modes.decckm = true,
+                        6 => p.modes.decom = true,
                         7 => p.modes.decawm = true,
                         9 => p.modes.mouse_reporting = MouseReportingMode::X10,
                         25 => p.modes.cursor_visible = true,
@@ -320,6 +346,7 @@ impl Perform for VtPerformBridge<'_> {
                     let prev_bracketed_paste = p.modes.bracketed_paste;
                     match mode {
                         1 => p.modes.decckm = false,
+                        6 => p.modes.decom = false,
                         7 => {
                             p.modes.decawm = false;
                             // Disabling DECAWM cancels any pending wrap immediately.
@@ -351,9 +378,11 @@ impl Perform for VtPerformBridge<'_> {
             // DECSC (7) — save cursor (CSI s)
             ([], 's') => {
                 let mut saved = p.active_cursor().clone();
-                // Capture current SGR attributes and charset slot into the saved state.
+                // Capture current SGR attributes, charset slot, DECAWM, and DECOM.
                 saved.attrs = p.current_attrs;
                 saved.charset_slot = p.modes.charset_slot;
+                saved.decawm = p.modes.decawm;
+                saved.decom = p.modes.decom;
                 if p.alt_active {
                     p.saved_alt_cursor = Some(saved);
                 } else {
@@ -370,6 +399,8 @@ impl Perform for VtPerformBridge<'_> {
                 if let Some(pos) = restored {
                     p.current_attrs = pos.attrs;
                     p.modes.charset_slot = pos.charset_slot;
+                    p.modes.decawm = pos.decawm;
+                    p.modes.decom = pos.decom;
                     *p.active_cursor_mut() = pos;
                 }
             }
@@ -451,9 +482,11 @@ impl Perform for VtPerformBridge<'_> {
             // DECSC — save cursor (ESC 7)
             ([], b'7') => {
                 let mut saved = p.active_cursor().clone();
-                // Capture current SGR attributes and charset slot into the saved state.
+                // Capture current SGR attributes, charset slot, DECAWM, and DECOM.
                 saved.attrs = p.current_attrs;
                 saved.charset_slot = p.modes.charset_slot;
+                saved.decawm = p.modes.decawm;
+                saved.decom = p.modes.decom;
                 if p.alt_active {
                     p.saved_alt_cursor = Some(saved);
                 } else {
@@ -470,6 +503,8 @@ impl Perform for VtPerformBridge<'_> {
                 if let Some(pos) = restored {
                     p.current_attrs = pos.attrs;
                     p.modes.charset_slot = pos.charset_slot;
+                    p.modes.decawm = pos.decawm;
+                    p.modes.decom = pos.decom;
                     *p.active_cursor_mut() = pos;
                 }
             }

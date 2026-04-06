@@ -122,6 +122,110 @@ describe('TPSC-FN-001: ScrollToBottomButton absent at initial render (scrollOffs
 });
 
 // ---------------------------------------------------------------------------
+// CSS cascade priority: selection must override search-match (F1)
+// ---------------------------------------------------------------------------
+
+describe('CSS-PRIORITY-001: selection classes declared after search-match in stylesheet', () => {
+  /**
+   * Both .terminal-pane__cell--selected and .terminal-pane__cell--search-match
+   * use !important. With equal specificity, the last declaration in source order
+   * wins. Selection must be declared AFTER search-match so it takes priority
+   * when a cell is both selected and a search match.
+   *
+   * This is a static source-order check — the only reliable approach in jsdom
+   * since it does not compute cascade priorities for scoped <style> blocks.
+   */
+  it('--selected is declared after --search-match in TerminalPane.svelte source', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    const searchMatchIdx = source.indexOf('terminal-pane__cell--search-match');
+    const selectedIdx = source.lastIndexOf('terminal-pane__cell--selected {');
+    expect(searchMatchIdx).toBeGreaterThan(-1);
+    expect(selectedIdx).toBeGreaterThan(-1);
+    expect(selectedIdx).toBeGreaterThan(searchMatchIdx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F4 — Blink: .terminal-pane__cell--blink class must be declared in TerminalPane.svelte
+// ---------------------------------------------------------------------------
+
+describe('F4-CSS-001: --blink CSS class exists in TerminalPane.svelte source', () => {
+  it('declares .terminal-pane__cell--blink rule', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    expect(source).toContain('terminal-pane__cell--blink');
+  });
+
+  it('declares @keyframes term-blink animation', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    expect(source).toContain('@keyframes term-blink');
+  });
+
+  it('includes prefers-reduced-motion: reduce guard for blink', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    // Must have a reduced-motion block that disables the blink animation
+    const reducedMotionIdx = source.indexOf('prefers-reduced-motion: reduce');
+    const blinkAnimNoneIdx = source.indexOf('animation: none', reducedMotionIdx);
+    expect(reducedMotionIdx).toBeGreaterThan(-1);
+    expect(blinkAnimNoneIdx).toBeGreaterThan(reducedMotionIdx);
+  });
+
+  it('cell.blink === true produces --blink class binding in template', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    // The template must bind --blink class based on cell.blink
+    expect(source).toContain('cell.blink');
+    expect(source).toContain('terminal-pane__cell--blink');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F9 — Strikethrough: --strikethrough class must be declared, not text-decoration
+// ---------------------------------------------------------------------------
+
+describe('F9-CSS-001: --strikethrough class uses ::after pseudo-element positioning', () => {
+  it('declares .terminal-pane__cell--strikethrough rule', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    expect(source).toContain('terminal-pane__cell--strikethrough');
+  });
+
+  it('uses ::after pseudo-element with --term-strikethrough-position token', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    expect(source).toContain('--strikethrough::after');
+    expect(source).toContain('--term-strikethrough-position');
+    expect(source).toContain('--term-strikethrough-thickness');
+  });
+
+  it('cell.strikethrough === true produces --strikethrough class binding in template', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+    expect(source).toContain('cell.strikethrough');
+    expect(source).toContain('terminal-pane__cell--strikethrough');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // E2E-deferred scenarios
 // These require firing IPC listen() event handlers from inside jsdom tests,
 // which is not feasible due to the vitest alias/vi.mock interception order.

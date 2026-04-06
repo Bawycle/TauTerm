@@ -62,10 +62,7 @@ export function setActiveTab(tabId: TabId): Promise<void> {
 // Pane commands
 // ---------------------------------------------------------------------------
 
-export function splitPane(
-  paneId: PaneId,
-  direction: 'horizontal' | 'vertical',
-): Promise<TabState> {
+export function splitPane(paneId: PaneId, direction: 'horizontal' | 'vertical'): Promise<TabState> {
   return invoke('split_pane', { paneId, direction });
 }
 

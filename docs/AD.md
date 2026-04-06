@@ -512,6 +512,14 @@ User themes replace semantic and component tokens. Primitive tokens can also be 
   --term-hyperlink-fg:        var(--color-blue-300); /* #7ab3d3 */
   --term-hyperlink-underline: var(--color-blue-400); /* #4a92bf */
 
+  /* Text attribute rendering (SGR — FS-VT-024, FS-VT-025) */
+  --term-dim-opacity:              0.5;     /* SGR 2 (Dim): fg alpha multiplier */
+  --term-underline-color-default:  inherit; /* SGR 4:x default underline color when SGR 58 not set */
+  --term-strikethrough-position:   50%;     /* SGR 9: vertical position as % of cell_height */
+  --term-strikethrough-thickness:  1px;     /* SGR 9: strikethrough line thickness */
+  --term-blink-on-duration:        533ms;   /* SGR 5/6: visible phase (2:1 on/off ratio) */
+  --term-blink-off-duration:       266ms;   /* SGR 5/6: invisible phase */
+
   /* ANSI palette (16 colors) */
   --term-color-0:  #2c2921; /* Black normal   — hsl(40, 13%, 14%) */
   --term-color-1:  #c44444; /* Red normal     — hsl(0, 55%, 52%)  — 5.2:1 */
@@ -572,15 +580,18 @@ User themes replace semantic and component tokens. Primitive tokens can also be 
   --space-10: 40px;
   --space-12: 48px;
 
-  --size-tab-height:      40px;
-  --size-toolbar-height:  40px;
-  --size-divider-hit:     8px;
-  --size-scrollbar-width: 8px;
-  --size-icon-sm:         14px;
-  --size-icon-md:         16px;
-  --size-icon-lg:         20px;
-  --size-target-min:      44px;
-  --size-badge:           6px;
+  --size-tab-height:            40px;
+  --size-toolbar-height:        40px;
+  --size-divider-hit:           8px;
+  --size-scrollbar-width:       8px;
+  --size-icon-sm:               14px;
+  --size-icon-md:               16px;
+  --size-icon-lg:               20px;
+  --size-target-min:            44px;
+  --size-badge:                 6px;
+  --size-cursor-underline-height: 2px;  /* underline cursor height */
+  --size-cursor-bar-width:        2px;  /* bar cursor width */
+  --size-cursor-outline-width:    1px;  /* unfocused cursor outline stroke */
 }
 ```
 

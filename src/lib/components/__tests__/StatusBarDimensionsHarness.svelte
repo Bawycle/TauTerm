@@ -27,9 +27,15 @@
   let rows = $state<number | null>(untrack(() => props.rows ?? null));
   let dimsVisible = $state<boolean>(untrack(() => props.dimsVisible ?? false));
 
-  export function setCols(v: number | null) { cols = v; }
-  export function setRows(v: number | null) { rows = v; }
-  export function setDimsVisible(v: boolean) { dimsVisible = v; }
+  export function setCols(v: number | null) {
+    cols = v;
+  }
+  export function setRows(v: number | null) {
+    rows = v;
+  }
+  export function setDimsVisible(v: boolean) {
+    dimsVisible = v;
+  }
 </script>
 
 <StatusBar {cols} {rows} {dimsVisible} />

@@ -73,7 +73,7 @@
     confirmMultilinePaste?: boolean;
     /**
      * Cursor blink interval in milliseconds (FS-VT-032).
-     * Mirrors AppearancePrefs.cursorBlinkMs. Default: 530.
+     * Mirrors AppearancePrefs.cursorBlinkMs. Default: 533 (OFF=266ms, ratio 2:1).
      */
     cursorBlinkMs?: number;
     /**
@@ -81,6 +81,15 @@
      * Mirrors TerminalPrefs.bellType. Default: 'audio'.
      */
     bellType?: BellType;
+    /**
+     * Terminal font family (FS-THEME-006). Used by Canvas cell measurement (F8).
+     * When defined, overrides the global font token on this pane.
+     */
+    fontFamily?: string;
+    /**
+     * Terminal font size in pixels (FS-THEME-007). Used by Canvas cell measurement (F8).
+     */
+    fontSize?: number;
     /**
      * Terminal line height multiplier (FS-THEME-010). Range: 1.0–2.0.
      * When defined, overrides the global `--line-height-terminal` token on this pane.
@@ -119,8 +128,10 @@
     sshState = null,
     wordDelimiters = ' \t|"\'`&()*,;<=>[]{}~',
     confirmMultilinePaste = true,
-    cursorBlinkMs = 530,
+    cursorBlinkMs = 533,
     bellType = 'audio',
+    fontFamily,
+    fontSize,
     lineHeight,
     searchMatches = [],
     activeSearchMatchIndex = 0,
@@ -185,6 +196,9 @@
     activeSearchMatchIndex: () => activeSearchMatchIndex,
     ondimensionschange: () => ondimensionschange,
     ondisableConfirmMultilinePaste: () => ondisableConfirmMultilinePaste,
+    fontFamily: () => fontFamily,
+    fontSize: () => fontSize,
+    lineHeight: () => lineHeight,
   });
 
   function handleKeydown(event: KeyboardEvent) {
@@ -263,13 +277,16 @@
                 class="terminal-pane__cell"
                 class:terminal-pane__cell--wide={cell.width === 2}
                 class:terminal-pane__cell--hyperlink={cell.hyperlink != null}
+                class:terminal-pane__cell--blink={cell.blink}
+                class:terminal-pane__cell--strikethrough={cell.strikethrough}
                 class:terminal-pane__cell--selected={tp.isSelected(rowIdx, colIdx) &&
                   active &&
                   !tp.selectionFlashing}
                 class:terminal-pane__cell--selected-flash={tp.isSelected(rowIdx, colIdx) &&
                   active &&
                   tp.selectionFlashing}
-                class:terminal-pane__cell--selected-inactive={tp.isSelected(rowIdx, colIdx) && !active}
+                class:terminal-pane__cell--selected-inactive={tp.isSelected(rowIdx, colIdx) &&
+                  !active}
                 class:terminal-pane__cell--search-active={tp.activeSearchMatchSet.has(
                   `${rowIdx}:${colIdx}`,
                 )}
@@ -284,6 +301,9 @@
       {/each}
 
       <!-- Cursor overlay (TUITC-FN-001 to 006, TUITC-UX-050 to 053) -->
+      <!-- F7: data-char carries the glyph under the block cursor so the CSS
+           pseudo-element can re-render it in var(--term-cursor-fg) without
+           mix-blend-mode tricks. -->
       {#if tp.cursor.visible && (tp.cursorVisible || !tp.currentCursorBlinks)}
         <div
           class="terminal-pane__cursor"
@@ -292,6 +312,7 @@
           class:terminal-pane__cursor--bar={tp.currentCursorShape === 'bar'}
           class:terminal-pane__cursor--unfocused={!active}
           style="--cursor-top:{tp.cursor.row}lh; top:var(--cursor-top); left:{tp.cursor.col}ch"
+          data-char={tp.gridRows[tp.cursor.row]?.[tp.cursor.col]?.content || ' '}
           aria-hidden="true"
         ></div>
       {/if}
@@ -446,18 +467,65 @@
     cursor: pointer;
   }
 
-  /* Selection colors (TUITC-UX-060/061) */
-  .terminal-pane__cell--selected {
-    background-color: var(--term-selection-bg) !important;
+  /* F4 — SGR 5/6 text blink animation (step-end, 2:1 ON:OFF ratio, 799ms total).
+   *
+   * The animation total duration is --term-blink-on-duration + --term-blink-off-duration
+   * (533ms + 266ms = 799ms). With step-end timing, each keyframe value is held until
+   * the *end* of its interval: opacity:1 is held from 0%→66.67% (the ON phase, ≈533ms)
+   * then opacity:0 from 66.67%→100% (the OFF phase, ≈266ms), giving the 2:1 ON:OFF ratio.
+   *
+   * Paused when the pane is not the active pane in a multi-pane layout
+   * (.terminal-pane--active class absent). Disabled entirely for prefers-reduced-motion: reduce.
+   */
+  @keyframes term-blink {
+    0% {
+      opacity: 1;
+    }
+    66.67% {
+      opacity: 0; /* ON ratio 533/(533+266) ≈ 66.67% */
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
-  .terminal-pane__cell--selected-inactive {
-    background-color: var(--term-selection-bg-inactive) !important;
+  .terminal-pane__cell--blink {
+    animation: term-blink calc(var(--term-blink-on-duration) + var(--term-blink-off-duration))
+      step-end infinite;
   }
 
-  /* Copy flash (UXD §7.12) — 80ms bright flash on selection to confirm auto-copy */
-  .terminal-pane__cell--selected-flash {
-    background-color: var(--term-selection-flash) !important;
+  /* Pause blink when pane is not focused */
+  .terminal-pane:not(.terminal-pane--active) .terminal-pane__cell--blink {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .terminal-pane__cell--blink {
+      animation: none;
+    }
+  }
+
+  /* F9 — Strikethrough at exactly 50% cell height via ::after pseudo-element.
+   *
+   * text-decoration: line-through is NOT used because its vertical position is
+   * browser-controlled and cannot be set to exactly 50%. Instead, an absolutely
+   * positioned line is rendered at var(--term-strikethrough-position) (50%),
+   * shifted up by half its own thickness via translateY(-50%).
+   */
+  .terminal-pane__cell--strikethrough {
+    position: relative;
+  }
+
+  .terminal-pane__cell--strikethrough::after {
+    content: '';
+    position: absolute;
+    top: var(--term-strikethrough-position); /* 50% */
+    left: 0;
+    right: 0;
+    height: var(--term-strikethrough-thickness); /* 1px */
+    background: currentColor;
+    transform: translateY(-50%);
+    pointer-events: none;
   }
 
   /* Search match highlighting (FS-SEARCH-006) */
@@ -469,6 +537,24 @@
   .terminal-pane__cell--search-active {
     background-color: var(--term-search-active-bg) !important;
     color: var(--term-search-active-fg) !important;
+  }
+
+  /*
+   * Selection colors (TUITC-UX-060/061) — declared AFTER search-match so that
+   * selection takes priority over search highlights when both apply to the same
+   * cell (same specificity + !important → last declaration wins in the cascade).
+   */
+  .terminal-pane__cell--selected {
+    background-color: var(--term-selection-bg) !important;
+  }
+
+  .terminal-pane__cell--selected-inactive {
+    background-color: var(--term-selection-bg-inactive) !important;
+  }
+
+  /* Copy flash (UXD §7.12) — 80ms bright flash on selection to confirm auto-copy */
+  .terminal-pane__cell--selected-flash {
+    background-color: var(--term-selection-flash) !important;
   }
 
   /* Visual bell flash (FS-VT-090) — brief border pulse using --color-indicator-bell */
@@ -509,7 +595,28 @@
     width: 1ch;
     height: 1lh;
     background-color: var(--term-cursor-bg);
-    mix-blend-mode: difference;
+    /*
+     * F7 — Back-to-front rendering: bg fill → cursor fill → glyph in --term-cursor-fg.
+     * mix-blend-mode: difference is removed; the glyph is rendered explicitly via
+     * the ::after pseudo-element using content: attr(data-char).
+     * This guarantees the foreground text color is always var(--term-cursor-fg),
+     * independent of the cell's own fg color.
+     */
+  }
+
+  .terminal-pane__cursor--block::after {
+    content: attr(data-char);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--term-cursor-fg);
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+    pointer-events: none;
   }
 
   .terminal-pane__cursor--underline {
@@ -536,7 +643,7 @@
   /* Unfocused: hollow outline per FS-VT-034, UXD §7.3.1 */
   .terminal-pane__cursor--unfocused {
     background-color: transparent !important;
-    border: 1px solid var(--term-cursor-unfocused);
+    border: var(--size-cursor-outline-width) solid var(--term-cursor-unfocused);
     mix-blend-mode: normal;
   }
 

@@ -36,6 +36,28 @@ use crate::session::{
 use crate::vt::screen_buffer::ScreenSnapshot;
 
 // ---------------------------------------------------------------------------
+// PTY minimum dimensions (FS-PTY)
+// ---------------------------------------------------------------------------
+
+/// Minimum number of columns accepted by `resize_pane`.
+///
+/// Any value below this is clamped up before being forwarded to the PTY and
+/// `VtProcessor`. Protects against degenerate grids that would break VT
+/// parsing and PTY scrollback assumptions.
+pub const MIN_COLS: u16 = 20;
+
+/// Minimum number of rows accepted by `resize_pane`.
+pub const MIN_ROWS: u16 = 5;
+
+/// Clamp `(cols, rows)` to the minimum terminal dimensions enforced by
+/// [`SessionRegistry::resize_pane`]. Extracted as a free function so that
+/// the clamping logic can be unit-tested independently of the PTY backend.
+#[inline]
+pub(crate) fn clamp_pane_dimensions(cols: u16, rows: u16) -> (u16, u16) {
+    (cols.max(MIN_COLS), rows.max(MIN_ROWS))
+}
+
+// ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
@@ -575,6 +597,7 @@ impl SessionRegistry {
             .panes
             .get_mut(&pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        let (cols, rows) = clamp_pane_dimensions(cols, rows);
         pane.resize(cols, rows, pixel_width, pixel_height)
     }
 
@@ -1007,5 +1030,61 @@ mod tests {
         let json = serde_json::to_string(&config).expect("serialize failed");
         let restored: CreateTabConfig = serde_json::from_str(&json).expect("deserialize failed");
         assert!(restored.login, "login:true must survive serde round-trip");
+    }
+
+    // -----------------------------------------------------------------------
+    // R4 — Minimum PTY dimensions clamping (FS-PTY / arch §14.4)
+    //
+    // resize_pane() delegates clamping to clamp_pane_dimensions(), which is
+    // tested here directly. These tests verify the clamping function itself;
+    // they do not prove that resize_pane() still calls it — that linkage must
+    // be verified by code review or integration tests.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn r4_constants_are_correct() {
+        assert_eq!(MIN_COLS, 20, "MIN_COLS must be 20 (FS-PTY min)");
+        assert_eq!(MIN_ROWS, 5, "MIN_ROWS must be 5 (FS-PTY min)");
+    }
+
+    #[test]
+    fn r4_clamp_zero_dimensions_to_minimum() {
+        assert_eq!(
+            clamp_pane_dimensions(0, 0),
+            (MIN_COLS, MIN_ROWS),
+            "cols=0 rows=0 must be clamped to (MIN_COLS, MIN_ROWS)"
+        );
+    }
+
+    #[test]
+    fn r4_clamp_below_min_cols() {
+        let (cols, rows) = clamp_pane_dimensions(5, 24);
+        assert_eq!(cols, MIN_COLS, "cols=5 must be clamped to MIN_COLS");
+        assert_eq!(rows, 24, "rows=24 must be unchanged");
+    }
+
+    #[test]
+    fn r4_clamp_below_min_rows() {
+        let (cols, rows) = clamp_pane_dimensions(80, 2);
+        assert_eq!(cols, 80, "cols=80 must be unchanged");
+        assert_eq!(rows, MIN_ROWS, "rows=2 must be clamped to MIN_ROWS");
+    }
+
+    #[test]
+    fn r4_values_above_min_are_unchanged() {
+        assert_eq!(
+            clamp_pane_dimensions(80, 24),
+            (80, 24),
+            "values above minimum must pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn r4_values_exactly_at_min_are_unchanged() {
+        assert_eq!(
+            clamp_pane_dimensions(MIN_COLS, MIN_ROWS),
+            (MIN_COLS, MIN_ROWS),
+            "values exactly at minimum must not be modified"
+        );
     }
 }

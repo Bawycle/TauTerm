@@ -644,9 +644,11 @@
     background-color: var(--color-tab-bg);
     border-bottom: 1px solid var(--color-border);
     overflow: hidden;
-    flex-shrink: 0;
-    /* Fill the parent flex row and prevent overflow clipping. */
-    flex-grow: 1;
+    /* flex: 1 0 0 — grow to fill (row_width − SSH button), never shrink,
+     * start from 0. The flex-basis:0 is critical: with flex-basis:auto the
+     * item's initial size is content-based, so adding tabs grows the bar
+     * beyond the row width and pushes the SSH button off-screen. */
+    flex: 1 0 0;
     min-width: 0;
   }
 

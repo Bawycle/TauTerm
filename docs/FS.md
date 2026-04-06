@@ -515,6 +515,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 |----|-------------|----------|
 | FS-SSH-030 | The user MUST be able to save SSH connections with at minimum: host, port, username, authentication method (identity file path or password reference), and optional label/group. | Must |
 | FS-SSH-031 | Saved connections MUST be listed in a dedicated UI (e.g., connection manager panel or quick-open dialog). | Must |
+| FS-SSH-031a | The SSH connections panel toggle button MUST be permanently visible in the tab row, outside the scrollable tab area. It MUST NOT be pushed off-screen or occluded when many tabs are open. The tab bar scrollable zone MUST use `flex: 1 0 0` (grow 1, shrink 0, basis 0) so that the toggle always retains its fixed width (44px). | Must |
 | FS-SSH-032 | From the saved connections list, the user MUST be able to open a connection in a new tab or pane with a single action. | Must |
 | FS-SSH-033 | The user MUST be able to create, edit, duplicate, and delete saved connections. | Must |
 | FS-SSH-034 | Saved connections MUST be stored persistently as part of user preferences. | Must |
@@ -522,6 +523,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 **Acceptance criteria:**
 - FS-SSH-030: A saved connection stores host, port, username, and auth method.
 - FS-SSH-031: A connection manager UI lists all saved connections.
+- FS-SSH-031a: With 20+ tabs open, the SSH connections toggle button remains fully visible at the right edge of the tab row with no overlap or clipping.
 - FS-SSH-032: Clicking a saved connection opens an SSH session in a new tab.
 - FS-SSH-033: All CRUD operations and duplication work from the UI.
 

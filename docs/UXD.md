@@ -641,12 +641,14 @@ When only one pane exists in a tab, no pane border is drawn (the terminal area i
 
 #### 7.1.1 Tab Bar Container
 
-- **Element:** Horizontal bar spanning the full window width.
+- **Element:** Horizontal flex row spanning the full window width, containing two zones:
+  1. **Tab bar zone** (`.tab-bar`, `flex: 1 0 0`) — occupies all available width minus the SSH connections toggle (§7.1.8). Contains: scroll arrows, tab items, new-tab button.
+  2. **SSH connections toggle** (§7.1.8, `flex-shrink: 0`) — anchored to the right edge, always visible.
 - **Height:** `--size-tab-height` (40px).
 - **Background:** `--color-tab-bg` (`#242118`).
 - **Bottom border:** 1px solid `--color-border`.
-- **Layout:** Flex row, items left-aligned. New-tab button is the rightmost item after all tabs.
-- **ARIA role:** `tablist`.
+- **Layout of tab bar zone:** Flex row, items left-aligned. New-tab button is the rightmost item after all tabs. The tab bar zone uses `overflow: hidden` and `flex: 1 0 0` so that adding tabs never expands the zone beyond its allocated width — the SSH connections toggle must remain visible at all times.
+- **ARIA role:** `tablist` on the tab bar zone.
 
 #### 7.1.2 Tab Item
 
@@ -751,6 +753,24 @@ For tabs hosting SSH sessions (FS-SSH-002):
 | Closed | transparent | `--color-text-muted` (`#6b6660`) | Lucide `XCircle` |
 
 The **Closed** state represents a session explicitly closed by the user (not a network drop). It is visually distinct from Disconnected: muted color, `XCircle` icon, no error background.
+
+#### 7.1.8 SSH Connections Toggle Button
+
+A fixed-width button anchored to the right edge of the tab row, outside the scrollable tab area. It toggles the SSH connections panel (§7.7, FS-SSH-031).
+
+- **Position:** Right-most element of the tab row — a direct flex sibling of the tab bar zone, NOT inside it. It must remain fully visible at all times regardless of how many tabs are open.
+- **Size:** `--size-target-min` (44px) × `--size-tab-height` (40px). `flex-shrink: 0` — never shrinks.
+- **Icon:** Lucide `Network`, `--size-icon-sm` (16px).
+- **Left border:** 1px solid `--color-border` (visual separator from the tab area).
+- **Bottom border:** 1px solid `--color-border`.
+- **Resting color:** `--color-text-secondary`.
+- **Hover:** Icon `--color-text-primary`; background `--color-hover-bg`.
+- **Active (panel open):** Icon `--color-accent`; background `--color-tab-active-bg`.
+- **Focus ring:** 2px solid `--color-focus-ring`, offset 2px.
+- **ARIA label:** "Open SSH connections" / "Close SSH connections" (toggles). `aria-pressed` reflects open/closed state.
+- **Tooltip:** "SSH Connections" — shown after `--duration-slow` (300ms) hover delay.
+
+**Constraint:** Because the tab bar zone uses `flex: 1 0 0` (basis 0, shrink 0), the toggle always receives its full 44px regardless of tab count. This is a hard layout requirement — do not set `flex-basis: auto` on the tab bar zone.
 
 ### 7.2 Pane Divider
 

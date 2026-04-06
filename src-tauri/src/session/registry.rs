@@ -269,7 +269,11 @@ impl SessionRegistry {
     }
 
     /// Close a tab and all its panes.
-    pub fn close_tab(&self, id: TabId) -> Result<(), SessionError> {
+    ///
+    /// Returns the new `active_tab_id` after closing (i.e. the tab that becomes
+    /// active, or `None` if no tabs remain). The caller is responsible for emitting
+    /// `session-state-changed` with `TabClosed` using this value.
+    pub fn close_tab(&self, id: TabId) -> Result<Option<TabId>, SessionError> {
         let mut inner = self.inner.write();
         if inner.tabs.remove(&id).is_none() {
             return Err(SessionError::TabNotFound(id.to_string()));
@@ -277,7 +281,7 @@ impl SessionRegistry {
         if inner.active_tab_id.as_ref() == Some(&id) {
             inner.active_tab_id = inner.tabs.keys().next().cloned();
         }
-        Ok(())
+        Ok(inner.active_tab_id.clone())
     }
 
     /// Rename a tab (set or clear the user label).

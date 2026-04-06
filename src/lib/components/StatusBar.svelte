@@ -345,15 +345,19 @@
 
   /* Disable opacity transition for users who prefer reduced motion.
      The element still appears/disappears; it just does so without animation. */
-  /* Settings ghost button (DIV-UXD-008) */
+  /* Settings ghost button (DIV-UXD-008)
+     The visible button area matches the status bar height (28px) to avoid layout
+     disruption. A ::before pseudo-element extends the interactive hit area to the
+     minimum WCAG 2.5.5 target of 44×44px via negative inset (WCAG 2.5.5). */
   .status-bar__settings-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 24px;
     height: 24px;
     border: none;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-tertiary);
     cursor: pointer;
@@ -362,6 +366,16 @@
       color var(--duration-instant),
       background-color var(--duration-instant);
     padding: 0;
+  }
+
+  /* Extend click/touch target to 44×44px without disturbing the layout.
+     The inset is calculated as: (44 - 24) / 2 = 10px on each axis. */
+  .status-bar__settings-btn::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    min-width: var(--size-target-min);
+    min-height: var(--size-target-min);
   }
 
   .status-bar__settings-btn:hover {

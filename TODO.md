@@ -22,19 +22,6 @@
 
 ## P0 — Bloquants release
 
-### Rust — violations CLAUDE.md actives
-
-- [ ] **`closed_tab_id` absent du payload `SessionStateChangedEvent`** — `src-tauri/src/events/types.rs`
-  - Ajouter `closed_tab_id: Option<TabId>` dans la variante `TabClosed` côté Rust
-  - Supprimer l'heuristique de fallback dans `TerminalView.svelte` (lignes 311–316)
-  - Violation directe règle IPC events CLAUDE.md
-
-### UX/UI — accessibilité et tokens
-
-- [ ] **Bouton Settings 24×24px** dans `StatusBar.svelte` — violation WCAG 2.5.5 (min 44×44px)
-  - Agrandir la zone de clic via padding, sans nécessairement agrandir l'icône
-- [ ] **`--color-bg-input` non défini** dans `src/app.css` — fond d'input silencieusement transparent
-  - Définir le token avec la valeur sémantique correcte dans la couche `component`
 
 ### Tests et CI
 

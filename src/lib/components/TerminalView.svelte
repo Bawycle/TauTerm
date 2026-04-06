@@ -91,10 +91,10 @@
           activePaneId={activeTab.activePaneId}
           {sshStates}
           {terminatedPanes}
-          wordDelimiters={preferences?.terminal.wordDelimiters}
-          confirmMultilinePaste={preferences?.terminal.confirmMultilinePaste ?? true}
-          cursorBlinkMs={preferences?.appearance.cursorBlinkMs}
-          bellType={preferences?.terminal.bellType}
+          wordDelimiters={preferences.value?.terminal.wordDelimiters}
+          confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}
+          cursorBlinkMs={preferences.value?.appearance.cursorBlinkMs}
+          bellType={preferences.value?.terminal.bellType}
           lineHeight={tv.activeThemeLineHeight}
           searchMatches={tv.searchMatches}
           activeSearchMatchIndex={tv.searchCurrentIdx}
@@ -161,7 +161,7 @@
   <!-- PreferencesPanel: modal dialog (FS-PREF-005, UXD §7.6) -->
   <PreferencesPanel
     bind:open={tv.prefsOpen}
-    {preferences}
+    preferences={preferences.value}
     onclose={() => {
       tv.prefsOpen = false;
     }}
@@ -170,11 +170,11 @@
 
   <!-- SSH TOFU host key dialog (FS-SSH-011, SEC-BLK-004) -->
   <SshHostKeyDialog
-    open={hostKeyPrompt !== null}
-    host={hostKeyPrompt?.host ?? ''}
-    keyType={hostKeyPrompt?.keyType ?? ''}
-    fingerprint={hostKeyPrompt?.fingerprint ?? ''}
-    isChanged={hostKeyPrompt?.isChanged ?? false}
+    open={hostKeyPrompt.value !== null}
+    host={hostKeyPrompt.value?.host ?? ''}
+    keyType={hostKeyPrompt.value?.keyType ?? ''}
+    fingerprint={hostKeyPrompt.value?.fingerprint ?? ''}
+    isChanged={hostKeyPrompt.value?.isChanged ?? false}
     onaccept={tv.handleAcceptHostKey}
     onreject={tv.handleRejectHostKey}
     onclose={tv.handleRejectHostKey}
@@ -182,10 +182,10 @@
 
   <!-- SSH credential prompt dialog (FS-SSH-012) -->
   <SshCredentialDialog
-    open={credentialPrompt !== null}
-    host={credentialPrompt?.host ?? ''}
-    username={credentialPrompt?.username ?? ''}
-    prompt={credentialPrompt?.prompt}
+    open={credentialPrompt.value !== null}
+    host={credentialPrompt.value?.host ?? ''}
+    username={credentialPrompt.value?.username ?? ''}
+    prompt={credentialPrompt.value?.prompt}
     onsubmit={tv.handleProvideCredentials}
     oncancel={tv.handleCancelCredentials}
     onclose={tv.handleCancelCredentials}

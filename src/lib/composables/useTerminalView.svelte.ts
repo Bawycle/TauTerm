@@ -163,7 +163,7 @@ export function useTerminalView() {
   // -------------------------------------------------------------------------
 
   const activeThemeLineHeight = $derived(
-    preferences?.themes.find((t) => t.name === preferences?.appearance.themeName)?.lineHeight,
+    preferences.value?.themes.find((t) => t.name === preferences.value?.appearance.themeName)?.lineHeight,
   );
 
   // -------------------------------------------------------------------------
@@ -190,8 +190,8 @@ export function useTerminalView() {
 
   $effect(() => {
     if (
-      preferences !== undefined &&
-      !preferences.appearance.contextMenuHintShown &&
+      preferences.value !== undefined &&
+      !preferences.value.appearance.contextMenuHintShown &&
       !contextMenuHintDismissed
     ) {
       contextMenuHintTimer = setTimeout(() => {
@@ -562,10 +562,10 @@ export function useTerminalView() {
     contextMenuHintDismissed = true;
     try {
       await markContextMenuUsed();
-      if (preferences !== undefined) {
+      if (preferences.value !== undefined) {
         setPreferences({
-          ...preferences,
-          appearance: { ...preferences.appearance, contextMenuHintShown: true },
+          ...preferences.value,
+          appearance: { ...preferences.value.appearance, contextMenuHintShown: true },
         });
       }
     } catch {
@@ -613,7 +613,7 @@ export function useTerminalView() {
   };
 
   function effectiveShortcut(actionId: string): string {
-    return preferences?.keyboard?.bindings?.[actionId] ?? defaultShortcuts[actionId] ?? '';
+    return preferences.value?.keyboard?.bindings?.[actionId] ?? defaultShortcuts[actionId] ?? '';
   }
 
   function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {

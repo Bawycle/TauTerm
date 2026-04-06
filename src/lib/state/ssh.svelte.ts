@@ -23,14 +23,44 @@ import type {
 // Reactive state — module-level singleton
 // ---------------------------------------------------------------------------
 
+/**
+ * Svelte 5 module-level state container.
+ *
+ * `export let x = $state(v)` is invalid when `x` is later reassigned — Svelte
+ * forbids re-exporting a reassigned primitive state from a module. Wrapping all
+ * mutable scalars inside a single `$state` object avoids the restriction: the
+ * object reference never changes, only its properties are mutated.
+ */
+const _ssh = $state<{
+  hostKeyPrompt: HostKeyPromptEvent | null;
+  credentialPrompt: CredentialPromptEvent | null;
+}>({
+  hostKeyPrompt: null,
+  credentialPrompt: null,
+});
+
 /** SSH lifecycle state keyed by PaneId. */
 export const sshStates = $state<Map<PaneId, SshLifecycleState>>(new Map());
 
-/** Active TOFU / key-change host key dialog, or null when none pending. */
-export let hostKeyPrompt = $state<HostKeyPromptEvent | null>(null);
+/**
+ * Active TOFU / key-change host key dialog, or null when none pending.
+ * Read-only export — mutate via setHostKeyPrompt / clearHostKeyPrompt.
+ */
+export const hostKeyPrompt = {
+  get value(): HostKeyPromptEvent | null {
+    return _ssh.hostKeyPrompt;
+  },
+};
 
-/** Active credential prompt dialog, or null when none pending. */
-export let credentialPrompt = $state<CredentialPromptEvent | null>(null);
+/**
+ * Active credential prompt dialog, or null when none pending.
+ * Read-only export — mutate via setCredentialPrompt / clearCredentialPrompt.
+ */
+export const credentialPrompt = {
+  get value(): CredentialPromptEvent | null {
+    return _ssh.credentialPrompt;
+  },
+};
 
 /**
  * Bracketed paste mode per pane.
@@ -58,7 +88,7 @@ export function applySshStateChanged(ev: SshStateChangedEvent): void {
  * Set the active host key prompt (opens TOFU dialog).
  */
 export function setHostKeyPrompt(prompt: HostKeyPromptEvent): void {
-  hostKeyPrompt = prompt;
+  _ssh.hostKeyPrompt = prompt;
 }
 
 /**
@@ -66,8 +96,8 @@ export function setHostKeyPrompt(prompt: HostKeyPromptEvent): void {
  * Returns the prompt that was cleared (for use in IPC calls), or null.
  */
 export function clearHostKeyPrompt(): HostKeyPromptEvent | null {
-  const prev = hostKeyPrompt;
-  hostKeyPrompt = null;
+  const prev = _ssh.hostKeyPrompt;
+  _ssh.hostKeyPrompt = null;
   return prev;
 }
 
@@ -75,7 +105,7 @@ export function clearHostKeyPrompt(): HostKeyPromptEvent | null {
  * Set the active credential prompt (opens password dialog).
  */
 export function setCredentialPrompt(prompt: CredentialPromptEvent): void {
-  credentialPrompt = prompt;
+  _ssh.credentialPrompt = prompt;
 }
 
 /**
@@ -83,8 +113,8 @@ export function setCredentialPrompt(prompt: CredentialPromptEvent): void {
  * Returns the prompt that was cleared (for use in IPC calls), or null.
  */
 export function clearCredentialPrompt(): CredentialPromptEvent | null {
-  const prev = credentialPrompt;
-  credentialPrompt = null;
+  const prev = _ssh.credentialPrompt;
+  _ssh.credentialPrompt = null;
   return prev;
 }
 

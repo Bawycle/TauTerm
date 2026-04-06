@@ -48,11 +48,22 @@ export const DEFAULT_PREFERENCES: Preferences = {
 // ---------------------------------------------------------------------------
 
 /**
+ * Internal container — a single $state object whose reference never changes,
+ * so Svelte 5 allows exporting it from a module without triggering
+ * "Cannot export state that is reassigned" (state_invalid_export).
+ */
+const _prefs = $state<{ value: Preferences | undefined }>({ value: undefined });
+
+/**
  * Current preferences.
  * `undefined` until the first successful get_preferences call.
- * Components should use `preferences ?? DEFAULT_PREFERENCES` for safe access.
+ * Components should use `preferences.value ?? DEFAULT_PREFERENCES` for safe access.
  */
-export let preferences = $state<Preferences | undefined>(undefined);
+export const preferences = {
+  get value(): Preferences | undefined {
+    return _prefs.value;
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Updaters
@@ -63,7 +74,7 @@ export let preferences = $state<Preferences | undefined>(undefined);
  * or update_preferences).
  */
 export function setPreferences(prefs: Preferences): void {
-  preferences = prefs;
+  _prefs.value = prefs;
 }
 
 /**
@@ -71,7 +82,7 @@ export function setPreferences(prefs: Preferences): void {
  * Only sets if preferences is still undefined (first load failure).
  */
 export function setPreferencesFallback(): void {
-  if (preferences === undefined) {
-    preferences = DEFAULT_PREFERENCES;
+  if (_prefs.value === undefined) {
+    _prefs.value = DEFAULT_PREFERENCES;
   }
 }

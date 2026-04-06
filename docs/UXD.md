@@ -82,7 +82,7 @@ Every action exposed by TauTerm's UI is reachable via mouse (visible controls, c
 
 ### 2.3 Status Is Honest and Immediate
 
-The interface reflects the system's actual state at all times. Connection drops, process termination, and activity in background tabs are communicated within 1 second of detection, using both color and a non-color indicator (icon, text, or shape).
+The interface reflects the system's actual state at all times. Connection drops, process termination, and activity in background tabs are communicated promptly (FS-SSH-022), using both color and a non-color indicator (icon, text, or shape).
 
 **Grounding:** Jordan (UR §2.2) manages many SSH sessions and needs at-a-glance status. FS-SSH-022 requires disconnection detection within 1 second. FS-A11Y-004 requires non-color-only indicators. AD.md §1.3 lists "Honesty" as a design value.
 
@@ -890,7 +890,7 @@ Triggered by Ctrl+Shift+F or context menu "Search" (FS-SEARCH-007).
 - **Enter:** Navigate to next match.
 - **Shift+Enter:** Navigate to previous match.
 - **Escape:** Close search overlay, clear highlights.
-- **Search executes on each keystroke** (incremental search). First result appears within 100ms per FS-SEARCH-005.
+- **Search executes on each keystroke** (incremental search). First result appears per FS-SEARCH-005.
 
 ### 7.5 Connection Status Indicator
 
@@ -1364,7 +1364,7 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 
 Displayed inline in the Keyboard section of the preferences panel. Each row shows an action name and its current binding.
 
-TauTerm's application shortcuts are intercepted at the WebView level via `keydown` event listeners with `preventDefault()` — they are **not** registered via Tauri's global shortcut plugin. This ensures they remain capturable by the shortcut recorder component. Any shortcut involving Super/Meta key that cannot be captured in a WebView context must be excluded from the recorder's accepted input.
+TauTerm's application shortcuts are intercepted within the WebView — they are not registered as OS-level global shortcuts. This ensures they remain capturable by the shortcut recorder component. Any shortcut involving Super/Meta key that cannot be captured in a WebView context must be excluded from the recorder's accepted input.
 
 **Anatomy:**
 ```
@@ -1593,9 +1593,9 @@ When an SSH connection is established and the negotiated host key algorithm is d
 - **Tab order:** Tab bar tabs → Tab bar new-tab button → Terminal area → Status bar elements. Within the terminal area, Tab key is captured by the PTY; pane navigation uses dedicated shortcuts.
 - **Focus trap in modals:** When a dialog or the preferences panel is open, Tab key cycles only through focusable elements within the modal. Shift+Tab cycles backward. Focus starts on the default action (typically the safe/cancel action for destructive dialogs).
 - **Focus restoration:** When a modal closes, focus returns to the element that triggered it.
-- **Auto-focus on active pane (FS-UX-003):** The active terminal pane's viewport MUST receive keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created (Ctrl+Shift+T or UI button), (3) when the user switches to a different tab (tab bar click or Ctrl+Tab). In all cases focus is applied via `element.focus({ preventScroll: true })` immediately after the pane viewport is mounted. This does not apply to terminated panes.
+- **Auto-focus on active pane (FS-UX-003):** The active terminal pane's viewport receives keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created, (3) when the user switches to a different tab. Focus is applied immediately after mount, without scrolling the page. This does not apply to terminated panes.
 
-**Input fields:** Use `outline-offset: -2px` (inset outline) to keep the focus ring within the field's border, avoiding visual overlap with adjacent elements. Do not use `box-shadow` for focus on inputs — `outline` correctly traverses `overflow: hidden` containers and respects `prefers-reduced-motion`.
+**Input fields:** Use an inset outline to keep the focus ring within the field's border, avoiding visual overlap with adjacent elements. Use `outline` rather than `box-shadow` for focus rings on inputs, so the ring respects `prefers-reduced-motion` and renders correctly in clipped containers.
 
 ### 8.3 Scroll Behavior
 
@@ -1604,8 +1604,8 @@ When an SSH connection is established and the negotiated host key algorithm is d
 TauTerm uses a **position-freeze + passive indicator** scroll policy.
 
 - **Mouse wheel in terminal:** Scrolls scrollback buffer. Scroll direction matches system setting. Scroll amount: 3 lines per wheel tick (configurable by OS).
-- **Position freeze during output:** When `scroll_offset > 0` (the user has scrolled into the scrollback) and new output arrives from the PTY, the viewport stays at its current position. No auto-scroll occurs. This allows reading historical output without interruption (FS-SB-009).
-- **Automatic return to live on PTY input:** When the user sends keyboard input to the PTY while `scroll_offset > 0`, the backend resets `scroll_offset` to 0 and emits a `scroll-position-changed` event. The frontend receives this event and scrolls the viewport to the bottom instantly. No user action is required (FS-SB-010).
+- **Position freeze during output:** When the user has scrolled into the scrollback and new output arrives from the PTY, the viewport stays at its current position. No auto-scroll occurs. This allows reading historical output without interruption (FS-SB-009).
+- **Automatic return to live on PTY input:** When the user sends keyboard input to the PTY while scrolled into the scrollback, the viewport returns to the live bottom instantly. No user action is required (FS-SB-010).
 - **Manual return to live:** Click `ScrollToBottomButton` or press `End` to reset `scroll_offset` to 0 immediately.
 - **Smooth vs. instant:** Programmatic scrolling (search navigation, scroll-to-bottom, PTY-input auto-return) is instant (no smooth scroll). User scrolling (mouse wheel, scrollbar drag) is handled natively by the OS.
 
@@ -1660,7 +1660,7 @@ A passive indicator that appears whenever `scroll_offset > 0` to signal that the
 - **Initiation:** Mouse down on pane divider hit area.
 - **Visual feedback:** Divider line color changes to `--color-divider-active`. Panes resize in real-time (no ghost/preview).
 - **Constraints:** Minimum pane dimensions enforced (20 columns, 5 rows). Divider stops at minimum boundaries.
-- **Debounce:** SIGWINCH/window-change events are debounced at 16-33ms (FS-PTY-010).
+- **Debounce:** Resize events are debounced (FS-PTY-010).
 
 ### 8.5 Clipboard
 
@@ -1960,7 +1960,7 @@ User-created themes (FS-THEME-003) override the same CSS custom properties defin
 
 ### 13.2 Required Theme Tokens (FS-THEME-004)
 
-A valid user theme MUST define at minimum:
+A valid user theme defines at minimum:
 
 | Token | Purpose |
 |-------|---------|
@@ -1972,7 +1972,7 @@ A valid user theme MUST define at minimum:
 
 ### 13.3 Optional Theme Tokens (FS-THEME-005)
 
-A user theme MAY also define any of the following:
+A user theme may also define any of the following:
 
 | Category | Tokens |
 |----------|--------|
@@ -1992,7 +1992,7 @@ Tokens not defined by a user theme inherit from the Umbra default.
 
 ### 13.4 Non-Themeable Tokens
 
-The following tokens are structural and MUST NOT be overridden by user themes (they are not exposed in the theme editor):
+The following tokens are structural and are not exposed in the theme editor — user themes cannot override them:
 
 | Token | Reason |
 |-------|--------|
@@ -2009,17 +2009,17 @@ The following tokens are structural and MUST NOT be overridden by user themes (t
 
 ### 13.5 Theme Validation Rules
 
-When a user creates or imports a theme, the following validations MUST be performed:
+When a user creates or imports a theme, the following validations are performed:
 
 1. **Required tokens present:** All tokens listed in §13.2 must be defined.
 2. **Valid color values:** All color tokens must parse as valid CSS color values (hex, rgb, hsl, oklch).
-3. **Minimum contrast enforcement:** `--term-fg` on `--term-bg` MUST achieve at minimum 4.5:1 contrast ratio. If it does not, the theme editor displays a warning (non-blocking — the user may save the theme, but the warning persists).
+3. **Minimum contrast enforcement:** `--term-fg` on `--term-bg` is checked for a minimum 4.5:1 contrast ratio. If not met, the theme editor displays a warning (non-blocking — the user may save the theme, but the warning persists).
 4. **ANSI palette contrast advisory:** Each of `--term-color-1` through `--term-color-7` and `--term-color-9` through `--term-color-15` is checked against `--term-bg`. Any pair below 4.5:1 triggers an advisory warning listing the affected colors.
-5. **Cursor visibility:** `--term-cursor-bg` on `--term-bg` MUST achieve at minimum 3:1 contrast ratio.
+5. **Cursor visibility:** `--term-cursor-bg` on `--term-bg` is checked for a minimum 3:1 contrast ratio.
 
 Validation failures on required tokens (items 1-2) prevent saving. Contrast warnings (items 3-5) are advisory — they inform the user but do not block saving. This respects user autonomy while making accessibility implications visible.
 
-**Editor chrome accessibility invariant:** During theme editing, the editor's own interface (form labels, input fields, buttons, navigation, validation messages) MUST always render using the active system tokens (Umbra defaults or the user's last confirmed active theme), not the theme currently being edited. Only the designated preview area — a terminal viewport sample — reflects the work-in-progress custom theme in real time. This invariant ensures the editor remains accessible and usable even when the user is authoring a theme with poor contrast or extreme colors.
+**Editor chrome accessibility invariant:** During theme editing, the editor's own interface (form labels, input fields, buttons, navigation, validation messages) always renders using the active system tokens (Umbra defaults or the user's last confirmed active theme), not the theme currently being edited. Only the designated preview area — a terminal viewport sample — reflects the work-in-progress custom theme in real time. This invariant ensures the editor remains accessible and usable even when the user is authoring a theme with poor contrast or extreme colors.
 
 The preview area is explicitly bounded (a labeled box within the editor panel) and is distinct from the editor controls. It carries a visible label: "Preview" (using `--color-text-secondary`).
 
@@ -2083,7 +2083,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | §12 | Graceful degradation at narrow widths | UR §2.1 (Alex — tiling WM use) | — |
 | §13 | Theme extensibility via token override | UR §8.2 (user themes) | FS-THEME-003, FS-THEME-009 |
 | §13.5 | Contrast validation on user themes; editor chrome accessibility invariant (editor always renders with active system tokens, not work-in-progress theme) | UR §8.3 (visual consistency) | FS-THEME-008, FS-A11Y-001, FS-A11Y-005 (to be added), FS-PREF-003 |
-| §15 | IPC contract for frontend-backend communication | — | Cross-cutting (FS-SSH-010, FS-NOTIF, FS-VT, FS-SB) |
+| §15 | IPC contract — deferred to ARCHITECTURE.md §4 (authoritative) | — | Cross-cutting (FS-SSH-010, FS-NOTIF, FS-VT, FS-SB) |
 | §2.7 | i18n as design constraint: all strings are locale-resolved keys, no hardcoded copy | UR 10 §10.1 (language support) | FS-I18N-001 |
 | §7.6.3 Language subsection (within Appearance) | Language selector dropdown in Appearance section of Preferences; immediate apply with `--duration-fast` opacity transition; persisted; discoverability for Sam (UR §2.3) | UR 10 §10.1; UR §2.3 (Sam — discoverability) | FS-I18N-003, FS-I18N-004, FS-I18N-005, FS-I18N-006 |
 
@@ -2091,178 +2091,8 @@ This table maps major UX/UI decisions in this document to their source requireme
 
 ## 15. IPC Contract
 
-This section specifies the data shapes exchanged between the Rust backend and the Svelte frontend. These interfaces define the contract that both sides must conform to. All communication uses Tauri's `invoke()` for commands and `listen()` for events.
-
-### 15.1 Session List and Active Pane State
-
-The session state describes all open tabs, their panes, which pane is active, and per-pane metadata.
-
-**Command:** `invoke('get_session_state')` — returns a full snapshot on mount.
-**Event:** `listen('session-state-changed', ...)` — emits deltas when session topology changes (tab created/closed, pane split/closed, active pane changed).
-
-**Consumers:** Tab bar (§7.1), Status bar (§7.5.1, §6.4), Pane borders (§6.6), Connection manager (§7.7).
-
-```typescript
-interface SessionState {
-  tabs: TabState[];
-  activeTabId: string;
-}
-
-// Recursive pane layout tree (ARCHITECTURE.md §4.5)
-type PaneId = string;
-type TabId = string;
-
-type PaneNode =
-  | { type: 'leaf'; paneId: PaneId; state: PaneState }
-  | { type: 'split'; direction: 'horizontal' | 'vertical'; ratio: number;
-      first: PaneNode; second: PaneNode };
-
-interface TabState {
-  id: TabId;
-  label: string | null; // user-defined label, null = use process title
-  activePaneId: PaneId;
-  order: number; // position in tab bar (0-indexed)
-  layout: PaneNode; // replaces panes: PaneState[] — supports arbitrary split depth
-}
-
-interface PaneState {
-  id: PaneId;
-  sessionType: 'local' | 'ssh';
-  processTitle: string; // OSC-driven title or shell name
-  cwd: string; // current working directory
-  sshConnectionId: string | null; // reference to saved connection, null for local
-  sshState: SshLifecycleState | null; // null for local sessions
-  notification: PaneNotification | null; // active notification indicator
-}
-
-type SshLifecycleState =
-  | { state: 'Connecting'; host: string }
-  | { state: 'Authenticating'; host: string }
-  | { state: 'Connected'; user: string; host: string }
-  | { state: 'Disconnected'; reason: string }
-  | { state: 'Closed' };
-
-interface PaneNotification {
-  type: 'output' | 'process-exit' | 'bell';
-  exitCode?: number; // only for process-exit
-}
-
-// Delta event payload.
-// Decision (ARCHITECTURE.md §4.5.2): carries the complete TabState of the affected
-// tab, not a free-form Partial<SessionState>. The frontend replaces its tab replica
-// atomically. Deep partial merge logic is explicitly rejected.
-// Note: not emitted for split_pane or close_pane — those return TabState directly.
-interface SessionStateChanged {
-  changeType: 'tab-created' | 'tab-closed' | 'tab-reordered'
-    | 'active-tab-changed' | 'active-pane-changed'
-    | 'pane-metadata-changed';
-  // Complete updated TabState of the affected tab.
-  // Absent when changeType is 'tab-closed' (tab no longer exists).
-  tab?: TabState;
-  // Present when changeType is 'active-tab-changed' or 'tab-closed'.
-  activeTabId?: string;
-}
-```
-
-### 15.2 SSH Connection State Events
-
-Emitted when an SSH session transitions between lifecycle states.
-
-**Event:** `listen('ssh-state-changed', ...)`
-
-**Consumers:** SSH badge (§7.1.7), Status bar indicator (§7.5.1), Disconnection banner (§7.5.2), Deprecated algorithm banner (§7.21).
-
-```typescript
-interface SshStateChangedEvent {
-  paneId: string;
-  tabId: string;
-  previousState: SshLifecycleState;
-  newState: SshLifecycleState;
-  deprecatedAlgorithm?: string; // present when FS-SSH-014 warning applies
-}
-```
-
-### 15.3 Screen Buffer Update Events
-
-Terminal screen updates use a diff-based model. The backend emits changed cells; the frontend applies them to its rendering grid. Full snapshots are sent on pane focus or resize.
-
-**Event:** `listen('screen-update', ...)`
-
-**Consumers:** Terminal area (§7.3), Scrollbar (§7.3.3), Search highlighting (§7.4.3).
-
-```typescript
-interface ScreenUpdateEvent {
-  paneId: string;
-  updateType: 'diff' | 'snapshot';
-  cells: CellUpdate[]; // for diff: only changed cells; for snapshot: all visible cells
-  cursorPosition: { row: number; col: number };
-  cursorStyle: 'block' | 'underline' | 'bar';
-  cursorVisible: boolean;
-  scrollbackLength: number; // total lines in scrollback buffer
-}
-
-interface CellUpdate {
-  row: number; // 0 = top of viewport
-  col: number; // 0 = left
-  char: string; // single character or empty string for blank cell
-  fg: string; // CSS color value or ANSI index reference
-  bg: string; // CSS color value or ANSI index reference
-  attrs: CellAttrs;
-}
-
-interface CellAttrs {
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  blink: boolean;
-  inverse: boolean;
-  strikethrough: boolean;
-}
-```
-
-**Coordinate system:** Row 0 is the top of the visible viewport. Column 0 is the leftmost position. The coordinate space does not include scrollback — scrollback content is addressed separately via scroll position.
-
-### 15.4 Scroll Position State
-
-Emitted when the scrollback viewport position changes (user scrolling, new output while scrolled up, programmatic scroll).
-
-**Event:** `listen('scroll-position-changed', ...)`
-
-**Consumers:** Scrollbar (§7.3.3), "Scroll to bottom" indicator (§8.3).
-
-```typescript
-interface ScrollPositionChangedEvent {
-  paneId: string;
-  offset: number; // lines scrolled from bottom (0 = at bottom)
-  totalLines: number; // total lines in scrollback buffer
-  viewportLines: number; // number of visible rows in the pane
-}
-```
-
-### 15.5 Notification Changed Event
-
-Emitted when a per-pane notification is set or cleared (bell, output in background pane, process exit). This event is not bundled into `session-state-changed` because it is higher-frequency and carries a narrow slice of `PaneState`.
-
-**Event:** `listen('notification-changed', ...)`
-
-**Consumers:** Tab bar badge (§7.1), Pane border indicator.
-
-```typescript
-interface NotificationChangedEvent {
-  tabId: string;
-  paneId: string;
-  notification: PaneNotification | null; // null = notification cleared
-}
-```
-
-The frontend locates the `leaf` node for `paneId` in its `TabState.layout` replica and updates its `state.notification` field in place. No full tab replacement is needed for this event.
-
-### 15.6 IPC Decisions
-
-The following architectural decisions override or supersede type definitions in this section. ARCHITECTURE.md §4.5 is authoritative for rationale.
-
-| Superseded definition | Authoritative definition | Decision |
-|-----------------------|--------------------------|---------|
-| `TabState.panes: PaneState[]` | `TabState.layout: PaneNode` (§15.1, ARCHITECTURE.md §4.5.1) | Tree layout required for arbitrary split depth |
-| `SessionStateChanged.state: Partial<SessionState>` | `SessionStateChanged.tab?: TabState` + `activeTabId?` (§15.1) | Complete tab payload; no deep partial merge |
-| `close_pane → ()` | `close_pane → TabState \| null` | Synchronous layout update via command response (ARCHITECTURE.md §4.5.3) |
+> **This section is superseded by [`docs/ARCHITECTURE.md` §4](ARCHITECTURE.md#4-ipc-contract)**, which is the single source of truth for all data shapes, command signatures, and event payloads exchanged between the Rust backend and the Svelte frontend.
+>
+> ARCHITECTURE.md §4 covers: the complete `invoke()` command list (29 commands), all `listen()` events (8 events), TypeScript interfaces, Rust structs, and the authoritative decisions that override earlier drafts (pane layout tree, `SessionStateChanged` shape, `close_pane` return type, `notification-changed` payload).
+>
+> This document references ARCHITECTURE.md §4 for IPC concerns — it does not restate the contract here.

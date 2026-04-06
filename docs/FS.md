@@ -142,8 +142,6 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-VT-024 | SGR 0 MUST reset all attributes. The following attributes MUST be independently settable and resettable: bold (1/22), dim (2/22), italic (3/23), underline (4/24), blink (5/25), inverse (7/27), hidden (8/28), strikethrough (9/29). | Must |
 | FS-VT-025 | Extended underline styles (SGR 4:0 through 4:5) and underline color (SGR 58) SHOULD be supported. | Should |
 
-> **Implementation note (FS-VT-023):** The palette mapping is resolved in the frontend via CSS custom properties (`--term-ansi-N-fg` / `--term-ansi-N-bg`). The backend emits `Color::Ansi { index }` and the frontend resolves the actual color through the active theme tokens. This avoids IPC round-trips for color resolution.
-
 **Acceptance criteria:**
 - FS-VT-020: A test script cycling through SGR 30–37 and 90–97 displays 16 distinct foreground colors.
 - FS-VT-021: A 256-color test pattern (e.g., `256colors.pl`) displays all colors correctly with smooth gradients in the cube and ramp regions.
@@ -160,14 +158,14 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-VT-031 | Cursor visibility MUST be controllable via DECTCEM (CSI ?25h to show, CSI ?25l to hide). | Must |
 | FS-VT-032 | Cursor blink rate MUST be configurable in user preferences. The default MUST be 530ms on/off. | Must |
 | FS-VT-033 | DECSC and DECRC MUST save and restore cursor state per screen buffer, independently. | Must |
-| FS-VT-034 | When the terminal pane loses focus, the cursor SHOULD display as an outline variant of its current shape. When focus returns, the cursor MUST resume its normal appearance. | Should |
+| FS-VT-034 | When the terminal pane loses focus, the cursor SHOULD visually indicate the inactive state. When focus returns, the cursor MUST resume its normal appearance. | Should |
 
 **Acceptance criteria:**
 - FS-VT-030: A script emitting each DECSCUSR value produces the corresponding cursor shape.
 - FS-VT-031: `tput civis` hides the cursor; `tput cnorm` restores it.
 - FS-VT-032: Changing the blink rate in preferences visibly changes the cursor blink speed without restart.
 - FS-VT-033: In vim (alternate screen), saving/restoring the cursor does not affect the normal screen cursor position, and vice versa.
-- FS-VT-034: Clicking outside the terminal pane changes the cursor to an outline; clicking back restores it.
+- FS-VT-034: Clicking outside the terminal pane changes the cursor appearance to indicate focus loss; clicking back restores its normal appearance.
 
 #### 3.1.5 Screen Modes
 
@@ -283,9 +281,9 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FS-PTY-001 | Each pane MUST have its own independent PTY pair (master + slave). | Must |
-| FS-PTY-002 | The child process MUST be spawned with the slave PTY as its controlling terminal (via `setsid()` + `TIOCSCTTY`). | Must |
-| FS-PTY-003 | PTY I/O MUST NOT block the async runtime. Acceptable strategies include `O_NONBLOCK` with `AsyncFd`, or a dedicated blocking thread (e.g. `spawn_blocking`). The latter is preferred on Linux due to the ambiguous `EIO`/`EAGAIN` semantics of `O_NONBLOCK` on PTY master fds. | Must |
-| FS-PTY-004 | File descriptors MUST be properly managed after fork: the slave fd closed in the parent process, the master fd closed in the child process. | Must |
+| FS-PTY-002 | The child process MUST be spawned with the slave PTY as its controlling terminal. | Must |
+| FS-PTY-003 | PTY I/O MUST NOT block the async runtime. | Must |
+| FS-PTY-004 | File descriptors MUST be properly managed: each process retains only the file descriptors necessary for its role; no descriptors are leaked across the fork boundary. | Must |
 | FS-PTY-005 | Shell process exit MUST be detected (via SIGCHLD/waitpid). The pane MUST transition to a "terminated" state displaying the exit status. The pane MUST NOT auto-close. | Must |
 | FS-PTY-006 | A terminated pane MUST offer the user two actions: close the pane, or restart the shell. | Must |
 | FS-PTY-007 | Closing a tab or pane MUST close the master fd, sending SIGHUP to the child process group. | Must |
@@ -523,7 +521,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 |----|-------------|----------|
 | FS-SSH-030 | The user MUST be able to save SSH connections with at minimum: host, port, username, authentication method (identity file path or password reference), and optional label/group. | Must |
 | FS-SSH-031 | Saved connections MUST be listed in a dedicated UI (e.g., connection manager panel or quick-open dialog). | Must |
-| FS-SSH-031a | The SSH connections panel toggle button MUST be permanently visible in the tab row, outside the scrollable tab area. It MUST NOT be pushed off-screen or occluded when many tabs are open. The tab bar scrollable zone MUST use `flex: 1 0 0` (grow 1, shrink 0, basis 0) so that the toggle always retains its fixed width (44px). | Must |
+| FS-SSH-031a | The SSH connections panel toggle button MUST be permanently visible in the tab row, outside the scrollable tab area. It MUST NOT be pushed off-screen or occluded when many tabs are open. | Must |
 | FS-SSH-032 | From the saved connections list, the user MUST be able to open a connection in a new tab or pane with a single action. | Must |
 | FS-SSH-033 | The user MUST be able to create, edit, duplicate, and delete saved connections. | Must |
 | FS-SSH-034 | Saved connections MUST be stored persistently as part of user preferences. | Must |
@@ -584,7 +582,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-THEME-007 | Themes MUST be stored persistently alongside other user preferences. | Must |
 | FS-THEME-008 | The theming system MUST be based on design tokens (colors, spacing, sizing, radius). No hardcoded visual values are allowed in the UI layer. | Must |
 | FS-THEME-009 | User-created themes MUST map to the same design tokens as the default theme, ensuring visual consistency across all UI surfaces. | Must |
-| FS-THEME-010 | A user theme MAY override the terminal line height. The configurable token is `--line-height-terminal` (default: 1.2). UI chrome line height (tab bar, status bar, panels) is not themeable and is fixed by the design system. | Should |
+| FS-THEME-010 | A user theme MAY override the terminal line height. UI chrome line height (tab bar, status bar, panels) is not themeable and is fixed by the design system. | Should |
 
 **Acceptance criteria:**
 - FS-THEME-001: On first launch, TauTerm displays a polished default theme.
@@ -593,7 +591,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-THEME-004: A custom theme that changes only background and foreground colors applies correctly; ANSI palette is visible in `ls --color` output.
 - FS-THEME-006: Switching themes in preferences applies the new theme immediately.
 - FS-THEME-008: No UI component uses hardcoded color or spacing values; all reference tokens.
-- FS-THEME-010: A user theme that sets `--line-height-terminal: 1.5` causes the terminal to render lines with 1.5× line height. UI elements (tab bar, status bar, panels) are unaffected.
+- FS-THEME-010: A user theme that overrides the terminal line height causes the terminal to render with the new spacing. UI elements (tab bar, status bar, panels) are unaffected.
 
 ---
 

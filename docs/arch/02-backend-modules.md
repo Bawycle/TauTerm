@@ -64,6 +64,9 @@ src-tauri/src/
     pty_task.rs       — PtyReadTask: Tokio task per pane; reads AsyncFd,
                         calls VtProcessor::process, coalesces dirty regions,
                         emits screen-update; back-pressure
+    ssh_task.rs       — SshReadTask: Tokio task per SSH pane; reads async russh::Channel,
+                        feeds bytes to VtProcessor, emits screen-update events;
+                        mirrors pty_task.rs but operates on async SSH channel
     resize.rs         — debounce resize (16–33ms Tokio timer); TIOCSWINSZ;
                         SSH window-change; SIGWINCH
     ids.rs            — TabId, PaneId, ConnectionId newtypes; UUID generation
@@ -93,21 +96,34 @@ src-tauri/src/
 
   credentials.rs      — public API: CredentialManager (wraps PAL CredentialStore)
 
+  security_load.rs    — Load tests: SPL-RM-001 (fd leak check after pane open/close),
+                        SPL-SZ-004 (rapid input validation under load); run in test suite
+  security_static_checks.rs — Static security tests: SEC-CSP-002 (unsafe-eval absence),
+                        SEC-CSP-003 (no @html with message accessors),
+                        SEC-IPC-003 (Credentials Debug redaction); run at test time
+
+  events.rs           — typed event definitions and emit helpers
+  events/
+    types.rs          — SessionStateChanged, SshStateChangedEvent, ScreenUpdateEvent,
+                        ScrollPositionChangedEvent, etc. (mirrors UXD §15 types as Rust structs)
+
   commands.rs         — re-exports all command handler functions for generate_handler![]
   commands/
     session_cmds.rs   — create_tab, close_tab, rename_tab, reorder_tab,
-                        split_pane, close_pane, set_active_pane
+                        split_pane, close_pane, set_active_tab, set_active_pane
     input_cmds.rs     — send_input, scroll_pane, scroll_to_bottom, search_pane,
-                        get_pane_screen_snapshot
+                        get_pane_screen_snapshot, resize_pane
     ssh_cmds.rs       — open_ssh_connection, close_ssh_connection, reconnect_ssh
     ssh_prompt_cmds.rs — provide_credentials, accept_host_key, reject_host_key,
                         dismiss_ssh_algorithm_warning
-    connection_cmds.rs — get_connections, save_connection, update_connection,
-                        delete_connection
+    connection_cmds.rs — get_connections, save_connection, delete_connection,
+                        duplicate_connection
     preferences_cmds.rs — get_preferences, update_preferences, get_themes,
                         save_theme, delete_theme
     system_cmds.rs    — copy_to_clipboard, get_clipboard, open_url,
                         mark_context_menu_used, get_session_state
+    testing.rs        — E2E testing commands (--features e2e-testing only):
+                        inject_pty_output, inject_ssh_failure, SshFailureRegistry
 
   platform.rs         — trait definitions: PtyBackend, PtySession, CredentialStore,
                         ClipboardBackend, NotificationBackend; factory fns: create_pty_backend(),
@@ -129,11 +145,11 @@ src-tauri/src/
     credentials_windows.rs — stub
     clipboard_windows.rs  — stub
     notifications_windows.rs — stub
-
-  events.rs           — typed event definitions and emit helpers
-  events/
-    types.rs          — SessionStateChanged, SshStateChangedEvent, ScreenUpdateEvent,
-                        ScrollPositionChangedEvent (mirrors UXD §15 types as Rust structs)
+    pty_injectable.rs     — Injectable PTY backend (--features e2e-testing only):
+                            InjectableRegistry, InjectablePtyBackend, InjectablePtySession;
+                            replaces real PTY with in-process mpsc channel for E2E test byte injection
+    validation.rs         — Path validation utilities: validate_ssh_identity_path(),
+                            validate_shell_executable_path(), permission checks (Unix mode 0700)
 ```
 
 ### 3.3 Public Interfaces per Module

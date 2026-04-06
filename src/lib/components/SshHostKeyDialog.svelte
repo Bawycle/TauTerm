@@ -110,7 +110,7 @@
 
   .ssh-host-key-dialog__warning {
     padding: var(--space-3);
-    background-color: var(--color-error-bg, rgba(239, 68, 68, 0.1));
+    background-color: var(--color-error-bg);
     border: 1px solid var(--color-error);
     border-radius: var(--radius-sm);
     color: var(--color-error);

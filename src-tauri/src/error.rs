@@ -162,6 +162,10 @@ pub enum SshError {
     Io(String),
     #[error("Pane not found: {0}")]
     PaneNotFound(String),
+    /// No pending credential prompt for this pane — either it was never requested
+    /// or it has already been consumed / timed out.
+    #[error("No pending credentials for pane: {0}")]
+    NoPendingCredentials(String),
     /// Transport-level russh error (keepalive timeout, protocol violation, etc.).
     #[error("SSH transport error: {0}")]
     Transport(String),
@@ -200,6 +204,11 @@ impl From<SshError> for TauTermError {
             SshError::PaneNotFound(id) => {
                 TauTermError::with_detail("INVALID_PANE_ID", "Pane not found.", id)
             }
+            SshError::NoPendingCredentials(id) => TauTermError::with_detail(
+                "NO_PENDING_CREDENTIALS",
+                "No pending credential prompt for this pane.",
+                id,
+            ),
             SshError::Transport(msg) => {
                 TauTermError::with_detail("SSH_TRANSPORT_ERROR", "SSH transport error.", msg)
             }

@@ -48,6 +48,7 @@ async function mountDialog(props: {
   open?: boolean;
   title: string;
   size?: 'small' | 'medium';
+  variant?: 'dialog' | 'alertdialog';
   onclose?: () => void;
 }): Promise<void> {
   const container = document.createElement('div');
@@ -218,6 +219,40 @@ describe('UIBC-SEC-005 — XSS via title/description', () => {
     const xss = '<img src=x onerror="window.__xss_dlg_img=true">';
     await mountDialog({ open: true, title: xss });
     expect((window as unknown as Record<string, unknown>).__xss_dlg_img).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UIBC-A11Y-DLG-ALT — alertdialog variant
+// ---------------------------------------------------------------------------
+
+describe('Dialog — alertdialog variant', () => {
+  it('open alertdialog has role="alertdialog"', async () => {
+    await mountDialog({ open: true, title: 'Confirm delete', variant: 'alertdialog' });
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+  });
+
+  it('alertdialog does not render role="dialog"', async () => {
+    await mountDialog({ open: true, title: 'Confirm delete', variant: 'alertdialog' });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('alertdialog has aria-modal="true"', async () => {
+    await mountDialog({ open: true, title: 'Confirm delete', variant: 'alertdialog' });
+    const el = document.querySelector('[role="alertdialog"]');
+    expect(el?.getAttribute('aria-modal')).toBe('true');
+  });
+
+  it('alertdialog title text is rendered', async () => {
+    await mountDialog({ open: true, title: 'Danger zone', variant: 'alertdialog' });
+    const el = document.querySelector('[role="alertdialog"]');
+    expect(el?.textContent).toContain('Danger zone');
+  });
+
+  it('default variant renders role="dialog" not "alertdialog"', async () => {
+    await mountDialog({ open: true, title: 'Standard dialog' });
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
   });
 });
 

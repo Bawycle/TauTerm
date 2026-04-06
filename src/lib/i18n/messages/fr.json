@@ -168,6 +168,7 @@
   "terminal_view_empty": "Aucune session de terminal. Appuyez sur Ctrl+Shift+T ou cliquez sur + pour en ouvrir une.",
 
   "dialog_close": "Fermer la boîte de dialogue",
+  "dropdown_placeholder": "Sélectionner…",
 
   "ssh_credential_password_for": "Mot de passe pour {username}@{host} :",
 

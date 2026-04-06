@@ -282,6 +282,7 @@
   --z-search: 20;
   --z-dropdown: 30;
   --z-overlay: 40;
+  --z-fullscreen-chrome: 45; /* fullscreen UI overlaid above z-overlay but below modal */
   --z-modal-backdrop: 49;
   --z-modal: 50;
   --z-tooltip: 60;

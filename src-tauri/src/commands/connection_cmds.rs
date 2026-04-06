@@ -13,38 +13,10 @@ use parking_lot::RwLock;
 use tauri::State;
 
 use crate::error::TauTermError;
+use crate::platform::validation::validate_ssh_identity_path;
 use crate::preferences::PreferencesStore;
 use crate::session::ids::ConnectionId;
 use crate::ssh::SshConnectionConfig;
-
-/// Validate an identity file path received over IPC (FINDING-004 / SEC-PATH-005).
-///
-/// Rules:
-/// - Must be absolute (no relative paths that could resolve unexpectedly).
-/// - Must not contain `..` components (path traversal prevention).
-/// - Must not contain null bytes (null injection prevention).
-fn validate_identity_file_path(path: &str) -> Result<(), TauTermError> {
-    if path.contains('\0') {
-        return Err(TauTermError::new(
-            "INVALID_PATH",
-            "Identity file path must not contain null bytes.",
-        ));
-    }
-    let p = std::path::Path::new(path);
-    if !p.is_absolute() {
-        return Err(TauTermError::new(
-            "INVALID_PATH",
-            "Identity file path must be absolute.",
-        ));
-    }
-    if p.components().any(|c| c == std::path::Component::ParentDir) {
-        return Err(TauTermError::new(
-            "INVALID_PATH",
-            "Identity file path must not contain '..' components.",
-        ));
-    }
-    Ok(())
-}
 
 #[tauri::command]
 pub async fn get_connections(
@@ -53,8 +25,15 @@ pub async fn get_connections(
     Ok(prefs.read().get().connections)
 }
 
-/// Maximum accepted length for `hostname` and `username` fields (SEC-IPC-004).
-const MAX_FIELD_LEN: usize = 10_000;
+/// Maximum accepted length for the `hostname` field (SEC-IPC-004).
+///
+/// DNS maximum hostname length per RFC 1035 §2.3.4: 253 characters.
+const MAX_HOSTNAME_LEN: usize = 253;
+
+/// Maximum accepted length for the `username` field (SEC-IPC-004).
+///
+/// POSIX `LOGIN_NAME_MAX` is typically 255 on Linux.
+const MAX_USERNAME_LEN: usize = 255;
 
 #[tauri::command]
 pub async fn save_connection(
@@ -62,20 +41,21 @@ pub async fn save_connection(
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<ConnectionId, TauTermError> {
     // SEC-IPC-004: reject oversized hostname / username.
-    if config.host.len() > MAX_FIELD_LEN {
+    if config.host.len() > MAX_HOSTNAME_LEN {
         return Err(TauTermError::new(
             "VALIDATION_ERROR",
-            "hostname exceeds maximum allowed length.",
+            "hostname exceeds maximum allowed length (253 characters).",
         ));
     }
-    if config.username.len() > MAX_FIELD_LEN {
+    if config.username.len() > MAX_USERNAME_LEN {
         return Err(TauTermError::new(
             "VALIDATION_ERROR",
-            "username exceeds maximum allowed length.",
+            "username exceeds maximum allowed length (255 characters).",
         ));
     }
     if let Some(ref path) = config.identity_file {
-        validate_identity_file_path(path)?;
+        // SEC-PATH-005: use the strict validator (file must exist and be inside ~/.ssh/).
+        validate_ssh_identity_path(path)?;
     }
     let id = config.id.clone();
     prefs.read().save_connection(config).map_err(|e| {
@@ -134,20 +114,20 @@ mod tests {
     // -----------------------------------------------------------------------
 
     fn check_hostname(host: &str) -> Result<(), TauTermError> {
-        if host.len() > MAX_FIELD_LEN {
+        if host.len() > MAX_HOSTNAME_LEN {
             return Err(TauTermError::new(
                 "VALIDATION_ERROR",
-                "hostname exceeds maximum allowed length.",
+                "hostname exceeds maximum allowed length (253 characters).",
             ));
         }
         Ok(())
     }
 
     fn check_username(username: &str) -> Result<(), TauTermError> {
-        if username.len() > MAX_FIELD_LEN {
+        if username.len() > MAX_USERNAME_LEN {
             return Err(TauTermError::new(
                 "VALIDATION_ERROR",
-                "username exceeds maximum allowed length.",
+                "username exceeds maximum allowed length (255 characters).",
             ));
         }
         Ok(())
@@ -163,10 +143,15 @@ mod tests {
     ) {
         let tmp = tempfile::tempdir().expect("tempdir");
         let orig_xdg = std::env::var_os("XDG_CONFIG_HOME");
-        // SAFETY: nextest runs each test in its own process.
+        // SAFETY: `set_var` is unsound when multiple threads read the environment
+        // concurrently. This is safe here because:
+        // 1. This project uses `cargo nextest` exclusively (see CLAUDE.md), which
+        //    runs each test in its own forked process — no shared address space.
+        // 2. No other thread in this test binary reads XDG_CONFIG_HOME concurrently.
+        // DO NOT run this code under `cargo test --test-threads > 1`.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
         let store = crate::preferences::PreferencesStore::load_or_default();
-        // SAFETY: same as above.
+        // SAFETY: same rationale as the set_var call above — nextest process isolation.
         unsafe {
             match orig_xdg {
                 Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
@@ -192,80 +177,88 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // SEC-IPC-004 — oversized hostname / username rejected
+    // SEC-IPC-004 — hostname length validation (DNS max: 253 chars)
     // -----------------------------------------------------------------------
 
-    /// SEC-IPC-004: hostname > 10 000 chars must be rejected.
+    /// SEC-IPC-004: hostname at exactly 253 chars (DNS max) must be accepted.
+    #[test]
+    fn sec_ipc_004_hostname_at_limit_accepted() {
+        let hostname = "a".repeat(MAX_HOSTNAME_LEN);
+        assert!(
+            check_hostname(&hostname).is_ok(),
+            "SEC-IPC-004: hostname of exactly {MAX_HOSTNAME_LEN} chars must be accepted"
+        );
+    }
+
+    /// SEC-IPC-004: hostname at 254 chars (one over DNS max) must be rejected.
     #[test]
     fn sec_ipc_004_hostname_over_limit_rejected() {
-        let long_hostname = "a".repeat(MAX_FIELD_LEN + 1);
+        let long_hostname = "a".repeat(MAX_HOSTNAME_LEN + 1);
         let result = check_hostname(&long_hostname);
         assert!(
             result.is_err(),
-            "SEC-IPC-004: hostname > {MAX_FIELD_LEN} chars must be rejected"
+            "SEC-IPC-004: hostname > {MAX_HOSTNAME_LEN} chars must be rejected"
         );
         assert_eq!(result.unwrap_err().code, "VALIDATION_ERROR");
     }
 
-    /// SEC-IPC-004: hostname at exactly MAX_FIELD_LEN chars must be accepted.
+    // -----------------------------------------------------------------------
+    // SEC-IPC-004 — username length validation (POSIX LOGIN_NAME_MAX: 255)
+    // -----------------------------------------------------------------------
+
+    /// SEC-IPC-004: username at exactly 255 chars must be accepted.
     #[test]
-    fn sec_ipc_004_hostname_at_limit_accepted() {
-        let hostname = "a".repeat(MAX_FIELD_LEN);
+    fn sec_ipc_004_username_at_limit_accepted() {
+        let username = "u".repeat(MAX_USERNAME_LEN);
         assert!(
-            check_hostname(&hostname).is_ok(),
-            "SEC-IPC-004: hostname of exactly {MAX_FIELD_LEN} chars must be accepted"
+            check_username(&username).is_ok(),
+            "SEC-IPC-004: username of exactly {MAX_USERNAME_LEN} chars must be accepted"
         );
     }
 
-    /// SEC-IPC-004: username > 10 000 chars must be rejected.
+    /// SEC-IPC-004: username at 256 chars (one over POSIX max) must be rejected.
     #[test]
     fn sec_ipc_004_username_over_limit_rejected() {
-        let long_username = "u".repeat(MAX_FIELD_LEN + 1);
+        let long_username = "u".repeat(MAX_USERNAME_LEN + 1);
         let result = check_username(&long_username);
         assert!(
             result.is_err(),
-            "SEC-IPC-004: username > {MAX_FIELD_LEN} chars must be rejected"
+            "SEC-IPC-004: username > {MAX_USERNAME_LEN} chars must be rejected"
         );
         assert_eq!(result.unwrap_err().code, "VALIDATION_ERROR");
     }
 
-    /// SEC-IPC-004: username at exactly MAX_FIELD_LEN chars must be accepted.
+    // -----------------------------------------------------------------------
+    // validate_ssh_identity_path via save_connection (SEC-PATH-005)
+    //
+    // The light validate_identity_file_path has been removed. All identity path
+    // validation now goes through validate_ssh_identity_path (platform::validation),
+    // which requires the file to exist and be within ~/.ssh/. The comprehensive
+    // test suite for that function lives in platform/validation.rs.
+    //
+    // We test here only that the connection_cmds save path calls the strict validator:
+    // a non-existent path must be rejected at save time.
+    // -----------------------------------------------------------------------
+
     #[test]
-    fn sec_ipc_004_username_at_limit_accepted() {
-        let username = "u".repeat(MAX_FIELD_LEN);
+    fn sec_path_005_nonexistent_identity_file_rejected_at_save_time() {
+        let result =
+            validate_ssh_identity_path("/home/nobody_tauterm_test/.ssh/does_not_exist_key");
         assert!(
-            check_username(&username).is_ok(),
-            "SEC-IPC-004: username of exactly {MAX_FIELD_LEN} chars must be accepted"
+            result.is_err(),
+            "SEC-PATH-005: nonexistent identity file must be rejected by the strict validator"
         );
-    }
-
-    // -----------------------------------------------------------------------
-    // validate_identity_file_path unit tests (SEC-PATH-005)
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn identity_file_path_null_byte_rejected() {
-        let result = validate_identity_file_path("/home/user/.ssh/id\0_ed25519");
-        assert!(result.is_err(), "Null byte in path must be rejected");
-        assert_eq!(result.unwrap_err().code, "INVALID_PATH");
+        assert_eq!(result.unwrap_err().code, "INVALID_SSH_IDENTITY_PATH");
     }
 
     #[test]
-    fn identity_file_path_relative_rejected() {
-        let result = validate_identity_file_path("relative/path");
-        assert!(result.is_err(), "Relative path must be rejected");
-    }
-
-    #[test]
-    fn identity_file_path_with_parent_dir_rejected() {
-        let result = validate_identity_file_path("/home/user/../.ssh/id_ed25519");
-        assert!(result.is_err(), "'..' component must be rejected");
-    }
-
-    #[test]
-    fn identity_file_path_valid_absolute_accepted() {
-        let result = validate_identity_file_path("/home/user/.ssh/id_ed25519");
-        assert!(result.is_ok(), "Valid absolute path must be accepted");
+    fn sec_path_005_relative_identity_path_rejected_at_save_time() {
+        let result = validate_ssh_identity_path("relative/path");
+        assert!(
+            result.is_err(),
+            "SEC-PATH-005: relative identity file path must be rejected"
+        );
+        assert_eq!(result.unwrap_err().code, "INVALID_SSH_IDENTITY_PATH");
     }
 
     // -----------------------------------------------------------------------

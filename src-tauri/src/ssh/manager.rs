@@ -623,7 +623,7 @@ impl SshManager {
         let (_, pending) = self
             .pending_credentials
             .remove(pane_id)
-            .ok_or_else(|| SshError::PaneNotFound(pane_id.to_string()))?;
+            .ok_or_else(|| SshError::NoPendingCredentials(pane_id.to_string()))?;
         // Ignore send error — the connect task may have timed out already.
         let _ = pending.sender.send(creds);
         Ok(())

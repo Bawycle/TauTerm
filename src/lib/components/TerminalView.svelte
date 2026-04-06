@@ -36,6 +36,18 @@
 
   const tv = useTerminalView();
 
+  // Respect prefers-reduced-motion: set fade duration to 0 when the user
+  // has requested reduced motion. Evaluated once per component instance —
+  // matchMedia is synchronous; no reactive wrapper needed since the media
+  // query result does not change during a component's lifetime in this app.
+  // The typeof guard also covers jsdom where matchMedia may be absent.
+  const _reducedMotion =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fadeDurationHint = _reducedMotion ? 0 : 300;
+  const fadeDurationShort = _reducedMotion ? 0 : 200;
+
   // Derived from shared session state
   const activeTab = $derived(getActiveTab());
   const activePanes = $derived(getActivePanes());
@@ -126,7 +138,7 @@
 
   <!-- FS-UX-002: First-launch context menu hint — non-blocking, bottom-right corner -->
   {#if tv.contextMenuHintVisible}
-    <div class="terminal-view__context-hint" aria-hidden="true" transition:fade={{ duration: 300 }}>
+    <div class="terminal-view__context-hint" aria-hidden="true" transition:fade={{ duration: fadeDurationHint }}>
       <MousePointerClick size={14} aria-hidden="true" />
       <span>{m.context_menu_hint()}</span>
     </div>
@@ -241,7 +253,7 @@
       class="terminal-view__connection-error"
       role="alert"
       aria-live="assertive"
-      transition:fade={{ duration: 200 }}
+      transition:fade={{ duration: fadeDurationShort }}
     >
       <span>{m.error_connection_failed()}</span>
       <button

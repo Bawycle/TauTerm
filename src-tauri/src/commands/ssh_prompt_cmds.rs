@@ -71,7 +71,7 @@ pub async fn accept_host_key(
     })?;
     let store = KnownHostsStore::new(store_path);
 
-    // For mismatch: remove old entry first.
+    // For mismatch: remove old entry first, then warn in the audit log.
     if pending.is_mismatch {
         store
             .remove_entries_for_host(&pending.host, &pending.key_type)
@@ -82,6 +82,17 @@ pub async fn accept_host_key(
                     e.to_string(),
                 )
             })?;
+
+        // SEC-SSH-CH-004: emit a warning so host-key substitution attacks leave a
+        // trace in the application log. Host and key type are logged; the raw key
+        // bytes are not (verbose but not secret). Username and filesystem paths are
+        // intentionally omitted per CLAUDE.md logging constraints.
+        tracing::warn!(
+            host = %pending.host,
+            key_type = %pending.key_type,
+            "SSH host key MISMATCH accepted by user — \
+             old key removed and new key trusted (SEC-SSH-CH-004)"
+        );
     }
 
     // Persist the new key.

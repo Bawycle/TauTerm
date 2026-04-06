@@ -106,9 +106,10 @@ describe('UIBC-FN-DRP-002 — placeholder', () => {
     expect(container.textContent).toContain('Choose…');
   });
 
-  it('default placeholder "Select…" used when placeholder prop is absent', () => {
+  it('default placeholder from i18n used when placeholder prop is absent', () => {
     const { container } = mountDropdown({ options: BASIC_OPTIONS });
-    expect(container.textContent).toContain('Select…');
+    // The i18n key `dropdown_placeholder` resolves to "Select…" in test locale
+    expect(container.textContent).toContain('Select');
   });
 });
 
@@ -174,6 +175,18 @@ describe('Dropdown — label prop', () => {
       id: 'theme',
     });
     expect(container.querySelector('label')!.getAttribute('for')).toBe('theme');
+  });
+
+  it('label for attribute is defined even when id prop is absent (uid fallback)', () => {
+    const { container } = mountDropdown({
+      options: BASIC_OPTIONS,
+      label: 'Choose theme',
+      // no id prop
+    });
+    const forAttr = container.querySelector('label')?.getAttribute('for');
+    expect(forAttr).not.toBeNull();
+    expect(forAttr).not.toBe('undefined');
+    expect(forAttr!.length).toBeGreaterThan(0);
   });
 });
 

@@ -57,7 +57,11 @@ impl LinuxCredentialStore {
             Err(_) => return false,
         };
 
-        rt.block_on(async { SecretService::connect(EncryptionType::Plain).await.is_ok() })
+        // Probe with Dh — same encrypted path as real store/get/delete operations.
+        // Using Plain would succeed even when D-Bus encryption negotiation fails,
+        // giving a false positive: we would claim availability but real operations
+        // would then fail. If Dh fails we return false (genuinely unavailable).
+        rt.block_on(async { SecretService::connect(EncryptionType::Dh).await.is_ok() })
     }
 }
 

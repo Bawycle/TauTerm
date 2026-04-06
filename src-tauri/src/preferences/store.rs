@@ -33,6 +33,13 @@ use parking_lot::RwLock;
 use crate::error::PreferencesError;
 use crate::preferences::schema::{Preferences, PreferencesPatch, UserTheme};
 
+/// Maximum number of saved SSH connections (SEC-PATH-005).
+///
+/// Prevents DoS via a malformed or adversarially crafted preferences file that
+/// contains an unbounded list of connections, which would exhaust memory or
+/// cause excessive IPC payload sizes.
+const MAX_CONNECTIONS: usize = 1_000;
+
 /// The preferences store — thread-safe, injected as `State<Arc<RwLock<PreferencesStore>>>`.
 pub struct PreferencesStore {
     prefs: RwLock<Preferences>,
@@ -157,14 +164,24 @@ impl PreferencesStore {
     }
 
     /// Save or update an SSH connection config.
+    ///
+    /// Returns `Err(PreferencesError::Validation)` if saving a **new** connection
+    /// would exceed `MAX_CONNECTIONS` (SEC-PATH-005).
     pub fn save_connection(
         &self,
         config: crate::ssh::SshConnectionConfig,
     ) -> Result<(), PreferencesError> {
         let mut prefs = self.prefs.write();
         if let Some(existing) = prefs.connections.iter_mut().find(|c| c.id == config.id) {
+            // Updating an existing connection — no count check needed.
             *existing = config;
         } else {
+            // New connection — enforce the limit before inserting.
+            if prefs.connections.len() >= MAX_CONNECTIONS {
+                return Err(PreferencesError::Validation(format!(
+                    "Cannot save more than {MAX_CONNECTIONS} SSH connections."
+                )));
+            }
             prefs.connections.push(config);
         }
         let updated = prefs.clone();
@@ -273,11 +290,14 @@ fn preferences_path() -> Result<PathBuf, PreferencesError> {
 /// 2. `preferences.json` — legacy fallback for migration; its camelCase keys
 ///    are directly compatible with the serde attributes on `Preferences`.
 /// 3. If neither file exists, return `Preferences::default()`.
+///
+/// After loading, the connections list is truncated to `MAX_CONNECTIONS` if it
+/// exceeds that limit (SEC-PATH-005 — DoS via malformed prefs).
 fn load_from_disk(path: &PathBuf) -> Preferences {
     // --- Primary: TOML (snake_case keys on disk) ---
     match std::fs::read_to_string(path) {
         Ok(content) => {
-            return parse_toml_prefs(&content);
+            return clamp_connections(parse_toml_prefs(&content));
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Fall through to JSON migration check.
@@ -290,31 +310,50 @@ fn load_from_disk(path: &PathBuf) -> Preferences {
 
     // --- Migration: JSON legacy file ---
     let json_path = path.with_extension("json");
-    match std::fs::read_to_string(&json_path) {
+    let migrated: Option<Preferences> = match std::fs::read_to_string(&json_path) {
         Ok(content) => match serde_json::from_str::<Preferences>(&content) {
-            Ok(prefs) => {
+            Ok(p) => {
                 tracing::info!(
                     "Migrating preferences from preferences.json to preferences.toml \
                      (TOML will be written on next save)"
                 );
-                prefs
+                Some(p)
             }
             Err(e) => {
                 tracing::warn!(
                     "Found preferences.json but failed to parse it, using defaults: {e}"
                 );
-                Preferences::default()
+                None
             }
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             tracing::info!("No preferences file found, using defaults.");
-            Preferences::default()
+            None
         }
         Err(e) => {
             tracing::warn!("Could not read preferences.json, using defaults: {e}");
-            Preferences::default()
+            None
         }
+    };
+
+    clamp_connections(migrated.unwrap_or_default())
+}
+
+/// Truncate the connections list to `MAX_CONNECTIONS` if it exceeds the limit.
+///
+/// A malformed preferences file could contain an unbounded list of connections.
+/// This guard prevents DoS via memory exhaustion or excessively large IPC payloads
+/// (SEC-PATH-005).
+fn clamp_connections(mut prefs: Preferences) -> Preferences {
+    if prefs.connections.len() > MAX_CONNECTIONS {
+        tracing::warn!(
+            "preferences file contains {} connections, truncating to {MAX_CONNECTIONS} \
+             (SEC-PATH-005)",
+            prefs.connections.len()
+        );
+        prefs.connections.truncate(MAX_CONNECTIONS);
     }
+    prefs
 }
 
 /// Parse a TOML string (with snake_case keys) into `Preferences`.
@@ -430,7 +469,7 @@ fn dirs_or_home() -> Result<PathBuf, PreferencesError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PreferencesStore, camel_to_snake, snake_to_camel};
+    use super::{MAX_CONNECTIONS, PreferencesStore, camel_to_snake, snake_to_camel};
     use crate::preferences::schema::{AppearancePatch, Language, PreferencesPatch};
 
     // -----------------------------------------------------------------------
@@ -575,6 +614,108 @@ mod tests {
     }
 
     // Roundtrip: camel → snake → camel
+
+    // -----------------------------------------------------------------------
+    // SEC-PATH-005 — connection limit
+    // -----------------------------------------------------------------------
+
+    fn make_connection(label: &str) -> crate::ssh::SshConnectionConfig {
+        crate::ssh::SshConnectionConfig {
+            id: crate::session::ids::ConnectionId::new(),
+            label: label.to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            username: "alice".to_string(),
+            identity_file: None,
+            allow_osc52_write: false,
+            keepalive_interval_secs: None,
+            keepalive_max_failures: None,
+        }
+    }
+
+    /// SEC-PATH-005: save_connection must reject a new connection when the store
+    /// already holds MAX_CONNECTIONS entries.
+    #[test]
+    fn sec_path_005_save_connection_rejected_when_limit_reached() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        // Fill up to exactly MAX_CONNECTIONS.
+        for i in 0..MAX_CONNECTIONS {
+            let conn = make_connection(&format!("conn-{i}"));
+            store
+                .read()
+                .save_connection(conn)
+                .expect("save should succeed while under limit");
+        }
+
+        // One more must be rejected.
+        let overflow = make_connection("overflow");
+        let result = store.read().save_connection(overflow);
+        assert!(
+            result.is_err(),
+            "SEC-PATH-005: adding a {}-th connection must fail",
+            MAX_CONNECTIONS + 1
+        );
+        match result.unwrap_err() {
+            crate::error::PreferencesError::Validation(msg) => {
+                assert!(
+                    msg.contains("1000"),
+                    "Error message should mention the limit, got: {msg}"
+                );
+            }
+            other => panic!("Expected Validation error, got: {other:?}"),
+        }
+    }
+
+    /// SEC-PATH-005: updating an existing connection when already at MAX_CONNECTIONS
+    /// must succeed (it is not adding a new entry).
+    #[test]
+    fn sec_path_005_update_existing_connection_allowed_at_limit() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        // Fill to the limit, keeping the last connection's ID.
+        let mut last_id = None;
+        for i in 0..MAX_CONNECTIONS {
+            let conn = make_connection(&format!("conn-{i}"));
+            last_id = Some(conn.id.clone());
+            store.read().save_connection(conn).expect("save");
+        }
+
+        // Update the last connection — must not fail (not a new entry).
+        let mut updated = make_connection("updated-label");
+        updated.id = last_id.unwrap();
+        let result = store.read().save_connection(updated);
+        assert!(
+            result.is_ok(),
+            "SEC-PATH-005: updating an existing connection at the limit must succeed"
+        );
+    }
+
+    /// SEC-PATH-005: clamp_connections truncates an oversized list.
+    #[test]
+    fn sec_path_005_clamp_connections_truncates_oversized_list() {
+        use super::clamp_connections;
+        use crate::preferences::schema::Preferences;
+
+        let mut prefs = Preferences::default();
+        for i in 0..MAX_CONNECTIONS + 1 {
+            prefs
+                .connections
+                .push(make_connection(&format!("conn-{i}")));
+        }
+        assert_eq!(prefs.connections.len(), MAX_CONNECTIONS + 1);
+
+        let clamped = clamp_connections(prefs);
+        assert_eq!(
+            clamped.connections.len(),
+            MAX_CONNECTIONS,
+            "SEC-PATH-005: clamp_connections must truncate to MAX_CONNECTIONS"
+        );
+    }
 
     #[test]
     fn conversion_roundtrip_camel_snake_camel() {

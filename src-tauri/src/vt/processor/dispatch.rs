@@ -22,13 +22,17 @@ impl Perform for VtPerformBridge<'_> {
     fn print(&mut self, c: char) {
         let p = &mut self.inner;
         // Apply DEC Special Graphics mapping if active.
-        let mapped_c = if c.is_ascii() && (c as u8) >= 0x60 {
+        // `u8::try_from` is used per convention (CLAUDE.md) even though the
+        // `is_ascii()` guard already guarantees the conversion is lossless.
+        let mapped_c = if let Ok(byte) = u8::try_from(c)
+            && byte >= 0x60
+        {
             let active_charset = match p.modes.charset_slot {
                 CharsetSlot::G0 => p.modes.g0,
                 CharsetSlot::G1 => p.modes.g1,
             };
             if active_charset == Charset::DecSpecialGraphics {
-                translate_dec_special(c as u8)
+                translate_dec_special(byte)
             } else {
                 c
             }
@@ -91,7 +95,7 @@ impl Perform for VtPerformBridge<'_> {
     }
 
     fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
-        // DCS hook — no-op for v1 (all DCS sequences ignored except DECRQSS handled in unhook).
+        // DCS hook — no-op for v1. All DCS sequences (including DECRQSS) are ignored.
     }
 
     fn put(&mut self, _byte: u8) {
@@ -99,7 +103,7 @@ impl Perform for VtPerformBridge<'_> {
     }
 
     fn unhook(&mut self) {
-        // DCS unhook — no-op for v1.
+        // DCS unhook — no-op for v1. No DCS sequence is processed on termination.
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {

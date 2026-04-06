@@ -27,6 +27,7 @@
 | `reorder_tab` | `{ tab_id: TabId, new_order: u32 }` | `()` | Move tab to position |
 | `split_pane` | `{ pane_id: PaneId, direction: SplitDirection }` | `TabState` | Split active pane; returns updated tab layout tree |
 | `close_pane` | `{ pane_id: PaneId }` | `TabState \| null` | Close pane; returns updated `TabState` if the tab still exists, `null` if the last pane was closed (tab removed) |
+| `set_active_tab` | `{ tab_id: TabId }` | `()` | Switch to tab |
 | `set_active_pane` | `{ pane_id: PaneId }` | `()` | Change focus to pane |
 | `send_input` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | Write bytes to PTY |
 | `scroll_pane` | `{ pane_id: PaneId, offset: i64 }` | `ScrollPositionState` | Scroll scrollback |
@@ -38,6 +39,7 @@
 | `get_connections` | — | `Vec<SshConnectionConfig>` | List saved SSH connections |
 | `save_connection` | `SshConnectionConfig` | `ConnectionId` | Create or update a saved connection |
 | `delete_connection` | `{ connection_id: ConnectionId }` | `()` | Delete saved connection |
+| `duplicate_connection` | `{ connection_id: ConnectionId }` | `ConnectionId` | Duplicate a saved SSH connection; returns new connection ID |
 | `get_preferences` | — | `Preferences` | Read current preferences |
 | `update_preferences` | `PreferencesPatch` | `Preferences` | Write preferences (immediate apply) |
 | `get_themes` | — | `Vec<UserTheme>` | List all user themes |
@@ -53,6 +55,8 @@
 | `mark_context_menu_used` | — | `()` | Clear first-launch context menu hint |
 | `resize_pane` | `{ pane_id: PaneId, cols: u16, rows: u16, pixel_width: u16, pixel_height: u16 }` | `()` | Notify backend of pane resize; triggers `TIOCSWINSZ` + `SIGWINCH`. `pixel_width`/`pixel_height` are required for complete `TIOCSWINSZ` (image protocols, multiplexers). Resize events are debounced — see [§6.5](04-runtime-platform.md#65-back-pressure). |
 | `get_pane_screen_snapshot` | `{ pane_id: PaneId }` | `ScreenSnapshot` | Full screen state for initial render |
+| `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | *E2E testing only (--features e2e-testing):* Inject bytes into PTY pane channel |
+| `inject_ssh_failure` | `{ pane_id: PaneId, error_code: String }` | `()` | *E2E testing only (--features e2e-testing):* Inject SSH connection failure |
 
 ### 4.3 Events (emit — backend → frontend)
 

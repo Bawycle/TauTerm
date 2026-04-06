@@ -8,7 +8,7 @@
   Props:
     options     — array of { value, label } pairs
     value       — currently selected value
-    placeholder — text shown when no value is selected
+    placeholder — text shown when no value is selected (defaults to i18n key)
     disabled    — disables the trigger
     label       — visible label rendered above the trigger
     id          — HTML id for the trigger (label association)
@@ -17,6 +17,7 @@
 <script lang="ts">
   import { Select } from 'bits-ui';
   import { ChevronDown } from 'lucide-svelte';
+  import * as m from '$lib/paraglide/messages';
 
   interface Option {
     value: string;
@@ -36,16 +37,24 @@
   const {
     options,
     value,
-    placeholder = 'Select…',
+    placeholder,
     disabled = false,
     label,
     id,
     onchange,
   }: Props = $props();
 
+  // Stable per-instance fallback ID computed once at instantiation.
+  // Used when the caller does not pass `id`, so label-for always points to a valid element.
+  const _fallbackId = `dd-${Math.random().toString(36).slice(2, 8)}`;
+  const uid = $derived(id ?? _fallbackId);
+
+  /** Resolved placeholder: prop overrides the i18n default. */
+  const resolvedPlaceholder = $derived(placeholder ?? m.dropdown_placeholder());
+
   /** Label to display in the trigger — falls back to placeholder when nothing is selected. */
   const displayLabel = $derived(
-    value ? (options.find((o) => o.value === value)?.label ?? value) : placeholder,
+    value ? (options.find((o) => o.value === value)?.label ?? value) : resolvedPlaceholder,
   );
 
   const triggerTextClass = $derived(
@@ -56,7 +65,7 @@
 <div class="flex flex-col">
   {#if label}
     <label
-      for={id}
+      for={uid}
       class="block text-(--font-size-ui-sm) font-medium text-(--color-text-secondary) mb-1"
     >
       {label}
@@ -65,7 +74,7 @@
 
   <Select.Root type="single" {value} onValueChange={(v) => onchange?.(v)} {disabled}>
     <Select.Trigger
-      {id}
+      id={uid}
       class="relative w-full h-[44px] px-3 pr-9 text-(--font-size-ui-base) bg-(--term-bg) border border-(--color-border) rounded-[2px] flex items-center text-left cursor-pointer disabled:cursor-not-allowed disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) {triggerTextClass}"
     >
       {#snippet child({ props })}

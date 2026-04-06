@@ -218,7 +218,11 @@ mod tests {
         assert!(!m.bracketed_paste);
         assert!(m.decawm, "DECAWM default must be true");
         assert!(m.cursor_visible, "cursor_visible default must be true");
-        assert_eq!(m.scroll_region, (0, 23), "scroll_region must span full screen (0..23)");
+        assert_eq!(
+            m.scroll_region,
+            (0, 23),
+            "scroll_region must span full screen (0..23)"
+        );
         assert_eq!(m.charset_slot, CharsetSlot::G0);
         assert_eq!(m.g0, Charset::Ascii);
         assert_eq!(m.g1, Charset::Ascii);

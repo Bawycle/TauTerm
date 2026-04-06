@@ -45,24 +45,6 @@
 
 ## P2 — Roadmap
 
-### Sécurité
-
-- [ ] **`MAX_FIELD_LEN` hostname trop permissif** (`connection_cmds.rs:57`) — 10 000 octets vs DNS max 253
-  - Définir `MAX_HOSTNAME_LEN = 253`, `MAX_USERNAME_LEN = 255`
-- [ ] **Probe SecretService avec `EncryptionType::Plain`** (`credentials_linux.rs:60`)
-  - Utiliser `EncryptionType::Dh` pour le probe de disponibilité aussi
-- [ ] **Validation SSH path incohérente** — `validate_identity_file_path` (light) vs `validate_ssh_identity_path` (stricte)
-  - Unifier : appeler `validate_ssh_identity_path` dès la sauvegarde
-- [ ] **`unsafe { set_var }` dans tests hors modules `platform/`** (`connection_cmds.rs:167,170`, `preferences/schema.rs:428,435`)
-  - Documenter explicitement la dépendance à nextest dans le commentaire SAFETY ou déplacer dans des helpers platform
-
-### Rust — conventions
-
-- [ ] **`char as u8` dans `dispatch.rs:25,31`** — remplacer par `u8::try_from(c)` (convention CLAUDE.md)
-  - La garde `is_ascii()` est présente donc pas de bug, mais violation de convention
-- [ ] **Commentaire incorrect dans `dispatch.rs`** sur DCS/DECRQSS
-  - `unhook` est un no-op pur — le commentaire "handled in unhook" est faux, le corriger
-
 ### Documentation
 
 - [ ] **Synchroniser `docs/arch/02-backend-modules.md §3.2`** avec le code réel
@@ -83,10 +65,6 @@
 
 ## P3 — Backlog technique
 
-- [ ] **CSP `font-src`** — ajouter directive explicite `font-src 'self' asset: http://asset.localhost`
-- [ ] **Limite du nombre de connexions sauvegardées** (SEC-PATH-005) — prévoir max ~1000 pour prévenir DoS via prefs malformées
-- [ ] **Code erreur `INVALID_PANE_ID`** trompeur dans `ssh_prompt_cmds.rs` — exposer `NO_PENDING_CREDENTIALS` distinct
-- [ ] **`tracing::warn!`** pour host key Mismatch accepté dans `ssh_prompt_cmds.rs` (SEC-SSH-CH-004)
 - [ ] **Tests E2E split pane** — feature split-pane sans test de comportement UI complet
 - [ ] **Tests E2E recherche UI** — boucle search-query → backend → highlight → navigation non exercée en E2E
 - [ ] **Tests unitaires events IPC dans TerminalPane** — actuellement E2E-deferred ; résoudre le problème de mock `listen()`

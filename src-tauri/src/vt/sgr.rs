@@ -113,8 +113,8 @@ pub fn apply_sgr(params: &vte::Params, attrs: &mut CellAttrs) {
 #[cfg(test)]
 mod tests {
     use crate::vt::{
-        cell::{CellAttrs, Color},
         VtProcessor,
+        cell::{CellAttrs, Color},
     };
 
     /// Create a standard 80×24 VtProcessor.
@@ -220,7 +220,10 @@ mod tests {
     #[test]
     fn sgr_6_rapid_blink_same_as_blink() {
         let a = attrs_after_sgr("6");
-        assert!(a.blink, "SGR 6 must set blink (rapid blink treated identically)");
+        assert!(
+            a.blink,
+            "SGR 6 must set blink (rapid blink treated identically)"
+        );
     }
 
     #[test]
@@ -264,7 +267,10 @@ mod tests {
         vt.process(b"\x1b[23m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert!(!snap.cells.first().unwrap().italic, "SGR 23 must reset italic");
+        assert!(
+            !snap.cells.first().unwrap().italic,
+            "SGR 23 must reset italic"
+        );
     }
 
     #[test]
@@ -274,7 +280,11 @@ mod tests {
         vt.process(b"\x1b[24m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert_eq!(snap.cells.first().unwrap().underline, 0, "SGR 24 must reset underline");
+        assert_eq!(
+            snap.cells.first().unwrap().underline,
+            0,
+            "SGR 24 must reset underline"
+        );
     }
 
     #[test]
@@ -284,7 +294,10 @@ mod tests {
         vt.process(b"\x1b[25m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert!(!snap.cells.first().unwrap().blink, "SGR 25 must reset blink");
+        assert!(
+            !snap.cells.first().unwrap().blink,
+            "SGR 25 must reset blink"
+        );
     }
 
     #[test]
@@ -294,7 +307,10 @@ mod tests {
         vt.process(b"\x1b[27m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert!(!snap.cells.first().unwrap().inverse, "SGR 27 must reset inverse");
+        assert!(
+            !snap.cells.first().unwrap().inverse,
+            "SGR 27 must reset inverse"
+        );
     }
 
     #[test]
@@ -304,7 +320,10 @@ mod tests {
         vt.process(b"\x1b[28m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert!(!snap.cells.first().unwrap().hidden, "SGR 28 must reset hidden");
+        assert!(
+            !snap.cells.first().unwrap().hidden,
+            "SGR 28 must reset hidden"
+        );
     }
 
     #[test]
@@ -314,7 +333,10 @@ mod tests {
         vt.process(b"\x1b[29m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert!(!snap.cells.first().unwrap().strikethrough, "SGR 29 must reset strikethrough");
+        assert!(
+            !snap.cells.first().unwrap().strikethrough,
+            "SGR 29 must reset strikethrough"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -400,13 +422,21 @@ mod tests {
     #[test]
     fn sgr_38_5_n_foreground_256_color() {
         let a = attrs_after_sgr("38;5;200");
-        assert_eq!(a.fg, Some(Color::Ansi256 { index: 200 }), "SGR 38;5;200 must set fg Ansi256(200)");
+        assert_eq!(
+            a.fg,
+            Some(Color::Ansi256 { index: 200 }),
+            "SGR 38;5;200 must set fg Ansi256(200)"
+        );
     }
 
     #[test]
     fn sgr_48_5_n_background_256_color() {
         let a = attrs_after_sgr("48;5;42");
-        assert_eq!(a.bg, Some(Color::Ansi256 { index: 42 }), "SGR 48;5;42 must set bg Ansi256(42)");
+        assert_eq!(
+            a.bg,
+            Some(Color::Ansi256 { index: 42 }),
+            "SGR 48;5;42 must set bg Ansi256(42)"
+        );
     }
 
     #[test]
@@ -426,7 +456,11 @@ mod tests {
         let a = attrs_after_sgr("38;2;255;128;0");
         assert_eq!(
             a.fg,
-            Some(Color::Rgb { r: 255, g: 128, b: 0 }),
+            Some(Color::Rgb {
+                r: 255,
+                g: 128,
+                b: 0
+            }),
             "SGR 38;2;255;128;0 must set fg Rgb(255,128,0)"
         );
     }
@@ -436,7 +470,11 @@ mod tests {
         let a = attrs_after_sgr("48;2;10;20;30");
         assert_eq!(
             a.bg,
-            Some(Color::Rgb { r: 10, g: 20, b: 30 }),
+            Some(Color::Rgb {
+                r: 10,
+                g: 20,
+                b: 30
+            }),
             "SGR 48;2;10;20;30 must set bg Rgb(10,20,30)"
         );
     }
@@ -455,7 +493,11 @@ mod tests {
         vt.process(b"\x1b[4:0m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert_eq!(snap.cells.first().unwrap().underline, 0, "SGR 4:0 must set underline=0");
+        assert_eq!(
+            snap.cells.first().unwrap().underline,
+            0,
+            "SGR 4:0 must set underline=0"
+        );
     }
 
     #[test]
@@ -464,7 +506,11 @@ mod tests {
         vt.process(b"\x1b[4:1m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert_eq!(snap.cells.first().unwrap().underline, 1, "SGR 4:1 must set underline=1");
+        assert_eq!(
+            snap.cells.first().unwrap().underline,
+            1,
+            "SGR 4:1 must set underline=1"
+        );
     }
 
     #[test]
@@ -473,7 +519,11 @@ mod tests {
         vt.process(b"\x1b[4:2m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert_eq!(snap.cells.first().unwrap().underline, 2, "SGR 4:2 must set underline=2");
+        assert_eq!(
+            snap.cells.first().unwrap().underline,
+            2,
+            "SGR 4:2 must set underline=2"
+        );
     }
 
     #[test]
@@ -482,7 +532,11 @@ mod tests {
         vt.process(b"\x1b[4:3m");
         vt.process(b"X");
         let snap = vt.get_snapshot();
-        assert_eq!(snap.cells.first().unwrap().underline, 3, "SGR 4:3 must set underline=3");
+        assert_eq!(
+            snap.cells.first().unwrap().underline,
+            3,
+            "SGR 4:3 must set underline=3"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -494,7 +548,11 @@ mod tests {
         let a = attrs_after_sgr("58;2;255;0;128");
         assert_eq!(
             a.underline_color,
-            Some(Color::Rgb { r: 255, g: 0, b: 128 }),
+            Some(Color::Rgb {
+                r: 255,
+                g: 0,
+                b: 128
+            }),
             "SGR 58;2;R;G;B must set underline_color"
         );
     }
@@ -502,7 +560,10 @@ mod tests {
     #[test]
     fn sgr_59_resets_underline_color() {
         let a = attrs_after_sgr("58;2;255;0;128;59");
-        assert!(a.underline_color.is_none(), "SGR 59 must clear underline_color");
+        assert!(
+            a.underline_color.is_none(),
+            "SGR 59 must clear underline_color"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -513,7 +574,11 @@ mod tests {
     fn unknown_sgr_code_does_not_change_attributes() {
         // SGR 255 is unrecognised. Attributes must remain at default.
         let a = attrs_after_sgr("255");
-        assert_eq!(a, CellAttrs::default(), "Unknown SGR code must not change attributes");
+        assert_eq!(
+            a,
+            CellAttrs::default(),
+            "Unknown SGR code must not change attributes"
+        );
     }
 
     #[test]

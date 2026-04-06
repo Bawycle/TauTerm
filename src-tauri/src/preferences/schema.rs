@@ -423,15 +423,19 @@ mod tests {
         // NOTE: env mutation in tests is only safe in single-threaded context.
         // This test is self-contained and does not run concurrently with other env tests.
         let orig_xdg = std::env::var_os("XDG_CONFIG_HOME");
-        // SAFETY: this test runs in its own process (nextest isolation).
-        // No other thread reads XDG_CONFIG_HOME concurrently in this binary.
+        // SAFETY: `set_var` is unsound when multiple threads read the environment
+        // concurrently. This is safe here because:
+        // 1. This project uses `cargo nextest` exclusively (see CLAUDE.md), which
+        //    runs each test in its own forked process — no shared address space.
+        // 2. No other thread in this test binary reads XDG_CONFIG_HOME concurrently.
+        // DO NOT run this code under `cargo test --test-threads > 1`.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", &tmp_dir) };
 
         let store = PreferencesStore::load_or_default();
         let prefs = store.read().get();
 
         // Restore env.
-        // SAFETY: same as above.
+        // SAFETY: same rationale as the set_var call above — nextest process isolation.
         unsafe {
             match orig_xdg {
                 Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),

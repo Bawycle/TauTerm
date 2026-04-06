@@ -246,9 +246,7 @@ pub fn spawn_pty_read_task(
             // The write-lock on `vt` is no longer held here, so there is no
             // risk of deadlocking when the shell sends back a reply that would
             // trigger a new `vt.write()` acquisition in this same task.
-            if !responses.is_empty()
-                && let Some(ref w) = writer_r
-            {
+            if !responses.is_empty() && let Some(ref w) = writer_r {
                 match w.lock() {
                     Ok(mut writer) => {
                         for resp in &responses {

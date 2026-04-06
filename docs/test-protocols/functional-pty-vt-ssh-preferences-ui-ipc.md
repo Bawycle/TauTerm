@@ -2,7 +2,7 @@
 
 > **Document status:** Initial revision — 2026-04-04
 > **Author:** test-engineer
-> **Based on:** FS.md (all sections), ARCHITECTURE.md §3–§8 §14, UXD.md §5–§7
+> **Based on:** FS.md (all sections), ARCHITECTURE.md §3–§8, docs/testing/TESTING.md §14, UXD.md §5–§7
 > **Bootstrap state:** 50 Rust unit tests passing, 24 frontend unit tests passing, E2E not yet runnable (requires production build)
 
 ---

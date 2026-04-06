@@ -87,7 +87,7 @@ You have the profile of a **senior application security engineer** with 10+ year
 
 | When… | Read… |
 |---|---|
-| Reviewing a backend or IPC feature | `docs/ARCHITECTURE.md` — relevant section (security strategy in §9, IPC in §7) |
-| Reviewing credential handling or SSH | `docs/FS.md` — `FS-CRED-*`, `FS-SSH-*` blocks; `docs/adr/ADR-0007` |
-| Reviewing distribution or artefact integrity | `docs/FS.md` — `FS-DIST-006`; `docs/adr/ADR-0014` |
-| Reviewing VT/escape sequence handling | `docs/FS.md` — `FS-VT-*` security-flagged entries; `docs/adr/ADR-0003` |
+| Reviewing a backend or IPC feature | `docs/arch/06-appendix.md` (security §8); `docs/arch/03-ipc-state.md` (IPC §4) |
+| Reviewing credential handling or SSH | `docs/fs/03-remote-ssh.md` — `FS-CRED-*`, `FS-SSH-*`; `docs/adr/ADR-0007` |
+| Reviewing distribution or artefact integrity | `docs/fs/05-scope-constraints.md` — `FS-DIST-006`; `docs/adr/ADR-0014` |
+| Reviewing VT/escape sequence handling | `docs/fs/01-terminal-emulation.md` — `FS-VT-*` security-flagged entries; `docs/adr/ADR-0003` |

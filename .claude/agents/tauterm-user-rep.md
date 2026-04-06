@@ -64,7 +64,7 @@ You have the profile of a **senior UX researcher and product analyst** with 10+ 
 | When… | Read… |
 |---|---|
 | Validating that a feature serves user needs | `docs/UR.md` — relevant section (personas in §2, interaction model in §3) |
-| Reviewing or writing acceptance criteria | `docs/FS.md` — matching `FS-*` block |
-| Validating a UX proposal | `docs/UXD.md` — relevant component or section |
+| Reviewing or writing acceptance criteria | `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md`) |
+| Validating a UX proposal | `docs/uxd/` — relevant component or section |
 
 **You own `docs/UR.md`.** Flag any decision that contradicts or ignores expressed user needs.

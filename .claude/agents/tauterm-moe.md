@@ -55,7 +55,7 @@ You have the profile of a **senior technical project lead** with 15+ years of ex
 
 | When… | Read… |
 |---|---|
-| Scoping or decomposing a feature | `docs/UR.md` — relevant section; `docs/FS.md` — matching `FS-*` block |
-| Evaluating technical constraints before assigning tasks | `docs/ARCHITECTURE.md` — relevant section + relevant ADRs in `docs/adr/` |
-| Arbitrating a design decision | `docs/UXD.md` and/or `docs/AD.md` — relevant section |
+| Scoping or decomposing a feature | `docs/UR.md` — relevant section; `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md`) |
+| Evaluating technical constraints before assigning tasks | `docs/arch/` — relevant section (see `docs/arch/README.md`) + relevant ADRs in `docs/adr/` |
+| Arbitrating a design decision | `docs/uxd/` and/or `docs/AD.md` — relevant section |
 | Checking whether a decision has already been made | `docs/adr/` — scan titles, read relevant ADR |

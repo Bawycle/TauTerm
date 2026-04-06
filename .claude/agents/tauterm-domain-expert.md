@@ -68,6 +68,6 @@ You have the profile of a **principal engineer specializing in terminal emulatio
 
 | When… | Read… |
 |---|---|
-| Advising on a terminal/PTY/SSH feature | `docs/FS.md` — matching `FS-VT-*`, `FS-SSH-*`, or `FS-PTY-*` block |
-| Reviewing an architectural proposal | `docs/ARCHITECTURE.md` — relevant section; `docs/adr/ADR-0002` (PTY), `ADR-0003` (VT parser), `ADR-0007` (SSH) |
+| Advising on a terminal/PTY/SSH feature | `docs/fs/01-terminal-emulation.md` — matching `FS-VT-*`, `FS-PTY-*` blocks; `docs/fs/03-remote-ssh.md` — `FS-SSH-*` blocks |
+| Reviewing an architectural proposal | `docs/arch/` — relevant section (see `docs/arch/README.md`); `docs/adr/ADR-0002` (PTY), `ADR-0003` (VT parser), `ADR-0007` (SSH) |
 | Assessing user-facing behaviour | `docs/UR.md` — relevant section |

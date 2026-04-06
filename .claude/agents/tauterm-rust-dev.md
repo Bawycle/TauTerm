@@ -85,6 +85,6 @@ You have the profile of a **senior Rust engineer** with 7+ years of Rust experie
 
 | When… | Read… |
 |---|---|
-| Implementing any backend module or Tauri command | `docs/ARCHITECTURE.md` — relevant section |
+| Implementing any backend module or Tauri command | `docs/arch/` — relevant file (see `docs/arch/README.md` for section index) |
 | Starting work on a feature | Relevant ADR(s) in `docs/adr/` (check titles — read only the matching one) |
-| Checking what the feature must do and what "done" means | `docs/FS.md` — matching `FS-*` block and its acceptance criteria |
+| Checking what the feature must do and what "done" means | `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md` for area-to-file map) |

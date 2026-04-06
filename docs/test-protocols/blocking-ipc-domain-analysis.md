@@ -4,7 +4,7 @@
 
 > **Document status:** Initial revision — 2026-04-05
 > **Author:** domain-expert
-> **Based on:** FS.md §3.1.7/3.1.9/3.1.10, §3.4–3.9, §3.10.2/3.10.5, §3.11; ARCHITECTURE.md §4–§6, §8, §14.3–14.5
+> **Based on:** FS.md §3.1.7/3.1.9/3.1.10, §3.4–3.9, §3.10.2/3.10.5, §3.11; ARCHITECTURE.md §4–§6, §8; docs/testing/TESTING.md §14.3–14.5
 > **Relationship to other protocols:**
 > - `blocking-major-ipc-items.md` — functional test scenarios in the standard team format (TEST-* IDs)
 > - `functional-blocking-ipc-wiring.md` — end-to-end scenario walkthroughs with security cases
@@ -46,7 +46,7 @@ Security scenarios are excluded — see `security-pty-ipc-ssh-credentials-csp-os
 | URXVT extended encoding | `ESC [ ? 1015 h` | `ESC [ ? 1015 l` | FS-VT-081 |
 | Focus events | `ESC [ ? 1004 h` | `ESC [ ? 1004 l` | FS-VT-084 |
 
-**Mode priority:** When both mode 1002 (ButtonEvent) and 1003 (AnyEvent) are active simultaneously, AnyEvent takes precedence. When SGR (1006) and URXVT (1015) are both active, SGR takes precedence (ARCHITECTURE.md §14.5, `mouse.ts` detail).
+**Mode priority:** When both mode 1002 (ButtonEvent) and 1003 (AnyEvent) are active simultaneously, AnyEvent takes precedence. When SGR (1006) and URXVT (1015) are both active, SGR takes precedence (docs/testing/TESTING.md §14.5, `mouse.ts` detail).
 
 #### X10 encoding (default, modes 9/1000/1002/1003)
 

@@ -1,0 +1,260 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
+# TauTerm — Rust Module Decomposition and Error Handling
+
+> Part of the [Architecture](README.md).
+
+---
+
+## 3. Rust Module Decomposition
+
+### 3.1 File Layout Convention
+
+The codebase follows the Rust 2018+ module convention: a module `foo` with submodules is written as `src/foo.rs` (re-exports and `mod` declarations) + `src/foo/bar.rs` (submodule implementations). The `src/foo/mod.rs` form is **never used**.
+
+### 3.2 Module Map
+
+```
+src-tauri/src/
+  lib.rs              — Tauri setup: plugin registration, command registration, State injection
+  main.rs             — thin entrypoint: lib::run()
+
+  vt.rs               — re-exports: VtProcessor, ScreenBuffer, ScreenSnapshot, Cell,
+                        CellAttrs, SearchQuery, SearchMatch, DirtyRegion
+  vt/
+    processor.rs      — VtProcessor: struct, public API (new/process/resize/get_snapshot/
+                        get_scrollback_line/search), private helpers; declares sub-modules
+    processor/
+      dispatch.rs     — impl vte::Perform for VtPerformBridge: CSI/OSC/ESC/execute dispatch
+      tests.rs        — unit + security tests (cfg(test))
+    screen_buffer.rs  — ScreenBuffer: cell grid (normal + alternate), scrollback ring,
+                        dirty tracking, resize, snapshot. Scrollback policy: only lines
+                        scrolled off the top of a full-screen scroll region enter the ring.
+                        Lines evicted by a partial DECSTBM region (margins not spanning the
+                        full screen) are discarded — they do not enter scrollback (FS-VT-053,
+                        FS-SB-004).
+    cell.rs           — Cell, CellAttrs (SGR attributes), Color (Ansi16/Ansi256/Rgb),
+                        Hyperlink; all Copy/Clone/PartialEq
+    modes.rs          — ModeState: all DECSET/DECRST boolean and enum modes;
+                        save/restore on alternate screen switch
+    sgr.rs            — SGR attribute parsing: parse_sgr_params() → CellAttrs delta;
+                        colon sub-params for ITU T.416 and extended underline
+    osc.rs            — OSC dispatch: title (0/1/2), title stack (22/23),
+                        hyperlink (8), clipboard (52) with per-connection policy
+    mouse.rs          — Mouse event encoding: X10, SGR (1006), URXVT (1015);
+                        mode arbitration: if SGR (1006) active → encode as SGR regardless
+                        of other modes; else if URXVT (1015) active → encode as URXVT;
+                        else encode as X10 (limited to col/row ≤ 223). Matches xterm
+                        reference behavior (FS-VT-081).
+    search.rs         — search(): iterate scrollback, skip soft-wrap boundaries,
+                        return SearchMatch positions
+    charset.rs        — DEC Special Graphics mapping; SI/SO charset switching;
+                        G0/G1 designator state
+
+  session.rs          — re-exports: SessionRegistry, TabSession, PaneSession,
+                        SessionState, PaneState, TabState, TabId, PaneId,
+                        SplitDirection, CreateTabConfig
+  session/
+    registry.rs       — SessionRegistry: HashMap<TabId, TabSession>; public API;
+                        emits session-state-changed; State<Arc<SessionRegistry>>
+    tab.rs            — TabSession: Vec<PaneId>, metadata, notification state
+    pane.rs           — PaneSession: owns PtyTaskHandle or SshChannelHandle;
+                        Arc<RwLock<VtProcessor>>; PaneLifecycleState
+    lifecycle.rs      — PaneLifecycleState enum; transitions; restart logic
+    pty_task.rs       — PtyReadTask: Tokio task per pane; reads AsyncFd,
+                        calls VtProcessor::process, coalesces dirty regions,
+                        emits screen-update; back-pressure
+    resize.rs         — debounce resize (16–33ms Tokio timer); TIOCSWINSZ;
+                        SSH window-change; SIGWINCH
+    ids.rs            — TabId, PaneId, ConnectionId newtypes; UUID generation
+
+  ssh.rs              — re-exports: SshManager, SshConnectionConfig,
+                        SshLifecycleState, Credentials, HostKeyInfo
+  ssh/
+    manager.rs        — SshManager: DashMap<PaneId, SshConnection>; open/close/reconnect.
+                        Manages live sessions only. Saved SshConnectionConfig are owned by
+                        PreferencesStore (sub-key `connections`) — SshManager reads/writes
+                        them via State<PreferencesStore>; it holds no connection store of its own.
+    connection.rs     — SshConnection: state machine; russh client handle;
+                        routes PTY output → VtProcessor; resize; emits ssh-state-changed
+    auth.rs           — auth sequence: publickey → keyboard-interactive → password;
+                        credential prompt round-trip
+    known_hosts.rs    — TauTerm known-hosts file: parse, lookup, add, update;
+                        OpenSSH-compatible format; import action from ~/.ssh/known_hosts
+                        (explicit user action only — not read automatically at startup; see [§8.3](06-appendix.md#83-ssh-security))
+    keepalive.rs      — Tokio keepalive task: interval, miss counter, disconnect trigger
+    algorithms.rs     — deprecated algorithm detection; emits in-pane banner event
+
+  preferences.rs      — re-exports: PreferencesStore, Preferences, UserTheme,
+                        PreferencesPatch
+  preferences/
+    store.rs          — PreferencesStore: load/save from disk with schema validation
+    schema.rs         — Preferences struct and all nested types (serde + validation)
+
+  credentials.rs      — public API: CredentialManager (wraps PAL CredentialStore)
+
+  commands.rs         — re-exports all command handler functions for generate_handler![]
+  commands/
+    session_cmds.rs   — create_tab, close_tab, rename_tab, reorder_tab,
+                        split_pane, close_pane, set_active_pane
+    input_cmds.rs     — send_input, scroll_pane, scroll_to_bottom, search_pane,
+                        get_pane_screen_snapshot
+    ssh_cmds.rs       — open_ssh_connection, close_ssh_connection, reconnect_ssh
+    ssh_prompt_cmds.rs — provide_credentials, accept_host_key, reject_host_key,
+                        dismiss_ssh_algorithm_warning
+    connection_cmds.rs — get_connections, save_connection, update_connection,
+                        delete_connection
+    preferences_cmds.rs — get_preferences, update_preferences, get_themes,
+                        save_theme, delete_theme
+    system_cmds.rs    — copy_to_clipboard, get_clipboard, open_url,
+                        mark_context_menu_used, get_session_state
+
+  platform.rs         — trait definitions: PtyBackend, PtySession, CredentialStore,
+                        ClipboardBackend, NotificationBackend; factory fns: create_pty_backend(),
+                        create_credential_store(), create_clipboard_backend(),
+                        create_notification_backend();
+                        #[cfg(target_os = ...)] dispatch lives here, not in sub-files
+  platform/
+    pty_linux.rs          — UnixPtySystem wrapper; AsyncFd extraction; O_CLOEXEC
+    credentials_linux.rs  — SecretService D-Bus adapter; SecVec<u8> zeroizing; fallback
+    clipboard_linux.rs    — arboard adapter; X11 PRIMARY; Wayland fallback
+    notifications_linux.rs — D-Bus org.freedesktop.Notifications adapter; no-op fallback
+                             if D-Bus unavailable; triggered by VtProcessor on BEL in
+                             non-active pane (FS-VT-090)
+    pty_macos.rs          — stub (unimplemented!())
+    credentials_macos.rs  — stub
+    clipboard_macos.rs    — stub
+    notifications_macos.rs — stub
+    pty_windows.rs        — stub
+    credentials_windows.rs — stub
+    clipboard_windows.rs  — stub
+    notifications_windows.rs — stub
+
+  events.rs           — typed event definitions and emit helpers
+  events/
+    types.rs          — SessionStateChanged, SshStateChangedEvent, ScreenUpdateEvent,
+                        ScrollPositionChangedEvent (mirrors UXD §15 types as Rust structs)
+```
+
+### 3.3 Public Interfaces per Module
+
+#### `session` module
+
+```rust
+// Injected into Tauri State<T>
+pub struct SessionRegistry {
+    // private fields
+}
+
+impl SessionRegistry {
+    pub fn create_tab(&self, config: CreateTabConfig) -> Result<TabState>;
+    pub fn close_tab(&self, id: TabId) -> Result<()>;
+    pub fn rename_tab(&self, id: TabId, label: Option<String>) -> Result<TabState>;
+    pub fn reorder_tab(&self, id: TabId, new_order: u32) -> Result<()>;
+    // Returns the updated TabState (including full PaneNode tree) after the split.
+    pub fn split_pane(&self, pane_id: PaneId, direction: SplitDirection) -> Result<TabState>;
+    // Returns Some(TabState) if the tab still has panes after closing, None if the tab was removed.
+    pub fn close_pane(&self, pane_id: PaneId) -> Result<Option<TabState>>;
+    pub fn send_input(&self, pane_id: PaneId, data: Vec<u8>) -> Result<()>;
+    pub fn scroll_pane(&self, pane_id: PaneId, offset: i64) -> Result<ScrollPositionState>;
+    pub fn get_state_snapshot(&self) -> SessionState;
+}
+```
+
+#### `vt` module
+
+```rust
+pub struct VtProcessor {
+    // private: vte::Parser, ScreenBuffer, ModeState
+}
+
+impl VtProcessor {
+    pub fn new(cols: u16, rows: u16) -> Self;
+    pub fn process(&mut self, bytes: &[u8]) -> DirtyRegion;
+    pub fn resize(&mut self, cols: u16, rows: u16);
+    pub fn get_snapshot(&self) -> ScreenSnapshot;
+    pub fn get_scrollback_line(&self, index: usize) -> Option<Vec<Cell>>;
+    pub fn search(&self, query: &SearchQuery) -> Vec<SearchMatch>;
+}
+```
+
+#### `ssh` module
+
+`SshManager` manages live SSH sessions only. It does not own a connection config store. Saved `SshConnectionConfig` are read from and written to `PreferencesStore` (sub-key `connections`) via `State<PreferencesStore>`. Command handlers in `ssh_cmds.rs` retrieve the config from `PreferencesStore` before passing it to `SshManager::open_connection`.
+
+```rust
+pub struct SshManager {
+    // private: DashMap<PaneId, SshConnection>
+    // No connection config store — configs come from PreferencesStore.
+}
+
+impl SshManager {
+    pub async fn open_connection(
+        &self,
+        pane_id: PaneId,
+        config: &SshConnectionConfig,
+        credentials: Option<Credentials>,
+    ) -> Result<()>;
+    pub async fn close_connection(&self, pane_id: PaneId) -> Result<()>;
+    pub async fn reconnect(&self, pane_id: PaneId) -> Result<()>;
+}
+```
+
+#### `preferences` module
+
+```rust
+pub struct PreferencesStore {
+    // private
+}
+
+impl PreferencesStore {
+    pub fn load() -> Result<Self>;
+    pub fn get(&self) -> &Preferences;
+    pub fn apply_patch(&self, patch: PreferencesPatch) -> Result<Preferences>;
+    pub fn get_themes(&self) -> Vec<UserTheme>;
+    pub fn save_theme(&self, theme: UserTheme) -> Result<()>;
+    pub fn delete_theme(&self, name: &str) -> Result<()>;
+}
+```
+
+### 3.4 Newtype IDs
+
+All entity IDs are newtypes over `String` (UUID v4), defined in `session/ids.rs` and re-exported from `session.rs`:
+
+```rust
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TabId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PaneId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ConnectionId(String);
+```
+
+These prevent silent mixing of IDs across entity types. All command handlers accept newtype IDs, not raw strings.
+
+---
+
+## 9. Error Handling Strategy
+
+### 9.1 Rust Backend
+
+- `?` operator for propagation throughout internal code.
+- `thiserror` for defining module-specific error types with descriptive variants.
+- `anyhow` is permitted in command handlers (where context enrichment is needed) but not in library code (where callers need to match on specific error variants).
+- No `unwrap()` or `expect()` on any data that originates from user input, the filesystem, OS calls, or the network. `unwrap()` is permitted only in initialization code where failure is a programming error (e.g., building a regex from a literal pattern). `PreferencesStore::load_or_default()` is the canonical example of this policy: preference file corruption is an expected filesystem condition, not a programming error, and is handled with a logged fallback to defaults (see [§7.6](04-runtime-platform.md#76-preferencesstore-load-strategy)).
+- Errors from the PTY read task (unexpected fd close, OS errors) transition the pane to `Terminated` state with an error description; they do not crash the application.
+- Errors from the SSH library (network errors, protocol errors) transition the SSH session to `Disconnected` state; they are communicated to the frontend via `SshStateChangedEvent`.
+
+### 9.2 Mapping to Frontend
+
+Every backend error that reaches a command handler must be converted to `TauTermError` with:
+- A stable `code` string (snake_case, upper-case, module-prefixed: e.g., `SSH_KEEPALIVE_TIMEOUT`, `PTY_SPAWN_FAILED`, `PREF_INVALID_VALUE`)
+- A human-readable `message` that a non-technical user can understand (FS-UX-001)
+- An optional `detail` with the raw system error for technical users
+
+### 9.3 Frontend
+
+- All `invoke()` calls are wrapped in `try/catch`. Unhandled `invoke` errors are reported via the application's error display mechanism (FS-UX-001 pattern: plain message + collapsible detail).
+- Svelte component-level errors (rendering failures, unexpected nulls) do not propagate to the terminal session; each pane is isolated.

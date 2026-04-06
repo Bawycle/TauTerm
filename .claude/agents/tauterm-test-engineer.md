@@ -86,6 +86,6 @@ You have the profile of a **senior test engineer / SDET** with 10+ years of expe
 
 | When… | Read… |
 |---|---|
-| Writing tests for a feature | `docs/FS.md` — matching `FS-*` block: acceptance criteria are the test specification |
-| Designing the test approach for a new area | `docs/ARCHITECTURE.md` §14 (testing strategy) |
-| Writing E2E scenarios for a UI surface | `docs/UXD.md` — relevant component spec section |
+| Writing tests for a feature | `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md`): acceptance criteria are the test specification |
+| Designing the test approach for a new area | `docs/testing/TESTING.md` (testing strategy) |
+| Writing E2E scenarios for a UI surface | `docs/uxd/03-components.md` — relevant component spec section |

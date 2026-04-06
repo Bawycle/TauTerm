@@ -90,7 +90,8 @@ You have the profile of a **senior frontend engineer** with 8+ years of experien
 
 | When… | Read… |
 |---|---|
-| Implementing any UI component or surface | `docs/UXD.md` — relevant component spec section |
-| Working on IPC, state, or frontend architecture | `docs/ARCHITECTURE.md` §11 (frontend), §10.5 (i18n), §15 (IPC contract) — relevant part |
-| Checking what the feature must do and what "done" means | `docs/FS.md` — matching `FS-*` block and its acceptance criteria |
+| Implementing any UI component or surface | `docs/uxd/03-components.md` — relevant component spec; `docs/uxd/02-tokens.md` for design tokens |
+| Working on IPC or state management | `docs/arch/03-ipc-state.md` (IPC contract §4 + state machines §5) |
+| Working on frontend architecture or i18n | `docs/arch/05-frontend.md` (frontend §11); `docs/arch/04-runtime-platform.md` §10.5 (i18n) |
+| Checking what the feature must do and what "done" means | `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md` for area-to-file map) |
 | Making a visual decision not covered by UXD spec | `docs/AD.md` — relevant section (aesthetic source of truth) |

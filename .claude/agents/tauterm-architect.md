@@ -74,9 +74,9 @@ You have the profile of a **staff-level software architect** with 12+ years of e
 
 | When… | Read… |
 |---|---|
-| Designing or reviewing any module, IPC contract, or state machine | `docs/ARCHITECTURE.md` — relevant section |
+| Designing or reviewing any module, IPC contract, or state machine | `docs/arch/` — relevant section (see `docs/arch/README.md`) |
 | Writing or updating an ADR | `docs/adr/` — relevant existing ADRs first |
-| Grounding a design decision in functional requirements | `docs/FS.md` — matching `FS-*` block |
+| Grounding a design decision in functional requirements | `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md`) |
 | Understanding user context or personas | `docs/UR.md` — relevant section |
 
-**You own `docs/ARCHITECTURE.md` and `docs/adr/`.** Keep them up to date when decisions change. ADRs must be written before implementation begins.
+**You own `docs/arch/` and `docs/adr/`.** Keep them up to date when decisions change. ADRs must be written before implementation begins.

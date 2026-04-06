@@ -10,11 +10,12 @@ La plateforme cible, pour cette première version, est Linux (x86, x86_64, ARM32
 ## Documentation
 
 - [`docs/UR.md`](docs/UR.md) — User Requirements: personas, interaction model, feature requirements (source of truth for what users need)
-- [`docs/FS.md`](docs/FS.md) — Functional Specifications: numbered requirements (`FS-XXX-NNN`) with acceptance criteria, MoSCoW priorities, and traceability to UR. **The only document that uses normative language (`MUST`/`SHALL`/`SHOULD`/`MAY`). Source of truth for what the system must do.**
+- [`docs/fs/`](docs/fs/) — Functional Specifications: numbered requirements (`FS-XXX-NNN`) with acceptance criteria, MoSCoW priorities, and traceability to UR. Entry point: `docs/fs/README.md`. **The only document that uses normative language (`MUST`/`SHALL`/`SHOULD`/`MAY`). Source of truth for what the system must do.**
 - [`docs/AD.md`](docs/AD.md) — Artistic Direction: visual identity, Umbra theme design intent, typography and color philosophy (source of truth for aesthetic decisions)
-- [`docs/UXD.md`](docs/UXD.md) — UX/UI Design: design token system, component specifications, interaction patterns, IPC contract. **Source of truth for how things look and behave from a UX perspective. Never restates FS requirements — references FS IDs instead.**
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Architecture: module decomposition, IPC contract, state machines, concurrency model, platform abstraction, security strategy (source of truth for how the system is built)
-- [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0014)
+- [`docs/uxd/`](docs/uxd/) — UX/UI Design: design token system, component specifications, interaction patterns, IPC contract. Entry point: `docs/uxd/README.md`. **Source of truth for how things look and behave from a UX perspective. Never restates FS requirements — references FS IDs instead.**
+- [`docs/arch/`](docs/arch/) — Architecture: module decomposition, IPC contract, state machines, concurrency model, platform abstraction, security strategy (source of truth for how the system is built). Entry point: `docs/arch/README.md`.
+- [`docs/testing/TESTING.md`](docs/testing/TESTING.md) — Testing strategy: test pyramid, unit/integration/E2E, coverage policy, no-regression policy
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0015)
 - [`docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md`](docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md) — Functional Test Protocol: 93 scenarios covering PTY/session, VT parser, SSH lifecycle, preferences & i18n, UI & accessibility, IPC contract
 - [`docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md`](docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md) — Security Test Protocol: threat model, 28 scenarios covering PTY injection, IPC boundary, SSH auth, credential storage, CSP/WebView, OSC52, input validation
 
@@ -65,7 +66,7 @@ pnpm prettier --write src/          # Format
 These tests (`src-tauri/tests/credentials_integration.rs`) require a live GNOME Keyring
 daemon and are **not** included in `cargo nextest run`. They run in an isolated Podman
 container with a virtual framebuffer (Xvfb) and auto-dismissed password prompt (xdotool).
-See `docs/ARCHITECTURE.md` §14.3 for the full rationale.
+See `docs/testing/TESTING.md` for the full rationale.
 
 ### E2E (tauri-driver + WebdriverIO)
 
@@ -155,9 +156,10 @@ Before making any decision or modification — code or documentation — read th
 
 | If touching… | Read first… |
 |---|---|
-| Any UI feature or user-facing behaviour | Relevant section in `docs/UR.md` + matching `FS-*` block in `docs/FS.md` |
-| Any visual/UX decision (layout, tokens, components) | Relevant section in `docs/UXD.md`; `docs/AD.md` only if aesthetic decisions are involved |
-| Any architectural decision (modules, IPC, state, data flow) | Relevant section in `docs/ARCHITECTURE.md` + the ADR(s) it references in `docs/adr/` |
+| Any UI feature or user-facing behaviour | Relevant section in `docs/UR.md` + matching `FS-*` file in `docs/fs/` (see `docs/fs/README.md`) |
+| Any visual/UX decision (layout, tokens, components) | Relevant section in `docs/uxd/` (see `docs/uxd/README.md` for the section index); `docs/AD.md` only if aesthetic decisions are involved |
+| Any architectural decision (modules, IPC, state, data flow) | Relevant section in `docs/arch/` (see `docs/arch/README.md`) + the ADR(s) it references in `docs/adr/` |
+| Any test strategy or coverage decision | `docs/testing/TESTING.md` |
 | Any new feature end-to-end | All of the above, section by section |
 
 This rule applies equally to all agents. Reading a section takes a few hundred lines; reading a whole document wastes context and defeats the purpose.
@@ -174,8 +176,8 @@ These two documents have a strict, non-overlapping responsibility boundary:
 | Does a designer need it to draw a mockup? | `UXD.md` only |
 
 **Hard rules — violation = SSOT breach:**
-- Normative language (`MUST`, `SHALL`, `SHOULD`, `MAY`) is **exclusively** `FS.md`. Never write it in `UXD.md`.
-- If a requirement is in `FS.md`, `UXD.md` references its ID (`(FS-TAB-009)`) and describes only the *design expression* — it does not restate the requirement.
+- Normative language (`MUST`, `SHALL`, `SHOULD`, `MAY`) is **exclusively** `docs/fs/`. Never write it in `docs/uxd/`.
+- If a requirement is in `docs/fs/`, `docs/uxd/` references its ID (`(FS-TAB-009)`) and describes only the *design expression* — it does not restate the requirement.
 - Implementation details (API names, CSS property names, algorithm choices) belong in source code and comments, not in either doc.
 - When adding to either document, check the other first: if the information already exists there in any form, add a cross-reference instead of duplicating.
 

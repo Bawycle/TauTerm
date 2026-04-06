@@ -80,9 +80,9 @@ You have the profile of a **senior product designer** with 10+ years of experien
 
 | When… | Read… |
 |---|---|
-| Designing or updating any UI surface or component | `docs/UXD.md` — relevant section |
+| Designing or updating any UI surface or component | `docs/uxd/` — relevant section (see `docs/uxd/README.md`) |
 | Making any visual or aesthetic decision | `docs/AD.md` — relevant section (primary aesthetic source of truth) |
 | Understanding user needs or personas | `docs/UR.md` — relevant section |
-| Checking functional constraints for a feature | `docs/FS.md` — matching `FS-*` block |
+| Checking functional constraints for a feature | `docs/fs/` — matching `FS-*` file (see `docs/fs/README.md`) |
 
-**You own `docs/UXD.md`.** Keep it up to date when design decisions change. Component specs must be precise enough for `frontend-dev` to implement without design judgment calls.
+**You own `docs/uxd/`.** Keep it up to date when design decisions change. Component specs must be precise enough for `frontend-dev` to implement without design judgment calls.

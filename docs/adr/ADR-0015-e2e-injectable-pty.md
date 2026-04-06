@@ -63,3 +63,5 @@ Build a headless Rust binary that exercises the VT pipeline without a WebView. T
 ## Notes
 
 The `InjectableRegistry` (a `DashMap<PaneId, mpsc::UnboundedSender<Vec<u8>>>`) is populated by `InjectablePtyBackend::open_session` and consumed by `inject_pty_output`. It must be registered as Tauri state before `SessionRegistry` is created (both are set up in the `setup` closure in `lib.rs`). The two state entries are independent: `SessionRegistry` owns pane lifecycle and the VT processor; `InjectableRegistry` owns only the injection channel senders.
+
+The detailed technical blueprint for implementing this ADR is at [`docs/guides/e2e-injectable-pty-impl.md`](../guides/e2e-injectable-pty-impl.md).

@@ -494,6 +494,9 @@
 
   function scheduleSendResize() {
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+    // Notify immediately with current dims for instant visual feedback (status bar),
+    // without waiting for the debounce or the IPC round-trip.
+    ondimensionschange?.(cols, rows);
     resizeDebounceTimer = setTimeout(sendResize, 50);
   }
 
@@ -513,6 +516,9 @@
     const pixelWidth = Math.max(1, Math.floor(rect.width));
     const pixelHeight = Math.max(1, Math.floor(rect.height));
 
+    // Notify immediately with computed dimensions — no need to wait for the IPC
+    // round-trip since newCols/newRows are derived locally from viewport geometry.
+    ondimensionschange?.(newCols, newRows);
     try {
       await invoke('resize_pane', {
         paneId,
@@ -523,7 +529,6 @@
       });
       cols = newCols;
       rows = newRows;
-      ondimensionschange?.(newCols, newRows);
     } catch {
       // Non-fatal
     }

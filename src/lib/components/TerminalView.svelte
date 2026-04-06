@@ -134,6 +134,30 @@
   // DIV-UXD-008: active pane terminal dimensions for StatusBar display.
   let activePaneCols = $state<number | null>(null);
   let activePaneRows = $state<number | null>(null);
+  // Transient visibility: shown on resize, hidden after 2s of inactivity.
+  let dimsVisible = $state(false);
+  let dimsHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    // Depend on both dimensions so any resize re-triggers the timer.
+    const _c = activePaneCols;
+    const _r = activePaneRows;
+    if (_c === null || _r === null) return;
+    // Show immediately.
+    dimsVisible = true;
+    // Reset the hide timer on every resize event.
+    if (dimsHideTimer !== null) clearTimeout(dimsHideTimer);
+    dimsHideTimer = setTimeout(() => {
+      dimsVisible = false;
+      dimsHideTimer = null;
+    }, 2000);
+    return () => {
+      if (dimsHideTimer !== null) {
+        clearTimeout(dimsHideTimer);
+        dimsHideTimer = null;
+      }
+    };
+  });
 
   // Tâche #13: ConnectionManager panel toggle.
   let connectionManagerOpen = $state(false);
@@ -951,6 +975,7 @@
     {activePaneState}
     cols={activePaneCols}
     rows={activePaneRows}
+    {dimsVisible}
     onsettings={() => {
       prefsOpen = true;
     }}

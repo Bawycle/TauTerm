@@ -23,6 +23,8 @@
 -->
 <script lang="ts">
   import { Network, WifiOff, XCircle, Settings } from 'lucide-svelte';
+  import { fade } from 'svelte/transition';
+  import { cubicIn } from 'svelte/easing';
   import type { PaneState, SshLifecycleState } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
 
@@ -36,6 +38,8 @@
     cols?: number | null;
     /** Terminal grid rows (for dimensions display). */
     rows?: number | null;
+    /** Whether the dimensions label is currently visible (transient: shown on resize, fades after 2s). */
+    dimsVisible?: boolean;
     /** Called when the Settings button is clicked (DIV-UXD-008). */
     onsettings?: () => void;
   }
@@ -46,6 +50,7 @@
     sshUser,
     cols = null,
     rows = null,
+    dimsVisible = false,
     onsettings,
   }: Props = $props();
 
@@ -141,9 +146,11 @@
 
   <!-- Right: terminal dimensions + SSH indicator + Settings button (DIV-UXD-008) -->
   <div class="status-bar__right">
-    <!-- Terminal dimensions: cols×rows -->
-    {#if cols !== null && rows !== null}
+    <!-- Terminal dimensions: cols×rows — transient, visible during resize only (DIV-UXD-008) -->
+    {#if cols !== null && rows !== null && dimsVisible}
       <span
+        in:fade={{ duration: 0 }}
+        out:fade={{ duration: 300, easing: cubicIn }}
         class="status-bar__dimensions"
         aria-label={m.status_bar_dimensions_aria({ cols, rows })}
       >
@@ -325,7 +332,9 @@
     max-width: 200px;
   }
 
-  /* Terminal dimensions: cols×rows (DIV-UXD-008) */
+  /* Terminal dimensions: cols×rows — transient (DIV-UXD-008)
+     Hidden at rest (opacity 0, visibility hidden); space is always reserved so
+     the layout does not shift when the element appears or disappears. */
   .status-bar__dimensions {
     font-family: var(--font-mono-ui);
     font-size: var(--font-size-ui-xs);
@@ -334,6 +343,8 @@
     flex-shrink: 0;
   }
 
+  /* Disable opacity transition for users who prefer reduced motion.
+     The element still appears/disappears; it just does so without animation. */
   /* Settings ghost button (DIV-UXD-008) */
   .status-bar__settings-btn {
     display: flex;

@@ -151,6 +151,8 @@ Motion in TauTerm is purposeful, brief, and non-distracting. Every animation com
 | SSH authenticating pulse | Opacity 0.5→1→0.5, `--duration-slow` (300ms) | `--ease-linear` | Static icon |
 | Pane border activity pulse | 800ms hold, `--ease-out` return | Border color change | Instant change, 800ms hold, instant return |
 | Connection group chevron | 150ms | `--ease-out` | Instant |
+| Terminal dimensions overlay (resize start) | Instant (0ms) — appears immediately | — | — |
+| Terminal dimensions overlay (fade-out, 2s after resize end) | `--duration-slow` (300ms), opacity 1→0 | `--ease-in` | Instant disappear (no transition) |
 
 ### 9.4 `prefers-reduced-motion` Policy
 

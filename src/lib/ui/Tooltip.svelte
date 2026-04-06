@@ -7,7 +7,7 @@
 
   Props:
     content        — tooltip text content
-    delayDuration  — hover delay in ms (default 600)
+    delayDuration  — hover delay in ms (default 300)
     children       — the trigger element(s) to wrap
 
   Security: content is rendered as text only — no {@html}.
@@ -22,7 +22,7 @@
     children: Snippet;
   }
 
-  const { content, delayDuration = 600, children }: Props = $props();
+  const { content, delayDuration = 300, children }: Props = $props();
 </script>
 
 <Tooltip.Root {delayDuration}>

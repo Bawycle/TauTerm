@@ -73,11 +73,18 @@ base64 = "0.22"
 # Platform directories (config, data, cache paths)
 dirs = "6"
 
+# Secure memory zeroization — credentials are wiped after use (FS-CRED-003)
+zeroize = { version = "1", features = ["derive"] }
+
 # Desktop notifications (D-Bus org.freedesktop.Notifications on Linux)
 notify-rust = { version = "4", default-features = false, features = ["d"] }
 
 [features]
 e2e-testing = []
+# Exclude the Tauri entry point from compilation so the fuzz workspace can
+# build the crate with nightly without hitting proc-macro incompatibilities
+# in tauri::generate_context!().  Never enable this in production builds.
+fuzz-testing = []
 
 [dev-dependencies]
 # Temporary files and directories for tests

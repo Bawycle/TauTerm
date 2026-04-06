@@ -29,6 +29,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import type {
@@ -38,8 +39,13 @@
     ScreenUpdateEvent,
     ScrollPositionChangedEvent,
     ModeStateChangedEvent,
+    CursorStyleChangedEvent,
+    BellTriggeredEvent,
+    NotificationChangedEvent,
     CursorState,
     SshLifecycleState,
+    SearchMatch,
+    BellType,
   } from '$lib/ipc/types';
   import { buildGridFromSnapshot, applyUpdates, type CellStyle } from '$lib/terminal/screen.js';
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
@@ -76,6 +82,31 @@
      * without bracketed paste active (FS-CLIP-009).
      */
     confirmMultilinePaste?: boolean;
+    /**
+     * Cursor blink interval in milliseconds (FS-VT-032).
+     * Mirrors AppearancePrefs.cursorBlinkMs. Default: 530.
+     */
+    cursorBlinkMs?: number;
+    /**
+     * Bell notification type (FS-VT-090/093).
+     * Mirrors TerminalPrefs.bellType. Default: 'audio'.
+     */
+    bellType?: BellType;
+    /**
+     * Terminal line height multiplier (FS-THEME-010). Range: 1.0–2.0.
+     * When defined, overrides the global `--line-height-terminal` token on this pane.
+     */
+    lineHeight?: number;
+    /**
+     * Search matches for the current query in this pane (FS-SEARCH-006).
+     * Only populated when this pane is active and a search is running.
+     */
+    searchMatches?: SearchMatch[];
+    /**
+     * 1-based index of the currently active search match (FS-SEARCH-006).
+     * 0 means no active match.
+     */
+    activeSearchMatchIndex?: number;
     onrestart?: () => void;
     onclosepane?: () => void;
     onsearch?: () => void;
@@ -83,6 +114,8 @@
     onsplitV?: () => void;
     /** Called when the user checks "Don't ask again" in the paste confirmation dialog. */
     ondisableConfirmMultilinePaste?: () => void;
+    /** Called whenever the terminal dimensions (cols × rows) change (DIV-UXD-008). */
+    ondimensionschange?: (cols: number, rows: number) => void;
   }
 
   const {
@@ -96,12 +129,18 @@
     sshState = null,
     wordDelimiters = ' \t|"\'`&()*,;<=>[]{}~',
     confirmMultilinePaste = true,
+    cursorBlinkMs = 530,
+    bellType = 'audio',
+    lineHeight,
+    searchMatches = [],
+    activeSearchMatchIndex = 0,
     onrestart,
     onclosepane,
     onsearch,
     onsplitH,
     onsplitV,
     ondisableConfirmMultilinePaste,
+    ondimensionschange,
   }: Props = $props();
 
   // -------------------------------------------------------------------------
@@ -147,15 +186,75 @@
 
   let screenGeneration = $state(0);
 
+  // Visual bell flash state (FS-VT-090)
+  let bellFlashing = $state(false);
+  let bellFlashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Pane border activity pulse state (UXD §7.2.1) — inactive panes only.
+  // 'output' → green pulse 800ms, 'bell' → amber pulse 800ms, 'exit' → red persistent
+  type BorderPulse = 'output' | 'bell' | 'exit' | null;
+  let borderPulse = $state<BorderPulse>(null);
+  let borderPulseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Copy flash state (UXD §7.12) — flashes the selection background for 80ms on auto-copy.
+  let selectionFlashing = $state(false);
+  let selectionFlashTimer: ReturnType<typeof setTimeout> | null = null;
+
   let unlistenScreenUpdate: (() => void) | null = null;
   let unlistenScrollPos: (() => void) | null = null;
   let unlistenModeState: (() => void) | null = null;
+  let unlistenBell: (() => void) | null = null;
+  let unlistenNotification: (() => void) | null = null;
+  let unlistenCursorStyle: (() => void) | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // -------------------------------------------------------------------------
   // Derived
   // -------------------------------------------------------------------------
+
+  /**
+   * Set of "row:col" keys for non-active search matches (O(1) lookup).
+   * SearchMatch.scrollbackRow is 0-based from the oldest scrollback line.
+   * We convert to screen row: screenRow = scrollbackRow - (scrollbackLines - scrollOffset) + ?
+   *
+   * The backend stores scrollback as lines above the visible screen.
+   * scrollbackLines = total scrollback count, scrollOffset = how many lines above bottom.
+   * The visible screen starts at scrollback index: (scrollbackLines - scrollOffset).
+   * So: screenRow = scrollbackRow - (scrollbackLines - scrollOffset)
+   * A match is visible if screenRow is in [0, rows - 1].
+   */
+  const searchMatchSet = $derived.by(() => {
+    const set = new Set<string>();
+    if (searchMatches.length === 0) return set;
+    const screenStart = scrollbackLines - scrollOffset;
+    for (let i = 0; i < searchMatches.length; i++) {
+      const m = searchMatches[i];
+      const screenRow = m.scrollbackRow - screenStart;
+      if (screenRow < 0 || screenRow >= rows) continue;
+      for (let c = m.colStart; c < m.colEnd; c++) {
+        set.add(`${screenRow}:${c}`);
+      }
+    }
+    return set;
+  });
+
+  /**
+   * Set of "row:col" keys for the active search match (1-based index).
+   */
+  const activeSearchMatchSet = $derived.by(() => {
+    const set = new Set<string>();
+    if (searchMatches.length === 0 || activeSearchMatchIndex <= 0) return set;
+    const m = searchMatches[activeSearchMatchIndex - 1];
+    if (!m) return set;
+    const screenStart = scrollbackLines - scrollOffset;
+    const screenRow = m.scrollbackRow - screenStart;
+    if (screenRow < 0 || screenRow >= rows) return set;
+    for (let c = m.colStart; c < m.colEnd; c++) {
+      set.add(`${screenRow}:${c}`);
+    }
+    return set;
+  });
 
   const currentCursorShape = $derived(cursorShape(cursor.shape));
   const currentCursorBlinks = $derived(cursor.blink && cursorBlinks(cursor.shape));
@@ -198,6 +297,7 @@
             hidden: false,
             strikethrough: false,
             underlineColor: undefined,
+            hyperlink: undefined,
           } satisfies CellStyle)
         );
       }),
@@ -280,7 +380,56 @@
       bracketedPasteActive = mode.bracketedPaste;
     });
 
-    startCursorBlink();
+    // FS-VT-030: cursor shape changed by DECSCUSR escape.
+    unlistenCursorStyle = await listen<CursorStyleChangedEvent>('cursor-style-changed', (event) => {
+      const ev = event.payload;
+      if (ev.paneId !== paneId) return;
+      cursor = { ...cursor, shape: ev.shape, blink: cursorBlinks(ev.shape) };
+      // Restart blink timer so the new period takes effect immediately.
+      startCursorBlink();
+    });
+
+    // FS-VT-090/093: bell notification.
+    unlistenBell = await listen<BellTriggeredEvent>('bell-triggered', (event) => {
+      const ev = event.payload;
+      if (ev.paneId !== paneId) return;
+      handleBell();
+    });
+
+    // UXD §7.2.1: pane border activity pulse for inactive panes.
+    unlistenNotification = await listen<NotificationChangedEvent>(
+      'notification-changed',
+      (event) => {
+        const ev = event.payload;
+        if (ev.paneId !== paneId) return;
+        // Only pulse on inactive panes — active pane has full focus, no indicator needed.
+        if (active) return;
+        if (ev.notification === null) {
+          // Notification cleared: clear any pending pulse (unless it is a persistent exit).
+          if (borderPulse !== 'exit') {
+            clearTimeout(borderPulseTimer ?? undefined);
+            borderPulseTimer = null;
+            borderPulse = null;
+          }
+          return;
+        }
+        switch (ev.notification.type) {
+          case 'backgroundOutput':
+            triggerBorderPulse('output', 800);
+            break;
+          case 'bell':
+            triggerBorderPulse('bell', 800);
+            break;
+          case 'processExited':
+            // Persistent: stays red until the pane becomes active.
+            triggerBorderPulse('exit', 1500);
+            break;
+        }
+      },
+    );
+
+    // Note: cursor blink timer is managed by the $effect below (responds to
+    // cursorBlinkMs changes). No need to start it here explicitly.
 
     if (viewportEl) {
       resizeObserver = new ResizeObserver(() => scheduleSendResize());
@@ -292,7 +441,13 @@
     unlistenScreenUpdate?.();
     unlistenScrollPos?.();
     unlistenModeState?.();
+    unlistenCursorStyle?.();
+    unlistenBell?.();
+    unlistenNotification?.();
     stopCursorBlink();
+    if (bellFlashTimer) clearTimeout(bellFlashTimer);
+    if (borderPulseTimer) clearTimeout(borderPulseTimer);
+    if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
     resizeObserver?.disconnect();
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
@@ -306,7 +461,7 @@
     stopCursorBlink();
     blinkTimer = setInterval(() => {
       cursorVisible = currentCursorBlinks ? !cursorVisible : true;
-    }, 530);
+    }, cursorBlinkMs);
   }
 
   function stopCursorBlink() {
@@ -316,6 +471,22 @@
     }
     cursorVisible = true;
   }
+
+  // Restart blink timer when cursorBlinkMs prop changes (FS-VT-032).
+  // This effect also handles the initial timer start after first render.
+  // stopCursorBlink inside startCursorBlink clears the previous timer before
+  // creating a new one, so no double-timer is possible.
+  $effect(() => {
+    // Tracking cursorBlinkMs makes this effect re-run whenever it changes.
+    const interval = cursorBlinkMs;
+    stopCursorBlink();
+    blinkTimer = setInterval(() => {
+      cursorVisible = currentCursorBlinks ? !cursorVisible : true;
+    }, interval);
+    return () => {
+      stopCursorBlink();
+    };
+  });
 
   // -------------------------------------------------------------------------
   // Resize (TUITC-FN-072/073, TUITC-SEC-050)
@@ -352,6 +523,7 @@
       });
       cols = newCols;
       rows = newRows;
+      ondimensionschange?.(newCols, newRows);
     } catch {
       // Non-fatal
     }
@@ -481,6 +653,8 @@
       if (hasSelection) {
         try {
           await invoke('copy_to_clipboard', { text });
+          // UXD §7.12: flash the selection for 80ms to confirm auto-copy.
+          triggerSelectionFlash();
         } catch {
           /* non-fatal */
         }
@@ -501,14 +675,28 @@
       }
     }
     if (event.button !== 0) return;
+
+    const cell = pixelToCell(event);
+
+    // FS-VT-071: Ctrl+Click on a hyperlink cell → open URL in system browser.
+    // Takes precedence over mouse reporting and selection (Ctrl is a user override).
+    if (event.ctrlKey && event.detail === 1) {
+      const hyperlink = grid[cell.row * cols + cell.col]?.hyperlink;
+      if (hyperlink) {
+        try {
+          await invoke('open_url', { url: hyperlink, paneId });
+        } catch {
+          /* non-fatal — invalid scheme silently rejected by backend */
+        }
+        return;
+      }
+    }
+
     // FS-VT-082/083: mouse reporting active + not Shift → send to PTY, skip selection
     if (mouseReporting !== 'none' && !event.shiftKey) {
-      const cell = pixelToCell(event);
       await sendMouseEvent(mouseButtonCode(event), cell.col, cell.row, event, false);
       return;
     }
-
-    const cell = pixelToCell(event);
 
     // Triple-click (detail >= 3): select full line (FS-CLIP-003)
     if (event.detail >= 3) {
@@ -754,11 +942,96 @@
     if (row === end.row && col > end.col) return false;
     return true;
   }
+
+  // -------------------------------------------------------------------------
+  // Bell handler (FS-VT-090/093)
+  // -------------------------------------------------------------------------
+
+  function handleBell() {
+    if (bellType === 'none') return;
+
+    if (bellType === 'visual' || bellType === 'both') {
+      // Flash the pane border for 80ms using --color-indicator-bell.
+      if (bellFlashTimer) clearTimeout(bellFlashTimer);
+      bellFlashing = true;
+      bellFlashTimer = setTimeout(() => {
+        bellFlashing = false;
+        bellFlashTimer = null;
+      }, 80);
+    }
+
+    if (bellType === 'audio' || bellType === 'both') {
+      // Short 440 Hz beep via AudioContext (avoids needing an audio file).
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 440;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.08);
+        osc.onended = () => ctx.close();
+      } catch {
+        // AudioContext may be unavailable (e.g. in test environments) — non-fatal.
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Pane border activity pulse (UXD §7.2.1)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Trigger a border pulse on this inactive pane.
+   * 'exit' holds for durationMs then clears; 'output'/'bell' clear after durationMs.
+   * A new notification replaces any ongoing non-exit pulse.
+   */
+  function triggerBorderPulse(type: BorderPulse, durationMs: number) {
+    // Do not override a persistent exit indicator with a lower-priority event.
+    if (borderPulse === 'exit' && type !== 'exit') return;
+    if (borderPulseTimer) clearTimeout(borderPulseTimer);
+    borderPulse = type;
+    borderPulseTimer = setTimeout(() => {
+      borderPulse = null;
+      borderPulseTimer = null;
+    }, durationMs);
+  }
+
+  // Clear border pulse when this pane becomes active (UXD §7.2.1).
+  $effect(() => {
+    if (active && borderPulse !== null) {
+      if (borderPulseTimer) clearTimeout(borderPulseTimer);
+      borderPulseTimer = null;
+      borderPulse = null;
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Copy flash (UXD §7.12)
+  // -------------------------------------------------------------------------
+
+  /** Trigger an 80ms flash on the selection layer to confirm auto-copy. */
+  function triggerSelectionFlash() {
+    if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
+    selectionFlashing = true;
+    selectionFlashTimer = setTimeout(() => {
+      selectionFlashing = false;
+      selectionFlashTimer = null;
+    }, 80);
+  }
 </script>
 
 <div
   class="terminal-pane"
   class:terminal-pane--active={active}
+  class:terminal-pane--bell-flash={bellFlashing}
+  class:terminal-pane--pulse-output={!active && borderPulse === 'output'}
+  class:terminal-pane--pulse-bell={!active && borderPulse === 'bell'}
+  class:terminal-pane--pulse-exit={!active && borderPulse === 'exit'}
   data-pane-id={paneId}
   data-active={active ? 'true' : undefined}
   role="region"
@@ -781,6 +1054,7 @@
       bind:this={viewportEl}
       class="terminal-pane__viewport terminal-grid"
       data-screen-generation={screenGeneration}
+      style={lineHeight != null ? `--line-height-terminal: ${lineHeight}` : undefined}
       tabindex={active ? 0 : -1}
       role="textbox"
       aria-multiline="true"
@@ -802,8 +1076,20 @@
               <span
                 class="terminal-pane__cell"
                 class:terminal-pane__cell--wide={cell.width === 2}
-                class:terminal-pane__cell--selected={isSelected(rowIdx, colIdx) && active}
+                class:terminal-pane__cell--hyperlink={cell.hyperlink != null}
+                class:terminal-pane__cell--selected={isSelected(rowIdx, colIdx) &&
+                  active &&
+                  !selectionFlashing}
+                class:terminal-pane__cell--selected-flash={isSelected(rowIdx, colIdx) &&
+                  active &&
+                  selectionFlashing}
                 class:terminal-pane__cell--selected-inactive={isSelected(rowIdx, colIdx) && !active}
+                class:terminal-pane__cell--search-active={activeSearchMatchSet.has(
+                  `${rowIdx}:${colIdx}`,
+                )}
+                class:terminal-pane__cell--search-match={!activeSearchMatchSet.has(
+                  `${rowIdx}:${colIdx}`,
+                ) && searchMatchSet.has(`${rowIdx}:${colIdx}`)}
                 style={cellStyle(cell)}>{cell.content === '' ? '\u00a0' : cell.content}</span
               >
             {/if}
@@ -819,8 +1105,7 @@
           class:terminal-pane__cursor--underline={currentCursorShape === 'underline'}
           class:terminal-pane__cursor--bar={currentCursorShape === 'bar'}
           class:terminal-pane__cursor--unfocused={!active}
-          style:top="{cursor.row}lh"
-          style:left="{cursor.col}ch"
+          style="--cursor-top:{cursor.row}lh; top:var(--cursor-top); left:{cursor.col}ch"
           aria-hidden="true"
         ></div>
       {/if}
@@ -831,6 +1116,7 @@
       <div
         bind:this={scrollbarEl}
         class="terminal-pane__scrollbar"
+        transition:fade={{ duration: 300 }}
         class:terminal-pane__scrollbar--dragging={scrollbarDragging}
         aria-hidden="true"
         onpointerdown={handleScrollbarPointerdown}
@@ -856,7 +1142,9 @@
 
     <!-- Scroll-to-bottom button — shown when scrolled up into scrollback history -->
     {#if scrollOffset > 0}
-      <ScrollToBottomButton onclick={handleScrollToBottom} />
+      <div transition:fade={{ duration: 150 }}>
+        <ScrollToBottomButton onclick={handleScrollToBottom} />
+      </div>
     {/if}
   </ContextMenu>
 
@@ -912,11 +1200,11 @@
     height: 100%;
     overflow: hidden;
     background-color: var(--term-bg);
-    border: 1px solid var(--color-pane-border-inactive);
+    border: 2px solid var(--color-pane-border-inactive);
   }
 
   .terminal-pane--active {
-    border-color: var(--color-pane-border-active);
+    border: 2px solid var(--color-pane-border-active);
   }
 
   .terminal-pane__viewport {
@@ -957,6 +1245,11 @@
     min-width: 2ch;
   }
 
+  /* OSC 8 hyperlink cells (FS-VT-071): pointer cursor on hover to indicate Ctrl+Click affordance */
+  .terminal-pane__cell--hyperlink {
+    cursor: pointer;
+  }
+
   /* Selection colors (TUITC-UX-060/061) */
   .terminal-pane__cell--selected {
     background-color: var(--term-selection-bg) !important;
@@ -964,6 +1257,49 @@
 
   .terminal-pane__cell--selected-inactive {
     background-color: var(--term-selection-bg-inactive) !important;
+  }
+
+  /* Copy flash (UXD §7.12) — 80ms bright flash on selection to confirm auto-copy */
+  .terminal-pane__cell--selected-flash {
+    background-color: var(--term-selection-flash) !important;
+  }
+
+  /* Search match highlighting (FS-SEARCH-006) */
+  .terminal-pane__cell--search-match {
+    background-color: var(--term-search-match-bg) !important;
+    color: var(--term-search-match-fg) !important;
+  }
+
+  .terminal-pane__cell--search-active {
+    background-color: var(--term-search-active-bg) !important;
+    color: var(--term-search-active-fg) !important;
+  }
+
+  /* Visual bell flash (FS-VT-090) — brief border pulse using --color-indicator-bell */
+  .terminal-pane--bell-flash {
+    border-color: var(--color-indicator-bell) !important;
+  }
+
+  /* Pane border activity pulses for inactive panes (UXD §7.2.1) */
+  .terminal-pane--pulse-output {
+    border-color: var(--color-indicator-output) !important;
+  }
+
+  .terminal-pane--pulse-bell {
+    border-color: var(--color-indicator-bell) !important;
+  }
+
+  .terminal-pane--pulse-exit {
+    border-color: var(--color-error) !important;
+  }
+
+  /* Reduced motion: disable smooth transitions for pulses (UXD §7.2.1) */
+  @media (prefers-reduced-motion: reduce) {
+    .terminal-pane--pulse-output,
+    .terminal-pane--pulse-bell,
+    .terminal-pane--pulse-exit {
+      transition: none;
+    }
   }
 
   /* Cursor (TUITC-UX-050 to 053) */
@@ -983,7 +1319,15 @@
   .terminal-pane__cursor--underline {
     width: 1ch;
     height: var(--size-cursor-underline-height, 2px);
-    top: calc(attr(style top) + 1lh - var(--size-cursor-underline-height, 2px)) !important;
+    /*
+     * Item 1 fix (UXD §7.3.1): `attr(style top)` is invalid CSS — the attr()
+     * function does not support reading arbitrary inline style properties.
+     * Instead, we receive --cursor-top from the inline style attribute
+     * (set in the template as `style="--cursor-top:{cursor.row}lh; top:var(--cursor-top); …"`)
+     * and offset by one line-height to position the underline at the bottom of
+     * the character cell.
+     */
+    top: calc(var(--cursor-top) + 1lh - var(--size-cursor-underline-height, 2px)) !important;
     background-color: var(--term-cursor-bg);
   }
 
@@ -1053,36 +1397,37 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing-3, 0.75rem);
-    padding: var(--spacing-2, 0.5rem) var(--spacing-4, 1rem);
-    background-color: var(--color-surface-overlay, rgba(0, 0, 0, 0.85));
-    border-top: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.1));
-    z-index: var(--z-overlay, 50);
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background-color: var(--color-bg-overlay);
+    border-top: 1px solid var(--color-border-subtle);
+    z-index: var(--z-overlay);
   }
 
   .terminal-pane__ssh-disconnected-label {
-    color: var(--color-text-muted, #a0a0a0);
-    font-size: var(--font-size-sm, 0.875rem);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-ui-sm);
   }
 
   .terminal-pane__ssh-reconnect-btn {
-    padding: var(--spacing-1, 0.25rem) var(--spacing-3, 0.75rem);
-    background-color: var(--color-accent, #6e9fd8);
-    color: var(--color-on-accent, #000);
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--color-accent);
+    color: var(--term-fg);
     border: none;
-    border-radius: var(--radius-sm, 4px);
-    font-size: var(--font-size-sm, 0.875rem);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-ui-sm);
     cursor: pointer;
-    min-height: 44px;
-    min-width: 44px;
+    min-height: var(--size-target-min);
+    min-width: var(--size-target-min);
   }
 
   .terminal-pane__ssh-reconnect-btn:hover {
-    background-color: var(--color-accent-hover, #5a8bc4);
+    background-color: var(--color-accent);
+    filter: brightness(1.15);
   }
 
   .terminal-pane__ssh-reconnect-btn:focus-visible {
-    outline: 2px solid var(--color-focus-ring, #6e9fd8);
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: 2px;
   }
 </style>

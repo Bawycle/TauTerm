@@ -159,6 +159,8 @@
   "tab_bar_close_tab": "Fermer l'onglet",
   "tab_bar_new_tab": "Nouvel onglet",
   "tab_bar_new_tab_tooltip": "Nouvel onglet (Ctrl+Shift+T)",
+  "tab_bar_scroll_left": "Défiler les onglets vers la gauche",
+  "tab_bar_scroll_right": "Défiler les onglets vers la droite",
 
   "terminal_view_empty": "Aucune session de terminal. Appuyez sur Ctrl+Shift+T ou cliquez sur + pour en ouvrir une.",
 
@@ -205,11 +207,18 @@
   "theme_empty_state": "Aucun thème personnalisé. Cliquez sur « Nouveau thème » pour en créer un.",
   "theme_section_builtin": "Intégré",
   "theme_section_custom": "Thèmes personnalisés",
+  "theme_line_height_label": "Interligne",
+  "theme_line_height_hint": "Multiplicateur 1.0–2.0 (défaut : 1.2). Laisser vide pour utiliser la valeur globale.",
+  "theme_contrast_warning": "Le ratio de contraste {ratio}:1 est inférieur au seuil WCAG 2.1 AA de {threshold}:1. Le texte peut être difficile à lire.",
+  "theme_preview_label": "Aperçu du thème",
 
   "context_menu_hint": "Clic droit pour plus d'options",
 
   "paste_confirm_title": "Coller du texte multi-lignes ?",
   "paste_confirm_body": "Le texte contient {lines} lignes. Coller du texte multi-lignes directement dans un terminal peut exécuter des commandes involontairement.",
   "paste_confirm_action": "Coller",
-  "paste_confirm_dont_ask": "Ne plus demander"
+  "paste_confirm_dont_ask": "Ne plus demander",
+
+  "status_bar_settings": "Ouvrir les paramètres",
+  "status_bar_dimensions_aria": "{cols} colonnes, {rows} lignes"
 }

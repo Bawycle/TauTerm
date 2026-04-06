@@ -49,6 +49,12 @@
     /** When provided, the invisible tab context menu trigger is positioned at these viewport coordinates. */
     anchorX?: number;
     anchorY?: number;
+    /**
+     * Optional keyboard shortcut hints to display right-aligned on menu items (UXD §7.8.1).
+     * Keys match action names: 'copy', 'paste', 'search', 'splitH', 'splitV', 'closePane',
+     * 'newTab', 'rename', 'closeTab'.
+     */
+    shortcuts?: Partial<Record<string, string>>;
     onclose?: () => void;
     oncopy?: () => void;
     onpaste?: () => void;
@@ -69,6 +75,7 @@
     open = false,
     anchorX,
     anchorY,
+    shortcuts = {},
     onclose,
     oncopy,
     onpaste,
@@ -106,7 +113,14 @@
     'z-[30] min-w-[180px] max-w-[280px] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) py-1';
 
   const menuItemClass =
-    'flex items-center gap-2 h-[44px] px-3 text-[13px] text-(--color-text-primary) cursor-pointer select-none outline-none hover:bg-(--color-hover-bg) focus:bg-(--color-hover-bg) active:bg-(--color-active-bg) data-[disabled]:text-(--color-text-tertiary) data-[disabled]:pointer-events-none';
+    'flex items-center justify-between gap-2 h-[44px] px-3 text-[13px] text-(--color-text-primary) cursor-pointer select-none outline-none hover:bg-(--color-hover-bg) focus:bg-(--color-hover-bg) active:bg-(--color-active-bg) data-[disabled]:text-(--color-text-tertiary) data-[disabled]:pointer-events-none';
+
+  /** Left side of a menu item: icon + label. */
+  const menuItemLabelClass = 'flex items-center gap-2 min-w-0';
+
+  /** Right-aligned shortcut hint (UXD §7.8.1). */
+  const menuItemShortcutClass =
+    'ml-4 shrink-0 font-mono text-[11px] text-(--color-text-tertiary) leading-none';
 
   const separatorClass = 'my-1 mx-3 h-px bg-(--color-border)';
 </script>
@@ -130,41 +144,71 @@
             if (hasSelection) oncopy?.();
           }}
         >
-          <Copy size={16} aria-hidden="true" />
-          {m.action_copy()}
+          <span class={menuItemLabelClass}>
+            <Copy size={16} aria-hidden="true" />
+            {m.action_copy()}
+          </span>
+          {#if shortcuts.copy}
+            <span class={menuItemShortcutClass}>{shortcuts.copy}</span>
+          {/if}
         </ContextMenu.Item>
 
         <!-- Paste -->
         <ContextMenu.Item class={menuItemClass} onSelect={() => onpaste?.()}>
-          <ClipboardPaste size={16} aria-hidden="true" />
-          {m.action_paste()}
+          <span class={menuItemLabelClass}>
+            <ClipboardPaste size={16} aria-hidden="true" />
+            {m.action_paste()}
+          </span>
+          {#if shortcuts.paste}
+            <span class={menuItemShortcutClass}>{shortcuts.paste}</span>
+          {/if}
         </ContextMenu.Item>
 
         <ContextMenu.Separator class={separatorClass} />
 
         <!-- Search -->
         <ContextMenu.Item class={menuItemClass} onSelect={() => onsearch?.()}>
-          <Search size={16} aria-hidden="true" />
-          {m.action_search()}
+          <span class={menuItemLabelClass}>
+            <Search size={16} aria-hidden="true" />
+            {m.action_search()}
+          </span>
+          {#if shortcuts.search}
+            <span class={menuItemShortcutClass}>{shortcuts.search}</span>
+          {/if}
         </ContextMenu.Item>
 
         <ContextMenu.Separator class={separatorClass} />
 
         <!-- Split actions -->
         <ContextMenu.Item class={menuItemClass} onSelect={() => onsplitH?.()}>
-          <SplitSquareHorizontal size={16} aria-hidden="true" />
-          {m.action_split_horizontal()}
+          <span class={menuItemLabelClass}>
+            <SplitSquareHorizontal size={16} aria-hidden="true" />
+            {m.action_split_horizontal()}
+          </span>
+          {#if shortcuts.splitH}
+            <span class={menuItemShortcutClass}>{shortcuts.splitH}</span>
+          {/if}
         </ContextMenu.Item>
         <ContextMenu.Item class={menuItemClass} onSelect={() => onsplitV?.()}>
-          <SplitSquareVertical size={16} aria-hidden="true" />
-          {m.action_split_vertical()}
+          <span class={menuItemLabelClass}>
+            <SplitSquareVertical size={16} aria-hidden="true" />
+            {m.action_split_vertical()}
+          </span>
+          {#if shortcuts.splitV}
+            <span class={menuItemShortcutClass}>{shortcuts.splitV}</span>
+          {/if}
         </ContextMenu.Item>
 
         {#if canClosePane}
           <ContextMenu.Separator class={separatorClass} />
           <ContextMenu.Item class={menuItemClass} onSelect={() => onclosepane?.()}>
-            <X size={16} aria-hidden="true" />
-            {m.pane_close()}
+            <span class={menuItemLabelClass}>
+              <X size={16} aria-hidden="true" />
+              {m.pane_close()}
+            </span>
+            {#if shortcuts.closePane}
+              <span class={menuItemShortcutClass}>{shortcuts.closePane}</span>
+            {/if}
           </ContextMenu.Item>
         {/if}
       </ContextMenu.Content>
@@ -192,36 +236,61 @@
       <DropdownMenu.Content class={menuContentClass} align="start" sideOffset={4}>
         <!-- New Tab -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onnewtab?.()}>
-          <Plus size={16} aria-hidden="true" />
-          {m.action_new_tab()}
+          <span class={menuItemLabelClass}>
+            <Plus size={16} aria-hidden="true" />
+            {m.action_new_tab()}
+          </span>
+          {#if shortcuts.newTab}
+            <span class={menuItemShortcutClass}>{shortcuts.newTab}</span>
+          {/if}
         </DropdownMenu.Item>
 
         <DropdownMenu.Separator class={separatorClass} />
 
         <!-- Rename -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onrename?.()}>
-          <Pencil size={16} aria-hidden="true" />
-          {m.action_rename()}
+          <span class={menuItemLabelClass}>
+            <Pencil size={16} aria-hidden="true" />
+            {m.action_rename()}
+          </span>
+          {#if shortcuts.rename}
+            <span class={menuItemShortcutClass}>{shortcuts.rename}</span>
+          {/if}
         </DropdownMenu.Item>
 
         <DropdownMenu.Separator class={separatorClass} />
 
         <!-- Split actions -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onsplitH?.()}>
-          <SplitSquareHorizontal size={16} aria-hidden="true" />
-          {m.action_split_horizontal()}
+          <span class={menuItemLabelClass}>
+            <SplitSquareHorizontal size={16} aria-hidden="true" />
+            {m.action_split_horizontal()}
+          </span>
+          {#if shortcuts.splitH}
+            <span class={menuItemShortcutClass}>{shortcuts.splitH}</span>
+          {/if}
         </DropdownMenu.Item>
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onsplitV?.()}>
-          <SplitSquareVertical size={16} aria-hidden="true" />
-          {m.action_split_vertical()}
+          <span class={menuItemLabelClass}>
+            <SplitSquareVertical size={16} aria-hidden="true" />
+            {m.action_split_vertical()}
+          </span>
+          {#if shortcuts.splitV}
+            <span class={menuItemShortcutClass}>{shortcuts.splitV}</span>
+          {/if}
         </DropdownMenu.Item>
 
         <DropdownMenu.Separator class={separatorClass} />
 
         <!-- Close Tab -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onclosetab?.()}>
-          <X size={16} aria-hidden="true" />
-          {m.action_close_tab()}
+          <span class={menuItemLabelClass}>
+            <X size={16} aria-hidden="true" />
+            {m.action_close_tab()}
+          </span>
+          {#if shortcuts.closeTab}
+            <span class={menuItemShortcutClass}>{shortcuts.closeTab}</span>
+          {/if}
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Portal>

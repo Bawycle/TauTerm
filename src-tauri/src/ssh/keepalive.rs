@@ -83,4 +83,50 @@ mod tests {
         assert_eq!(config.keepalive_interval, Some(custom_interval));
         assert_eq!(config.keepalive_max, 5);
     }
+
+    // -----------------------------------------------------------------------
+    // FS-SSH-020 — per-connection keepalive overrides
+    // -----------------------------------------------------------------------
+
+    /// keepalive_interval_secs in SshConnectionConfig is forwarded to make_client_config.
+    #[test]
+    fn per_connection_interval_override_applied() {
+        let custom_interval = Duration::from_secs(120);
+        let config = make_client_config(Some(custom_interval), None);
+        assert_eq!(
+            config.keepalive_interval,
+            Some(custom_interval),
+            "Per-connection interval override must be forwarded to russh config"
+        );
+        // max falls back to default
+        assert_eq!(config.keepalive_max, SSH_KEEPALIVE_MAX_MISSES as usize);
+    }
+
+    /// keepalive_max_failures in SshConnectionConfig is forwarded to make_client_config.
+    #[test]
+    fn per_connection_max_failures_override_applied() {
+        let config = make_client_config(None, Some(7));
+        assert_eq!(
+            config.keepalive_max, 7,
+            "Per-connection max failures override must be forwarded to russh config"
+        );
+        // interval falls back to default
+        assert_eq!(config.keepalive_interval, Some(SSH_KEEPALIVE_INTERVAL));
+    }
+
+    /// Both overrides applied simultaneously.
+    #[test]
+    fn per_connection_both_overrides_applied() {
+        let interval = Duration::from_secs(45);
+        let config = make_client_config(Some(interval), Some(2));
+        assert_eq!(config.keepalive_interval, Some(interval));
+        assert_eq!(config.keepalive_max, 2);
+    }
+
+    /// Zero max_failures is accepted (edge case — disables keepalive).
+    #[test]
+    fn per_connection_zero_max_failures_accepted() {
+        let config = make_client_config(None, Some(0));
+        assert_eq!(config.keepalive_max, 0);
+    }
 }

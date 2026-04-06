@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MPL-2.0
+[package]
+name = "tau-term-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# cargo-fuzz requires nightly. See docs/ARCHITECTURE.md §14 and CLAUDE.md §Rust (nextest).
+# To run: rustup override set nightly && cargo fuzz build vt_processor
+#
+# The targets in this crate are excluded from `cargo nextest run` because they
+# depend on libfuzzer-sys which only compiles under nightly.
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+# The package is named "tau-term" in src-tauri/Cargo.toml.
+# The lib target within it is named "tau_term_lib" (via [lib] name = "tau_term_lib").
+# Cargo resolves the extern crate name from the lib name, so `use tau_term_lib::...` works.
+# `fuzz-testing` excludes `tauri::generate_context!()` which is incompatible with nightly.
+[dependencies.tau-term]
+path = ".."
+features = ["fuzz-testing"]
+
+# Prevent this workspace from being part of the main build.
+# cargo-fuzz manages this directory as its own workspace.
+[[bin]]
+name = "vt_processor"
+path = "fuzz_targets/vt_processor.rs"
+test = false
+doc = false

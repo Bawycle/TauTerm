@@ -97,6 +97,9 @@ pub struct CellUpdate {
     pub col: u16,
     pub content: String,
     pub attrs: CellAttrsDto,
+    /// OSC 8 hyperlink URI for this cell, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hyperlink: Option<String>,
 }
 
 /// Serializable cursor state.
@@ -206,6 +209,84 @@ pub struct HostKeyPromptEvent {
     pub fingerprint: String,
     /// `true` if this is a key change (potential MITM); `false` for first-time TOFU.
     pub is_changed: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Cursor style (DECSCUSR)
+// ---------------------------------------------------------------------------
+
+/// Emitted when the cursor shape changes via DECSCUSR (FS-VT-030).
+///
+/// `shape` carries the raw DECSCUSR parameter (0–6):
+/// - 0/1 = blinking block, 2 = steady block
+/// - 3 = blinking underline, 4 = steady underline
+/// - 5 = blinking bar, 6 = steady bar
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorStyleChangedEvent {
+    pub pane_id: PaneId,
+    /// Raw DECSCUSR value (0–6).
+    pub shape: u8,
+}
+
+// ---------------------------------------------------------------------------
+// Bell
+// ---------------------------------------------------------------------------
+
+/// Emitted when the terminal produces a BEL character, rate-limited to at most
+/// one event per 100 ms per pane (FS-VT-090).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BellTriggeredEvent {
+    pub pane_id: PaneId,
+}
+
+// ---------------------------------------------------------------------------
+// OSC 52 clipboard write forwarding
+// ---------------------------------------------------------------------------
+
+/// Emitted when the terminal requests a clipboard write via OSC 52 (FS-VT-075).
+/// Only emitted when `allow_osc52_write` is `true` in `VtProcessor`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Osc52WriteRequestedEvent {
+    pub pane_id: PaneId,
+    /// Decoded UTF-8 clipboard payload.
+    pub data: String,
+}
+
+// ---------------------------------------------------------------------------
+// SSH algorithm warnings (FS-SSH-014)
+// ---------------------------------------------------------------------------
+
+/// Emitted when a deprecated SSH algorithm is detected during the connection
+/// handshake (`ssh-rsa` SHA-1, `ssh-dss`). Non-blocking — for informational
+/// display in the pane or a UI banner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshWarningEvent {
+    pub pane_id: PaneId,
+    /// The deprecated algorithm name, e.g. `"ssh-rsa"` or `"ssh-dss"`.
+    pub algorithm: String,
+    /// Human-readable explanation of why this algorithm is deprecated.
+    pub reason: String,
+}
+
+// ---------------------------------------------------------------------------
+// SSH reconnection separator (FS-SSH-042)
+// ---------------------------------------------------------------------------
+
+/// Emitted immediately after a successful SSH reconnect.
+///
+/// The frontend uses this to insert a visual separator in the scrollback so
+/// the user can clearly distinguish output from the previous session and the
+/// new one (FS-SSH-042, UXD §7.19).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshReconnectedEvent {
+    pub pane_id: PaneId,
+    /// Unix timestamp in milliseconds at the moment of reconnection.
+    pub timestamp_ms: u64,
 }
 
 // ---------------------------------------------------------------------------

@@ -43,4 +43,20 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  build: {
+    rolldownOptions: {
+      // Suppress EMPTY_IMPORT_META: `bundleStrategy: "inline"` forces an iife-style
+      // bundle where import.meta is not natively supported. Rolldown already replaces
+      // import.meta with {} automatically; this makes the intent explicit and silences
+      // the warning. Vite has already replaced all import.meta.env.* before this point.
+      transform: {
+        define: { "import.meta": "{}" },
+      },
+      // Suppress PLUGIN_TIMINGS: informational-only performance report, not actionable.
+      checks: {
+        pluginTimings: false,
+      },
+    },
+  },
 }));

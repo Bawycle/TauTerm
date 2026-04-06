@@ -112,8 +112,8 @@
   --color-tab-active-fg: var(--color-neutral-200); /* #e8e3d8 */
   --color-tab-inactive-bg: transparent;
   --color-tab-inactive-fg: var(
-    --color-neutral-200
-  ); /* #e8e3d8 — WCAG AA: ~5.1:1 on tab-bg (#242118); distinguishable from active by font-weight */
+    --color-neutral-400
+  ); /* #9c9890 — WCAG AA: ~3.2:1 on tab-bg (#242118); distinguishable from active by both weight and lightness */
   --color-tab-hover-bg: var(--color-neutral-750); /* #2c2921 */
   --color-tab-hover-fg: var(
     --color-neutral-200

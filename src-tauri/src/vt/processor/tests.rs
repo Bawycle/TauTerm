@@ -11,7 +11,7 @@ mod security_tests {
     /// SEC-PTY-001: CSI 21t must not trigger any title injection into PTY input.
     #[test]
     fn sec_pty_001_csi_21t_title_readback_discarded() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         // Set a title that could be weaponised if echoed.
         vt.process(b"\x1b]0;injected;ls -la\x07");
         assert_eq!(vt.title, "injected;ls -la");
@@ -24,7 +24,7 @@ mod security_tests {
     /// SEC-PTY-001: CSI 21t after a title containing a shell injection payload.
     #[test]
     fn sec_pty_001_csi_21t_after_shell_injection_title_no_effect() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         let _dirty = vt.process(b"\x1b]0;$(id)\x07\x1b[21t");
         // No panic, no crash, no observable injection.
     }
@@ -36,7 +36,7 @@ mod security_tests {
     /// SEC-PTY-002: OSC 10;? (foreground color query) must be silently discarded.
     #[test]
     fn sec_pty_002_osc_color_query_no_response() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         // OSC 10 ; ? BEL
         let _dirty = vt.process(b"\x1b]10;?\x07");
         // No panic. VtProcessor has no response buffer — confirms no echo-back.
@@ -45,7 +45,7 @@ mod security_tests {
     /// SEC-PTY-002: DECRQSS (ESC P $ q ... ESC \) must be silently discarded.
     #[test]
     fn sec_pty_002_decrqss_ignored() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         // DECRQSS sequence: ESC P $ q " p ESC \
         let _dirty = vt.process(b"\x1bP$q\"p\x1b\\");
         // No panic, no observable response.
@@ -54,7 +54,7 @@ mod security_tests {
     /// SEC-PTY-002: CSI ? 1 $ p (DECRPM) must be silently discarded.
     #[test]
     fn sec_pty_002_decrpm_mode_query_ignored() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         let _dirty = vt.process(b"\x1b[?1$p");
         // No panic, no mode response injected.
     }
@@ -66,7 +66,7 @@ mod security_tests {
     /// SEC-PTY-003: Large OSC 0 title payload must be processed without panic.
     #[test]
     fn sec_pty_003_large_osc_title_no_panic() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         let mut seq = b"\x1b]0;".to_vec();
         seq.extend(b"A".repeat(10_000));
         seq.push(b'\x07');
@@ -86,7 +86,7 @@ mod security_tests {
     /// SEC-PTY-004: DCS sequence with 10 000-byte payload must not panic.
     #[test]
     fn sec_pty_004_large_dcs_payload_no_panic() {
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         let mut seq = b"\x1bP".to_vec();
         seq.extend(b"B".repeat(10_000));
         seq.extend(b"\x1b\\"); // DCS string terminator (ST)
@@ -105,7 +105,7 @@ mod security_tests {
     #[test]
     fn sec_pty_007_invalid_utf8_replaced_with_replacement_char() {
         use crate::vt::screen_buffer::SnapshotCell;
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         // 0xC0 0xAF is an overlong encoding of U+002F ('/'). It is invalid UTF-8.
         let _dirty = vt.process(b"\xC0\xAF");
         let snapshot = vt.get_snapshot();
@@ -129,7 +129,7 @@ mod security_tests {
     #[test]
     fn sec_pty_007_valid_chars_unaffected_by_invalid_utf8() {
         use crate::vt::screen_buffer::SnapshotCell;
-        let mut vt = VtProcessor::new(80, 24);
+        let mut vt = VtProcessor::new(80, 24, 10_000);
         // "ok" + invalid bytes + "!"
         let _dirty = vt.process(b"ok\xC0\xAF!");
         let snapshot = vt.get_snapshot();
@@ -164,9 +164,9 @@ mod security_tests {
 mod tests {
     use crate::vt::VtProcessor;
 
-    // Helper: create a VtProcessor with standard 80×24 dimensions.
+    // Helper: create a VtProcessor with standard 80×24 dimensions and default scrollback.
     fn make_vt(cols: u16, rows: u16) -> VtProcessor {
-        VtProcessor::new(cols, rows)
+        VtProcessor::new(cols, rows, 10_000)
     }
 
     // Helper: extract the grapheme at (row, col) from the active screen buffer.
@@ -647,5 +647,280 @@ mod tests {
         assert!(vt.modes.bracketed_paste);
         vt.process(b"\x1b[?2004l");
         assert!(!vt.modes.bracketed_paste);
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-012 — Combining / zero-width characters (FS-VT-012/013)
+    // ---------------------------------------------------------------------------
+
+    /// A combining character (width=0) must attach to the previous cell and must
+    /// not advance the cursor.
+    #[test]
+    fn combining_char_attaches_to_previous_cell_no_cursor_advance() {
+        let mut vt = make_vt(80, 24);
+        // Write 'e' followed by combining acute accent U+0301 (width=0).
+        vt.process("e\u{0301}".as_bytes());
+        // The grapheme at (0,0) must contain both codepoints.
+        let g = grapheme_at(&vt, 0, 0);
+        assert!(
+            g.contains('e') && g.contains('\u{0301}'),
+            "combining acute accent must merge into the base char cell, got: {g:?}"
+        );
+        // The cursor must be at col=1, not col=2 (no extra advance for the combining char).
+        assert_eq!(
+            vt.normal_cursor.col, 1,
+            "cursor must be at col=1 after e + combining"
+        );
+    }
+
+    /// Combining character at column 0 must attach to cell (0,0) without panicking.
+    #[test]
+    fn combining_char_at_column_zero_does_not_panic() {
+        let mut vt = make_vt(80, 24);
+        // Feed a combining mark at the very start — should attach to cell (0,0).
+        vt.process("\u{0301}".as_bytes()); // combining acute at col=0
+        // No panic is the primary assertion.
+        let snap = vt.get_snapshot();
+        assert_eq!(snap.cursor_row, 0);
+        assert_eq!(
+            snap.cursor_col, 0,
+            "cursor must not move for a combining-only input"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-052 — CSI S / T (scroll up/down) within scroll region (FS-VT-052)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn csi_scroll_up_moves_content() {
+        let mut vt = make_vt(10, 5);
+        // Write distinct content on rows 0–2.
+        vt.process(b"AAA\r\nBBB\r\nCCC");
+        // Cursor is now on row 2. Set full-screen scroll region (rows 0–4, default).
+        // CSI 1 S — scroll up 1 line within region.
+        vt.process(b"\x1b[1S");
+        // After scroll up: row 0 should contain what was on row 1 ("BBB").
+        let g = grapheme_at(&vt, 0, 0);
+        assert_eq!(
+            g, "B",
+            "after CSI S: row 0 must contain former row 1 content"
+        );
+    }
+
+    #[test]
+    fn csi_scroll_down_moves_content() {
+        let mut vt = make_vt(10, 5);
+        // Write content on row 0.
+        vt.process(b"AAA");
+        // CSI 1 T — scroll down 1 line.
+        vt.process(b"\x1b[1T");
+        // Row 0 should now be blank; former row 0 content is on row 1.
+        let g0 = grapheme_at(&vt, 0, 0);
+        let g1 = grapheme_at(&vt, 1, 0);
+        assert!(
+            g0.trim().is_empty() || g0 == " ",
+            "after CSI T: row 0 must be blank, got: {g0:?}"
+        );
+        assert_eq!(
+            g1, "A",
+            "after CSI T: former row 0 content must be on row 1"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-030 — DECSCUSR cursor shape (FS-VT-030)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn decscusr_sets_cursor_shape_and_flags_change() {
+        let mut vt = make_vt(80, 24);
+        assert_eq!(vt.cursor_shape, 0, "default cursor shape must be 0");
+        assert!(!vt.cursor_shape_changed);
+
+        // CSI 2 SP q — steady block.
+        vt.process(b"\x1b[2 q");
+        assert_eq!(
+            vt.cursor_shape, 2,
+            "cursor shape must be 2 after DECSCUSR 2"
+        );
+        assert!(
+            vt.cursor_shape_changed,
+            "cursor_shape_changed flag must be set"
+        );
+
+        // take_cursor_shape_changed must return Some and reset the flag.
+        let shape = vt.take_cursor_shape_changed();
+        assert_eq!(shape, Some(2));
+        assert!(!vt.cursor_shape_changed, "flag must be reset after take");
+    }
+
+    #[test]
+    fn decscusr_same_value_does_not_set_changed_flag() {
+        let mut vt = make_vt(80, 24);
+        // Already at shape=0; sending DECSCUSR 0 must not set the flag.
+        vt.process(b"\x1b[0 q");
+        assert!(
+            !vt.cursor_shape_changed,
+            "no change: flag must remain false"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-090 — BEL rate limiting (FS-VT-090)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn bel_sets_bell_pending() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x07");
+        assert!(vt.bell_pending, "BEL must set bell_pending");
+        let fired = vt.take_bell_pending();
+        assert!(fired, "take_bell_pending must return true");
+        assert!(!vt.bell_pending, "flag must be reset after take");
+    }
+
+    #[test]
+    fn bel_rate_limited_second_immediate_bell_ignored() {
+        let mut vt = make_vt(80, 24);
+        // First BEL — allowed.
+        vt.process(b"\x07");
+        let _ = vt.take_bell_pending(); // consume + reset
+
+        // Second BEL immediately after — must be suppressed (< 100 ms).
+        vt.process(b"\x07");
+        assert!(
+            !vt.bell_pending,
+            "second immediate BEL must be suppressed by rate limit"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-SB-002 — scrollback_lines preference is honoured (FS-SB-002)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn scrollback_limit_from_constructor_is_respected() {
+        let mut vt = crate::vt::VtProcessor::new(5, 1, 3);
+        // Scroll 5 lines into scrollback — only 3 should be retained.
+        for _ in 0..5 {
+            vt.process(b"A\r\n");
+        }
+        let sb_len = vt.normal.scrollback_len();
+        assert!(
+            sb_len <= 3,
+            "scrollback must be capped at the constructor limit (3), got {sb_len}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-OSC8-001 — OSC 8 hyperlinks stored on cells (FS-VT-070–073)
+    // ---------------------------------------------------------------------------
+
+    /// Cells written while an OSC 8 hyperlink is active receive the URI.
+    #[test]
+    fn osc8_cell_inside_hyperlink_receives_uri() {
+        let mut vt = make_vt(80, 24);
+        // ESC ] 8 ; ; https://example.com BEL  followed by text 'A'
+        vt.process(b"\x1b]8;;https://example.com\x07A");
+        let cell = vt.normal.get(0, 0).expect("cell (0,0) must exist");
+        assert_eq!(
+            cell.hyperlink.as_deref(),
+            Some("https://example.com"),
+            "cell inside OSC 8 hyperlink must carry the URI"
+        );
+    }
+
+    /// Cells written after OSC 8 ;; (end-of-hyperlink) have no hyperlink.
+    #[test]
+    fn osc8_cell_after_end_sequence_has_no_hyperlink() {
+        let mut vt = make_vt(80, 24);
+        // Open hyperlink, write 'A', close hyperlink, write 'B'.
+        vt.process(b"\x1b]8;;https://example.com\x07A\x1b]8;;\x07B");
+        let cell_a = vt.normal.get(0, 0).expect("cell (0,0)");
+        let cell_b = vt.normal.get(0, 1).expect("cell (0,1)");
+        assert_eq!(
+            cell_a.hyperlink.as_deref(),
+            Some("https://example.com"),
+            "cell 'A' must carry the URI"
+        );
+        assert!(
+            cell_b.hyperlink.is_none(),
+            "cell 'B' after OSC 8 ;; must have no hyperlink, got {:?}",
+            cell_b.hyperlink
+        );
+    }
+
+    /// OSC 8 with the same ID on two successive opens reuses the same URI (FS-VT-072).
+    #[test]
+    fn osc8_same_id_on_two_lines_carries_same_uri() {
+        let mut vt = make_vt(80, 24);
+        // First open: id=link1, write 'A'.
+        vt.process(b"\x1b]8;id=link1;https://example.com\x07A");
+        // Close hyperlink.
+        vt.process(b"\x1b]8;;\x07");
+        // Re-open with the same ID — URI must still be present on written cell.
+        vt.process(b"\x1b]8;id=link1;https://example.com\x07B");
+
+        let cell_a = vt.normal.get(0, 0).expect("cell (0,0)");
+        let cell_b = vt.normal.get(0, 1).expect("cell (0,1)");
+        assert_eq!(cell_a.hyperlink.as_deref(), Some("https://example.com"));
+        assert_eq!(cell_b.hyperlink.as_deref(), Some("https://example.com"));
+    }
+
+    /// Cells written before any OSC 8 sequence have no hyperlink.
+    #[test]
+    fn osc8_no_hyperlink_by_default() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"Hello");
+        let cell = vt.normal.get(0, 0).expect("cell (0,0)");
+        assert!(
+            cell.hyperlink.is_none(),
+            "cells written without an active hyperlink must have hyperlink=None"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // TEST-VT-OSC52-001 — OSC 52 clipboard write forwarding (FS-VT-075)
+    // ---------------------------------------------------------------------------
+
+    /// With `allow_osc52_write = false` (default), no clipboard event is queued.
+    #[test]
+    fn osc52_write_blocked_by_default_policy() {
+        let mut vt = make_vt(80, 24);
+        // Base64("hello") = "aGVsbG8="
+        vt.process(b"\x1b]52;c;aGVsbG8=\x07");
+        assert!(
+            vt.take_osc52_write().is_none(),
+            "OSC 52 write must be blocked when allow_osc52_write = false (default)"
+        );
+    }
+
+    /// With `allow_osc52_write = true`, the decoded payload is returned by `take_osc52_write`.
+    #[test]
+    fn osc52_write_forwarded_when_policy_allows() {
+        let mut vt = make_vt(80, 24);
+        vt.allow_osc52_write = true;
+        // Base64("hello") = "aGVsbG8="
+        vt.process(b"\x1b]52;c;aGVsbG8=\x07");
+        let payload = vt.take_osc52_write();
+        assert_eq!(
+            payload.as_deref(),
+            Some("hello"),
+            "OSC 52 decoded payload must be forwarded when allow_osc52_write = true"
+        );
+    }
+
+    /// `take_osc52_write` drains the pending payload — second call returns None.
+    #[test]
+    fn osc52_take_drains_pending_payload() {
+        let mut vt = make_vt(80, 24);
+        vt.allow_osc52_write = true;
+        vt.process(b"\x1b]52;c;aGVsbG8=\x07");
+        let _ = vt.take_osc52_write(); // first call drains
+        assert!(
+            vt.take_osc52_write().is_none(),
+            "second call to take_osc52_write must return None (payload already drained)"
+        );
     }
 }

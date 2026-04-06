@@ -136,6 +136,8 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-VT-024 | SGR 0 MUST reset all attributes. The following attributes MUST be independently settable and resettable: bold (1/22), dim (2/22), italic (3/23), underline (4/24), blink (5/25), inverse (7/27), hidden (8/28), strikethrough (9/29). | Must |
 | FS-VT-025 | Extended underline styles (SGR 4:0 through 4:5) and underline color (SGR 58) SHOULD be supported. | Should |
 
+> **Implementation note (FS-VT-023):** The palette mapping is resolved in the frontend via CSS custom properties (`--term-ansi-N-fg` / `--term-ansi-N-bg`). The backend emits `Color::Ansi { index }` and the frontend resolves the actual color through the active theme tokens. This avoids IPC round-trips for color resolution.
+
 **Acceptance criteria:**
 - FS-VT-020: A test script cycling through SGR 30–37 and 90–97 displays 16 distinct foreground colors.
 - FS-VT-021: A 256-color test pattern (e.g., `256colors.pl`) displays all colors correctly with smooth gradients in the cube and ramp regions.
@@ -245,7 +247,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-VT-083 | Shift+Click MUST bypass mouse reporting and perform TauTerm selection regardless of reporting mode. | Must |
 | FS-VT-084 | Focus events (mode 1004) MUST be supported. | Must |
 | FS-VT-085 | Mouse wheel events when reporting is active MUST be sent to the PTY as button 4/5 events. Shift+Wheel MUST scroll the scrollback instead. | Must |
-| FS-VT-086 | On application exit, all mouse reporting modes MUST be reset. | Must |
+| FS-VT-086 | When the alternate screen is exited (RM ?1049), all mouse reporting modes MUST be reset to their defaults. This ensures that applications crashing without sending `?1000l`/`?1003l` do not leave the terminal in a broken mouse reporting state. TauTerm destroying the `VtProcessor` on pane close provides equivalent cleanup for session termination. | Must |
 
 **Acceptance criteria:**
 - FS-VT-080: vim with `set mouse=a` responds to click-to-position correctly.
@@ -276,14 +278,14 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 |----|-------------|----------|
 | FS-PTY-001 | Each pane MUST have its own independent PTY pair (master + slave). | Must |
 | FS-PTY-002 | The child process MUST be spawned with the slave PTY as its controlling terminal (via `setsid()` + `TIOCSCTTY`). | Must |
-| FS-PTY-003 | The master file descriptor MUST be operated in non-blocking mode for asynchronous I/O. | Must |
+| FS-PTY-003 | PTY I/O MUST NOT block the async runtime. Acceptable strategies include `O_NONBLOCK` with `AsyncFd`, or a dedicated blocking thread (e.g. `spawn_blocking`). The latter is preferred on Linux due to the ambiguous `EIO`/`EAGAIN` semantics of `O_NONBLOCK` on PTY master fds. | Must |
 | FS-PTY-004 | File descriptors MUST be properly managed after fork: the slave fd closed in the parent process, the master fd closed in the child process. | Must |
 | FS-PTY-005 | Shell process exit MUST be detected (via SIGCHLD/waitpid). The pane MUST transition to a "terminated" state displaying the exit status. The pane MUST NOT auto-close. | Must |
 | FS-PTY-006 | A terminated pane MUST offer the user two actions: close the pane, or restart the shell. | Must |
 | FS-PTY-007 | Closing a tab or pane MUST close the master fd, sending SIGHUP to the child process group. | Must |
 | FS-PTY-008 | If a foreground process is running when the user attempts to close a tab, a pane, or the application window, a confirmation dialog MUST be displayed. When closing the window, the dialog MUST indicate how many tabs/panes have active processes. | Must |
 | FS-PTY-009 | Pane resize MUST trigger `ioctl(TIOCSWINSZ)` and deliver SIGWINCH to the foreground process group. The resize MUST include pixel dimensions (xpixel, ypixel). | Must |
-| FS-PTY-010 | Resize events SHOULD be debounced (16–33ms). The final size MUST always be sent. | Should |
+| FS-PTY-010 | Resize events SHOULD be debounced (≤ 100ms, typically 50ms). The final size MUST always be sent. | Should |
 | FS-PTY-011 | The following environment variables MUST be set in the child process: `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` (UTF-8 locale — inherited or fallback), `LINES`, `COLUMNS`, `SHELL`, `HOME`, `USER`, `LOGNAME`, `PATH`, `TERM_PROGRAM=TauTerm`, `TERM_PROGRAM_VERSION=<version>`. | Must |
 | FS-PTY-012 | The environment variables `DISPLAY`, `WAYLAND_DISPLAY`, and `DBUS_SESSION_BUS_ADDRESS` MUST be inherited from the parent environment when present. | Must |
 | FS-PTY-013 | The initial tab MUST launch a login shell. Subsequent tabs and panes MUST launch interactive non-login shells. | Must |

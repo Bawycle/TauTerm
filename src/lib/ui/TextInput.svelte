@@ -53,7 +53,7 @@
   const uid = $derived(id ?? _fallbackId);
 
   const baseInputClasses =
-    'w-full h-[44px] px-3 text-[13px] text-(--color-text-primary) bg-(--term-bg) rounded-[2px] border placeholder:text-(--color-text-tertiary) focus:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) disabled:cursor-not-allowed';
+    'w-full h-[44px] px-3 text-[13px] text-(--color-text-primary) bg-(--term-bg) rounded-[2px] border placeholder:text-(--color-text-tertiary) focus-visible:outline-2 focus-visible:outline-(--color-focus-ring) focus-visible:outline-offset-[-2px] disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) disabled:cursor-not-allowed';
 
   const inputClasses = $derived(
     error

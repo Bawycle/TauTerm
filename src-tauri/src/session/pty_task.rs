@@ -21,9 +21,13 @@ use parking_lot::RwLock;
 use tauri::AppHandle;
 
 use crate::events::{
-    emit_mode_state_changed, emit_screen_update, emit_session_state_changed,
+    emit_bell_triggered, emit_cursor_style_changed, emit_mode_state_changed,
+    emit_notification_changed, emit_osc52_write_requested, emit_screen_update,
+    emit_session_state_changed,
     types::{
-        ModeStateChangedEvent, ScreenUpdateEvent, SessionChangeType, SessionStateChangedEvent,
+        BellTriggeredEvent, CursorStyleChangedEvent, ModeStateChangedEvent,
+        NotificationChangedEvent, Osc52WriteRequestedEvent, PaneNotificationDto, ScreenUpdateEvent,
+        SessionChangeType, SessionStateChangedEvent,
     },
 };
 use crate::session::ids::PaneId;
@@ -71,24 +75,24 @@ pub fn spawn_pty_read_task(
                     Ok(g) => g,
                     Err(_) => {
                         tracing::error!("PTY reader mutex poisoned on pane {pane_id}");
-                        return;
+                        break;
                     }
                 };
                 match rdr.read(&mut buf) {
                     Ok(0) => {
                         tracing::debug!("PTY EOF on pane {pane_id}");
-                        return;
+                        break;
                     }
                     Ok(n) => n,
                     Err(e) => {
                         tracing::error!("PTY read error on pane {pane_id}: {e}");
-                        return;
+                        break;
                     }
                 }
             };
 
             // Process bytes through the VT processor.
-            let (dirty, mode_changed, new_title) = {
+            let (dirty, mode_changed, new_title, new_cursor_shape, bell, osc52) = {
                 let mut proc = vt.write();
                 let dirty = proc.process(&buf[..n]);
                 let changed = proc.mode_changed;
@@ -96,12 +100,45 @@ pub fn spawn_pty_read_task(
                     proc.mode_changed = false;
                 }
                 let title = proc.take_title_changed();
-                (dirty, changed, title)
+                let cursor_shape = proc.take_cursor_shape_changed();
+                let bell = proc.take_bell_pending();
+                let osc52 = proc.take_osc52_write();
+                (dirty, changed, title, cursor_shape, bell, osc52)
             };
 
             if mode_changed {
                 let event = build_mode_state_event(&pane_id, &vt);
                 emit_mode_state_changed(&app, event);
+            }
+
+            if let Some(shape) = new_cursor_shape {
+                emit_cursor_style_changed(
+                    &app,
+                    CursorStyleChangedEvent {
+                        pane_id: pane_id.clone(),
+                        shape,
+                    },
+                );
+            }
+
+            if bell {
+                emit_bell_triggered(
+                    &app,
+                    BellTriggeredEvent {
+                        pane_id: pane_id.clone(),
+                    },
+                );
+            }
+
+            // FS-VT-075: forward OSC 52 clipboard write to the frontend.
+            if let Some(data) = osc52 {
+                emit_osc52_write_requested(
+                    &app,
+                    Osc52WriteRequestedEvent {
+                        pane_id: pane_id.clone(),
+                        data,
+                    },
+                );
             }
 
             if let Some(title) = new_title
@@ -118,9 +155,40 @@ pub fn spawn_pty_read_task(
             }
 
             if !dirty.is_empty() {
+                // FS-NOTIF-001: if this pane is not the active pane, emit a background-output notification.
+                if !registry.is_active_pane(&pane_id)
+                    && let Some((_, tab_state)) = registry.get_tab_state_for_pane(&pane_id)
+                {
+                    emit_notification_changed(
+                        &app,
+                        NotificationChangedEvent {
+                            tab_id: tab_state.id,
+                            pane_id: pane_id.clone(),
+                            notification: Some(PaneNotificationDto::BackgroundOutput),
+                        },
+                    );
+                }
+
                 let event = build_screen_update_event(&pane_id, &vt, &dirty);
                 emit_screen_update(&app, event);
             }
+        }
+
+        // FS-NOTIF-002: PTY process exited — emit notification with exit code.
+        // The blocking Read task does not have access to the child's wait() result;
+        // the exit code is read from the pane's lifecycle state in the registry if it
+        // has already been updated to `Terminated`, otherwise -1 is used as a sentinel
+        // meaning "process exited with unknown code".
+        let exit_code = registry.get_pane_exit_code(&pane_id).unwrap_or(-1);
+        if let Some((_, tab_state)) = registry.get_tab_state_for_pane(&pane_id) {
+            emit_notification_changed(
+                &app,
+                NotificationChangedEvent {
+                    tab_id: tab_state.id,
+                    pane_id: pane_id.clone(),
+                    notification: Some(PaneNotificationDto::ProcessExited { exit_code }),
+                },
+            );
         }
     });
 
@@ -198,6 +266,7 @@ pub(crate) fn build_screen_update_event(
                     col,
                     content: cell.content.clone(),
                     attrs: snapshot_cell_to_attrs_dto(cell, &color_to_dto),
+                    hyperlink: cell.hyperlink.clone(),
                 }
             })
             .collect()
@@ -213,6 +282,7 @@ pub(crate) fn build_screen_update_event(
                     col: col_offset as u16,
                     content: cell.content.clone(),
                     attrs: snapshot_cell_to_attrs_dto(cell, &color_to_dto),
+                    hyperlink: cell.hyperlink.clone(),
                 });
             }
         }

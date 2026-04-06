@@ -25,7 +25,14 @@
     onsplitv       — called when user requests vertical split from context menu
 -->
 <script lang="ts">
-  import type { PaneNode, PaneId, TabId, SshLifecycleState } from '$lib/ipc/types';
+  import type {
+    PaneNode,
+    PaneId,
+    TabId,
+    SshLifecycleState,
+    SearchMatch,
+    BellType,
+  } from '$lib/ipc/types';
   import TerminalPane from './TerminalPane.svelte';
   import SplitPane from './SplitPane.svelte';
 
@@ -38,12 +45,27 @@
     wordDelimiters?: string;
     canClosePane?: boolean;
     confirmMultilinePaste?: boolean;
+    /** Cursor blink interval in ms — forwarded to active TerminalPane (FS-VT-032). */
+    cursorBlinkMs?: number;
+    /** Bell type — forwarded to TerminalPane (FS-VT-090/093). */
+    bellType?: BellType;
+    /** Terminal line height multiplier (FS-THEME-010) — forwarded to TerminalPane. */
+    lineHeight?: number;
+    /**
+     * Search matches for the active pane (FS-SEARCH-006).
+     * Only transmitted to the leaf whose paneId === activePaneId.
+     */
+    searchMatches?: SearchMatch[];
+    /** 1-based index of the active search match. 0 means no active match. */
+    activeSearchMatchIndex?: number;
     onpaneclick?: (paneId: PaneId) => void;
     onclosepane?: (paneId: PaneId) => void;
     onsearch?: (paneId: PaneId) => void;
     onsplith?: (paneId: PaneId) => void;
     onsplitv?: (paneId: PaneId) => void;
     ondisableConfirmMultilinePaste?: () => void;
+    /** Called when a pane's terminal dimensions change (DIV-UXD-008). */
+    ondimensionschange?: (paneId: PaneId, cols: number, rows: number) => void;
   }
 
   const {
@@ -55,12 +77,18 @@
     wordDelimiters,
     canClosePane = true,
     confirmMultilinePaste = true,
+    cursorBlinkMs,
+    bellType,
+    lineHeight,
+    searchMatches = [],
+    activeSearchMatchIndex = 0,
     onpaneclick,
     onclosepane,
     onsearch,
     onsplith,
     onsplitv,
     ondisableConfirmMultilinePaste,
+    ondimensionschange,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -117,6 +145,11 @@
     // Keep the final drag value — dragRatio stays set so layout holds the
     // user's chosen ratio until the next backend snapshot updates backendRatio.
   }
+
+  /** Double-click on divider resets the split to 50/50 (UXD §7.2). */
+  function handleDividerDblClick() {
+    dragRatio = 0.5;
+  }
 </script>
 
 {#if node.type === 'leaf'}
@@ -134,11 +167,17 @@
       sshState={sshStates.get(node.paneId) ?? null}
       {wordDelimiters}
       {confirmMultilinePaste}
+      {cursorBlinkMs}
+      {bellType}
+      {lineHeight}
+      searchMatches={node.paneId === activePaneId ? searchMatches : []}
+      activeSearchMatchIndex={node.paneId === activePaneId ? activeSearchMatchIndex : 0}
       onclosepane={() => onclosepane?.(node.paneId)}
       onsearch={() => onsearch?.(node.paneId)}
       onsplitH={() => onsplith?.(node.paneId)}
       onsplitV={() => onsplitv?.(node.paneId)}
       {ondisableConfirmMultilinePaste}
+      ondimensionschange={(c, r) => ondimensionschange?.(node.paneId, c, r)}
     />
   </div>
 {:else}
@@ -168,12 +207,18 @@
         {wordDelimiters}
         {canClosePane}
         {confirmMultilinePaste}
+        {cursorBlinkMs}
+        {bellType}
+        {lineHeight}
+        {searchMatches}
+        {activeSearchMatchIndex}
         {onpaneclick}
         {onclosepane}
         {onsearch}
         {onsplith}
         {onsplitv}
         {ondisableConfirmMultilinePaste}
+        {ondimensionschange}
       />
     </div>
 
@@ -189,6 +234,7 @@
       onpointerdown={handlePointerDown}
       onpointermove={handlePointerMove}
       onpointerup={handlePointerUp}
+      ondblclick={handleDividerDblClick}
     ></div>
 
     <!-- Second child -->
@@ -208,6 +254,12 @@
         {onsplith}
         {onsplitv}
         {ondisableConfirmMultilinePaste}
+        {ondimensionschange}
+        {cursorBlinkMs}
+        {bellType}
+        {lineHeight}
+        {searchMatches}
+        {activeSearchMatchIndex}
       />
     </div>
   </div>
@@ -270,14 +322,14 @@
   }
 
   .split-pane__divider--horizontal {
-    width: 5px;
+    width: var(--size-divider-hit);
     height: 100%;
     cursor: col-resize;
   }
 
   .split-pane__divider--vertical {
     width: 100%;
-    height: 5px;
+    height: var(--size-divider-hit);
     cursor: row-resize;
   }
 </style>

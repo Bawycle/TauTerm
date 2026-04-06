@@ -78,6 +78,9 @@ pub struct SnapshotCell {
     pub bg: Option<crate::vt::cell::Color>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub underline_color: Option<crate::vt::cell::Color>,
+    /// OSC 8 hyperlink URI for this cell, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hyperlink: Option<String>,
 }
 
 impl From<&Cell> for SnapshotCell {
@@ -96,6 +99,7 @@ impl From<&Cell> for SnapshotCell {
             fg: cell.attrs.fg,
             bg: cell.attrs.bg,
             underline_color: cell.attrs.underline_color,
+            hyperlink: cell.hyperlink.as_ref().map(|h| h.as_ref().to_owned()),
         }
     }
 }

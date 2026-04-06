@@ -12,21 +12,28 @@
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
 
-  interface Props {
+  interface Props extends Omit<HTMLButtonAttributes, 'children'> {
     variant?: 'primary' | 'secondary' | 'ghost' | 'destructive';
     disabled?: boolean;
     type?: 'button' | 'submit' | 'reset';
     onclick?: (e: MouseEvent) => void;
+    /** Bindable ref to the underlying <button> element (e.g. for programmatic focus). */
+    buttonRef?: HTMLButtonElement;
     children: Snippet;
   }
 
-  const {
+  let {
     variant = 'primary',
     disabled = false,
     type = 'button',
     onclick,
+    buttonRef = $bindable<HTMLButtonElement | undefined>(undefined),
     children,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    class: _class,
+    ...restProps
   }: Props = $props();
 
   const baseClasses =
@@ -46,6 +53,6 @@
   const classes = $derived(`${baseClasses} ${variantClasses[variant ?? 'primary']}`);
 </script>
 
-<button {type} {disabled} class={classes} {onclick}>
+<button bind:this={buttonRef} {type} {disabled} class={classes} {onclick} {...restProps}>
   {@render children()}
 </button>

@@ -40,7 +40,9 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { invoke } from '@tauri-apps/api/core';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
   import TabBar from './TabBar.svelte';
   import StatusBar from './StatusBar.svelte';
@@ -93,6 +95,15 @@
   let prefsOpen = $state(false);
   let preferences = $state<Preferences | undefined>(undefined);
 
+  /**
+   * Line height of the active theme (FS-THEME-010).
+   * Resolved from the user-defined theme whose name matches `preferences.appearance.themeName`.
+   * `undefined` when the active theme is the built-in "umbra" or has no lineHeight override.
+   */
+  const activeThemeLineHeight = $derived(
+    preferences?.themes.find((t) => t.name === preferences?.appearance.themeName)?.lineHeight,
+  );
+
   // SSH auth dialog state (item 6)
   let hostKeyPrompt = $state<HostKeyPromptEvent | null>(null);
   let credentialPrompt = $state<CredentialPromptEvent | null>(null);
@@ -114,9 +125,15 @@
   // Stores the pending action (tab close or pane close) awaiting user confirmation.
   type PendingClose = { kind: 'tab'; tabId: string } | { kind: 'pane'; paneId: PaneId };
   let pendingClose = $state<PendingClose | null>(null);
+  // DIV-UXD-012: ref to the Cancel button in the close confirmation dialog for initial focus.
+  let closeConfirmCancelBtn = $state<HTMLButtonElement | undefined>(undefined);
 
   // FS-KBD-003: F2 rename — ID to trigger rename on TabBar, cleared after TabBar acts.
   let requestedRenameTabId = $state<string | null>(null);
+
+  // DIV-UXD-008: active pane terminal dimensions for StatusBar display.
+  let activePaneCols = $state<number | null>(null);
+  let activePaneRows = $state<number | null>(null);
 
   // Tâche #13: ConnectionManager panel toggle.
   let connectionManagerOpen = $state(false);
@@ -125,8 +142,10 @@
   // FS-UX-002: First-launch context menu hint.
   // Visible when preferences are loaded and hint has not been shown yet.
   // Latched: once dismissed, stays dismissed even if preferences are refreshed.
+  // A 2s delay avoids showing the hint while the app is still settling on first launch.
   let contextMenuHintVisible = $state(false);
   let contextMenuHintDismissed = $state(false);
+  let contextMenuHintTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     if (
@@ -134,8 +153,16 @@
       !preferences.appearance.contextMenuHintShown &&
       !contextMenuHintDismissed
     ) {
-      contextMenuHintVisible = true;
+      contextMenuHintTimer = setTimeout(() => {
+        contextMenuHintVisible = true;
+      }, 2000);
     }
+    return () => {
+      if (contextMenuHintTimer) {
+        clearTimeout(contextMenuHintTimer);
+        contextMenuHintTimer = null;
+      }
+    };
   });
 
   let unlistenSessionState: (() => void) | null = null;
@@ -376,6 +403,10 @@
         const remaining = tabs.filter((t) => t.id !== tabId);
         activeTabId = remaining[remaining.length - 1]?.id ?? '';
       }
+      // FS-TAB-008: closing the last tab closes the window.
+      if (tabs.length === 0) {
+        await getCurrentWindow().close();
+      }
     } catch {
       // Tab close failed — backend may have already handled it
     }
@@ -556,6 +587,14 @@
     next_tab: 'Ctrl+Tab',
     prev_tab: 'Ctrl+Shift+Tab',
     rename_tab: 'F2',
+    // Pane shortcuts (DIV-FS-003)
+    split_pane_h: 'Ctrl+Shift+D',
+    split_pane_v: 'Ctrl+Shift+E',
+    close_pane: 'Ctrl+Shift+Q',
+    navigate_pane_left: 'Ctrl+Shift+ArrowLeft',
+    navigate_pane_right: 'Ctrl+Shift+ArrowRight',
+    navigate_pane_up: 'Ctrl+Shift+ArrowUp',
+    navigate_pane_down: 'Ctrl+Shift+ArrowDown',
   };
 
   /**
@@ -641,43 +680,42 @@
       return;
     }
 
-    // FS-KBD-003: pane actions — these are not user-configurable in this release.
-    if (event.ctrlKey && event.shiftKey) {
-      switch (event.key) {
-        case 'D':
-        case 'd':
-          event.preventDefault();
-          handleSplitPane('horizontal');
-          return;
-        case 'E':
-        case 'e':
-          event.preventDefault();
-          handleSplitPane('vertical');
-          return;
-        case 'Q':
-        case 'q': {
-          event.preventDefault();
-          const activePaneId = activeTab?.activePaneId;
-          if (activePaneId) handlePaneClose(activePaneId);
-          return;
-        }
-        case 'ArrowLeft':
-          event.preventDefault();
-          handleNavigatePane('left');
-          return;
-        case 'ArrowRight':
-          event.preventDefault();
-          handleNavigatePane('right');
-          return;
-        case 'ArrowUp':
-          event.preventDefault();
-          handleNavigatePane('up');
-          return;
-        case 'ArrowDown':
-          event.preventDefault();
-          handleNavigatePane('down');
-          return;
-      }
+    // FS-KBD-003 / DIV-FS-003: pane actions — resolved from preferences.keyboard.bindings.
+    if (matchesShortcut(event, effectiveShortcut('split_pane_h'))) {
+      event.preventDefault();
+      handleSplitPane('horizontal');
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('split_pane_v'))) {
+      event.preventDefault();
+      handleSplitPane('vertical');
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('close_pane'))) {
+      event.preventDefault();
+      const activePaneId = activeTab?.activePaneId;
+      if (activePaneId) handlePaneClose(activePaneId);
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('navigate_pane_left'))) {
+      event.preventDefault();
+      handleNavigatePane('left');
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('navigate_pane_right'))) {
+      event.preventDefault();
+      handleNavigatePane('right');
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('navigate_pane_up'))) {
+      event.preventDefault();
+      handleNavigatePane('up');
+      return;
+    }
+    if (matchesShortcut(event, effectiveShortcut('navigate_pane_down'))) {
+      event.preventDefault();
+      handleNavigatePane('down');
+      return;
     }
   }
 
@@ -855,50 +893,68 @@
   <!-- FS-UX-002: contextmenu bubbles up from TerminalPane to dismiss the first-launch hint -->
   <div class="terminal-view__pane-area" role="region" oncontextmenu={handleContextMenuHintDismiss}>
     {#key activeTabId}
-    {#if activeTab && activePanes.length > 0}
-      <SplitPane
-        node={activeTab.layout}
-        tabId={activeTab.id}
-        activePaneId={activeTab.activePaneId}
-        {sshStates}
-        {terminatedPanes}
-        wordDelimiters={preferences?.terminal.wordDelimiters}
-        confirmMultilinePaste={preferences?.terminal.confirmMultilinePaste ?? true}
-        canClosePane={activePanes.length > 1}
-        onpaneclick={async (paneId) => {
-          try {
-            await invoke('set_active_pane', { paneId });
-          } catch {
-            /* non-fatal */
-          }
-        }}
-        onclosepane={handlePaneClose}
-        onsearch={() => {
-          searchOpen = true;
-        }}
-        onsplith={() => handleSplitPane('horizontal')}
-        onsplitv={() => handleSplitPane('vertical')}
-        ondisableConfirmMultilinePaste={() =>
-          handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
-      />
-    {:else}
-      <div class="terminal-view__empty">
-        <p>{m.terminal_view_empty()}</p>
-      </div>
-    {/if}
+      {#if activeTab && activePanes.length > 0}
+        <SplitPane
+          node={activeTab.layout}
+          tabId={activeTab.id}
+          activePaneId={activeTab.activePaneId}
+          {sshStates}
+          {terminatedPanes}
+          wordDelimiters={preferences?.terminal.wordDelimiters}
+          confirmMultilinePaste={preferences?.terminal.confirmMultilinePaste ?? true}
+          cursorBlinkMs={preferences?.appearance.cursorBlinkMs}
+          bellType={preferences?.terminal.bellType}
+          lineHeight={activeThemeLineHeight}
+          {searchMatches}
+          activeSearchMatchIndex={searchCurrentIdx}
+          canClosePane={activePanes.length > 1}
+          onpaneclick={async (paneId) => {
+            try {
+              await invoke('set_active_pane', { paneId });
+            } catch {
+              /* non-fatal */
+            }
+          }}
+          onclosepane={handlePaneClose}
+          onsearch={() => {
+            searchOpen = true;
+          }}
+          onsplith={() => handleSplitPane('horizontal')}
+          onsplitv={() => handleSplitPane('vertical')}
+          ondisableConfirmMultilinePaste={() =>
+            handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
+          ondimensionschange={(paneId, c, r) => {
+            if (paneId === activeTab?.activePaneId) {
+              activePaneCols = c;
+              activePaneRows = r;
+            }
+          }}
+        />
+      {:else}
+        <div class="terminal-view__empty">
+          <p>{m.terminal_view_empty()}</p>
+        </div>
+      {/if}
     {/key}
   </div>
 
   <!-- FS-UX-002: First-launch context menu hint — non-blocking, bottom-right corner -->
   {#if contextMenuHintVisible}
-    <div class="terminal-view__context-hint" aria-hidden="true">
+    <div class="terminal-view__context-hint" aria-hidden="true" transition:fade={{ duration: 300 }}>
       <MousePointerClick size={14} aria-hidden="true" />
       <span>{m.context_menu_hint()}</span>
     </div>
   {/if}
 
-  <!-- Status bar: reflects active pane state -->
-  <StatusBar {activePaneState} />
+  <!-- Status bar: reflects active pane state (DIV-UXD-008) -->
+  <StatusBar
+    {activePaneState}
+    cols={activePaneCols}
+    rows={activePaneRows}
+    onsettings={() => {
+      prefsOpen = true;
+    }}
+  />
 
   <!-- SearchOverlay: positioned relative to pane area (FS-SEARCH-007, UXD §7.4) -->
   {#if activePanes.length > 0}
@@ -948,12 +1004,17 @@
     onclose={handleCancelCredentials}
   />
 
-  <!-- FS-PTY-008: Close confirmation dialog -->
+  <!-- FS-PTY-008: Close confirmation dialog — DIV-UXD-012: initial focus on Cancel -->
   <Dialog
     open={pendingClose !== null}
     title={m.close_confirm_title()}
     size="small"
     onclose={handleCloseCancel}
+    onopenautoFocus={(e) => {
+      e.preventDefault();
+      // Focus Cancel — the safe default, preventing accidental destructive action (DIV-UXD-012).
+      closeConfirmCancelBtn?.focus();
+    }}
   >
     {#snippet children()}
       <p class="text-[14px] text-(--color-text-secondary) leading-relaxed">
@@ -961,7 +1022,9 @@
       </p>
     {/snippet}
     {#snippet footer()}
-      <Button variant="ghost" onclick={handleCloseCancel}>{m.action_cancel()}</Button>
+      <Button variant="ghost" bind:buttonRef={closeConfirmCancelBtn} onclick={handleCloseCancel}
+        >{m.action_cancel()}</Button
+      >
       <Button variant="destructive" onclick={handleCloseConfirm}>{m.close_confirm_action()}</Button>
     {/snippet}
   </Dialog>

@@ -58,9 +58,12 @@ pub struct PaneSession {
 
 impl PaneSession {
     /// Create a new pane in `Spawning` state (no PTY yet).
-    pub fn new(id: PaneId, cols: u16, rows: u16) -> Self {
+    ///
+    /// `scrollback_lines` is the maximum scrollback capacity for this pane,
+    /// read from `preferences.terminal.scrollback_lines` at creation time (FS-SB-002).
+    pub fn new(id: PaneId, cols: u16, rows: u16, scrollback_lines: usize) -> Self {
         Self {
-            vt: Arc::new(RwLock::new(VtProcessor::new(cols, rows))),
+            vt: Arc::new(RwLock::new(VtProcessor::new(cols, rows, scrollback_lines))),
             lifecycle: PaneLifecycleState::Spawning,
             title: None,
             ssh_state: None,

@@ -26,6 +26,7 @@ use crate::events::{HostKeyPromptEvent, SshStateChangedEvent};
 use crate::events::{emit_host_key_prompt, emit_ssh_state_changed};
 use crate::session::ids::PaneId;
 use crate::session::ssh_task::SshTaskHandle;
+use crate::ssh::algorithms::check_server_key_algorithm;
 use crate::ssh::known_hosts::{KnownHostLookup, KnownHostsStore};
 use crate::ssh::{SshConnectionConfig, SshLifecycleState};
 
@@ -141,6 +142,31 @@ impl TauTermSshHandler {
     }
 }
 
+/// Classify a russh disconnect reason into a lifecycle state and message.
+///
+/// Pure function extracted from `TauTermSshHandler::disconnected` so that the
+/// mapping logic can be unit-tested without an `AppHandle` (TEST-SSH-UNIT-004).
+///
+/// Returns `(new_state, reason_message, is_error)`:
+/// - `Closed`        / `false` — clean server-initiated disconnect (SSH_DISCONNECT).
+/// - `Disconnected`  / `true`  — unexpected error: keepalive timeout, network drop, etc.
+pub(crate) fn classify_disconnect_reason(
+    reason: &russh::client::DisconnectReason<SshError>,
+) -> (SshLifecycleState, Option<String>, bool) {
+    match reason {
+        russh::client::DisconnectReason::ReceivedDisconnect(info) => (
+            SshLifecycleState::Closed,
+            Some(format!("Server disconnected: {:?}", info.reason_code)),
+            false,
+        ),
+        russh::client::DisconnectReason::Error(e) => (
+            SshLifecycleState::Disconnected,
+            Some(format!("Connection lost: {e:?}")),
+            true,
+        ),
+    }
+}
+
 impl russh::client::Handler for TauTermSshHandler {
     type Error = SshError;
 
@@ -171,6 +197,10 @@ impl russh::client::Handler for TauTermSshHandler {
         let key_bytes: Vec<u8> = server_public_key.public_key_bytes();
 
         async move {
+            // Emit a warning before the TOFU check so the user is informed even
+            // if the connection is ultimately rejected (FS-SSH-014).
+            check_server_key_algorithm(&app, &pane_id, &key_type);
+
             let store_path = known_hosts_path
                 .or_else(KnownHostsStore::default_path)
                 .ok_or_else(|| {
@@ -180,7 +210,7 @@ impl russh::client::Handler for TauTermSshHandler {
             let store = KnownHostsStore::new(store_path);
 
             let lookup = store
-                .lookup(&host, &key_type, &key_bytes)
+                .lookup_with_system_fallback(&host, &key_type, &key_bytes, None)
                 .map_err(|e| SshError::Connection(format!("known_hosts I/O error: {e}")))?;
 
             match lookup {
@@ -261,18 +291,7 @@ impl russh::client::Handler for TauTermSshHandler {
         let app = self.app.clone();
 
         async move {
-            let (new_state, reason_str, is_error) = match &reason {
-                russh::client::DisconnectReason::ReceivedDisconnect(info) => (
-                    SshLifecycleState::Closed,
-                    Some(format!("Server disconnected: {:?}", info.reason_code)),
-                    false,
-                ),
-                russh::client::DisconnectReason::Error(e) => (
-                    SshLifecycleState::Disconnected,
-                    Some(format!("Connection lost: {e:?}")),
-                    true,
-                ),
-            };
+            let (new_state, reason_str, is_error) = classify_disconnect_reason(&reason);
 
             emit_ssh_state_changed(
                 &app,
@@ -300,6 +319,93 @@ impl russh::client::Handler for TauTermSshHandler {
 mod tests {
     use super::*;
     use crate::session::ids::{ConnectionId, PaneId};
+    use russh::client::{DisconnectReason, RemoteDisconnectInfo};
+
+    // -----------------------------------------------------------------------
+    // TEST-SSH-UNIT-004 — classify_disconnect_reason (FS-SSH-020)
+    //
+    // Context: russh owns the keepalive timer and the failure counter.
+    // The application cannot intercept individual keepalive misses — it only
+    // receives a final `disconnected(DisconnectReason::Error(...))` callback
+    // after the configured number of consecutive misses (SSH_KEEPALIVE_MAX_MISSES).
+    //
+    // `tokio::time::pause()/advance()` is therefore not applicable here: there
+    // is no applicative sleep to accelerate.
+    //
+    // What IS testable without AppHandle is the pure classification function
+    // `classify_disconnect_reason`, which maps the disconnect reason to the
+    // correct lifecycle state and error flag.  These tests cover all branches
+    // of that function and verify that a keepalive-equivalent error reason
+    // produces `Disconnected` (not `Closed`).
+    // -----------------------------------------------------------------------
+
+    /// A clean server-initiated disconnect maps to Closed, is_error = false.
+    #[test]
+    fn classify_received_disconnect_maps_to_closed() {
+        let reason: DisconnectReason<SshError> =
+            DisconnectReason::ReceivedDisconnect(RemoteDisconnectInfo {
+                reason_code: russh::Disconnect::ByApplication,
+                message: "user logout".to_string(),
+                lang_tag: "en".to_string(),
+            });
+        let (state, msg, is_error) = classify_disconnect_reason(&reason);
+        assert_eq!(
+            state,
+            SshLifecycleState::Closed,
+            "ReceivedDisconnect must map to Closed (TEST-SSH-UNIT-004)"
+        );
+        assert!(!is_error, "ReceivedDisconnect must not be flagged as error");
+        assert!(
+            msg.as_deref().unwrap_or("").contains("ByApplication"),
+            "reason message must include reason_code, got: {msg:?}"
+        );
+    }
+
+    /// An unexpected transport error maps to Disconnected, is_error = true.
+    /// This is the path taken by russh when keepalive misses exceed the maximum.
+    #[test]
+    fn classify_transport_error_maps_to_disconnected() {
+        let reason: DisconnectReason<SshError> =
+            DisconnectReason::Error(SshError::Connection("keepalive timeout".to_string()));
+        let (state, msg, is_error) = classify_disconnect_reason(&reason);
+        assert_eq!(
+            state,
+            SshLifecycleState::Disconnected,
+            "Transport error must map to Disconnected (TEST-SSH-UNIT-004 — keepalive path)"
+        );
+        assert!(
+            is_error,
+            "Transport error must be flagged as is_error = true"
+        );
+        assert!(
+            msg.as_deref().unwrap_or("").contains("keepalive timeout"),
+            "reason message must include error detail, got: {msg:?}"
+        );
+    }
+
+    /// ConnectionLost disconnect code also maps to Closed (it is a ReceivedDisconnect).
+    #[test]
+    fn classify_received_disconnect_connection_lost_maps_to_closed() {
+        let reason: DisconnectReason<SshError> =
+            DisconnectReason::ReceivedDisconnect(RemoteDisconnectInfo {
+                reason_code: russh::Disconnect::ConnectionLost,
+                message: String::new(),
+                lang_tag: String::new(),
+            });
+        let (state, _msg, is_error) = classify_disconnect_reason(&reason);
+        assert_eq!(state, SshLifecycleState::Closed);
+        assert!(!is_error);
+    }
+
+    /// Auth error (e.g. all methods failed) maps to Disconnected.
+    #[test]
+    fn classify_auth_error_maps_to_disconnected() {
+        let reason: DisconnectReason<SshError> =
+            DisconnectReason::Error(SshError::Auth("all methods failed".to_string()));
+        let (state, _msg, is_error) = classify_disconnect_reason(&reason);
+        assert_eq!(state, SshLifecycleState::Disconnected);
+        assert!(is_error);
+    }
 
     fn make_config() -> SshConnectionConfig {
         SshConnectionConfig {
@@ -310,6 +416,8 @@ mod tests {
             username: "admin".to_string(),
             identity_file: None,
             allow_osc52_write: false,
+            keepalive_interval_secs: None,
+            keepalive_max_failures: None,
         }
     }
 

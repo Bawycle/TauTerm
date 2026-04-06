@@ -159,6 +159,8 @@
   "tab_bar_close_tab": "Close tab",
   "tab_bar_new_tab": "New tab",
   "tab_bar_new_tab_tooltip": "New Tab (Ctrl+Shift+T)",
+  "tab_bar_scroll_left": "Scroll tabs left",
+  "tab_bar_scroll_right": "Scroll tabs right",
 
   "terminal_view_empty": "No terminal sessions. Press Ctrl+Shift+T or click + to open one.",
 
@@ -205,11 +207,18 @@
   "theme_empty_state": "No custom themes. Click \"New theme\" to create one.",
   "theme_section_builtin": "Built-in",
   "theme_section_custom": "Custom themes",
+  "theme_line_height_label": "Line height",
+  "theme_line_height_hint": "Multiplier 1.0–2.0 (default: 1.2). Leave empty to use the global default.",
+  "theme_contrast_warning": "Contrast ratio {ratio}:1 is below the WCAG 2.1 AA threshold of {threshold}:1. Text may be hard to read.",
+  "theme_preview_label": "Theme preview",
 
   "context_menu_hint": "Right-click for more options",
 
   "paste_confirm_title": "Paste multi-line text?",
   "paste_confirm_body": "The text contains {lines} lines. Pasting multi-line text directly into a terminal may execute commands unintentionally.",
   "paste_confirm_action": "Paste",
-  "paste_confirm_dont_ask": "Don't ask again"
+  "paste_confirm_dont_ask": "Don't ask again",
+
+  "status_bar_settings": "Open settings",
+  "status_bar_dimensions_aria": "{cols} columns, {rows} rows"
 }

@@ -27,6 +27,13 @@
     title: string;
     size?: 'small' | 'medium';
     onclose?: () => void;
+    /**
+     * Override the auto-focus behaviour when the dialog opens (DIV-UXD-012).
+     * Receives the default open event; call `e.preventDefault()` to suppress
+     * default focus, then manually focus the desired element.
+     * Use this to focus Cancel in destructive dialogs.
+     */
+    onopenautoFocus?: (e: Event) => void;
     children: Snippet;
     footer?: Snippet;
   }
@@ -36,6 +43,7 @@
     title,
     size = 'small',
     onclose,
+    onopenautoFocus,
     children,
     footer,
   }: Props = $props();
@@ -58,6 +66,7 @@
              bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
              shadow-(--shadow-overlay) p-6"
       aria-modal="true"
+      onOpenAutoFocus={onopenautoFocus}
     >
       <!-- Header: title + close button -->
       <div class="flex items-start justify-between mb-3">

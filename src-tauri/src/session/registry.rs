@@ -25,6 +25,7 @@ use tauri::AppHandle;
 
 use crate::error::SessionError;
 use crate::platform::{PtyBackend, PtySession, validation::validate_shell_path};
+use crate::preferences::PreferencesStore;
 use crate::session::{
     ids::{PaneId, TabId},
     lifecycle::PaneLifecycleState,
@@ -87,6 +88,8 @@ pub struct SessionRegistry {
     app: AppHandle,
     /// Weak self-reference so read tasks can call back into the registry.
     self_ref: std::sync::Weak<SessionRegistry>,
+    /// Preferences store — read at pane creation time to get `scrollback_lines` (FS-SB-002).
+    prefs: Arc<RwLock<PreferencesStore>>,
     /// Injectable output registry — present only in e2e-testing builds.
     /// Stores the mpsc senders keyed by PaneId so that `inject_pty_output`
     /// can push synthetic bytes into the VT pipeline.
@@ -114,6 +117,7 @@ impl SessionRegistry {
     pub fn new(
         pty_backend: Arc<dyn PtyBackend>,
         app: AppHandle,
+        prefs: Arc<RwLock<PreferencesStore>>,
         #[cfg(feature = "e2e-testing")] injectable_registry: std::sync::Arc<
             crate::platform::pty_injectable::InjectableRegistry,
         >,
@@ -123,6 +127,7 @@ impl SessionRegistry {
             pty_backend,
             app,
             self_ref: weak.clone(),
+            prefs,
             #[cfg(feature = "e2e-testing")]
             injectable_registry,
         })
@@ -178,6 +183,10 @@ impl SessionRegistry {
             .open_session(config.cols, config.rows, &shell_path, args, &env)
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
 
+        // Read scrollback limit from preferences before acquiring the registry lock
+        // so we don't hold two locks simultaneously (FS-SB-002).
+        let scrollback_lines = self.prefs.read().get().terminal.scrollback_lines;
+
         // --- Build pane and tab state ---
         let mut inner = self.inner.write();
 
@@ -186,7 +195,8 @@ impl SessionRegistry {
         let order = inner.next_order;
         inner.next_order += 1;
 
-        let mut pane = PaneSession::new(pane_id.clone(), config.cols, config.rows);
+        let mut pane =
+            PaneSession::new(pane_id.clone(), config.cols, config.rows, scrollback_lines);
         pane.lifecycle = PaneLifecycleState::Running;
 
         // --- Start PTY read task ---
@@ -366,7 +376,10 @@ impl SessionRegistry {
             .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
 
         let new_pane_id = PaneId::new();
-        let mut new_pane = PaneSession::new(new_pane_id.clone(), cols, rows);
+        // Read scrollback limit from preferences (FS-SB-002).
+        // Prefs lock is not held across the pty_backend call above.
+        let scrollback_lines = self.prefs.read().get().terminal.scrollback_lines;
+        let mut new_pane = PaneSession::new(new_pane_id.clone(), cols, rows, scrollback_lines);
         new_pane.lifecycle = PaneLifecycleState::Running;
 
         let reader_handle = get_reader_handle(&*pty_box);
@@ -669,6 +682,58 @@ impl SessionRegistry {
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         let vt = pane.vt.read();
         Ok(vt.search(query))
+    }
+
+    /// Returns `true` if `pane_id` is the currently active pane of its tab.
+    ///
+    /// Returns `false` if the pane does not exist or belongs to a background tab
+    /// (i.e. another tab is the active tab). Only the active pane of the active tab
+    /// is considered "in the foreground" for notification purposes (FS-NOTIF-001).
+    pub fn is_active_pane(&self, pane_id: &PaneId) -> bool {
+        let inner = self.inner.read();
+        // Find the tab containing this pane.
+        let Some((tab_id, entry)) = inner
+            .tabs
+            .iter()
+            .find(|(_, e)| e.panes.contains_key(pane_id))
+        else {
+            return false;
+        };
+        // The pane must be the active pane of its tab AND the tab must be the active tab.
+        entry.state.active_pane_id == *pane_id && inner.active_tab_id.as_ref() == Some(tab_id)
+    }
+
+    /// Returns the `TabId` and `TabState` for the tab containing `pane_id`, if found.
+    pub fn get_tab_state_for_pane(&self, pane_id: &PaneId) -> Option<(TabId, TabState)> {
+        let inner = self.inner.read();
+        inner
+            .tabs
+            .iter()
+            .find(|(_, e)| e.panes.contains_key(pane_id))
+            .map(|(tab_id, e)| (tab_id.clone(), e.state.clone()))
+    }
+
+    /// Returns the exit code of a pane if its lifecycle is already `Terminated`.
+    ///
+    /// Returns `None` if the pane is not found or is not yet in `Terminated` state.
+    /// The PTY read task calls this after EOF to include the real exit code in the
+    /// `ProcessExited` notification (FS-NOTIF-002).
+    pub fn get_pane_exit_code(&self, pane_id: &PaneId) -> Option<i32> {
+        let inner = self.inner.read();
+        inner
+            .tabs
+            .values()
+            .find_map(|e| e.panes.get(pane_id))
+            .and_then(|pane| {
+                if let crate::session::lifecycle::PaneLifecycleState::Terminated {
+                    exit_code, ..
+                } = &pane.lifecycle
+                {
+                    *exit_code
+                } else {
+                    None
+                }
+            })
     }
 
     /// Returns `true` if the pane identified by `pane_id` is a local PTY session

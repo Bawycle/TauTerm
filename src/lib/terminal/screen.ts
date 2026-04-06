@@ -36,6 +36,11 @@ export interface CellStyle {
   hidden: boolean;
   strikethrough: boolean;
   underlineColor: string | undefined;
+  /**
+   * OSC 8 hyperlink URI, if any (FS-VT-070–073).
+   * Undefined when no hyperlink is active on this cell.
+   */
+  hyperlink: string | undefined;
 }
 
 /**
@@ -57,6 +62,7 @@ export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
     hidden: cell.hidden,
     strikethrough: cell.strikethrough,
     underlineColor: resolveColor(cell.underlineColor),
+    hyperlink: cell.hyperlink,
   };
 }
 
@@ -64,7 +70,11 @@ export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
  * Build a CellStyle from a CellUpdate (incremental update event).
  * CellAttrsDto.ColorDto has a 'default' variant.
  */
-export function cellStyleFromUpdate(content: string, attrs: CellAttrsDto): CellStyle {
+export function cellStyleFromUpdate(
+  content: string,
+  attrs: CellAttrsDto,
+  hyperlink?: string,
+): CellStyle {
   return {
     content,
     fg: resolveColorDto(attrs.fg),
@@ -79,6 +89,7 @@ export function cellStyleFromUpdate(content: string, attrs: CellAttrsDto): CellS
     hidden: attrs.hidden,
     strikethrough: attrs.strikethrough,
     underlineColor: resolveColorDto(attrs.underlineColor),
+    hyperlink,
   };
 }
 
@@ -121,7 +132,7 @@ export function applyUpdates(grid: CellStyle[], updates: CellUpdate[], cols: num
   for (const update of updates) {
     const idx = update.row * cols + update.col;
     if (idx >= 0 && idx < grid.length) {
-      grid[idx] = cellStyleFromUpdate(update.content, update.attrs);
+      grid[idx] = cellStyleFromUpdate(update.content, update.attrs, update.hyperlink);
     }
   }
 }
@@ -149,6 +160,7 @@ export function buildGridFromSnapshot(
     hidden: false,
     strikethrough: false,
     underlineColor: undefined,
+    hyperlink: undefined,
   }));
 
   for (let i = 0; i < cells.length && i < rows * cols; i++) {

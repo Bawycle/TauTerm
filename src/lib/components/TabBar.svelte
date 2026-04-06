@@ -15,19 +15,31 @@
     - Inline rename: double-click or F2 on focused tab (FS-TAB-006)
     - Right-click context menu → Rename (FS-TAB-006, UXD §7.8.2)
     - Drag-and-drop reorder via HTML5 DnD (FS-TAB-005)
+    - Horizontal scroll with ChevronLeft/ChevronRight when tabs overflow (UXD §6.2, §12.2)
+    - Scroll arrow badges when hidden tabs have active notifications (UXD §7.1.3)
 
   Libraries:
-    - lucide-svelte: X, Plus, Bell, CheckCircle, XCircle, Network icons
-    - bits-ui Tooltip: new-tab tooltip with 300ms delay (UXD §7.1.5, §7.10)
+    - lucide-svelte: X, Plus, Bell, CheckCircle, XCircle, Network, ChevronLeft, ChevronRight icons
+    - bits-ui Tooltip: new-tab tooltip (UXD §7.1.5, §7.10)
     - ContextMenu: tab context menu
 
   Security:
     - Tab titles via Svelte text interpolation only — no {@html} (TUITC-SEC-010)
 -->
 <script lang="ts">
-  import { Plus, X, Bell, CheckCircle, XCircle, Network } from 'lucide-svelte';
+  import {
+    Plus,
+    X,
+    Bell,
+    CheckCircle,
+    XCircle,
+    Network,
+    ChevronLeft,
+    ChevronRight,
+  } from 'lucide-svelte';
   import { Tooltip } from 'bits-ui';
   import { invoke } from '@tauri-apps/api/core';
+  import { onMount, onDestroy, tick } from 'svelte';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
   import ContextMenu from './ContextMenu.svelte';
@@ -110,6 +122,90 @@
     if (!tab) return;
     startRename(tab.id, tabDisplayTitle(tab));
     onRenameHandled?.();
+  });
+
+  // ── Horizontal scroll / overflow detection (UXD §6.2, §12.2) ────────────────
+  // DOM reference for the scrollable tabs container.
+  let tabsContainerEl = $state<HTMLDivElement | null>(null);
+  // True when tabs overflow to the left of the scroll position.
+  let canScrollLeft = $state(false);
+  // True when tabs overflow to the right of the scroll position.
+  let canScrollRight = $state(false);
+
+  /**
+   * Aggregate notification badge color for a given side's hidden tabs.
+   * Returns 'bell' (amber, higher priority), 'output' (green), or null.
+   */
+  function hiddenTabsBadge(side: 'left' | 'right'): 'bell' | 'output' | null {
+    if (!tabsContainerEl) return null;
+    const containerRect = tabsContainerEl.getBoundingClientRect();
+    let hasBell = false;
+    let hasOutput = false;
+    const tabEls = tabsContainerEl.querySelectorAll<HTMLElement>('[data-tab-id]');
+    for (const el of tabEls) {
+      const rect = el.getBoundingClientRect();
+      // A tab is "hidden" if it is fully outside the container's visible bounds.
+      const isHiddenLeft = rect.right <= containerRect.left;
+      const isHiddenRight = rect.left >= containerRect.right;
+      if (side === 'left' ? isHiddenLeft : isHiddenRight) {
+        const tabId = el.getAttribute('data-tab-id');
+        const tab = sortedTabs.find((t) => t.id === tabId);
+        if (!tab) continue;
+        const notif = tabNotification(tab);
+        if (notif?.type === 'bell') hasBell = true;
+        else if (notif?.type === 'backgroundOutput') hasOutput = true;
+      }
+    }
+    if (hasBell) return 'bell';
+    if (hasOutput) return 'output';
+    return null;
+  }
+
+  const leftBadge = $derived(canScrollLeft ? hiddenTabsBadge('left') : null);
+  const rightBadge = $derived(canScrollRight ? hiddenTabsBadge('right') : null);
+
+  function updateScrollState() {
+    if (!tabsContainerEl) return;
+    const { scrollLeft, scrollWidth, clientWidth } = tabsContainerEl;
+    // Guard: show arrows only when there is real overflow beyond sub-pixel tolerance.
+    // scrollWidth can exceed clientWidth by 1-2px due to fractional flex-item widths;
+    // treating that as "no overflow" prevents spurious arrows when all tabs fit.
+    const hasOverflow = scrollWidth > clientWidth + 1;
+    canScrollLeft = hasOverflow && scrollLeft > 1;
+    canScrollRight = hasOverflow && scrollLeft + clientWidth < scrollWidth - 1;
+  }
+
+  /** Scroll the tab container by a fixed pixel amount. */
+  function scrollTabs(direction: 'left' | 'right') {
+    if (!tabsContainerEl) return;
+    const SCROLL_STEP = 120;
+    tabsContainerEl.scrollBy({
+      left: direction === 'left' ? -SCROLL_STEP : SCROLL_STEP,
+      behavior: 'smooth',
+    });
+  }
+
+  let tabsResizeObserver: ResizeObserver | null = null;
+
+  onMount(() => {
+    if (tabsContainerEl) {
+      tabsResizeObserver = new ResizeObserver(() => {
+        updateScrollState();
+      });
+      tabsResizeObserver.observe(tabsContainerEl);
+      updateScrollState();
+    }
+  });
+
+  onDestroy(() => {
+    tabsResizeObserver?.disconnect();
+  });
+
+  // Re-check overflow whenever the sorted tab list changes (tab added/removed).
+  $effect(() => {
+    // Depend on sortedTabs length so this re-runs when tabs are added/removed.
+    const _len = sortedTabs.length;
+    tick().then(() => updateScrollState());
   });
 
   // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────
@@ -292,7 +388,34 @@
 </script>
 
 <div class="tab-bar" role="tablist" aria-label={m.tab_bar_tabs_aria_label()}>
-  <div class="tab-bar__tabs" ondragleave={handleDragLeave} role="presentation">
+  <!-- Left scroll arrow — visible only when tabs overflow left (UXD §6.2, §12.2) -->
+  {#if canScrollLeft}
+    <button
+      class="tab-bar__scroll-arrow tab-bar__scroll-arrow--left"
+      type="button"
+      aria-label={m.tab_bar_scroll_left()}
+      tabindex={-1}
+      onclick={() => scrollTabs('left')}
+    >
+      <ChevronLeft size={14} aria-hidden="true" />
+      {#if leftBadge !== null}
+        <span
+          class="tab-bar__scroll-badge"
+          class:tab-bar__scroll-badge--bell={leftBadge === 'bell'}
+          class:tab-bar__scroll-badge--output={leftBadge === 'output'}
+          aria-hidden="true"
+        ></span>
+      {/if}
+    </button>
+  {/if}
+
+  <div
+    bind:this={tabsContainerEl}
+    class="tab-bar__tabs"
+    ondragleave={handleDragLeave}
+    onscroll={updateScrollState}
+    role="presentation"
+  >
     {#each sortedTabs as tab, index (tab.id)}
       {@const isActive = tab.id === activeTabId}
       {@const notification = tabNotification(tab)}
@@ -403,6 +526,27 @@
     {/if}
   </div>
 
+  <!-- Right scroll arrow — visible only when tabs overflow right (UXD §6.2, §12.2) -->
+  {#if canScrollRight}
+    <button
+      class="tab-bar__scroll-arrow tab-bar__scroll-arrow--right"
+      type="button"
+      aria-label={m.tab_bar_scroll_right()}
+      tabindex={-1}
+      onclick={() => scrollTabs('right')}
+    >
+      <ChevronRight size={14} aria-hidden="true" />
+      {#if rightBadge !== null}
+        <span
+          class="tab-bar__scroll-badge"
+          class:tab-bar__scroll-badge--bell={rightBadge === 'bell'}
+          class:tab-bar__scroll-badge--output={rightBadge === 'output'}
+          aria-hidden="true"
+        ></span>
+      {/if}
+    </button>
+  {/if}
+
   <!-- Tab context menu (UXD §7.8.2) — DropdownMenu anchored to pointer position.
        Rendered once; controlled by contextMenuTabId. The ContextMenu trigger is
        fixed-positioned at the right-click coordinates via anchorX/anchorY. -->
@@ -465,7 +609,79 @@
     align-items: stretch;
     flex: 1;
     height: 100%;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* Hide native scrollbar — navigation is provided by ChevronLeft/Right buttons */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-behavior: smooth;
+  }
+
+  .tab-bar__tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scroll arrow buttons (UXD §6.2, §12.2) */
+  .tab-bar__scroll-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 24px;
+    height: 100%;
+    flex-shrink: 0;
+    border: none;
+    background: var(--color-tab-bg);
+    color: var(--color-tab-new-fg);
+    cursor: pointer;
+    padding: 0;
+    z-index: var(--z-base);
+    transition:
+      color var(--duration-instant),
+      background-color var(--duration-instant);
+  }
+
+  .tab-bar__scroll-arrow:hover {
+    color: var(--color-tab-new-hover-fg);
+    background-color: var(--color-hover-bg);
+  }
+
+  .tab-bar__scroll-arrow:active {
+    background-color: var(--color-active-bg);
+  }
+
+  .tab-bar__scroll-arrow:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+
+  /* Left arrow: subtle right border to separate from tabs area */
+  .tab-bar__scroll-arrow--left {
+    border-right: 1px solid var(--color-border-subtle);
+  }
+
+  /* Right arrow: subtle left border */
+  .tab-bar__scroll-arrow--right {
+    border-left: 1px solid var(--color-border-subtle);
+  }
+
+  /* Activity badge on scroll arrows (UXD §7.1.3, §12.2) */
+  .tab-bar__scroll-badge {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    width: var(--size-scroll-arrow-badge, 4px);
+    height: var(--size-scroll-arrow-badge, 4px);
+    border-radius: var(--radius-full);
+    pointer-events: none;
+  }
+
+  .tab-bar__scroll-badge--output {
+    background-color: var(--color-indicator-output);
+  }
+
+  .tab-bar__scroll-badge--bell {
+    background-color: var(--color-indicator-bell);
   }
 
   /* Tab item — TUITC-UX-010 to 016 */

@@ -73,10 +73,10 @@
   <!-- Visual track — 44×44px hit area wrapper -->
   <span class="flex items-center justify-center w-[44px] h-[44px]">
     <span
-      class="relative w-[36px] h-[20px] rounded-full transition-colors duration-[80ms] {trackBg}"
+      class="relative w-[36px] h-[20px] rounded-full transition-colors duration-(--duration-base) {trackBg}"
     >
       <span
-        class="absolute top-[2px] w-[16px] h-[16px] rounded-full transition-transform duration-[80ms] {thumbBg} {thumbTranslate}"
+        class="absolute top-[2px] w-[16px] h-[16px] rounded-full transition-transform duration-(--duration-base) {thumbBg} {thumbTranslate}"
       ></span>
     </span>
   </span>

@@ -17,17 +17,32 @@ pub mod session;
 pub mod ssh;
 pub mod vt;
 
+// These imports are only used by `run()`, which is gated behind
+// `not(feature = "fuzz-testing")`.  Wrap them in the same cfg guard
+// so the fuzz workspace compiles without unused-import warnings.
+#[cfg(not(feature = "fuzz-testing"))]
 use std::sync::Arc;
 
+#[cfg(not(feature = "fuzz-testing"))]
 use parking_lot::RwLock;
 
+#[cfg(not(feature = "fuzz-testing"))]
 use tauri::Manager;
 
+#[cfg(not(feature = "fuzz-testing"))]
 use crate::credentials::CredentialManager;
+#[cfg(not(feature = "fuzz-testing"))]
 use crate::preferences::PreferencesStore;
+#[cfg(not(feature = "fuzz-testing"))]
 use crate::session::{CreateTabConfig, SessionRegistry};
+#[cfg(not(feature = "fuzz-testing"))]
 use crate::ssh::SshManager;
 
+// The `run()` function calls `tauri::generate_context!()`, which expands to
+// code that is incompatible with nightly rustc (field layout changes in Tauri
+// internals).  Gate it behind `not(fuzz-testing)` so the fuzz workspace can
+// compile the crate with nightly without touching any Tauri proc-macro output.
+#[cfg(not(feature = "fuzz-testing"))]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize tracing subscriber for logging.
@@ -74,9 +89,15 @@ pub fn run() {
             #[cfg(feature = "e2e-testing")]
             app.manage(injectable_registry.clone());
 
+            let prefs_for_registry = app
+                .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
+                .inner()
+                .clone();
+
             let registry = SessionRegistry::new(
                 pty_backend,
                 app.handle().clone(),
+                prefs_for_registry,
                 #[cfg(feature = "e2e-testing")]
                 injectable_registry,
             );
@@ -134,6 +155,7 @@ pub fn run() {
             commands::connection_cmds::get_connections,
             commands::connection_cmds::save_connection,
             commands::connection_cmds::delete_connection,
+            commands::connection_cmds::duplicate_connection,
             // Preferences commands
             commands::preferences_cmds::get_preferences,
             commands::preferences_cmds::update_preferences,

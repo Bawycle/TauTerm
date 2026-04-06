@@ -201,8 +201,7 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
     const existingTab = makeTab();
 
     const invokeSpy = vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
-      if (cmd === 'get_session_state')
-        return { tabs: [existingTab], activeTabId: existingTab.id };
+      if (cmd === 'get_session_state') return { tabs: [existingTab], activeTabId: existingTab.id };
       if (cmd === 'get_preferences') return basePrefs;
       if (cmd === 'get_connections') return [];
       if (cmd === 'close_tab') return undefined;
@@ -231,7 +230,8 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
 
     // Bits UI Dialog portals into document.body.
     // The confirmation dialog title is m.close_confirm_title() = "Close terminal?"
-    const dialogTitle = document.body.querySelector('[data-dialog-title]') ??
+    const dialogTitle =
+      document.body.querySelector('[data-dialog-title]') ??
       Array.from(document.body.querySelectorAll('*')).find(
         (el) => el.textContent?.trim() === 'Close terminal?',
       );
@@ -245,7 +245,9 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
     closeBtn!.click();
     await settle();
 
-    const closeTabCalls = invokeSpy.mock.calls.filter(([cmd]: [string, ...unknown[]]) => cmd === 'close_tab');
+    const closeTabCalls = invokeSpy.mock.calls.filter(
+      ([cmd]: [string, ...unknown[]]) => cmd === 'close_tab',
+    );
     expect(closeTabCalls.length).toBe(0);
   });
 
@@ -267,7 +269,9 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
     confirmBtn!.click();
     await settle();
 
-    const closeTabCalls = invokeSpy.mock.calls.filter(([cmd]: [string, ...unknown[]]) => cmd === 'close_tab');
+    const closeTabCalls = invokeSpy.mock.calls.filter(
+      ([cmd]: [string, ...unknown[]]) => cmd === 'close_tab',
+    );
     expect(closeTabCalls.length).toBe(1);
     expect(closeTabCalls[0][1]).toMatchObject({ tabId: 'tab-1' });
   });
@@ -287,7 +291,9 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
     cancelBtn!.click();
     await settle();
 
-    const closeTabCalls = invokeSpy.mock.calls.filter(([cmd]: [string, ...unknown[]]) => cmd === 'close_tab');
+    const closeTabCalls = invokeSpy.mock.calls.filter(
+      ([cmd]: [string, ...unknown[]]) => cmd === 'close_tab',
+    );
     expect(closeTabCalls.length).toBe(0);
   });
 });
@@ -297,9 +303,7 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
 // ---------------------------------------------------------------------------
 
 describe('TV-INIT-002 [E2E-deferred]: tab created by backend event after failed create_tab', () => {
-  it.todo(
-    'session-state-changed tab-created event populates tabs when onMount create_tab fails',
-  );
+  it.todo('session-state-changed tab-created event populates tabs when onMount create_tab fails');
 });
 
 describe('TV-CLOSE-002 [E2E-deferred]: pane close confirmation dialog', () => {

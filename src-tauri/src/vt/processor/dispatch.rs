@@ -5,6 +5,8 @@
 //! Dispatches parsed VT/ANSI sequences to the `VtProcessor` state machine:
 //! C0 controls (`execute`), printable characters (`print`), CSI, OSC, and ESC sequences.
 
+use std::sync::Arc;
+
 use vte::Perform;
 
 use crate::vt::{
@@ -41,8 +43,10 @@ impl Perform for VtPerformBridge<'_> {
         let row = p.cursor_row();
         let col = p.cursor_col();
         match byte {
-            // BEL (0x07) — handled in PtyReadTask via dirty region + notification.
-            0x07 => {}
+            // BEL (0x07) — rate-limited; PTY read task emits the event (FS-VT-090).
+            0x07 => {
+                p.register_bell();
+            }
             // BS (0x08)
             0x08 => {
                 if col > 0 {
@@ -118,11 +122,37 @@ impl Perform for VtPerformBridge<'_> {
                     self.inner.title_changed = true;
                 }
             }
-            OscAction::SetHyperlink { .. } => {
-                // TODO: store hyperlink state on current cell position.
+            OscAction::SetHyperlink { uri, id } => {
+                // FS-VT-070–073: store the active hyperlink URI/ID in the processor.
+                // Subsequent printable characters will inherit this URI until it is cleared.
+                match uri {
+                    None => {
+                        // OSC 8 ;; — end hyperlink.
+                        self.inner.current_hyperlink = None;
+                        self.inner.current_hyperlink_id = None;
+                    }
+                    Some(uri_str) => {
+                        let new_id: Option<Arc<str>> = id.map(|s| Arc::from(s.as_str()));
+                        // FS-VT-072: if same ID as current hyperlink, reuse the existing
+                        // Arc to keep identity stable across multi-line continuations.
+                        let reuse = matches!(
+                            (&self.inner.current_hyperlink_id, &new_id),
+                            (Some(existing), Some(new)) if existing == new
+                        );
+                        if reuse {
+                            // Same ID → URI should be the same; keep existing Arc.
+                        } else {
+                            self.inner.current_hyperlink = Some(Arc::from(uri_str.as_str()));
+                            self.inner.current_hyperlink_id = new_id;
+                        }
+                    }
+                }
             }
-            OscAction::ClipboardWrite(_text) => {
-                // TODO: forward to clipboard backend respecting allow_osc52_write policy.
+            OscAction::ClipboardWrite(text) => {
+                // FS-VT-075 / SEC-OSC-002: forward only when the policy allows it.
+                if self.inner.allow_osc52_write {
+                    self.inner.pending_osc52_write = Some(text);
+                }
             }
             OscAction::Ignore => {}
         }
@@ -322,11 +352,29 @@ impl Perform for VtPerformBridge<'_> {
                     *p.active_cursor_mut() = pos;
                 }
             }
-            // DECSCUSR — cursor shape
+            // CSI Ps S — scroll up Ps lines (default 1) within the scroll region (FS-VT-052).
+            ([], 'S') => {
+                let n = param0.max(1);
+                let (top, bottom) = p.modes.scroll_region;
+                let is_full = top == 0 && bottom == p.rows - 1;
+                p.active_buf_mut().scroll_up(top, bottom, n, is_full, false);
+            }
+            // CSI Ps T — scroll down Ps lines (default 1) within the scroll region (FS-VT-052).
+            ([], 'T') => {
+                let n = param0.max(1);
+                let (top, bottom) = p.modes.scroll_region;
+                p.active_buf_mut().scroll_down(top, bottom, n);
+            }
+            // DECSCUSR — set cursor shape (FS-VT-030).
+            // Values: 0/1 = blinking block, 2 = steady block, 3 = blinking underline,
+            // 4 = steady underline, 5 = blinking bar, 6 = steady bar.
             ([b' '], 'q') => {
-                // Shape stored; frontend reads it via snapshot cursor_shape field.
-                // TODO: propagate shape to cursor state in snapshot.
-                let _ = param0;
+                // SAFETY: param0 is clamped to [0, 6] — fits in u8 without truncation.
+                let shape = param0.min(6) as u8;
+                if p.cursor_shape != shape {
+                    p.cursor_shape = shape;
+                    p.cursor_shape_changed = true;
+                }
             }
             _ => {} // Unknown CSI sequence — ignore.
         }

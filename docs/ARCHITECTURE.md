@@ -809,16 +809,19 @@ tauri::Builder::default()
     .run(ctx)
 ```
 
-**`PreferencesStore::load_or_default()`:** if the preferences file does not exist, loading returns a default instance. If the file exists but is invalid (corrupted JSON, I/O error), the error is logged and a default `PreferencesStore` is returned — TauTerm does not crash on preference corruption. See §7.6.
+**`PreferencesStore::load_or_default()`:** if the preferences file does not exist, loading returns a default instance. If the file exists but is invalid (corrupted TOML, I/O error), the error is logged and a default `PreferencesStore` is returned — TauTerm does not crash on preference corruption. See §7.6.
 
 ### 7.6 PreferencesStore Load Strategy
 
 `PreferencesStore::load_or_default()` replaces the original `load().expect(...)` call. The strategy:
 
-1. Attempt to read `~/.config/tauterm/preferences.json` (XDG_CONFIG_HOME).
-2. If the file does not exist: return `PreferencesStore::default()`.
-3. If the file exists but cannot be read (I/O error) or cannot be parsed (JSON error): log the error at `WARN` level with the filesystem path and error description, then return `PreferencesStore::default()`. The corrupted file is not deleted automatically; the user retains it for inspection.
-4. On successful load: validate values against schema ranges (see §8.1). Out-of-range values are replaced with defaults, and a `WARN` log entry is emitted per replaced field.
+1. Attempt to read `~/.config/tauterm/preferences.toml` (XDG_CONFIG_HOME).
+2. If the TOML file does not exist, attempt to read `~/.config/tauterm/preferences.json` (legacy migration path). If the JSON file is found and parses successfully, its content is used as the initial preferences; the TOML file will be written on the next `save_to_disk` call (i.e., the first `update_preferences` or theme/connection save after launch). The JSON file is not deleted automatically.
+3. If neither file exists: return `PreferencesStore::default()`.
+4. If the file exists but cannot be read (I/O error) or cannot be parsed (TOML/JSON error): log the error at `WARN` level and return `PreferencesStore::default()`. The corrupted file is not deleted automatically; the user retains it for inspection.
+5. On successful load: validate values against schema ranges (see §8.1). Out-of-range values are replaced with defaults, and a `WARN` log entry is emitted per replaced field.
+
+**Format mandate:** preferences must be serialised as **TOML** (`preferences.toml`). JSON is accepted only as a one-way migration source. New code must never write `preferences.json`.
 
 This strategy satisfies §9.1 (no `unwrap()` on filesystem data) and prevents application startup failure due to preference corruption (FS-SEC-003).
 
@@ -836,7 +839,7 @@ Every `#[tauri::command]` that accepts user-provided data applies validation at 
 - **IPC sequence length**: OSC and DCS sequences are limited to 4096 bytes in the VtProcessor (FS-SEC-005).
 - **Preferences on load**: validated against a schema; out-of-range values replaced with defaults (FS-SEC-003). See §7.6 for the load strategy.
 
-**`PreferencesStore` structure:** The `Preferences` struct (defined in `preferences/schema.rs`) owns the following top-level keys in `preferences.json`:
+**`PreferencesStore` structure:** The `Preferences` struct (defined in `preferences/schema.rs`) owns the following top-level keys in `preferences.toml`:
 
 | Sub-key | Type | Description |
 |---------|------|-------------|
@@ -964,7 +967,7 @@ See [§14 — Testing Strategy](#14-testing-strategy) for the complete test orga
 
 **Tauri integration:** Locale files are static frontend assets bundled by Vite. No Rust-side i18n is required: all user-visible strings live in the frontend. The backend emits string keys (error codes, status codes) which the frontend maps to locale strings via its own message catalogue. This keeps the IPC contract locale-agnostic. The backend never reads or modifies PTY environment variables (`LANG`, `LC_*`) based on the UI language selection (FS-I18N-007).
 
-**Persistence:** The active locale is saved to `preferences.json` under `appearance.language` via the standard `update_preferences` command. On next launch, `get_preferences` returns the saved locale; the frontend restores it before first render.
+**Persistence:** The active locale is saved to `preferences.toml` under `appearance.language` via the standard `update_preferences` command. On next launch, `get_preferences` returns the saved locale; the frontend restores it before first render.
 
 **IPC safety — `language` field:** The `language` field on `AppearancePrefs` MUST NOT be a free `String` across the IPC boundary. It MUST be deserialised on the Rust side to an enum validated against the known allowlist:
 
@@ -978,7 +981,7 @@ pub enum Language {
 }
 ```
 
-With `#[serde(default)]`, any unknown locale code in `preferences.json` (e.g., `"de"`) deserialises to `Language::En` instead of propagating an arbitrary string through the IPC layer and into the frontend (FS-I18N-006). The serialised form remains the lowercase string (`"en"` / `"fr"`) for JSON compatibility.
+With `#[serde(default)]`, any unknown locale code in `preferences.toml` (e.g., `"de"`) deserialises to `Language::En` instead of propagating an arbitrary string through the IPC layer and into the frontend (FS-I18N-006). The serialised form remains the lowercase string (`"en"` / `"fr"`).
 
 **Module map additions:**
 
@@ -1200,7 +1203,7 @@ A plugin system would allow third parties to add new session types (e.g., serial
 
 ### 12.3 Cloud Sync (Post-v1 — explicitly out of scope)
 
-Preferences and saved connections are stored in `~/.config/tauterm/` as JSON files (validated on load). A cloud sync feature would add a sync layer above `PreferencesStore`. The `PreferencesStore` interface (`get`, `apply_patch`, `get_themes`, `save_theme`, `delete_theme`) is the abstraction boundary. No structural change is required; a `SyncedPreferencesStore` could wrap the base store.
+Preferences and saved connections are stored in `~/.config/tauterm/preferences.toml` (TOML format, validated on load). A cloud sync feature would add a sync layer above `PreferencesStore`. The `PreferencesStore` interface (`get`, `apply_patch`, `get_themes`, `save_theme`, `delete_theme`) is the abstraction boundary. No structural change is required; a `SyncedPreferencesStore` could wrap the base store.
 
 ### 12.4 Kitty Keyboard Protocol (Post-v1)
 
@@ -1227,7 +1230,8 @@ See ADR-0005. The PAL stubs are in `platform/pty_macos.rs`, `platform/credential
 | [ADR-0009](adr/ADR-0009-pane-structure-flat-list.md) | Pane layout structure: flat list with split metadata vs. recursive tree | Accepted |
 | [ADR-0010](adr/ADR-0010-session-state-delta-events.md) | `session-state-changed` event: complete TabState vs. partial diff | Accepted |
 | [ADR-0011](adr/ADR-0011-scrollback-rust-ring-buffer.md) | Scrollback storage: Rust ring buffer in backend | Accepted |
-| [ADR-0012](adr/ADR-0012-preferences-json-file.md) | Preferences persistence: JSON file in XDG_CONFIG_HOME | Accepted |
+| [ADR-0012](adr/ADR-0012-preferences-json-file.md) | Preferences persistence: JSON file in XDG_CONFIG_HOME | Superseded by ADR-0016 |
+| [ADR-0016](adr/ADR-0016-preferences-toml-format.md) | Preferences persistence: TOML with snake_case keys (supersedes ADR-0012) | Accepted |
 | [ADR-0013](adr/ADR-0013-i18n-paraglide-js.md) | i18n library: Paraglide JS (Inlang) | Accepted |
 | [ADR-0014](adr/ADR-0014-appimage-tauri-bundler.md) | AppImage distribution via Tauri bundler | Accepted |
 

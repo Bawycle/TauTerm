@@ -10,6 +10,8 @@
 //! All types are `Copy` + `Clone` + `PartialEq` so they can be diffed efficiently
 //! for dirty-cell tracking and screen snapshot generation.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 /// A single cell in the terminal grid.
@@ -22,6 +24,9 @@ pub struct Cell {
     pub attrs: CellAttrs,
     /// Display width: 1 for normal, 2 for wide (CJK/emoji), 0 for phantom.
     pub width: u8,
+    /// OSC 8 hyperlink URI attached to this cell, if any.
+    /// Shared via `Arc<str>` to avoid per-cell string allocation in hyperlinked runs.
+    pub hyperlink: Option<Arc<str>>,
 }
 
 impl Default for Cell {
@@ -30,6 +35,7 @@ impl Default for Cell {
             grapheme: " ".to_string(),
             attrs: CellAttrs::default(),
             width: 1,
+            hyperlink: None,
         }
     }
 }
@@ -46,6 +52,7 @@ impl Cell {
             grapheme: String::new(),
             attrs: CellAttrs::default(),
             width: 0,
+            hyperlink: None,
         }
     }
 

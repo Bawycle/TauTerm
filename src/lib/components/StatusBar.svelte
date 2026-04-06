@@ -2,8 +2,13 @@
 <!--
   StatusBar — single-line status strip at the bottom of the window.
 
-  Displays the active pane's session type, SSH connection state (text + icon),
-  process title, and CWD.
+  Layout (UXD §6.4):
+    Left  : shell name (processTitle) + current working directory, truncated with ellipsis.
+    Right : SSH connection status indicator (if applicable).
+
+  Elements deferred to DIV-UXD-008 (not implemented here):
+    - Settings button
+    - Terminal dimensions (cols×rows)
 
   Props:
     activePaneState — PaneState of the currently active pane (null if no session)
@@ -17,7 +22,7 @@
     - All text via Svelte text interpolation — no {@html}
 -->
 <script lang="ts">
-  import { Network, WifiOff, XCircle } from 'lucide-svelte';
+  import { Network, WifiOff, XCircle, Settings } from 'lucide-svelte';
   import type { PaneState, SshLifecycleState } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
 
@@ -27,9 +32,22 @@
     sshHost?: string;
     /** Username for the SSH connection. */
     sshUser?: string;
+    /** Terminal grid columns (for dimensions display). */
+    cols?: number | null;
+    /** Terminal grid rows (for dimensions display). */
+    rows?: number | null;
+    /** Called when the Settings button is clicked (DIV-UXD-008). */
+    onsettings?: () => void;
   }
 
-  const { activePaneState = null, sshHost, sshUser }: Props = $props();
+  const {
+    activePaneState = null,
+    sshHost,
+    sshUser,
+    cols = null,
+    rows = null,
+    onsettings,
+  }: Props = $props();
 
   // -------------------------------------------------------------------------
   // SSH indicator logic (TUITC-UX-090 to 092, UXD §7.5.1)
@@ -105,17 +123,32 @@
     return '';
   });
 
-  // Process title for center display
+  // Left zone: shell name (processTitle) and CWD
   const processTitle = $derived(activePaneState?.processTitle ?? '');
   const cwd = $derived(activePaneState?.cwd ?? '');
 </script>
 
 <div class="status-bar" role="status" aria-live="polite">
-  <!-- Left: session type + SSH indicator -->
+  <!-- Left: shell name + CWD (UXD §6.4) -->
   <div class="status-bar__left">
-    {#if activePaneState?.sessionType === 'local'}
-      <!-- No indicator for local sessions (absence = local per UXD §7.5.1) -->
-      <span class="status-bar__session-label">{m.status_bar_local()}</span>
+    {#if processTitle}
+      <span class="status-bar__shell-name">{processTitle}</span>
+    {/if}
+    {#if cwd}
+      <span class="status-bar__cwd" title={cwd}>{cwd}</span>
+    {/if}
+  </div>
+
+  <!-- Right: terminal dimensions + SSH indicator + Settings button (DIV-UXD-008) -->
+  <div class="status-bar__right">
+    <!-- Terminal dimensions: cols×rows -->
+    {#if cols !== null && rows !== null}
+      <span
+        class="status-bar__dimensions"
+        aria-label={m.status_bar_dimensions_aria({ cols, rows })}
+      >
+        {cols}×{rows}
+      </span>
     {/if}
 
     {#if isSsh && sshState}
@@ -141,20 +174,17 @@
         {/if}
       </span>
     {/if}
-  </div>
 
-  <!-- Center: process title -->
-  <div class="status-bar__center">
-    {#if processTitle}
-      <span class="status-bar__process-title">{processTitle}</span>
-    {/if}
-  </div>
-
-  <!-- Right: CWD (truncated) -->
-  <div class="status-bar__right">
-    {#if cwd}
-      <span class="status-bar__cwd" title={cwd}>{cwd}</span>
-    {/if}
+    <!-- Settings button (DIV-UXD-008) -->
+    <button
+      type="button"
+      class="status-bar__settings-btn"
+      onclick={() => onsettings?.()}
+      aria-label={m.status_bar_settings()}
+      title={m.status_bar_settings()}
+    >
+      <Settings size={14} aria-hidden="true" />
+    </button>
   </div>
 </div>
 
@@ -164,7 +194,7 @@
     align-items: center;
     height: var(--size-status-bar-height);
     min-height: var(--size-status-bar-height);
-    background-color: var(--color-bg-surface);
+    background-color: var(--color-bg-base);
     border-top: 1px solid var(--color-border);
     padding: 0 var(--space-2);
     flex-shrink: 0;
@@ -174,37 +204,45 @@
     gap: var(--space-2);
   }
 
+  /* Left: shell name + CWD — takes all available space, truncates with ellipsis */
   .status-bar__left {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    flex-shrink: 0;
-  }
-
-  .status-bar__center {
     flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
     min-width: 0;
+    overflow: hidden;
   }
 
+  /* Right: SSH indicator — shrinks to fit, never grows */
   .status-bar__right {
     display: flex;
     align-items: center;
     gap: var(--space-1);
     flex-shrink: 0;
-    max-width: 30%;
-    overflow: hidden;
   }
 
-  .status-bar__session-label {
-    color: var(--color-text-tertiary);
-    font-size: var(--font-size-ui-2xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+  /* Shell name (processTitle): monospace, truncated */
+  .status-bar__shell-name {
     font-family: var(--font-mono-ui);
+    font-size: var(--font-size-ui-sm);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+    max-width: 30%;
+  }
+
+  /* CWD: monospace, truncated, takes remaining space */
+  .status-bar__cwd {
+    font-family: var(--font-mono-ui);
+    font-size: var(--font-size-ui-xs);
+    color: var(--color-text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
 
   /* SSH indicator (TUITC-UX-090 to 092, UXD §7.5.1) */
@@ -287,19 +325,41 @@
     max-width: 200px;
   }
 
-  .status-bar__process-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  /* Terminal dimensions: cols×rows (DIV-UXD-008) */
+  .status-bar__dimensions {
+    font-family: var(--font-mono-ui);
+    font-size: var(--font-size-ui-xs);
+    color: var(--color-text-tertiary);
     white-space: nowrap;
-    color: var(--color-text-secondary);
+    flex-shrink: 0;
   }
 
-  .status-bar__cwd {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* Settings ghost button (DIV-UXD-008) */
+  .status-bar__settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 2px;
+    background: transparent;
     color: var(--color-text-tertiary);
-    font-size: var(--font-size-ui-xs);
-    font-family: var(--font-mono-ui);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      color var(--duration-instant),
+      background-color var(--duration-instant);
+    padding: 0;
+  }
+
+  .status-bar__settings-btn:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-hover-bg);
+  }
+
+  .status-bar__settings-btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -1px;
   }
 </style>

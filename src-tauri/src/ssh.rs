@@ -34,6 +34,15 @@ pub struct SshConnectionConfig {
     /// Per-connection OSC 52 write policy override.
     #[serde(default)]
     pub allow_osc52_write: bool,
+    /// Override the keepalive probe interval for this connection (seconds).
+    /// Falls back to `SSH_KEEPALIVE_INTERVAL` (30 s) when absent (FS-SSH-020).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keepalive_interval_secs: Option<u64>,
+    /// Override the maximum number of consecutive unanswered keepalive probes
+    /// before the connection is declared lost (FS-SSH-020).
+    /// Falls back to `SSH_KEEPALIVE_MAX_MISSES` (3) when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keepalive_max_failures: Option<u32>,
 }
 
 /// SSH session lifecycle state (§5.2 of ARCHITECTURE.md).

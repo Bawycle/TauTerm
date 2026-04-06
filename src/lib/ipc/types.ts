@@ -180,6 +180,12 @@ export interface CellUpdate {
   /** Single character, or empty string for a blank cell. */
   content: string;
   attrs: CellAttrsDto;
+  /**
+   * OSC 8 hyperlink URI for this cell, if any (FS-VT-070–073).
+   * Absent when no active hyperlink.
+   * Mirrors Rust CellUpdate.hyperlink (skip_serializing_if = "Option::is_none").
+   */
+  hyperlink?: string;
 }
 
 /**
@@ -323,6 +329,30 @@ export interface NotificationChangedEvent {
   tabId: TabId;
   paneId: PaneId;
   notification: PaneNotification | null;
+}
+
+/**
+ * Emitted when a DECSCUSR escape changes the cursor shape for a pane.
+ * Mirrors Rust CursorStyleChangedEvent (events/types.rs).
+ * `shape` is the raw DECSCUSR parameter (0–6):
+ *   0/1 = blinking block, 2 = steady block,
+ *   3 = blinking underline, 4 = steady underline,
+ *   5 = blinking bar, 6 = steady bar.
+ * Event name: "cursor-style-changed"
+ */
+export interface CursorStyleChangedEvent {
+  paneId: PaneId;
+  /** Raw DECSCUSR value 0–6. */
+  shape: number;
+}
+
+/**
+ * Emitted when the terminal produces a BEL character (rate-limited, ≤1/100 ms per pane).
+ * Mirrors Rust BellTriggeredEvent (events/types.rs).
+ * Event name: "bell-triggered"
+ */
+export interface BellTriggeredEvent {
+  paneId: PaneId;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +544,12 @@ export interface SnapshotCell {
   fg?: Color;
   bg?: Color;
   underlineColor?: Color;
+  /**
+   * OSC 8 hyperlink URI for this cell, if any (FS-VT-070–073).
+   * Absent when no active hyperlink.
+   * Mirrors Rust SnapshotCell.hyperlink (skip_serializing_if = "Option::is_none").
+   */
+  hyperlink?: string;
 }
 
 /**
@@ -711,6 +747,11 @@ export interface UserTheme {
   background: string;
   cursorColor: string;
   selectionBg: string;
+  /**
+   * Terminal line height multiplier (FS-THEME-010). Range: 1.0–2.0.
+   * `undefined` means use the global default (`--line-height-terminal` token).
+   */
+  lineHeight?: number;
 }
 
 /**

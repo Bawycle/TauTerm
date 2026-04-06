@@ -40,7 +40,7 @@
   {onclick}
   onkeydown={handleKeydown}
 >
-  <ArrowDown size="var(--size-icon-sm)" aria-hidden="true" />
+  <ArrowDown size="var(--size-icon-md)" aria-hidden="true" />
 </div>
 
 <style>
@@ -71,9 +71,8 @@
     cursor: pointer;
     user-select: none;
 
-    /* Opacity transition for show/hide (driven by parent) */
+    /* Opacity controlled by parent's transition:fade directive */
     opacity: 1;
-    transition: opacity var(--duration-fast) ease-out;
   }
 
   .scroll-to-bottom-btn:hover {

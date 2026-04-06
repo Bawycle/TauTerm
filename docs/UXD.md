@@ -123,61 +123,63 @@ All tokens are defined in AD.md §7 and expressed as Tailwind 4 `@theme` CSS cus
 
 Primitive tokens are named palette positions with no semantic meaning. Components never consume these directly — they go through semantic tokens (§3.2).
 
-Primitive tokens use the `--umbra-` prefix to avoid collision with Tailwind 4's auto-generated `--color-*` namespace. Semantic tokens (`--color-tab-bg`, `--term-bg`, etc.) keep their descriptive names and are safe.
+Primitive tokens use the `--color-*` namespace (e.g. `--color-neutral-950`). This shared namespace with Tailwind 4 is safe in practice: Tailwind 4 generates its utility tokens from the palette config, not from custom `@theme` declarations — both sets coexist without collision. The previous `--umbra-` prefix added verbosity and onboarding friction without meaningful benefit and has been removed.
+
+Primitives are distinguished from semantic tokens by their position in the name: `--color-neutral-950` is a primitive (palette position), while `--color-bg-base` is semantic (usage meaning). Components never consume primitives directly — they always go through semantic tokens (§3.2).
 
 #### Neutral Scale (warm-shifted)
 
 | Token | Value | Description |
 |-------|-------|-------------|
-| `--umbra-neutral-950` | `#0e0d0b` | Deepest background, window chrome base |
-| `--umbra-neutral-900` | `#16140f` | Terminal background, active tab background |
-| `--umbra-neutral-850` | `#1c1a14` | Unfocused pane background |
-| `--umbra-neutral-800` | `#242118` | Tab bar background, surface |
-| `--umbra-neutral-750` | `#2c2921` | Raised surface (menus, dropdowns, tooltips, hover backgrounds) |
-| `--umbra-neutral-700` | `#35312a` | Border, divider, active background |
-| `--umbra-neutral-600` | `#4a4640` | Scrollbar thumb, inactive tab text background reference |
-| `--umbra-neutral-500` | `#6b6660` | Placeholder text, disabled elements |
-| `--umbra-neutral-400` | `#9c9890` | Secondary text, inactive labels, icons default, inactive tab text |
-| `--umbra-neutral-300` | `#ccc7bc` | Primary UI text, terminal foreground |
-| `--umbra-neutral-200` | `#e8e3d8` | Emphasized text, active tab title |
-| `--umbra-neutral-100` | `#f5f2ea` | High-emphasis text (rare), ANSI bright white |
+| `--color-neutral-950` | `#0e0d0b` | Deepest background, window chrome base |
+| `--color-neutral-900` | `#16140f` | Terminal background, active tab background |
+| `--color-neutral-850` | `#1c1a14` | Unfocused pane background |
+| `--color-neutral-800` | `#242118` | Tab bar background, surface |
+| `--color-neutral-750` | `#2c2921` | Raised surface (menus, dropdowns, tooltips, hover backgrounds) |
+| `--color-neutral-700` | `#35312a` | Border, divider, active background |
+| `--color-neutral-600` | `#4a4640` | Scrollbar thumb, inactive tab text background reference |
+| `--color-neutral-500` | `#6b6660` | Placeholder text, disabled elements |
+| `--color-neutral-400` | `#9c9890` | Secondary text, inactive labels, icons default, inactive tab text |
+| `--color-neutral-300` | `#ccc7bc` | Primary UI text, terminal foreground |
+| `--color-neutral-200` | `#e8e3d8` | Emphasized text, active tab title |
+| `--color-neutral-100` | `#f5f2ea` | High-emphasis text (rare), ANSI bright white |
 
 #### Blue-Steel Scale (primary accent)
 
 | Token | Value | Description |
 |-------|-------|-------------|
-| `--umbra-blue-700` | `#1a3a52` | Deep accent background, SSH badge background, selection (unfocused) |
-| `--umbra-blue-600` | `#1e4d6e` | Focus ring base |
-| `--umbra-blue-500` | `#2e6f9c` | Interactive accent hover, selection background (focused) |
-| `--umbra-blue-400` | `#4a92bf` | Primary accent default state, focus ring, active pane border, divider hover |
-| `--umbra-blue-300` | `#7ab3d3` | Accent text on dark, cursor fill, hyperlink text |
-| `--umbra-blue-200` | `#b3d2e6` | Light accent (reserved) |
+| `--color-blue-700` | `#1a3a52` | Deep accent background, SSH badge background, selection (unfocused) |
+| `--color-blue-600` | `#1e4d6e` | Focus ring base |
+| `--color-blue-500` | `#2e6f9c` | Interactive accent hover, selection background (focused) |
+| `--color-blue-400` | `#4a92bf` | Primary accent default state, focus ring, active pane border, divider hover |
+| `--color-blue-300` | `#7ab3d3` | Accent text on dark, cursor fill, hyperlink text |
+| `--color-blue-200` | `#b3d2e6` | Light accent (reserved) |
 
 #### Amber Scale (warning/caution)
 
 | Token | Value | Description |
 |-------|-------|-------------|
-| `--umbra-amber-700` | `#4d3000` | Warning background, search match background (non-active) |
-| `--umbra-amber-500` | `#b06a00` | Warning indicator |
-| `--umbra-amber-400` | `#d48a20` | Warning text, bell indicator, SSH connecting state |
-| `--umbra-amber-300` | `#e8b060` | Warning label, search match foreground (non-active) |
+| `--color-amber-700` | `#4d3000` | Warning background, search match background (non-active) |
+| `--color-amber-500` | `#b06a00` | Warning indicator |
+| `--color-amber-400` | `#d48a20` | Warning text, bell indicator, SSH connecting state |
+| `--color-amber-300` | `#e8b060` | Warning label, search match foreground (non-active) |
 
 #### Red Scale (error/danger)
 
 | Token | Value | Description |
 |-------|-------|-------------|
-| `--umbra-red-700` | `#3d1212` | Error background, SSH disconnected badge background |
-| `--umbra-red-500` | `#9c2c2c` | Error indicator |
-| `--umbra-red-400` | `#c44444` | Error text, destructive action, ANSI red normal |
-| `--umbra-red-300` | `#d97878` | Error label, SSH disconnected badge text |
+| `--color-red-700` | `#3d1212` | Error background, SSH disconnected badge background |
+| `--color-red-500` | `#9c2c2c` | Error indicator |
+| `--color-red-400` | `#c44444` | Error text, destructive action, ANSI red normal |
+| `--color-red-300` | `#d97878` | Error label, SSH disconnected badge text |
 
 #### Green Scale (success/activity)
 
 | Token | Value | Description |
 |-------|-------|-------------|
-| `--umbra-green-600` | `#1a3d1a` | Activity background |
-| `--umbra-green-400` | `#4a9c4a` | Activity indicator, success |
-| `--umbra-green-300` | `#78c078` | Activity text, output-on-inactive-tab indicator |
+| `--color-green-600` | `#1a3d1a` | Activity background |
+| `--color-green-400` | `#4a9c4a` | Activity indicator, success |
+| `--color-green-300` | `#78c078` | Activity text, output-on-inactive-tab indicator |
 
 ### 3.2 Color Tokens — Semantic
 
@@ -706,6 +708,8 @@ All indicators are cleared when the user switches to the indicated tab (FS-NOTIF
 - **Behavior:** On click, closes the tab. If a foreground process is running, triggers confirmation dialog (FS-PTY-008).
 - **Visibility:** Always visible on active tab. On inactive tabs, visible only on hover over the tab item.
 
+**Keyboard accessibility note:** The close button carries `tabindex="-1"` and is intentionally excluded from sequential Tab navigation. Keyboard users close a tab by focusing the tab item and pressing Delete. The close button's `focus-visible` ring remains active for programmatic focus (e.g. assistive technology scripts). This avoids three focus stops per tab (tab-item → close-button → next-tab-item) which would degrade keyboard navigation flow.
+
 #### 7.1.5 New Tab Button
 
 - **Position:** After the last tab item in the tab bar.
@@ -1229,10 +1233,10 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 | State | Background | Text | Border |
 |-------|-----------|------|--------|
 | Default | `--color-accent` (`#4a92bf`) | `--color-text-inverted` (`#0e0d0b`) | none |
-| Hover | `--umbra-blue-500` (`#2e6f9c`) | `--color-text-inverted` | none |
-| Active | `--umbra-blue-600` (`#1e4d6e`) | `--color-text-inverted` | none |
+| Hover | `--color-blue-500` (`#2e6f9c`) | `--color-text-inverted` | none |
+| Active | `--color-blue-600` (`#1e4d6e`) | `--color-text-inverted` | none |
 | Focus | `--color-accent` | `--color-text-inverted` | 2px solid `--color-focus-ring`, offset 2px `--color-focus-ring-offset` |
-| Disabled | `--umbra-neutral-700` (`#35312a`) | `--color-text-tertiary` (`#6b6660`) | none |
+| Disabled | `--color-neutral-700` (`#35312a`) | `--color-text-tertiary` (`#6b6660`) | none |
 
 #### Secondary Button
 
@@ -1240,9 +1244,9 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 |-------|-----------|------|--------|
 | Default | transparent | `--color-accent-text` (`#7ab3d3`) | 1px solid `--color-accent` |
 | Hover | `--color-accent-subtle` (`#1a3a52`) | `--color-accent-text` | 1px solid `--color-accent` |
-| Active | `--umbra-blue-700` (`#1a3a52`) | `--color-accent-text` | 1px solid `--color-accent` |
+| Active | `--color-blue-700` (`#1a3a52`) | `--color-accent-text` | 1px solid `--color-accent` |
 | Focus | transparent | `--color-accent-text` | 2px solid `--color-focus-ring`, offset 2px |
-| Disabled | transparent | `--color-text-tertiary` | 1px solid `--umbra-neutral-700` |
+| Disabled | transparent | `--color-text-tertiary` | 1px solid `--color-neutral-700` |
 
 #### Ghost Button
 
@@ -1258,11 +1262,11 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 
 | State | Background | Text | Border |
 |-------|-----------|------|--------|
-| Default | `--color-error` (`#c44444`) | `--umbra-neutral-100` (`#f5f2ea`) | none |
-| Hover | `--umbra-red-500` (`#9c2c2c`) | `--umbra-neutral-100` | none |
-| Active | `--umbra-red-700` (`#3d1212`) | `--umbra-neutral-100` | none |
-| Focus | `--color-error` | `--umbra-neutral-100` | 2px solid `--color-focus-ring`, offset 2px |
-| Disabled | `--umbra-neutral-700` | `--color-text-tertiary` | none |
+| Default | `--color-error` (`#c44444`) | `--color-neutral-100` (`#f5f2ea`) | none |
+| Hover | `--color-red-500` (`#9c2c2c`) | `--color-neutral-100` | none |
+| Active | `--color-red-700` (`#3d1212`) | `--color-neutral-100` | none |
+| Focus | `--color-error` | `--color-neutral-100` | 2px solid `--color-focus-ring`, offset 2px |
+| Disabled | `--color-neutral-700` | `--color-text-tertiary` | none |
 
 ### 7.15 Text Input / Form Field
 
@@ -1287,7 +1291,7 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 | State | Border | Background | Additional |
 |-------|--------|-----------|------------|
 | Default | 1px `--color-border` | `--term-bg` | — |
-| Hover | 1px `--umbra-neutral-600` (`#4a4640`) | `--term-bg` | — |
+| Hover | 1px `--color-neutral-600` (`#4a4640`) | `--term-bg` | — |
 | Focus | 2px `--color-focus-ring` (`#4a92bf`) | `--term-bg` | Focus ring replaces border |
 | Error | 1px `--color-error` (`#c44444`) | `--term-bg` | Error text shown below |
 | Disabled | 1px `--color-border-subtle` | `--color-bg-surface` (`#242118`) | Text `--color-text-tertiary`, cursor not-allowed |
@@ -1302,13 +1306,13 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 
 | State | Track | Thumb |
 |-------|-------|-------|
-| Unchecked | `--umbra-neutral-700` (`#35312a`) | `--umbra-neutral-400` (`#9c9890`) |
-| Checked | `--color-accent` (`#4a92bf`) | `--umbra-neutral-100` (`#f5f2ea`) |
-| Hover (unchecked) | `--umbra-neutral-600` | `--umbra-neutral-300` |
-| Hover (checked) | `--umbra-blue-500` | `--umbra-neutral-100` |
+| Unchecked | `--color-neutral-700` (`#35312a`) | `--color-neutral-400` (`#9c9890`) |
+| Checked | `--color-accent` (`#4a92bf`) | `--color-neutral-100` (`#f5f2ea`) |
+| Hover (unchecked) | `--color-neutral-600` | `--color-neutral-300` |
+| Hover (checked) | `--color-blue-500` | `--color-neutral-100` |
 | Focus | +2px `--color-focus-ring` ring | unchanged |
-| Disabled (unchecked) | `--umbra-neutral-750` | `--umbra-neutral-600` |
-| Disabled (checked) | `--umbra-blue-700` | `--umbra-neutral-500` |
+| Disabled (unchecked) | `--color-neutral-750` | `--color-neutral-600` |
+| Disabled (checked) | `--color-blue-700` | `--color-neutral-500` |
 
 **Transition:** Thumb slides 16px (track width - thumb width - 4px inset) over `--duration-base` (100ms) with `--ease-out`.
 
@@ -1527,7 +1531,7 @@ When an SSH connection is established and the negotiated host key algorithm is d
 
 - **Icon:** Lucide `X`, `--size-icon-sm` (14px).
 - **Hit area:** `--size-target-min` (44px).
-- **Icon color:** `--color-warning-text` (`#e8b060`) resting, `--umbra-neutral-100` (`#f5f2ea`) on hover.
+- **Icon color:** `--color-warning-text` (`#e8b060`) resting, `--color-neutral-100` (`#f5f2ea`) on hover.
 - **Background:** transparent resting, `--color-warning` (`#d48a20`) at 20% opacity on hover, `--radius-sm`.
 - **Behavior:** On click, the banner is dismissed permanently for this pane session. The banner does not reappear unless a new connection is established to the same host. Dismissal state is not persisted across application restarts — the warning reappears on each new connection to a server using deprecated algorithms.
 
@@ -1560,6 +1564,8 @@ When an SSH connection is established and the negotiated host key algorithm is d
 - **Focus trap in modals:** When a dialog or the preferences panel is open, Tab key cycles only through focusable elements within the modal. Shift+Tab cycles backward. Focus starts on the default action (typically the safe/cancel action for destructive dialogs).
 - **Focus restoration:** When a modal closes, focus returns to the element that triggered it.
 - **Auto-focus on active pane (FS-UX-003):** The active terminal pane's viewport MUST receive keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created (Ctrl+Shift+T or UI button), (3) when the user switches to a different tab (tab bar click or Ctrl+Tab). In all cases focus is applied via `element.focus({ preventScroll: true })` immediately after the pane viewport is mounted. This does not apply to terminated panes.
+
+**Input fields:** Use `outline-offset: -2px` (inset outline) to keep the focus ring within the field's border, avoiding visual overlap with adjacent elements. Do not use `box-shadow` for focus on inputs — `outline` correctly traverses `overflow: hidden` containers and respects `prefers-reduced-motion`.
 
 ### 8.3 Scroll Behavior
 
@@ -1613,7 +1619,7 @@ A passive indicator that appears whenever `scroll_offset > 0` to signal that the
 
 #### Tab Reorder (FS-TAB-005)
 
-- **Initiation:** Mouse down on tab + 4px drag threshold.
+- **Initiation:** The drag initiation threshold is delegated to the native HTML5 DnD API mechanism (managed by the OS/compositor). No additional application-level threshold is implemented, as the native threshold is sufficient to prevent accidental drags.
 - **Visual feedback:** The dragged tab gets `--shadow-raised`, opacity 0.9. A 2px-wide vertical insertion indicator (`--color-accent`) appears between tabs at the target position.
 - **Cursor:** `grabbing`.
 - **Drop:** Tab moves to the indicated position. No animation on drop (instant repositioning).
@@ -1947,7 +1953,7 @@ A user theme MAY also define any of the following:
 | UI borders | `--color-border`, `--color-border-subtle`, `--color-divider`, `--color-divider-active` |
 | UI components | All `--color-tab-*`, `--color-pane-*`, `--color-scrollbar-*`, `--color-ssh-*` tokens |
 | Status | `--color-error`, `--color-error-bg`, `--color-error-text`, `--color-warning`, `--color-warning-bg`, `--color-warning-text`, `--color-success`, `--color-success-text`, `--color-activity`, `--color-bell`, `--color-process-end` |
-| Primitives | All `--umbra-neutral-*`, `--umbra-blue-*`, `--umbra-amber-*`, `--umbra-red-*`, `--umbra-green-*` (if the theme defines a wholly different palette) |
+| Primitives | All `--color-neutral-*`, `--color-blue-*`, `--color-amber-*`, `--color-red-*`, `--color-green-*` (if the theme defines a wholly different palette) |
 
 > **Note:** Overriding primitive tokens is valid in the context of user theming. The rule that "components never consume primitives directly" applies to component implementation code — components always reference semantic tokens. When a user theme overrides a primitive, the change propagates automatically through all semantic tokens that map to it. This is the intended cascade mechanism for users who want to define a wholly different palette without redefining every semantic token.
 
@@ -2001,7 +2007,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | §2.3 | Status is honest and immediate | UR §2.2 (Jordan — at-a-glance status) | FS-SSH-022, FS-A11Y-004 |
 | §2.4 | Sensible defaults, zero required configuration | UR §2.3 (Sam — no config for basic use) | — |
 | §3 | Complete design token system | UR §8.3 (design tokens) | FS-THEME-008 |
-| §3.1 | Primitive tokens use `--umbra-` prefix | — | Tailwind 4 namespace collision avoidance |
+| §3.1 | Primitive tokens use `--color-` prefix | — | Tailwind 4 namespace collision avoidance |
 | §4.1 | Terminal font stack with JetBrains Mono primary | UR §8.2 (font family in themes) | FS-PREF-006 (font configurable) |
 | §5.3 | ANSI 16-color palette with 4.5:1+ contrast | UR §8.2 (ANSI palette in themes) | FS-VT-020, FS-VT-023 |
 | §5.4 | All pairings meet WCAG 2.1 AA | — | FS-A11Y-001 |

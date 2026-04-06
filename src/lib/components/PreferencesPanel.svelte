@@ -30,6 +30,7 @@
     CursorStyle,
     BellType,
   } from '$lib/ipc/types';
+  import { contrastRatio, WCAG_AA_THRESHOLD } from '$lib/utils/contrast';
 
   // ---------------------------------------------------------------------------
   // Props
@@ -340,6 +341,56 @@
   function paletteLabel(index: number): string {
     return m.theme_color_index({ index: String(index) });
   }
+
+  // ---------------------------------------------------------------------------
+  // Theme editor — contrast advisory (UXD §7.20.4)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * WCAG 2.1 contrast ratio between foreground and background of the theme
+   * currently being edited. Recomputed reactively on every color change.
+   * Returns 1 (minimum) when either color is not a valid hex string.
+   */
+  const editingContrastRatio = $derived(
+    editingTheme ? contrastRatio(editingTheme.foreground, editingTheme.background) : 1,
+  );
+
+  /** Whether the fg/bg contrast is below the WCAG 2.1 AA threshold (4.5:1). */
+  const contrastBelowAA = $derived(editingContrastRatio < WCAG_AA_THRESHOLD);
+
+  // ---------------------------------------------------------------------------
+  // Theme editor — preview CSS variables (UXD §7.20.5, FS-A11Y-007)
+  // Applied as inline style on the `.theme-preview` container only, so the
+  // editor chrome always uses system tokens, never the in-progress theme.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Inline style string applied to the `.theme-preview` container.
+   * Maps the editing theme's colors to `--preview-*` variables scoped to that
+   * element, keeping the panel chrome unaffected.
+   */
+  const previewStyle = $derived.by(() => {
+    if (!editingTheme) return '';
+    const parts: string[] = [
+      `--preview-bg: ${editingTheme.background}`,
+      `--preview-fg: ${editingTheme.foreground}`,
+      `--preview-cursor: ${editingTheme.cursorColor}`,
+    ];
+    for (let i = 0; i < 16; i++) {
+      parts.push(`--preview-color-${i}: ${editingTheme.palette[i]}`);
+    }
+    return parts.join('; ');
+  });
+
+  /**
+   * Clamp and validate a line_height value to the allowed range [1.0, 2.0].
+   * Returns undefined when the input is not a valid number in range.
+   */
+  function clampLineHeight(val: string): number | undefined {
+    const n = parseFloat(val);
+    if (isNaN(n)) return undefined;
+    return Math.max(1.0, Math.min(2.0, Math.round(n * 10) / 10));
+  }
 </script>
 
 <Dialog.Root
@@ -569,6 +620,38 @@
                   }}
                 />
 
+                <!-- Line height (FS-THEME-010): range 1.0–2.0, step 0.1 -->
+                <div class="flex flex-col gap-1">
+                  <label
+                    for="theme-line-height"
+                    class="text-[12px] font-medium text-(--color-text-secondary)"
+                  >
+                    {m.theme_line_height_label()}
+                  </label>
+                  <input
+                    id="theme-line-height"
+                    type="number"
+                    min="1.0"
+                    max="2.0"
+                    step="0.1"
+                    value={editingTheme.lineHeight ?? ''}
+                    placeholder="1.2"
+                    class="h-[36px] px-3 rounded-[2px] border border-(--color-border)
+                           bg-(--color-bg-input) text-(--color-text-primary) text-[13px]
+                           focus:outline-2 focus:outline-(--color-focus-ring)"
+                    oninput={(e) => {
+                      if (!editingTheme) return;
+                      const val = (e.currentTarget as HTMLInputElement).value;
+                      const clamped = clampLineHeight(val);
+                      editingTheme = { ...editingTheme, lineHeight: clamped };
+                    }}
+                    aria-label={m.theme_line_height_label()}
+                  />
+                  <span class="text-[11px] text-(--color-text-tertiary)"
+                    >{m.theme_line_height_hint()}</span
+                  >
+                </div>
+
                 <fieldset class="border border-(--color-border) rounded-[2px] p-3">
                   <legend
                     class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider px-1"
@@ -600,6 +683,67 @@
                     {/each}
                   </div>
                 </fieldset>
+
+                <!-- Contrast advisory (UXD §7.20.4) -->
+                {#if contrastBelowAA}
+                  <div
+                    class="flex items-start gap-2 p-3 rounded-[2px]
+                           bg-(--color-warning-bg) border border-(--color-warning)"
+                    role="alert"
+                    aria-live="polite"
+                  >
+                    <span class="text-[13px] text-(--color-warning-text) leading-snug">
+                      {m.theme_contrast_warning({
+                        ratio: editingContrastRatio.toFixed(2),
+                        threshold: String(WCAG_AA_THRESHOLD),
+                      })}
+                    </span>
+                  </div>
+                {/if}
+
+                <!-- Real-time preview (UXD §7.20.5) — isolated container -->
+                <!-- CSS variables are scoped to this element, not the panel chrome -->
+                <div
+                  class="theme-preview rounded-[2px] border border-(--color-border) overflow-hidden"
+                  style={previewStyle}
+                  aria-label={m.theme_preview_label()}
+                  role="img"
+                >
+                  <div
+                    class="p-3 font-mono text-[13px] leading-relaxed"
+                    style="background: var(--preview-bg); color: var(--preview-fg);"
+                  >
+                    <!-- Simulated terminal output with ANSI colors -->
+                    <div>
+                      <span style="color: var(--preview-color-2);">user@host</span>
+                      <span style="color: var(--preview-fg);">:</span>
+                      <span style="color: var(--preview-color-4);">~/projects</span>
+                      <span style="color: var(--preview-fg);">$ </span>
+                      <span style="color: var(--preview-fg);">ls -la</span>
+                    </div>
+                    <div>
+                      <span style="color: var(--preview-color-6);">drwxr-xr-x</span>
+                      <span style="color: var(--preview-fg);"> 2 user group 4096 </span>
+                      <span style="color: var(--preview-color-4);">src/</span>
+                    </div>
+                    <div>
+                      <span style="color: var(--preview-color-1);">error</span>
+                      <span style="color: var(--preview-fg);">: file not found</span>
+                    </div>
+                    <div>
+                      <span style="color: var(--preview-color-3);">warning</span>
+                      <span style="color: var(--preview-fg);">: deprecated API</span>
+                    </div>
+                    <div>
+                      <span style="color: var(--preview-fg);">$ </span>
+                      <!-- Simulated block cursor -->
+                      <span
+                        style="background: var(--preview-cursor); color: var(--preview-bg); display: inline-block; width: 0.6em;"
+                        aria-hidden="true">&nbsp;</span
+                      >
+                    </div>
+                  </div>
+                </div>
 
                 <div class="flex gap-2 pt-2">
                   <Button

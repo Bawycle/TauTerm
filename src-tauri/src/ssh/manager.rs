@@ -15,7 +15,7 @@
 //!    - Unknown or Mismatch: emits frontend event, rejects connection.
 //!    - Trusted: proceeds.
 //! 4. Transition to `Authenticating`.
-//! 5. Try authentication in order: pubkey → password (FS-SSH-012).
+//! 5. Try authentication in order: pubkey → keyboard-interactive → password (FS-SSH-012).
 //! 6. On success: transition to `Connected`, keepalive configured in russh `Config`.
 //! 7. On failure: remove from map, emit error event.
 
@@ -27,13 +27,19 @@ use russh::Pty;
 use tauri::AppHandle;
 use tokio::sync::oneshot;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use crate::error::SshError;
-use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
+use crate::events::{
+    SshReconnectedEvent, SshStateChangedEvent, emit_ssh_reconnected, emit_ssh_state_changed,
+};
 use crate::platform::validation::validate_ssh_identity_path;
 use crate::session::ids::PaneId;
 use crate::session::registry::SessionRegistry;
 use crate::session::ssh_task::spawn_ssh_read_task;
-use crate::ssh::auth::{authenticate_password, authenticate_pubkey};
+use crate::ssh::auth::{
+    authenticate_keyboard_interactive, authenticate_password, authenticate_pubkey,
+};
 use crate::ssh::connection::{SshChannelArc, TauTermSshHandler};
 use crate::ssh::keepalive::make_client_config;
 use crate::ssh::{SshConnectionConfig, SshLifecycleState, connection::SshConnection};
@@ -86,7 +92,9 @@ pub struct SshManager {
 ///
 /// SECURITY: `Debug` is implemented manually to redact sensitive fields.
 /// Never use `#[derive(Debug)]` on this struct — it would expose passwords in logs.
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+/// `ZeroizeOnDrop` ensures all secret fields are overwritten in memory when the struct is dropped
+/// (FS-CRED-003).
+#[derive(Clone, Zeroize, ZeroizeOnDrop, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Credentials {
     pub username: String,
@@ -188,6 +196,8 @@ mod security_tests {
             username: "alice".to_string(),
             identity_file: Some("/home/alice/.ssh/id_ed25519".to_string()),
             allow_osc52_write: false,
+            keepalive_interval_secs: None,
+            keepalive_max_failures: None,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
@@ -219,6 +229,8 @@ mod security_tests {
             username: "bob".to_string(),
             identity_file: None,
             allow_osc52_write: false,
+            keepalive_interval_secs: None,
+            keepalive_max_failures: None,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
@@ -247,6 +259,9 @@ impl SshManager {
     /// `vt` — the pane's shared `VtProcessor`, used by the SSH read task to
     /// process terminal output and emit `screen-update` events.
     ///
+    /// `is_reconnect` — when `true`, emits a `ssh-reconnected` separator event
+    /// upon successful connection (FS-SSH-042).
+    ///
     /// # Errors
     /// Returns `Err` only for synchronous precondition failures (duplicate pane,
     /// invalid key path). Transport/auth errors are delivered via events.
@@ -261,6 +276,33 @@ impl SshManager {
         cols: u16,
         rows: u16,
         registry: Arc<SessionRegistry>,
+    ) -> Result<(), SshError> {
+        self.open_connection_inner(
+            pane_id,
+            config,
+            credentials,
+            app,
+            vt,
+            cols,
+            rows,
+            registry,
+            /* is_reconnect */ false,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn open_connection_inner(
+        self: &Arc<Self>,
+        pane_id: PaneId,
+        config: &SshConnectionConfig,
+        credentials: Option<Credentials>,
+        app: AppHandle,
+        vt: Arc<RwLock<VtProcessor>>,
+        cols: u16,
+        rows: u16,
+        registry: Arc<SessionRegistry>,
+        is_reconnect: bool,
     ) -> Result<(), SshError> {
         if self.connections.contains_key(&pane_id) {
             return Err(SshError::Connection(
@@ -294,6 +336,7 @@ impl SshManager {
                     cols,
                     rows,
                     registry,
+                    is_reconnect,
                 )
                 .await;
 
@@ -325,10 +368,16 @@ impl SshManager {
         cols: u16,
         rows: u16,
         registry: Arc<SessionRegistry>,
+        is_reconnect: bool,
     ) -> Result<(), SshError> {
         let addr = format!("{}:{}", config.host, config.port);
 
-        let russh_config = make_client_config(None, None);
+        // Use per-connection keepalive overrides when present (FS-SSH-020).
+        let keepalive_interval = config
+            .keepalive_interval_secs
+            .map(std::time::Duration::from_secs);
+        let keepalive_max = config.keepalive_max_failures.map(|n| n as usize);
+        let russh_config = make_client_config(keepalive_interval, keepalive_max);
         let handler =
             TauTermSshHandler::new(pane_id.clone(), config, app.clone()).with_manager(self);
 
@@ -355,9 +404,14 @@ impl SshManager {
             .map(|c| c.username.clone())
             .unwrap_or_else(|| config.username.clone());
 
-        // Authentication order: pubkey → password (FS-SSH-012).
+        // Authentication order: pubkey → keyboard-interactive → password (FS-SSH-012).
         let authenticated =
             Self::try_authenticate(&mut session, &username, config, credentials.as_ref()).await?;
+
+        // SECURITY (FS-CRED-003): drop credentials immediately after auth so ZeroizeOnDrop
+        // wipes the password/key bytes without waiting until end of the connect_task future
+        // (which may stay alive for minutes across the PTY channel lifetime).
+        drop(credentials);
 
         if !authenticated {
             return Err(SshError::Auth(
@@ -462,10 +516,26 @@ impl SshManager {
             },
         );
 
+        // Emit the reconnection separator event (FS-SSH-042).
+        // Only on reconnect — not on the initial connection.
+        if is_reconnect {
+            let timestamp_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            emit_ssh_reconnected(
+                &app,
+                SshReconnectedEvent {
+                    pane_id: pane_id.clone(),
+                    timestamp_ms,
+                },
+            );
+        }
+
         Ok(())
     }
 
-    /// Try authentication methods in order: pubkey → password (FS-SSH-012).
+    /// Try authentication methods in order: pubkey → keyboard-interactive → password (FS-SSH-012).
     async fn try_authenticate<H: russh::client::Handler>(
         session: &mut russh::client::Handle<H>,
         username: &str,
@@ -481,14 +551,32 @@ impl SshManager {
                     tracing::debug!("Pubkey auth rejected for {username}@{}", config.host);
                 }
                 Err(e) => {
-                    // Log and fall through to password — transport errors on pubkey
-                    // do not abort the auth sequence.
+                    // Log and fall through — transport errors on pubkey do not abort the sequence.
                     tracing::warn!("Pubkey auth error for {username}: {e}");
                 }
             }
         }
 
-        // 2. Password (if provided in credentials).
+        // 2. Keyboard-interactive (if password is available as a response).
+        if let Some(creds) = credentials
+            && let Some(ref password) = creds.password
+        {
+            match authenticate_keyboard_interactive(session, username, password).await {
+                Ok(true) => return Ok(true),
+                Ok(false) => {
+                    tracing::debug!(
+                        "Keyboard-interactive auth rejected for {username}@{}",
+                        config.host
+                    );
+                }
+                Err(e) => {
+                    // Transport error: log and fall through to password.
+                    tracing::warn!("Keyboard-interactive auth error for {username}: {e}");
+                }
+            }
+        }
+
+        // 3. Password (if provided in credentials).
         if let Some(creds) = credentials
             && let Some(ref password) = creds.password
         {
@@ -603,7 +691,9 @@ impl SshManager {
 
         // Re-open the connection. Credentials are None — the connect task will
         // prompt the user via the credential-prompt event if needed.
-        self.open_connection(pane_id, &config, None, app, vt, cols, rows, registry)
+        // `is_reconnect = true` causes a `ssh-reconnected` separator event to be
+        // emitted once the new session reaches Connected state (FS-SSH-042).
+        self.open_connection_inner(pane_id, &config, None, app, vt, cols, rows, registry, true)
             .await
     }
 
@@ -632,6 +722,8 @@ mod manager_tests {
             username: "user".to_string(),
             identity_file: None,
             allow_osc52_write: false,
+            keepalive_interval_secs: None,
+            keepalive_max_failures: None,
         }
     }
 

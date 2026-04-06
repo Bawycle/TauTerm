@@ -30,11 +30,5 @@
 </script>
 
 <Tooltip.Provider>
-  <TabBar
-    {tabs}
-    {activeTabId}
-    {onTabClick}
-    {onTabClose}
-    {onNewTab}
-  />
+  <TabBar {tabs} {activeTabId} {onTabClick} {onTabClose} {onNewTab} />
 </Tooltip.Provider>

@@ -175,6 +175,10 @@ pub struct UserTheme {
     pub background: String,
     pub cursor_color: String,
     pub selection_bg: String,
+    /// Terminal line height multiplier (FS-THEME-010). Range: 1.0–2.0.
+    /// `None` means use the global default (`--line-height-terminal` token).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_height: Option<f32>,
 }
 
 #[cfg(test)]

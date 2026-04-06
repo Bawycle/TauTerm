@@ -16,9 +16,16 @@
 //! Hashed hostname entries (`|1|...`) are silently skipped with a count
 //! (they cannot be imported because the plaintext hostname is not recoverable).
 //!
+//! ## Secondary source: `~/.ssh/known_hosts`
+//!
+//! During TOFU lookup, `KnownHostsStore::lookup_with_system_fallback` also
+//! consults `~/.ssh/known_hosts` as a read-only secondary source (FS-SSH-011).
+//! A match there is returned as `Trusted` without writing to TauTerm's store.
+//! New entries are always written only to `~/.config/tauterm/known_hosts`.
+//!
 //! ## Security notes (ADR-0007)
 //! - File is written with permissions 0600.
-//! - TauTerm does NOT read from `~/.ssh/known_hosts` automatically.
+//! - `~/.ssh/known_hosts` is read-only — TauTerm never writes to it.
 //! - The Preferences UI offers an explicit "Import from OpenSSH" action.
 //! - A mismatch between stored and offered key always returns `HostKeyMismatch`
 //!   — there is no "override" path in this module.
@@ -70,6 +77,14 @@ impl KnownHostsStore {
     /// Default path: `~/.config/tauterm/known_hosts`.
     pub fn default_path() -> Option<PathBuf> {
         dirs::config_dir().map(|p| p.join("tauterm").join("known_hosts"))
+    }
+
+    /// Path to the system/user OpenSSH known_hosts: `~/.ssh/known_hosts`.
+    ///
+    /// Used as a read-only secondary trust source (FS-SSH-011).
+    /// Returns `None` if the home directory cannot be determined.
+    pub fn system_known_hosts_path() -> Option<PathBuf> {
+        dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"))
     }
 
     /// Load all entries from the known-hosts file.
@@ -170,6 +185,53 @@ impl KnownHostsStore {
                 offered_key_type: offered_key_type.to_string(),
                 offered_key_bytes: offered_key_bytes.to_vec(),
             }),
+        }
+    }
+
+    /// Look up a host, falling back to `~/.ssh/known_hosts` on `Unknown` (FS-SSH-011).
+    ///
+    /// Resolution order:
+    /// 1. TauTerm store (`~/.config/tauterm/known_hosts`): authoritative for Trusted / Mismatch.
+    /// 2. If `Unknown` in TauTerm store: check the system OpenSSH file.
+    ///    - Found and matching → return `Trusted` (read-only trust, no write).
+    ///    - Found and mismatching → return `Mismatch` (key conflict still reported).
+    ///    - Not found → return `Unknown`.
+    ///
+    /// The system file path can be overridden via `system_path` (used in tests).
+    /// Pass `None` to use `system_known_hosts_path()`.
+    ///
+    /// I/O errors on the system file are logged and ignored (best-effort).
+    pub fn lookup_with_system_fallback(
+        &self,
+        hostname: &str,
+        offered_key_type: &str,
+        offered_key_bytes: &[u8],
+        system_path: Option<&std::path::Path>,
+    ) -> io::Result<KnownHostLookup> {
+        // Primary lookup in TauTerm's own store.
+        let primary = self.lookup(hostname, offered_key_type, offered_key_bytes)?;
+
+        if !matches!(primary, KnownHostLookup::Unknown) {
+            return Ok(primary);
+        }
+
+        // Primary is Unknown — consult the system OpenSSH file as read-only fallback.
+        let sys_path = match system_path
+            .map(|p| p.to_path_buf())
+            .or_else(Self::system_known_hosts_path)
+        {
+            Some(p) => p,
+            None => return Ok(KnownHostLookup::Unknown),
+        };
+
+        let sys_store = KnownHostsStore::new(sys_path);
+        match sys_store.lookup(hostname, offered_key_type, offered_key_bytes) {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                // System file I/O errors are non-fatal — log and fall through to Unknown.
+                tracing::warn!("system known_hosts read error (ignored): {e}");
+                Ok(KnownHostLookup::Unknown)
+            }
         }
     }
 
@@ -396,6 +458,176 @@ mod tests {
         // The plain host entry is malformed (CCCC is not valid base64 for our purposes)
         // but since we're testing skipping hashed entries, we only assert the skip count.
         let _ = entries; // parsed entries may be empty due to base64 decode failure on CCCC
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests for lookup_with_system_fallback (FS-SSH-011 secondary source)
+    // -----------------------------------------------------------------------
+
+    /// Host present in system known_hosts (plain format) → Trusted, even if absent
+    /// from the TauTerm store.
+    #[test]
+    fn system_fallback_plain_host_trusted() {
+        let key_bytes = vec![0xAA, 0xBB, 0xCC, 0xDD];
+        let key_b64 = BASE64.encode(&key_bytes);
+        let sys_content = format!("remote.server ssh-ed25519 {key_b64}\n");
+
+        // TauTerm store is empty.
+        let tauterm_dir = tempfile::tempdir().expect("tempdir");
+        let tauterm_path = tauterm_dir.path().join("known_hosts");
+        let store = KnownHostsStore::new(tauterm_path);
+
+        // System file has the entry.
+        let sys_dir = tempfile::tempdir().expect("tempdir");
+        let sys_path = sys_dir.path().join("known_hosts");
+        fs::write(&sys_path, sys_content.as_bytes()).expect("write sys");
+
+        let result = store
+            .lookup_with_system_fallback(
+                "remote.server",
+                "ssh-ed25519",
+                &key_bytes,
+                Some(&sys_path),
+            )
+            .expect("lookup");
+
+        assert!(
+            matches!(result, KnownHostLookup::Trusted(_)),
+            "Host in system known_hosts (plain) must be Trusted via fallback (FS-SSH-011)"
+        );
+    }
+
+    /// Host absent from both stores → Unknown.
+    #[test]
+    fn system_fallback_absent_both_stores_unknown() {
+        let tauterm_dir = tempfile::tempdir().expect("tempdir");
+        let tauterm_path = tauterm_dir.path().join("known_hosts");
+        let store = KnownHostsStore::new(tauterm_path);
+
+        let sys_dir = tempfile::tempdir().expect("tempdir");
+        let sys_path = sys_dir.path().join("known_hosts");
+        // System file empty.
+        fs::write(&sys_path, b"").expect("write");
+
+        let result = store
+            .lookup_with_system_fallback("unknown.host", "ssh-ed25519", &[1, 2, 3], Some(&sys_path))
+            .expect("lookup");
+
+        assert!(
+            matches!(result, KnownHostLookup::Unknown),
+            "Host absent from both stores must be Unknown"
+        );
+    }
+
+    /// TauTerm store is authoritative: if host is Mismatch there, fallback is NOT consulted.
+    #[test]
+    fn system_fallback_tauterm_mismatch_is_final() {
+        let stored_key = vec![0x01, 0x02];
+        let offered_key = vec![0xFF, 0xFE]; // different
+        let key_b64 = BASE64.encode(&stored_key);
+        let content = format!("mismatch.host ssh-ed25519 {key_b64}\n");
+
+        let tauterm_dir = tempfile::tempdir().expect("tempdir");
+        let tauterm_path = tauterm_dir.path().join("known_hosts");
+        fs::write(&tauterm_path, content.as_bytes()).expect("write");
+        let store = KnownHostsStore::new(tauterm_path);
+
+        // System file has the *offered* key (matching).
+        let offered_b64 = BASE64.encode(&offered_key);
+        let sys_content = format!("mismatch.host ssh-ed25519 {offered_b64}\n");
+        let sys_dir = tempfile::tempdir().expect("tempdir");
+        let sys_path = sys_dir.path().join("known_hosts");
+        fs::write(&sys_path, sys_content.as_bytes()).expect("write sys");
+
+        // TauTerm store says Mismatch → result must be Mismatch regardless of system file.
+        let result = store
+            .lookup_with_system_fallback(
+                "mismatch.host",
+                "ssh-ed25519",
+                &offered_key,
+                Some(&sys_path),
+            )
+            .expect("lookup");
+
+        assert!(
+            matches!(result, KnownHostLookup::Mismatch { .. }),
+            "TauTerm store Mismatch must not be overridden by system known_hosts"
+        );
+    }
+
+    /// Hashed entries in system file are skipped; host still resolves Unknown.
+    #[test]
+    fn system_fallback_hashed_entries_in_system_file_skipped() {
+        let tauterm_dir = tempfile::tempdir().expect("tempdir");
+        let tauterm_path = tauterm_dir.path().join("known_hosts");
+        let store = KnownHostsStore::new(tauterm_path);
+
+        // System file contains only hashed entries — cannot be matched by hostname.
+        let sys_content = "|1|abc123=|xyz456= ssh-ed25519 AAAA==\n";
+        let sys_dir = tempfile::tempdir().expect("tempdir");
+        let sys_path = sys_dir.path().join("known_hosts");
+        fs::write(&sys_path, sys_content.as_bytes()).expect("write sys");
+
+        let result = store
+            .lookup_with_system_fallback("hashed.host", "ssh-ed25519", &[0x11], Some(&sys_path))
+            .expect("lookup");
+
+        assert!(
+            matches!(result, KnownHostLookup::Unknown),
+            "Hashed entries in system file must be skipped → Unknown"
+        );
+    }
+
+    /// Non-existent system file is silently ignored → Unknown.
+    #[test]
+    fn system_fallback_missing_system_file_returns_unknown() {
+        let tauterm_dir = tempfile::tempdir().expect("tempdir");
+        let tauterm_path = tauterm_dir.path().join("known_hosts");
+        let store = KnownHostsStore::new(tauterm_path);
+
+        let sys_dir = tempfile::tempdir().expect("tempdir");
+        let nonexistent_path = sys_dir.path().join("does_not_exist");
+
+        let result = store
+            .lookup_with_system_fallback(
+                "some.host",
+                "ssh-ed25519",
+                &[0xAA],
+                Some(&nonexistent_path),
+            )
+            .expect("lookup must not error on missing system file");
+
+        assert!(
+            matches!(result, KnownHostLookup::Unknown),
+            "Missing system file must be silently ignored → Unknown"
+        );
+    }
+
+    /// TauTerm store match takes precedence over system file (Trusted in TauTerm → no fallback).
+    #[test]
+    fn system_fallback_tauterm_trusted_takes_precedence() {
+        let key_bytes = vec![0x01, 0x02, 0x03];
+        let key_b64 = BASE64.encode(&key_bytes);
+        let content = format!("trusted.host ssh-ed25519 {key_b64}\n");
+
+        let tauterm_dir = tempfile::tempdir().expect("tempdir");
+        let tauterm_path = tauterm_dir.path().join("known_hosts");
+        fs::write(&tauterm_path, content.as_bytes()).expect("write");
+        let store = KnownHostsStore::new(tauterm_path);
+
+        // System file is empty — fallback should never be consulted.
+        let sys_dir = tempfile::tempdir().expect("tempdir");
+        let sys_path = sys_dir.path().join("known_hosts");
+        fs::write(&sys_path, b"").expect("write");
+
+        let result = store
+            .lookup_with_system_fallback("trusted.host", "ssh-ed25519", &key_bytes, Some(&sys_path))
+            .expect("lookup");
+
+        assert!(
+            matches!(result, KnownHostLookup::Trusted(_)),
+            "TauTerm store Trusted must be returned without consulting system file"
+        );
     }
 
     /// Comments and empty lines are skipped.

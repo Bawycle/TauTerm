@@ -21,6 +21,11 @@ pub const EVENT_SCROLL_POSITION_CHANGED: &str = "scroll-position-changed";
 pub const EVENT_CREDENTIAL_PROMPT: &str = "credential-prompt";
 pub const EVENT_HOST_KEY_PROMPT: &str = "host-key-prompt";
 pub const EVENT_NOTIFICATION_CHANGED: &str = "notification-changed";
+pub const EVENT_CURSOR_STYLE_CHANGED: &str = "cursor-style-changed";
+pub const EVENT_BELL_TRIGGERED: &str = "bell-triggered";
+pub const EVENT_OSC52_WRITE_REQUESTED: &str = "osc52-write-requested";
+pub const EVENT_SSH_WARNING: &str = "ssh-warning";
+pub const EVENT_SSH_RECONNECTED: &str = "ssh-reconnected";
 
 /// Emit a session topology change event.
 pub fn emit_session_state_changed(app: &AppHandle, event: SessionStateChangedEvent) {
@@ -75,5 +80,40 @@ pub fn emit_host_key_prompt(app: &AppHandle, event: HostKeyPromptEvent) {
 pub fn emit_notification_changed(app: &AppHandle, event: NotificationChangedEvent) {
     if let Err(e) = app.emit(EVENT_NOTIFICATION_CHANGED, event) {
         tracing::error!("Failed to emit notification-changed: {e}");
+    }
+}
+
+/// Emit a cursor style change event (DECSCUSR).
+pub fn emit_cursor_style_changed(app: &AppHandle, event: CursorStyleChangedEvent) {
+    if let Err(e) = app.emit(EVENT_CURSOR_STYLE_CHANGED, event) {
+        tracing::error!("Failed to emit cursor-style-changed: {e}");
+    }
+}
+
+/// Emit a bell triggered event (rate-limited, at most 1 per 100 ms per pane).
+pub fn emit_bell_triggered(app: &AppHandle, event: BellTriggeredEvent) {
+    if let Err(e) = app.emit(EVENT_BELL_TRIGGERED, event) {
+        tracing::error!("Failed to emit bell-triggered: {e}");
+    }
+}
+
+/// Emit an OSC 52 clipboard write request event (FS-VT-075).
+pub fn emit_osc52_write_requested(app: &AppHandle, event: Osc52WriteRequestedEvent) {
+    if let Err(e) = app.emit(EVENT_OSC52_WRITE_REQUESTED, event) {
+        tracing::error!("Failed to emit osc52-write-requested: {e}");
+    }
+}
+
+/// Emit a deprecated SSH algorithm warning event (FS-SSH-014).
+pub fn emit_ssh_warning(app: &AppHandle, event: SshWarningEvent) {
+    if let Err(e) = app.emit(EVENT_SSH_WARNING, event) {
+        tracing::error!("Failed to emit ssh-warning: {e}");
+    }
+}
+
+/// Emit an SSH reconnected separator event (FS-SSH-042).
+pub fn emit_ssh_reconnected(app: &AppHandle, event: SshReconnectedEvent) {
+    if let Err(e) = app.emit(EVENT_SSH_RECONNECTED, event) {
+        tracing::error!("Failed to emit ssh-reconnected: {e}");
     }
 }

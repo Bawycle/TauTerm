@@ -3,7 +3,7 @@
 # ADR-0012 — Preferences persistence: JSON file in XDG_CONFIG_HOME
 
 **Date:** 2026-04-04
-**Status:** Accepted
+**Status:** Superseded by [ADR-0016](ADR-0016-preferences-toml-format.md)
 
 ## Context
 

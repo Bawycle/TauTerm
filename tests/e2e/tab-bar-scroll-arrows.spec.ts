@@ -29,8 +29,8 @@
  * We assert non-existence via isExisting() === false, not visibility.
  */
 
-import { browser, $, $$ } from "@wdio/globals";
-import { Selectors } from "./helpers/selectors";
+import { browser, $, $$ } from '@wdio/globals';
+import { Selectors } from './helpers/selectors';
 
 // ---------------------------------------------------------------------------
 // DOM helpers
@@ -47,7 +47,7 @@ async function countTabs(): Promise<number> {
  */
 async function isLeftArrowPresent(): Promise<boolean> {
   return browser.execute((): boolean => {
-    return document.querySelector(".tab-bar__scroll-arrow--left") !== null;
+    return document.querySelector('.tab-bar__scroll-arrow--left') !== null;
   }) as Promise<boolean>;
 }
 
@@ -56,7 +56,7 @@ async function isLeftArrowPresent(): Promise<boolean> {
  */
 async function isRightArrowPresent(): Promise<boolean> {
   return browser.execute((): boolean => {
-    return document.querySelector(".tab-bar__scroll-arrow--right") !== null;
+    return document.querySelector('.tab-bar__scroll-arrow--right') !== null;
   }) as Promise<boolean>;
 }
 
@@ -66,8 +66,8 @@ async function isRightArrowPresent(): Promise<boolean> {
 async function isAnyArrowPresent(): Promise<boolean> {
   return browser.execute((): boolean => {
     return (
-      document.querySelector(".tab-bar__scroll-arrow--left") !== null ||
-      document.querySelector(".tab-bar__scroll-arrow--right") !== null
+      document.querySelector('.tab-bar__scroll-arrow--left') !== null ||
+      document.querySelector('.tab-bar__scroll-arrow--right') !== null
     );
   }) as Promise<boolean>;
 }
@@ -77,12 +77,12 @@ async function isAnyArrowPresent(): Promise<boolean> {
  */
 async function openNewTab(expectedCount: number): Promise<void> {
   await browser.execute((): void => {
-    const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+    const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
     const target = grid ?? document.body;
     target.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "T",
-        code: "KeyT",
+      new KeyboardEvent('keydown', {
+        key: 'T',
+        code: 'KeyT',
         ctrlKey: true,
         shiftKey: true,
         bubbles: true,
@@ -105,12 +105,12 @@ async function openNewTab(expectedCount: number): Promise<void> {
  */
 async function closeActiveTab(): Promise<void> {
   await browser.execute((): void => {
-    const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+    const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
     const target = grid ?? document.body;
     target.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "W",
-        code: "KeyW",
+      new KeyboardEvent('keydown', {
+        key: 'W',
+        code: 'KeyW',
         ctrlKey: true,
         shiftKey: true,
         bubbles: true,
@@ -120,25 +120,17 @@ async function closeActiveTab(): Promise<void> {
   });
 
   // Dismiss the close-confirmation dialog (E2E build never emits processExited).
+  // Use data-testid to be locale-independent.
   await browser.waitUntil(
     () =>
       browser.execute((): boolean => {
-        for (const btn of document.querySelectorAll("button")) {
-          if ((btn.textContent ?? "").trim() === "Close anyway") return true;
-        }
-        return false;
+        return document.querySelector('[data-testid="close-confirm-action"]') !== null;
       }),
-    { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not appear" },
+    { timeout: 3_000, timeoutMsg: 'Close confirmation dialog did not appear' },
   );
   await browser.execute((): void => {
-    for (const btn of document.querySelectorAll("button")) {
-      if ((btn.textContent ?? "").trim() === "Close anyway") {
-        (btn as HTMLButtonElement).dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
-        break;
-      }
-    }
+    const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-action"]');
+    btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });
 }
 
@@ -163,12 +155,8 @@ async function ensureOneTab(): Promise<void> {
  */
 async function clickTabByIndex(index: number): Promise<void> {
   await browser.execute((idx: number): void => {
-    const tab = document.querySelector<HTMLElement>(
-      `.tab-bar__tab[data-tab-index='${idx}']`,
-    );
-    tab?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    const tab = document.querySelector<HTMLElement>(`.tab-bar__tab[data-tab-index='${idx}']`);
+    tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   }, index);
   // Allow layout and scroll-state update after tab switch.
   await browser.pause(150);
@@ -178,17 +166,13 @@ async function clickTabByIndex(index: number): Promise<void> {
 // Suite
 // ---------------------------------------------------------------------------
 
-describe("TauTerm — TabBar scroll arrow visibility", () => {
+describe('TauTerm — TabBar scroll arrow visibility', () => {
   before(async () => {
-    // Dismiss any lingering dialog from a previous spec.
+    // Dismiss any lingering dialog from a previous spec (locale-independent).
     await browser.execute((): void => {
-      for (const btn of document.querySelectorAll("button")) {
-        if ((btn.textContent ?? "").trim() === "Cancel") {
-          (btn as HTMLButtonElement).dispatchEvent(
-            new MouseEvent("click", { bubbles: true, cancelable: true }),
-          );
-          return;
-        }
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-cancel"]');
+      if (btn) {
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
     });
     await browser.pause(200);
@@ -207,8 +191,7 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
       },
       {
         timeout: 10_000,
-        timeoutMsg:
-          "Active terminal pane not ready before scroll-arrow tests",
+        timeoutMsg: 'Active terminal pane not ready before scroll-arrow tests',
       },
     );
   });
@@ -230,7 +213,7 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
    * canScrollLeft and canScrollRight must be false and the arrow buttons
    * must be absent from the DOM.
    */
-  it("TBTC-E2E-SCR-001: no scroll arrows with a single tab", async () => {
+  it('TBTC-E2E-SCR-001: no scroll arrows with a single tab', async () => {
     const tabCount = await countTabs();
     expect(tabCount).toBe(1);
 
@@ -253,7 +236,7 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
    * fit easily in any reasonable window width (>= 800px).  No arrows should
    * appear.
    */
-  it("TBTC-E2E-SCR-002: no scroll arrows after adding a second tab", async () => {
+  it('TBTC-E2E-SCR-002: no scroll arrows after adding a second tab', async () => {
     await openNewTab(2);
 
     expect(await isLeftArrowPresent()).toBe(false);
@@ -276,7 +259,7 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
    * With 2-3 tabs that easily fit the window, switching between them must
    * leave both arrows absent.
    */
-  it("TBTC-E2E-SCR-003: no arrows after switching between tabs (regression)", async () => {
+  it('TBTC-E2E-SCR-003: no arrows after switching between tabs (regression)', async () => {
     // Ensure we have at least 2 tabs.
     if ((await countTabs()) < 2) {
       await openNewTab(2);
@@ -320,7 +303,7 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
    * (there is nothing further right to scroll to).  We therefore check for the
    * presence of ANY arrow rather than the right arrow specifically.
    */
-  it("TBTC-E2E-SCR-004: scroll arrows appear when tabs overflow", async () => {
+  it('TBTC-E2E-SCR-004: scroll arrows appear when tabs overflow', async () => {
     // Start from whatever tab count we have (3 from previous test).
     let currentCount = await countTabs();
 
@@ -356,19 +339,19 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
    * We set scrollLeft directly (instant, no animation) to avoid racing against
    * any residual smooth-scroll animation from the previous test.
    */
-  it("TBTC-E2E-SCR-005: right arrow appears when scrolled back to the start", async () => {
+  it('TBTC-E2E-SCR-005: right arrow appears when scrolled back to the start', async () => {
     // Prerequisite: the left arrow must be present (from TBTC-E2E-SCR-004).
     expect(await isLeftArrowPresent()).toBe(true);
 
     // Reset scroll position to 0 instantly (bypasses smooth-scroll animation).
     // Dispatching the scroll event ensures updateScrollState() fires.
     await browser.execute((): void => {
-      const tabs = document.querySelector<HTMLElement>(".tab-bar__tabs");
+      const tabs = document.querySelector<HTMLElement>('.tab-bar__tabs');
       if (!tabs) return;
       // Override scroll-behavior so the assignment is instant.
-      tabs.style.scrollBehavior = "auto";
+      tabs.style.scrollBehavior = 'auto';
       tabs.scrollLeft = 0;
-      tabs.dispatchEvent(new Event("scroll"));
+      tabs.dispatchEvent(new Event('scroll'));
     });
 
     // Allow Svelte to flush the DOM update.
@@ -394,7 +377,7 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
    * This catches bugs where the overflow state is only computed on scroll
    * events but not on tab removal.
    */
-  it("TBTC-E2E-SCR-006: arrows disappear when tabs no longer overflow", async () => {
+  it('TBTC-E2E-SCR-006: arrows disappear when tabs no longer overflow', async () => {
     // Close tabs until we have 2 left.
     let n = await countTabs();
     while (n > 2) {

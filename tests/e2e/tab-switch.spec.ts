@@ -28,8 +28,8 @@
  * property and polled — same workaround for browser.executeAsync unreliability.
  */
 
-import { browser, $, $$ } from "@wdio/globals";
-import { Selectors } from "./helpers/selectors";
+import { browser, $, $$ } from '@wdio/globals';
+import { Selectors } from './helpers/selectors';
 
 // ---------------------------------------------------------------------------
 // IPC helpers
@@ -59,22 +59,16 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   const key = `__tauterm_result_${Date.now()}_${Math.random()}`;
   await browser.execute(
     function (cmdArg: string, argsArg: Record<string, unknown> | undefined, keyArg: string) {
-      (window as any).__TAURI_INTERNALS__
-        .invoke(cmdArg, argsArg)
-        .then((result: unknown) => {
-          (window as any)[keyArg] = result;
-        });
+      (window as any).__TAURI_INTERNALS__.invoke(cmdArg, argsArg).then((result: unknown) => {
+        (window as any)[keyArg] = result;
+      });
     },
     cmd,
     args,
     key,
   );
   await browser.waitUntil(
-    () =>
-      browser.execute(
-        (k: string) => Object.prototype.hasOwnProperty.call(window, k),
-        key,
-      ),
+    () => browser.execute((k: string) => Object.prototype.hasOwnProperty.call(window, k), key),
     { timeout: 5_000, timeoutMsg: `Tauri command "${cmd}" did not resolve within 5 s` },
   );
   return browser.execute((k: string) => (window as any)[k], key) as Promise<T>;
@@ -97,8 +91,8 @@ async function waitForTextInGrid(text: string, timeoutMs = 10_000): Promise<void
   await browser.waitUntil(
     () =>
       browser.execute((t: string): boolean => {
-        const grid = document.querySelector(".terminal-grid");
-        return grid !== null && (grid.textContent ?? "").includes(t);
+        const grid = document.querySelector('.terminal-grid');
+        return grid !== null && (grid.textContent ?? '').includes(t);
       }, text),
     {
       timeout: timeoutMs,
@@ -110,7 +104,7 @@ async function waitForTextInGrid(text: string, timeoutMs = 10_000): Promise<void
 /** Read the full text content of the terminal grid in a single RPC call. */
 async function getGridText(): Promise<string> {
   return browser.execute(
-    (): string => document.querySelector(".terminal-grid")?.textContent ?? "",
+    (): string => document.querySelector('.terminal-grid')?.textContent ?? '',
   ) as Promise<string>;
 }
 
@@ -118,23 +112,19 @@ async function getGridText(): Promise<string> {
 // Suite
 // ---------------------------------------------------------------------------
 
-describe("TauTerm — Tab switch session isolation", () => {
+describe('TauTerm — Tab switch session isolation', () => {
   // Tab IDs captured during TEST-TAB-SW-001, reused for TEST-TAB-SW-003.
-  let tab1Id = "";
-  let tab2Id = "";
+  let tab1Id = '';
+  let tab2Id = '';
 
   before(async () => {
     // tab-lifecycle.spec.ts test 4 leaves the close-confirmation dialog open
     // (Ctrl+Shift+W on the last tab triggers it but the test does not dismiss it).
-    // Dismiss it by clicking the Cancel button if present.
+    // Dismiss it by clicking the Cancel button if present (locale-independent).
     await browser.execute((): void => {
-      for (const btn of document.querySelectorAll("button")) {
-        if ((btn.textContent ?? "").trim() === "Cancel") {
-          (btn as HTMLButtonElement).dispatchEvent(
-            new MouseEvent("click", { bubbles: true, cancelable: true }),
-          );
-          return;
-        }
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-cancel"]');
+      if (btn) {
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
     });
     await browser.pause(300);
@@ -148,7 +138,7 @@ describe("TauTerm — Tab switch session isolation", () => {
           return false;
         }
       },
-      { timeout: 10_000, timeoutMsg: "Active terminal pane not ready before tab-switch tests" },
+      { timeout: 10_000, timeoutMsg: 'Active terminal pane not ready before tab-switch tests' },
     );
   });
 
@@ -163,11 +153,11 @@ describe("TauTerm — Tab switch session isolation", () => {
    */
   it("shows new tab's own content immediately after Ctrl+Shift+T", async () => {
     // Step 1: capture tab 1's pane ID and inject a distinctive marker.
-    const pane1Id = await $(Selectors.activeTerminalPane).getAttribute("data-pane-id");
+    const pane1Id = await $(Selectors.activeTerminalPane).getAttribute('data-pane-id');
     expect(pane1Id).toBeTruthy();
 
-    const marker1 = "TAB1-SESSION-CONTENT";
-    await tauriFireAndForget("inject_pty_output", {
+    const marker1 = 'TAB1-SESSION-CONTENT';
+    await tauriFireAndForget('inject_pty_output', {
       paneId: pane1Id,
       data: encodeBytes(marker1),
     });
@@ -175,21 +165,21 @@ describe("TauTerm — Tab switch session isolation", () => {
 
     // Step 2: open a second tab via Ctrl+Shift+T.
     await $(Selectors.terminalGrid).click();
-    await browser.keys(["Control", "Shift", "t"]);
-    await browser.waitUntil(
-      async () => (await $$(Selectors.tab)).length === 2,
-      { timeout: 5_000, timeoutMsg: "Second tab did not appear after Ctrl+Shift+T" },
-    );
+    await browser.keys(['Control', 'Shift', 't']);
+    await browser.waitUntil(async () => (await $$(Selectors.tab)).length === 2, {
+      timeout: 5_000,
+      timeoutMsg: 'Second tab did not appear after Ctrl+Shift+T',
+    });
 
     // Step 3: capture tab 2's pane ID (the newly active pane).
-    const pane2Id = await $(Selectors.activeTerminalPane).getAttribute("data-pane-id");
+    const pane2Id = await $(Selectors.activeTerminalPane).getAttribute('data-pane-id');
     expect(pane2Id).toBeTruthy();
     // Different pane ID confirms we are on a different session.
     expect(pane2Id).not.toBe(pane1Id);
 
     // Step 4: inject tab 2's marker and wait for it.
-    const marker2 = "TAB2-SESSION-CONTENT";
-    await tauriFireAndForget("inject_pty_output", {
+    const marker2 = 'TAB2-SESSION-CONTENT';
+    await tauriFireAndForget('inject_pty_output', {
       paneId: pane2Id,
       data: encodeBytes(marker2),
     });
@@ -202,8 +192,8 @@ describe("TauTerm — Tab switch session isolation", () => {
 
     // Capture tab DOM IDs for TEST-TAB-SW-003.
     const allTabs = await $$(Selectors.tab);
-    tab1Id = (await allTabs[0].getAttribute("data-tab-id")) ?? "";
-    tab2Id = (await allTabs[1].getAttribute("data-tab-id")) ?? "";
+    tab1Id = (await allTabs[0].getAttribute('data-tab-id')) ?? '';
+    tab2Id = (await allTabs[1].getAttribute('data-tab-id')) ?? '';
   });
 
   /**
@@ -216,9 +206,9 @@ describe("TauTerm — Tab switch session isolation", () => {
    * Clicks tab 1 and asserts only tab 1's content is visible, then
    * clicks tab 2 and asserts only tab 2's content is visible.
    */
-  it("switches session content on tab click (regression for missing {#key})", async () => {
-    const marker1 = "TAB1-SESSION-CONTENT";
-    const marker2 = "TAB2-SESSION-CONTENT";
+  it('switches session content on tab click (regression for missing {#key})', async () => {
+    const marker1 = 'TAB1-SESSION-CONTENT';
+    const marker2 = 'TAB2-SESSION-CONTENT';
 
     // Click tab 1 (index 0) and wait for its content to be rendered.
     await $(`${Selectors.tab}[data-tab-index='0']`).click();
@@ -240,20 +230,20 @@ describe("TauTerm — Tab switch session isolation", () => {
    * Regression test for the missing set_active_tab IPC call in
    * handleTabClick — the backend registry was never updated on tab switch.
    */
-  it("backend active_tab_id matches the displayed tab after each switch", async () => {
+  it('backend active_tab_id matches the displayed tab after each switch', async () => {
     interface SessionState {
       activeTabId: string;
     }
 
     // Currently on tab 2 (from previous test).
-    const stateOnTab2 = await tauriInvoke<SessionState>("get_session_state");
+    const stateOnTab2 = await tauriInvoke<SessionState>('get_session_state');
     expect(stateOnTab2.activeTabId).toBe(tab2Id);
 
     // Switch to tab 1 and verify.
     await $(`${Selectors.tab}[data-tab-index='0']`).click();
-    await waitForTextInGrid("TAB1-SESSION-CONTENT");
+    await waitForTextInGrid('TAB1-SESSION-CONTENT');
 
-    const stateOnTab1 = await tauriInvoke<SessionState>("get_session_state");
+    const stateOnTab1 = await tauriInvoke<SessionState>('get_session_state');
     expect(stateOnTab1.activeTabId).toBe(tab1Id);
   });
 });

@@ -12,8 +12,8 @@
  * - FS-TAB-001 (open tab), FS-TAB-003 (close tab), FS-TAB-004 (tab count)
  */
 
-import { browser, $, $$ } from "@wdio/globals";
-import { Selectors } from "./helpers/selectors";
+import { browser, $, $$ } from '@wdio/globals';
+import { Selectors } from './helpers/selectors';
 
 /** Helper: count the number of tab elements currently in the DOM. */
 async function countTabs(): Promise<number> {
@@ -21,14 +21,14 @@ async function countTabs(): Promise<number> {
   return tabs.length;
 }
 
-describe("TauTerm — Tab create and close lifecycle", () => {
+describe('TauTerm — Tab create and close lifecycle', () => {
   /**
    * TEST-TAB-E2E-001: Application starts with exactly one tab.
    *
    * On first launch, the tab bar must show exactly one tab in active state.
    * No additional tabs are created by default.
    */
-  it("starts with exactly one tab", async () => {
+  it('starts with exactly one tab', async () => {
     const tabBar = await $(Selectors.tabBar);
     await expect(tabBar).toExist();
 
@@ -46,27 +46,23 @@ describe("TauTerm — Tab create and close lifecycle", () => {
    * After pressing the new-tab shortcut, the tab bar must show a second tab
    * and the second tab must become active (data-tab-index="1", 0-indexed).
    */
-  it("creates a second tab with Ctrl+Shift+T", async () => {
+  it('creates a second tab with Ctrl+Shift+T', async () => {
     // Give focus to the app window before sending keyboard shortcuts.
     await $(Selectors.terminalGrid).click();
 
     // Open a new tab via keyboard shortcut (FS-TAB-001 / FS-KBD-002).
-    await browser.keys(["Control", "Shift", "t"]);
+    await browser.keys(['Control', 'Shift', 't']);
 
     // Wait for a second tab to appear in the tab bar.
-    await browser.waitUntil(
-      async () => (await countTabs()) === 2,
-      {
-        timeout: 5_000,
-        timeoutMsg:
-          "Second tab did not appear within 5 seconds after Ctrl+Shift+T",
-      }
-    );
+    await browser.waitUntil(async () => (await countTabs()) === 2, {
+      timeout: 5_000,
+      timeoutMsg: 'Second tab did not appear within 5 seconds after Ctrl+Shift+T',
+    });
 
     // The new tab must be active and carry the correct index attribute.
     const activeTab = await $(Selectors.activeTab);
-    const tabIndex = await activeTab.getAttribute("data-tab-index");
-    expect(tabIndex).toBe("1"); // second tab, 0-indexed
+    const tabIndex = await activeTab.getAttribute('data-tab-index');
+    expect(tabIndex).toBe('1'); // second tab, 0-indexed
   });
 
   /**
@@ -77,15 +73,15 @@ describe("TauTerm — Tab create and close lifecycle", () => {
    *
    * Depends on TEST-TAB-E2E-002 having opened a second tab.
    */
-  it("closes the active tab with Ctrl+Shift+W and reverts to one tab", async () => {
+  it('closes the active tab with Ctrl+Shift+W and reverts to one tab', async () => {
     // Ensure we start with 2 tabs (continuation from previous test).
     // In isolation, create a tab first.
     if ((await countTabs()) < 2) {
       await $(Selectors.terminalGrid).click();
-      await browser.keys(["Control", "Shift", "t"]);
+      await browser.keys(['Control', 'Shift', 't']);
       await browser.waitUntil(async () => (await countTabs()) === 2, {
         timeout: 5_000,
-        timeoutMsg: "Could not create second tab for close test setup",
+        timeoutMsg: 'Could not create second tab for close test setup',
       });
     }
 
@@ -94,58 +90,42 @@ describe("TauTerm — Tab create and close lifecycle", () => {
     // WebKitGTK (browser.keys() reliably triggers Ctrl+Shift+T but may not
     // reliably deliver Ctrl+Shift+W after a tab switch).
     await browser.execute((): void => {
-      const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+      const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
       const target = grid ?? document.body;
       target.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "W",
-          code: "KeyW",
+        new KeyboardEvent('keydown', {
+          key: 'W',
+          code: 'KeyW',
           ctrlKey: true,
           shiftKey: true,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
     });
 
     // FS-PTY-008: InjectablePtyBackend never emits processExited, so the tab is
     // always considered to have an active process → the close confirmation dialog
-    // will appear. Wait for it, then click "Close anyway".
-    //
-    // Strategy: poll for the confirm button's existence (by text content) rather
-    // than relying on a specific dialog role or portal selector, then dispatch a
-    // native click event so Svelte 5's event listeners fire correctly.
+    // will appear. Wait for the confirm button (via data-testid, locale-independent),
+    // then dispatch a native click event so Svelte 5's event listeners fire correctly.
     await browser.waitUntil(
       async () => {
         return browser.execute((): boolean => {
-          for (const btn of document.querySelectorAll("button")) {
-            if ((btn.textContent ?? "").trim() === "Close anyway") return true;
-          }
-          return false;
+          return document.querySelector('[data-testid="close-confirm-action"]') !== null;
         });
       },
-      { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not appear within 3 s" }
+      { timeout: 3_000, timeoutMsg: 'Close confirmation dialog did not appear within 3 s' },
     );
     await browser.execute((): void => {
-      for (const btn of document.querySelectorAll("button")) {
-        if ((btn.textContent ?? "").trim() === "Close anyway") {
-          (btn as HTMLButtonElement).dispatchEvent(
-            new MouseEvent("click", { bubbles: true, cancelable: true })
-          );
-          break;
-        }
-      }
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-action"]');
+      btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
 
     // Wait for the tab count to drop back to one.
-    await browser.waitUntil(
-      async () => (await countTabs()) === 1,
-      {
-        timeout: 5_000,
-        timeoutMsg:
-          "Tab count did not return to 1 within 5 seconds after Ctrl+Shift+W",
-      }
-    );
+    await browser.waitUntil(async () => (await countTabs()) === 1, {
+      timeout: 5_000,
+      timeoutMsg: 'Tab count did not return to 1 within 5 seconds after Ctrl+Shift+W',
+    });
 
     // The remaining tab must be active.
     const activeTab = await $(Selectors.activeTab);
@@ -160,26 +140,26 @@ describe("TauTerm — Tab create and close lifecycle", () => {
    * (b) Prompt the user before closing.
    * The application must remain open and responsive.
    */
-  it("does not crash when attempting to close the last tab", async () => {
+  it('does not crash when attempting to close the last tab', async () => {
     // Ensure we are down to one tab.
-    await browser.waitUntil(
-      async () => (await countTabs()) === 1,
-      { timeout: 3_000, timeoutMsg: "Expected 1 tab before last-tab close test" }
-    );
+    await browser.waitUntil(async () => (await countTabs()) === 1, {
+      timeout: 3_000,
+      timeoutMsg: 'Expected 1 tab before last-tab close test',
+    });
 
     // Dispatch Ctrl+Shift+W via DOM to ensure the Svelte handler receives it.
     await browser.execute((): void => {
-      const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+      const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
       const target = grid ?? document.body;
       target.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "W",
-          code: "KeyW",
+        new KeyboardEvent('keydown', {
+          key: 'W',
+          code: 'KeyW',
           ctrlKey: true,
           shiftKey: true,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
     });
 
@@ -188,7 +168,7 @@ describe("TauTerm — Tab create and close lifecycle", () => {
 
     // Application must still be responsive — window title is still correct.
     const title = await browser.getTitle();
-    expect(title).toBe("tau-term");
+    expect(title).toBe('tau-term');
 
     // The tab bar must still show at least one tab.
     const tabCount = await countTabs();

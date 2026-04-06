@@ -714,6 +714,11 @@
   }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
+    // When focus is inside a portal-rendered modal dialog (close confirmation,
+    // preferences, SSH dialogs), application shortcuts must not fire — the
+    // dialog owns the keyboard context.
+    if ((event.target as Element)?.closest?.('[role="dialog"], [role="alertdialog"]')) return;
+
     // FS-KBD-002: check user-configurable shortcuts first, then fixed pane shortcuts.
 
     if (matchesShortcut(event, effectiveShortcut('new_tab'))) {
@@ -939,13 +944,9 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div
-  class="terminal-view"
-  role="application"
-  aria-label={m.terminal_view_aria_label()}
-  onkeydown={handleGlobalKeydown}
->
+<svelte:window onkeydown={handleGlobalKeydown} />
+
+<div class="terminal-view" role="application" aria-label={m.terminal_view_aria_label()}>
   <!-- Tab bar: renders tabs from session state -->
   <div class="terminal-view__tab-row">
     <TabBar
@@ -1111,10 +1112,15 @@
       </p>
     {/snippet}
     {#snippet footer()}
-      <Button variant="ghost" bind:buttonRef={closeConfirmCancelBtn} onclick={handleCloseCancel}
-        >{m.action_cancel()}</Button
+      <Button
+        variant="ghost"
+        bind:buttonRef={closeConfirmCancelBtn}
+        onclick={handleCloseCancel}
+        data-testid="close-confirm-cancel">{m.action_cancel()}</Button
       >
-      <Button variant="destructive" onclick={handleCloseConfirm}>{m.close_confirm_action()}</Button>
+      <Button variant="destructive" onclick={handleCloseConfirm} data-testid="close-confirm-action"
+        >{m.close_confirm_action()}</Button
+      >
     {/snippet}
   </Dialog>
 
@@ -1148,8 +1154,8 @@
         onclick={() => {
           connectionOpenError = false;
         }}
-        aria-label={m.action_close()}
-      >{m.action_close()}</button>
+        aria-label={m.action_close()}>{m.action_close()}</button
+      >
     </div>
   {/if}
 </div>

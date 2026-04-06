@@ -32,8 +32,8 @@
  * stall that affects async scripts.
  */
 
-import { browser, $, $$ } from "@wdio/globals";
-import { Selectors } from "./helpers/selectors";
+import { browser, $, $$ } from '@wdio/globals';
+import { Selectors } from './helpers/selectors';
 
 // ---------------------------------------------------------------------------
 // IPC helpers (same fire-and-forget pattern as other specs)
@@ -70,8 +70,7 @@ function isViewportFocused(): Promise<boolean> {
     const el = document.activeElement;
     if (el === null || el === document.body) return false;
     return (
-      el.classList.contains("terminal-grid") ||
-      el.classList.contains("terminal-pane__viewport")
+      el.classList.contains('terminal-grid') || el.classList.contains('terminal-pane__viewport')
     );
   }) as Promise<boolean>;
 }
@@ -108,12 +107,12 @@ async function countTabs(): Promise<number> {
  */
 async function closeTabViaKeyboard(): Promise<void> {
   await browser.execute((): void => {
-    const grid = document.querySelector(".terminal-grid") as HTMLElement | null;
+    const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
     const target = grid ?? document.body;
     target.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "W",
-        code: "KeyW",
+      new KeyboardEvent('keydown', {
+        key: 'W',
+        code: 'KeyW',
         ctrlKey: true,
         shiftKey: true,
         bubbles: true,
@@ -124,25 +123,17 @@ async function closeTabViaKeyboard(): Promise<void> {
 
   // Dismiss the close-confirmation dialog if it appears (E2E build never
   // emits processExited, so the dialog always shows for active sessions).
+  // Use data-testid to be locale-independent.
   await browser.waitUntil(
     () =>
       browser.execute((): boolean => {
-        for (const btn of document.querySelectorAll("button")) {
-          if ((btn.textContent ?? "").trim() === "Close anyway") return true;
-        }
-        return false;
+        return document.querySelector('[data-testid="close-confirm-action"]') !== null;
       }),
-    { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not appear" },
+    { timeout: 3_000, timeoutMsg: 'Close confirmation dialog did not appear' },
   );
   await browser.execute((): void => {
-    for (const btn of document.querySelectorAll("button")) {
-      if ((btn.textContent ?? "").trim() === "Close anyway") {
-        (btn as HTMLButtonElement).dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
-        break;
-      }
-    }
+    const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-action"]');
+    btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });
 }
 
@@ -167,18 +158,13 @@ async function ensureOneTab(): Promise<void> {
 // Suite
 // ---------------------------------------------------------------------------
 
-describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
+describe('TauTerm — Terminal viewport auto-focus (FS-UX-003)', () => {
   before(async () => {
-    // Dismiss any lingering dialog from a previous spec (e.g. tab-lifecycle
-    // test 4 leaves the last-tab close dialog open without dismissing it).
+    // Dismiss any lingering dialog from a previous spec (locale-independent).
     await browser.execute((): void => {
-      for (const btn of document.querySelectorAll("button")) {
-        if ((btn.textContent ?? "").trim() === "Cancel") {
-          (btn as HTMLButtonElement).dispatchEvent(
-            new MouseEvent("click", { bubbles: true, cancelable: true }),
-          );
-          return;
-        }
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-cancel"]');
+      if (btn) {
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
     });
     await browser.pause(200);
@@ -195,7 +181,7 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
           return false;
         }
       },
-      { timeout: 10_000, timeoutMsg: "Active terminal pane not ready before focus tests" },
+      { timeout: 10_000, timeoutMsg: 'Active terminal pane not ready before focus tests' },
     );
   });
 
@@ -221,7 +207,7 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
    *
    * Intentionally RED before FS-UX-003 implementation.
    */
-  it("TEST-FOCUS-001: viewport is focused at launch without user interaction", async () => {
+  it('TEST-FOCUS-001: viewport is focused at launch without user interaction', async () => {
     // At this point we have not clicked anything — the browser was opened by
     // tauri-driver and app.spec.ts only checked window title and .app-shell.
     // Any focus that exists must have been set programmatically.
@@ -248,7 +234,7 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
    * Note: we open a tab, assert focus, then close it in afterEach so the
    * next test starts from a one-tab state.
    */
-  it("TEST-FOCUS-002: viewport is focused after Ctrl+Shift+T (new tab)", async () => {
+  it('TEST-FOCUS-002: viewport is focused after Ctrl+Shift+T (new tab)', async () => {
     // Move focus to the active tab button (not the viewport) — this lets
     // browser.keys deliver the shortcut while keeping the terminal unfocused,
     // so the auto-focus on the NEW tab is the only thing that can pass the assertion.
@@ -256,12 +242,12 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
     expect(await isViewportFocused()).toBe(false);
 
     // Open a new tab.
-    await browser.keys(["Control", "Shift", "t"]);
+    await browser.keys(['Control', 'Shift', 't']);
 
-    await browser.waitUntil(
-      async () => (await countTabs()) === 2,
-      { timeout: 5_000, timeoutMsg: "Second tab did not appear after Ctrl+Shift+T" },
-    );
+    await browser.waitUntil(async () => (await countTabs()) === 2, {
+      timeout: 5_000,
+      timeoutMsg: 'Second tab did not appear after Ctrl+Shift+T',
+    });
 
     // Auto-focus must kick in without any further user action.
     await waitForViewportFocus();
@@ -272,7 +258,7 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
     await closeTabViaKeyboard();
     await browser.waitUntil(async () => (await countTabs()) === 1, {
       timeout: 5_000,
-      timeoutMsg: "Extra tab was not closed after TEST-FOCUS-002",
+      timeoutMsg: 'Extra tab was not closed after TEST-FOCUS-002',
     });
   });
 
@@ -292,25 +278,25 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
    *
    * Intentionally RED before FS-UX-003 implementation.
    */
-  it("TEST-FOCUS-003: viewport is focused after clicking a tab in the tab bar", async () => {
+  it('TEST-FOCUS-003: viewport is focused after clicking a tab in the tab bar', async () => {
     // Wait for the UI to fully settle after the previous test's tab close + dialog.
-    await browser.waitUntil(
-      async () => (await countTabs()) === 1,
-      { timeout: 5_000, timeoutMsg: "Expected 1 tab at start of TEST-FOCUS-003" },
-    );
+    await browser.waitUntil(async () => (await countTabs()) === 1, {
+      timeout: 5_000,
+      timeoutMsg: 'Expected 1 tab at start of TEST-FOCUS-003',
+    });
 
     // Setup: focus the active tab button so browser.keys can deliver Ctrl+Shift+T.
     // Use dispatchEvent — WebKitGTK marks the tab button as non-interactable
     // briefly after the auto-focus $effect fires (same issue as in TEST-FOCUS-002).
     await browser.execute((): void => {
-      const tab = document.querySelector<HTMLElement>(".tab-bar__tab--active");
-      tab?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      const tab = document.querySelector<HTMLElement>('.tab-bar__tab--active');
+      tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
-    await browser.keys(["Control", "Shift", "t"]);
-    await browser.waitUntil(
-      async () => (await countTabs()) === 2,
-      { timeout: 5_000, timeoutMsg: "Second tab did not appear for TEST-FOCUS-003 setup" },
-    );
+    await browser.keys(['Control', 'Shift', 't']);
+    await browser.waitUntil(async () => (await countTabs()) === 2, {
+      timeout: 5_000,
+      timeoutMsg: 'Second tab did not appear for TEST-FOCUS-003 setup',
+    });
 
     // Now click tab 0 (the first tab) in the tab bar.  We are currently on
     // tab 1 (the newly created one), so this is a genuine tab switch.
@@ -319,16 +305,16 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
     // (same workaround used in tab-lifecycle.spec.ts for Ctrl+Shift+W).
     await browser.execute((): void => {
       const tab = document.querySelector<HTMLElement>(".tab-bar__tab[data-tab-index='0']");
-      tab?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
 
     // Wait for the switch to complete — the first tab must be active.
     await browser.waitUntil(
       async () => {
         const activeTab = await $(Selectors.activeTab);
-        return (await activeTab.getAttribute("data-tab-index")) === "0";
+        return (await activeTab.getAttribute('data-tab-index')) === '0';
       },
-      { timeout: 5_000, timeoutMsg: "Tab 0 did not become active after click" },
+      { timeout: 5_000, timeoutMsg: 'Tab 0 did not become active after click' },
     );
 
     // The click was on the tab button, not the viewport — auto-focus must
@@ -340,7 +326,7 @@ describe("TauTerm — Terminal viewport auto-focus (FS-UX-003)", () => {
     await closeTabViaKeyboard();
     await browser.waitUntil(async () => (await countTabs()) === 1, {
       timeout: 5_000,
-      timeoutMsg: "Extra tab was not closed after TEST-FOCUS-003",
+      timeoutMsg: 'Extra tab was not closed after TEST-FOCUS-003',
     });
   });
 });

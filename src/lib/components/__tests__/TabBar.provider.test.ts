@@ -3,20 +3,14 @@
 /**
  * TabBar — Tooltip.Provider context tests.
  *
- * These tests document and guard against the regression where TabBar was
- * rendered without an ancestor <Tooltip.Provider>, causing Bits UI v2 to
- * throw "Context 'Tooltip.Provider' not found".
- *
- * The fix (wrapping the app root in <Tooltip.Provider> in +page.svelte)
- * is validated here at the unit level by:
- *   1. Verifying that TabBar mounts cleanly when a Tooltip.Provider ancestor
- *      is present (the correct production setup).
- *   2. Documenting the failure mode (no provider) as an expected error so
- *      the contract is explicit in the test suite.
+ * Historical context: TabBar previously included a new-tab "+" button wrapped
+ * in Tooltip.Root, which required a Tooltip.Provider ancestor.  The button was
+ * moved to TerminalView (outside the scrollable tab zone — UXD §7.1.1).
+ * TabBar no longer uses Tooltip.Root and does not require a provider.
  *
  * Covered:
- *   TBTC-CTX-001 — TabBar mounts without error inside Tooltip.Provider
- *   TBTC-CTX-002 — TabBar throws context error when mounted without Tooltip.Provider
+ *   TBTC-CTX-001 — TabBar mounts without error (with or without Tooltip.Provider)
+ *   TBTC-CTX-002 — TabBar mounts without throwing even without Tooltip.Provider
  *
  * Note: Bits UI Dialog/Tooltip portals are rendered into document.body;
  * DOM queries use document.body when needed.
@@ -123,46 +117,22 @@ describe('TBTC-CTX-001: TabBar mounts cleanly inside Tooltip.Provider', () => {
     expect(tablist).not.toBeNull();
   });
 
-  it('renders the new-tab button (uses Tooltip.Root — requires provider)', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-
-    const instance = mount(TabBarWithProvider, {
-      target: container,
-      props: {
-        tabs: [],
-        activeTabId: '',
-        onTabClick: () => {},
-        onTabClose: () => {},
-        onNewTab: () => {},
-      },
-    });
-    instances.push(instance);
-    flushSync();
-
-    // The new-tab button is rendered by the Tooltip.Trigger snippet inside TabBar.
-    // Its presence confirms the Tooltip.Root tree initialised without a context error.
-    const newTabBtn = container.querySelector('.tab-bar__new-tab');
-    expect(newTabBtn).not.toBeNull();
-  });
+  it.todo(
+    'new-tab button moved to TerminalView (outside scrollable zone) — no longer rendered by TabBar',
+  );
 });
 
 // ---------------------------------------------------------------------------
-// TBTC-CTX-002 — TabBar throws context error without Tooltip.Provider
+// TBTC-CTX-002 — TabBar no longer requires Tooltip.Provider
 //
-// This test documents the failure mode that motivated the fix.
-// Bits UI v2 requires Tooltip.Provider as an ancestor of Tooltip.Root.
-// Mounting TabBar directly (without the wrapper) triggers the error.
+// The new-tab button (which used Tooltip.Root) was moved to TerminalView.
+// TabBar now mounts cleanly without a Tooltip.Provider ancestor.
 // ---------------------------------------------------------------------------
 
-describe('TBTC-CTX-002: TabBar throws context error without Tooltip.Provider', () => {
-  it('throws "Context \\"Tooltip.Provider\\" not found" when mounted without a provider', () => {
+describe('TBTC-CTX-002: TabBar mounts without Tooltip.Provider (no Tooltip.Root)', () => {
+  it('mounts without throwing when there is no Tooltip.Provider ancestor', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
-
-    // Suppress the expected console.error from Svelte's error boundary so the
-    // test output stays clean.
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {
       const instance = mount(TabBar, {
@@ -176,10 +146,7 @@ describe('TBTC-CTX-002: TabBar throws context error without Tooltip.Provider', (
         },
       });
       instances.push(instance);
-      // flushSync materialises the Tooltip.Root context lookup.
       flushSync();
-    }).toThrow(/Tooltip\.Provider/);
-
-    consoleError.mockRestore();
+    }).not.toThrow();
   });
 });

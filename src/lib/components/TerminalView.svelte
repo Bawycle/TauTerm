@@ -871,7 +871,7 @@
         requestedRenameTabId = null;
       }}
     />
-    <!-- SSH connections toggle button (Tâche #13) -->
+    <!-- SSH connections toggle button (FS-SSH-031, UXD §7.1.8) -->
     <button
       class="terminal-view__ssh-btn"
       class:terminal-view__ssh-btn--active={connectionManagerOpen}

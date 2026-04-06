@@ -2,14 +2,16 @@
 <!--
   TabBar — horizontal tab strip at the top of the window.
   Displays all open tabs, active indicator, SSH badges,
-  notification indicators, and the new-tab button.
+  and notification indicators.
+
+  The new-tab button lives in TerminalView (outside the scrollable zone).
 
   Props:
     tabs        — list of TabState from session state
     activeTabId — ID of the currently active tab
     onTabClick  — callback when a tab is clicked
     onTabClose  — callback when a tab close button is clicked
-    onNewTab    — callback when the new-tab button is clicked
+    onNewTab    — callback forwarded to the tab context menu "New tab" item
 
   Features:
     - Inline rename: double-click or F2 on focused tab (FS-TAB-006)
@@ -19,8 +21,7 @@
     - Scroll arrow badges when hidden tabs have active notifications (UXD §7.1.3)
 
   Libraries:
-    - lucide-svelte: X, Plus, Bell, CheckCircle, XCircle, Network, ChevronLeft, ChevronRight icons
-    - bits-ui Tooltip: new-tab tooltip (UXD §7.1.5, §7.10)
+    - lucide-svelte: X, Bell, CheckCircle, XCircle, Network, ChevronLeft, ChevronRight icons
     - ContextMenu: tab context menu
 
   Security:
@@ -37,7 +38,6 @@
     ChevronLeft,
     ChevronRight,
   } from 'lucide-svelte';
-  import { Tooltip } from 'bits-ui';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
@@ -49,6 +49,7 @@
     activeTabId: string;
     onTabClick: (tabId: string) => void;
     onTabClose: (tabId: string) => void;
+    /** Forwarded to the tab context menu "New tab" item. */
     onNewTab: () => void;
     /**
      * Set to the tab ID to start rename mode on that tab programmatically
@@ -590,6 +591,17 @@
     </button>
   {/if}
 
+  <!-- New tab button — outside the scrollable zone, right of the scroll area (UXD §7.1.1) -->
+  <button
+    class="tab-bar__new-tab"
+    type="button"
+    aria-label={m.tab_bar_new_tab()}
+    title={m.tab_bar_new_tab_tooltip()}
+    onclick={onNewTab}
+  >
+    <Plus size={16} aria-hidden="true" />
+  </button>
+
   <!-- Tab context menu (UXD §7.8.2) — DropdownMenu anchored to pointer position.
        Rendered once; controlled by contextMenuTabId. The ContextMenu trigger is
        fixed-positioned at the right-click coordinates via anchorX/anchorY. -->
@@ -613,25 +625,6 @@
     {/if}
   {/if}
 
-  <!-- New tab button with Bits UI Tooltip (TUITC-UX-040 to 043, UXD §7.1.5) -->
-  <Tooltip.Root delayDuration={300}>
-    <Tooltip.Trigger>
-      {#snippet child({ props })}
-        <button
-          {...props}
-          class="tab-bar__new-tab"
-          type="button"
-          aria-label={m.tab_bar_new_tab()}
-          onclick={onNewTab}
-        >
-          <Plus size={14} aria-hidden="true" />
-        </button>
-      {/snippet}
-    </Tooltip.Trigger>
-    <Tooltip.Content class="tab-bar__tooltip">
-      {m.tab_bar_new_tab_tooltip()}
-    </Tooltip.Content>
-  </Tooltip.Root>
 </div>
 
 <style>
@@ -643,19 +636,21 @@
     min-height: var(--size-tab-height);
     background-color: var(--color-tab-bg);
     border-bottom: 1px solid var(--color-border);
-    overflow: hidden;
-    /* flex: 1 0 0 — grow to fill (row_width − SSH button), never shrink,
-     * start from 0. The flex-basis:0 is critical: with flex-basis:auto the
-     * item's initial size is content-based, so adding tabs grows the bar
-     * beyond the row width and pushes the SSH button off-screen. */
+    /* flex: 1 0 0 — fill the full available row width (row − SSH button).
+     * SSH button is therefore always anchored at the right edge of the window.
+     * .tab-bar__tabs uses flex: 0 1 auto so it sizes to its content — the "+"
+     * button lands right after the tabs, and empty bar space sits between them
+     * and the SSH button. overflow: hidden clips any transient overflows. */
     flex: 1 0 0;
+    overflow: hidden;
     min-width: 0;
   }
 
   .tab-bar__tabs {
     display: flex;
     align-items: stretch;
-    flex: 1;
+    /* flex: 0 1 auto — sized by tab content, can shrink when bar hits max-width */
+    flex: 0 1 auto;
     height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
@@ -891,7 +886,7 @@
     outline-offset: 2px;
   }
 
-  /* New tab button — TUITC-UX-040 to 043 */
+  /* New tab button — right of scroll area, outside .tab-bar__tabs (UXD §7.1.1) */
   .tab-bar__new-tab {
     display: flex;
     align-items: center;
@@ -921,19 +916,6 @@
   .tab-bar__new-tab:focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 2px;
-  }
-
-  /* Tooltip content (UXD §7.10) */
-  :global(.tab-bar__tooltip) {
-    background-color: var(--color-bg-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-1) var(--space-2);
-    font-size: var(--font-size-ui-xs);
-    color: var(--color-text-primary);
-    box-shadow: var(--shadow-raised);
-    z-index: var(--z-tooltip, 60);
-    white-space: nowrap;
   }
 
   /* Drop insertion indicator (UXD §8.4) — 2px vertical bar in accent color */

@@ -56,7 +56,7 @@ impl Perform for VtPerformBridge<'_> {
             // HT (0x09) — advance to next tab stop (every 8 columns).
             0x09 => {
                 let next_tab = ((col / 8) + 1) * 8;
-                p.active_cursor_mut().col = next_tab.min(p.cols - 1);
+                p.active_cursor_mut().col = next_tab.min(p.cols.saturating_sub(1));
             }
             // LF / VT / FF (0x0A / 0x0B / 0x0C)
             0x0A..=0x0C => {
@@ -64,12 +64,12 @@ impl Perform for VtPerformBridge<'_> {
                 // is terminated by an explicit LF, not by auto-wrap.
                 p.wrap_pending = false;
                 let (top, bottom) = p.modes.scroll_region;
-                let is_full = top == 0 && bottom == p.rows - 1;
+                let is_full = top == 0 && bottom == p.rows.saturating_sub(1);
                 if row == bottom {
                     // `soft_wrapped: false` — this is an explicit newline.
                     p.active_buf_mut().scroll_up(top, bottom, 1, is_full, false);
                 } else {
-                    p.active_cursor_mut().row = (row + 1).min(p.rows - 1);
+                    p.active_cursor_mut().row = (row + 1).min(p.rows.saturating_sub(1));
                 }
             }
             // CR (0x0D)
@@ -198,7 +198,7 @@ impl Perform for VtPerformBridge<'_> {
             // CUF — cursor forward
             ([], 'C') => {
                 let n = param0.max(1);
-                p.active_cursor_mut().col = (p.cursor_col() + n).min(p.cols - 1);
+                p.active_cursor_mut().col = (p.cursor_col() + n).min(p.cols.saturating_sub(1));
             }
             // CUB — cursor back
             ([], 'D') => {
@@ -207,8 +207,14 @@ impl Perform for VtPerformBridge<'_> {
             }
             // CUP / HVP — cursor position
             ([], 'H') | ([], 'f') => {
-                let row = param0.max(1).saturating_sub(1).min(p.rows - 1);
-                let col = param1.max(1).saturating_sub(1).min(p.cols - 1);
+                let row = param0
+                    .max(1)
+                    .saturating_sub(1)
+                    .min(p.rows.saturating_sub(1));
+                let col = param1
+                    .max(1)
+                    .saturating_sub(1)
+                    .min(p.cols.saturating_sub(1));
                 p.active_cursor_mut().row = row;
                 p.active_cursor_mut().col = col;
             }
@@ -252,7 +258,7 @@ impl Perform for VtPerformBridge<'_> {
             ([], 'r') => {
                 let top = param0.max(1).saturating_sub(1);
                 let bottom = if param1 == 0 {
-                    p.rows - 1
+                    p.rows.saturating_sub(1)
                 } else {
                     param1.saturating_sub(1)
                 };
@@ -338,16 +344,19 @@ impl Perform for VtPerformBridge<'_> {
                     }
                 }
             }
-            // DECSC (7) — save cursor
+            // DECSC (7) — save cursor (CSI s)
             ([], 's') => {
-                let saved = p.active_cursor().clone();
+                let mut saved = p.active_cursor().clone();
+                // Capture current SGR attributes and charset slot into the saved state.
+                saved.attrs = p.current_attrs;
+                saved.charset_slot = p.modes.charset_slot;
                 if p.alt_active {
                     p.saved_alt_cursor = Some(saved);
                 } else {
                     p.saved_normal_cursor = Some(saved);
                 }
             }
-            // DECRC (8) — restore cursor
+            // DECRC (8) — restore cursor (CSI u)
             ([], 'u') => {
                 let restored = if p.alt_active {
                     p.saved_alt_cursor.clone()
@@ -355,6 +364,8 @@ impl Perform for VtPerformBridge<'_> {
                     p.saved_normal_cursor.clone()
                 };
                 if let Some(pos) = restored {
+                    p.current_attrs = pos.attrs;
+                    p.modes.charset_slot = pos.charset_slot;
                     *p.active_cursor_mut() = pos;
                 }
             }
@@ -398,7 +409,7 @@ impl Perform for VtPerformBridge<'_> {
                 let (top, bottom) = p.modes.scroll_region;
                 // Cursor must be within the scroll region; otherwise ignore.
                 if row >= top && row <= bottom {
-                    let is_full = top == 0 && bottom == p.rows - 1;
+                    let is_full = top == 0 && bottom == p.rows.saturating_sub(1);
                     p.active_buf_mut().scroll_up(row, bottom, n, is_full, false);
                 }
             }
@@ -406,7 +417,7 @@ impl Perform for VtPerformBridge<'_> {
             ([], 'S') => {
                 let n = param0.max(1);
                 let (top, bottom) = p.modes.scroll_region;
-                let is_full = top == 0 && bottom == p.rows - 1;
+                let is_full = top == 0 && bottom == p.rows.saturating_sub(1);
                 p.active_buf_mut().scroll_up(top, bottom, n, is_full, false);
             }
             // CSI Ps T — scroll down Ps lines (default 1) within the scroll region (FS-VT-052).
@@ -435,7 +446,10 @@ impl Perform for VtPerformBridge<'_> {
         match (intermediates, byte) {
             // DECSC — save cursor (ESC 7)
             ([], b'7') => {
-                let saved = p.active_cursor().clone();
+                let mut saved = p.active_cursor().clone();
+                // Capture current SGR attributes and charset slot into the saved state.
+                saved.attrs = p.current_attrs;
+                saved.charset_slot = p.modes.charset_slot;
                 if p.alt_active {
                     p.saved_alt_cursor = Some(saved);
                 } else {
@@ -450,6 +464,8 @@ impl Perform for VtPerformBridge<'_> {
                     p.saved_normal_cursor.clone()
                 };
                 if let Some(pos) = restored {
+                    p.current_attrs = pos.attrs;
+                    p.modes.charset_slot = pos.charset_slot;
                     *p.active_cursor_mut() = pos;
                 }
             }

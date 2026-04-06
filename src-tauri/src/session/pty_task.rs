@@ -11,11 +11,14 @@
 //! Using Tauri's async runtime (rather than `tokio::task` directly) ensures the runtime
 //! is available even when called from Tauri's `setup()` hook.
 //!
-//! Back-pressure: all available bytes are processed before emitting a single
-//! event. Rate limiting is a future improvement (§6.5).
+//! Back-pressure: dirty regions are coalesced over a short debounce window
+//! (SCREEN_UPDATE_DEBOUNCE_MS) before emitting a single `screen-update` event.
+//! This prevents flooding the frontend when high-volume apps (`yes`, `seq`) write
+//! faster than the frontend can consume events.
 
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use parking_lot::RwLock;
 use tauri::AppHandle;
@@ -64,6 +67,13 @@ impl Drop for PtyTaskHandle {
 /// wrapped in `Arc<Mutex<...>>` so it can be passed to `spawn_blocking`.
 ///
 /// Returns a `PtyTaskHandle` that aborts the task on drop.
+/// Debounce window for coalescing `screen-update` events.
+///
+/// After processing PTY bytes, the task waits up to this duration before emitting,
+/// coalescing further reads into a single event. This prevents flooding the frontend
+/// when high-volume apps write faster than the frontend can consume events (§6.5).
+const SCREEN_UPDATE_DEBOUNCE: Duration = Duration::from_millis(12);
+
 pub fn spawn_pty_read_task(
     pane_id: PaneId,
     vt: Arc<RwLock<VtProcessor>>,
@@ -73,7 +83,37 @@ pub fn spawn_pty_read_task(
 ) -> PtyTaskHandle {
     let task = tauri::async_runtime::spawn_blocking(move || {
         let mut buf = vec![0u8; 4096];
+        // Accumulated dirty region across the debounce window.
+        let mut pending_dirty = DirtyRegion::default();
+        // Time at which the current debounce window opened (None = no pending dirty).
+        let mut debounce_start: Option<Instant> = None;
+
         loop {
+            // Flush any accumulated dirty region when the debounce window expires.
+            if let Some(start) = debounce_start
+                && start.elapsed() >= SCREEN_UPDATE_DEBOUNCE
+            {
+                if !pending_dirty.is_empty() {
+                    // FS-NOTIF-001: background-output notification.
+                    if !registry.is_active_pane(&pane_id)
+                        && let Some((_, tab_state)) = registry.get_tab_state_for_pane(&pane_id)
+                    {
+                        emit_notification_changed(
+                            &app,
+                            NotificationChangedEvent {
+                                tab_id: tab_state.id,
+                                pane_id: pane_id.clone(),
+                                notification: Some(PaneNotificationDto::BackgroundOutput),
+                            },
+                        );
+                    }
+                    let event = build_screen_update_event(&pane_id, &vt, &pending_dirty);
+                    emit_screen_update(&app, event);
+                }
+                pending_dirty = DirtyRegion::default();
+                debounce_start = None;
+            }
+
             // Read from PTY master — blocking call.
             let n = {
                 let mut rdr = match reader.lock() {
@@ -160,24 +200,19 @@ pub fn spawn_pty_read_task(
                 );
             }
 
+            // Coalesce dirty region into the pending window.
             if !dirty.is_empty() {
-                // FS-NOTIF-001: if this pane is not the active pane, emit a background-output notification.
-                if !registry.is_active_pane(&pane_id)
-                    && let Some((_, tab_state)) = registry.get_tab_state_for_pane(&pane_id)
-                {
-                    emit_notification_changed(
-                        &app,
-                        NotificationChangedEvent {
-                            tab_id: tab_state.id,
-                            pane_id: pane_id.clone(),
-                            notification: Some(PaneNotificationDto::BackgroundOutput),
-                        },
-                    );
+                pending_dirty.merge(&dirty);
+                if debounce_start.is_none() {
+                    debounce_start = Some(Instant::now());
                 }
-
-                let event = build_screen_update_event(&pane_id, &vt, &dirty);
-                emit_screen_update(&app, event);
             }
+        }
+
+        // Loop exited (EOF or error) — flush any remaining dirty region immediately.
+        if !pending_dirty.is_empty() {
+            let event = build_screen_update_event(&pane_id, &vt, &pending_dirty);
+            emit_screen_update(&app, event);
         }
 
         // FS-NOTIF-002: PTY process exited — emit notification with exit code.

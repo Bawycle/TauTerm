@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use tau_term_lib::session::{
     pty_task::PtyTaskHandle,
-    resize::{PendingResize, ResizeDebouncer, RESIZE_DEBOUNCE_MS},
+    resize::{PendingResize, RESIZE_DEBOUNCE_MS, ResizeDebouncer},
     ssh_task::SshTaskHandle,
 };
 

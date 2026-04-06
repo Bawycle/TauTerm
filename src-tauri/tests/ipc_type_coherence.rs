@@ -104,6 +104,7 @@ fn ipc_session_state_changed_tab_created_serializes() {
         change_type: SessionChangeType::TabCreated,
         tab: Some(make_leaf_tab(0)),
         active_tab_id: None,
+        closed_tab_id: None,
     };
     let json = serde_json::to_string(&event).expect("SessionStateChangedEvent must serialize");
     assert!(
@@ -119,6 +120,7 @@ fn ipc_session_state_changed_tab_closed_serializes() {
         change_type: SessionChangeType::TabClosed,
         tab: None,
         active_tab_id: Some(tab_id.0.clone()),
+        closed_tab_id: Some(tab_id.clone()),
     };
     let json = serde_json::to_string(&event).expect("serialize");
     assert!(
@@ -142,6 +144,7 @@ fn ipc_session_state_changed_all_change_types_serialize() {
             change_type: variant,
             tab: None,
             active_tab_id: None,
+            closed_tab_id: None,
         };
         // Must serialize without panic.
         let json = serde_json::to_string(&event).expect("serialize SessionChangeType variant");

@@ -27,6 +27,9 @@ export default defineConfig({
     // jsdom provides the DOM APIs needed for Svelte component tests.
     environment: 'jsdom',
 
+    // Global setup: polyfills for jsdom gaps (ResizeObserver, etc.).
+    setupFiles: ['src/__mocks__/vitest-setup.ts'],
+
     // Glob covering all unit/component tests in src/.
     // E2E tests in tests/ are handled by WebdriverIO separately.
     include: ['src/**/*.{test,spec}.{ts,js}'],

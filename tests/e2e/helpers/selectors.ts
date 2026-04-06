@@ -15,4 +15,7 @@ export const Selectors = {
   tabBar: ".tab-bar",
   tab: ".tab-bar__tab",
   activeTab: ".tab-bar__tab[aria-selected='true']",
+  scrollArrowLeft: ".tab-bar__scroll-arrow--left",
+  scrollArrowRight: ".tab-bar__scroll-arrow--right",
+  newTabButton: ".tab-bar__new-tab",
 } as const;

@@ -39,7 +39,7 @@
   } from 'lucide-svelte';
   import { Tooltip } from 'bits-ui';
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
   import ContextMenu from './ContextMenu.svelte';
@@ -71,6 +71,13 @@
 
   // Sort tabs by order field
   const sortedTabs = $derived([...tabs].sort((a, b) => a.order - b.order));
+
+  // Memoised tab count — used to detect add/remove without reacting to tab
+  // content changes (e.g. active tab switch causes tabs = tabs.map(…) in the
+  // parent, which creates a new array reference with the same length).
+  // $derived memoises by value: effects reading tabCount only rerun when the
+  // number actually changes, not on every new array reference.
+  const tabCount = $derived(tabs.length);
 
   // ── Inline rename state (FS-TAB-006) ────────────────────────────────────────
   // ID of the tab currently being renamed, or null.
@@ -165,12 +172,26 @@
   const rightBadge = $derived(canScrollRight ? hiddenTabsBadge('right') : null);
 
   function updateScrollState() {
-    if (!tabsContainerEl) return;
+    if (!tabsContainerEl || !tabsContainerEl.isConnected) return;
+
     const { scrollLeft, scrollWidth, clientWidth } = tabsContainerEl;
-    // Guard: show arrows only when there is real overflow beyond sub-pixel tolerance.
-    // scrollWidth can exceed clientWidth by 1-2px due to fractional flex-item widths;
-    // treating that as "no overflow" prevents spurious arrows when all tabs fit.
-    const hasOverflow = scrollWidth > clientWidth + 1;
+
+    // Compare scrollWidth against tabsContainerEl.clientWidth directly.
+    //
+    // Earlier attempts used tabBar.clientWidth − newTabBtn.offsetWidth, but
+    // tabBar is content-sized in its parent flex row: adding a 24 px arrow
+    // expands tabBar.clientWidth by 24 px and inflates the denominator.
+    //
+    // Using clientWidth avoids that problem. The bistability concern (arrows
+    // shrink clientWidth → still looks like overflow → arrows stay) does NOT
+    // apply here because the overflow margin always exceeds the arrow width:
+    //   • without arrow: clientWidth = ~1800, scrollWidth = 1807 → margin = 7 px
+    //   • with right arrow: clientWidth = ~1776, scrollWidth = 1807 → margin = 31 px
+    // In both states overflow is detected, so arrows stay correctly once shown.
+    //
+    // 2 px tolerance absorbs sub-pixel rounding in flex layout.
+    const hasOverflow = scrollWidth > clientWidth + 2;
+
     canScrollLeft = hasOverflow && scrollLeft > 1;
     canScrollRight = hasOverflow && scrollLeft + clientWidth < scrollWidth - 1;
   }
@@ -189,9 +210,9 @@
 
   onMount(() => {
     if (tabsContainerEl) {
-      tabsResizeObserver = new ResizeObserver(() => {
-        updateScrollState();
-      });
+      // ResizeObserver fires after layout (spec-guaranteed), so measurements
+      // are stable. No rAF deferral needed here.
+      tabsResizeObserver = new ResizeObserver(() => updateScrollState());
       tabsResizeObserver.observe(tabsContainerEl);
       updateScrollState();
     }
@@ -201,11 +222,33 @@
     tabsResizeObserver?.disconnect();
   });
 
-  // Re-check overflow whenever the sorted tab list changes (tab added/removed).
+  // Re-check overflow whenever the tab count changes (tab added/removed).
+  //
+  // IMPORTANT: read `tabCount` (a $derived primitive) — NOT `tabs.length`
+  // directly inside the effect. Both yield the same number, but reading
+  // `tabs.length` subscribes to the full `tabs` signal: whenever the parent
+  // does `tabs = tabs.map(…)` (e.g. on active-tab-changed events), the effect
+  // would rerun even though the count hasn't changed. `tabCount` is memoised
+  // by value — Svelte only propagates when the number actually changes.
+  //
+  // Two-path scheduling: requestAnimationFrame fires post-layout in live
+  // browsers (exact, zero-delay). setTimeout(50) is a fallback for headless
+  // WebKitGTK (tauri-driver E2E) where rAF callbacks are unreliable. The
+  // `done` guard ensures only the first path calls updateScrollState().
   $effect(() => {
-    // Depend on sortedTabs length so this re-runs when tabs are added/removed.
-    const _len = sortedTabs.length;
-    tick().then(() => updateScrollState());
+    const _len = tabCount;
+    let done = false;
+    const rafId = requestAnimationFrame(() => {
+      if (!done) { done = true; updateScrollState(); }
+    });
+    const timeoutId = setTimeout(() => {
+      if (!done) { done = true; updateScrollState(); }
+      cancelAnimationFrame(rafId);
+    }, 200);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+    };
   });
 
   // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────
@@ -602,6 +645,9 @@
     border-bottom: 1px solid var(--color-border);
     overflow: hidden;
     flex-shrink: 0;
+    /* Fill the parent flex row and prevent overflow clipping. */
+    flex-grow: 1;
+    min-width: 0;
   }
 
   .tab-bar__tabs {

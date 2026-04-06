@@ -98,6 +98,8 @@ const basePrefs = {
     confirmMultilinePaste: true,
   },
   keyboard: { bindings: {} },
+  connections: [],
+  themes: [],
 };
 
 // ---------------------------------------------------------------------------

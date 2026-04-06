@@ -18,7 +18,7 @@
  *   UITCP-PREF-I18N-002 — language dropdown renders with 'En'|'Fr' values
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mount, unmount } from 'svelte';
 import PreferencesPanel from '../PreferencesPanel.svelte';
 import type { Preferences } from '$lib/ipc/types';
@@ -72,7 +72,18 @@ function mountPanel(props: {
 
 const instances: ReturnType<typeof mount>[] = [];
 
+beforeEach(() => {
+  // Bits UI body-scroll-lock schedules cleanup via setTimeout. Use fake timers
+  // so those pending timers are drained during afterEach before jsdom teardown,
+  // preventing "document is not defined" unhandled errors.
+  vi.useFakeTimers();
+});
+
 afterEach(() => {
+  // Unmount FIRST so bits-ui body-scroll-lock schedules its cleanup timer
+  // while fake timers are still active (useFakeTimers() called in beforeEach).
+  // Then drain all pending fake timers so the cleanup runs before jsdom tears
+  // down the document — prevents "document is not defined" unhandled errors.
   instances.forEach((i) => {
     try {
       unmount(i);
@@ -81,6 +92,8 @@ afterEach(() => {
     }
   });
   instances.length = 0;
+  vi.runAllTimers();
+  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 

@@ -17,7 +17,7 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 |------|----------|
 | [01-principles.md](01-principles.md) | §1 Purpose & Scope, §2 Design Principles — SSOT rules, authoritativeness, the 7 design principles |
 | [02-tokens.md](02-tokens.md) | §3 Design Token System, §4 Typography System, §5 Color System, §6 Layout & Spatial Model |
-| [03-components.md](03-components.md) | §7 Component Specifications — all 21 sub-sections (§7.1 Tab Bar through §7.21 Deprecated SSH Algorithm Warning Banner) |
+| [03-components.md](03-components.md) | §7 Component Specifications — all 22 sub-sections (§7.1 Tab Bar through §7.22 Full-Screen Mode) |
 | [04-interaction.md](04-interaction.md) | §8 Interaction Patterns, §9 Motion & Animation, §10 Iconography |
 | [05-accessibility.md](05-accessibility.md) | §11 Accessibility, §12 Responsiveness & Window Resizing |
 | [06-themes.md](06-themes.md) | §13 Theme Extensibility — required/optional tokens, non-themeable tokens, validation rules |
@@ -56,6 +56,7 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 | SSH Reconnection Separator | [03-components.md](03-components.md) | §7.19 |
 | Theme Editor | [03-components.md](03-components.md) | §7.20 |
 | Deprecated SSH Algorithm Banner | [03-components.md](03-components.md) | §7.21 |
+| Full-Screen Mode | [03-components.md](03-components.md) | §7.22 |
 | Mouse interaction patterns | [04-interaction.md](04-interaction.md) | §8.1 |
 | Focus management | [04-interaction.md](04-interaction.md) | §8.2 |
 | Scroll behavior | [04-interaction.md](04-interaction.md) | §8.3 |
@@ -63,7 +64,7 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 | Clipboard | [04-interaction.md](04-interaction.md) | §8.5 |
 | SSH interruption feedback | [04-interaction.md](04-interaction.md) | §8.6 |
 | Motion philosophy | [04-interaction.md](04-interaction.md) | §9.1 |
-| Entrance/exit transitions | [04-interaction.md](04-interaction.md) | §9.2 |
+| Entrance/exit transitions (incl. full-screen) | [04-interaction.md](04-interaction.md) | §9.2 |
 | `prefers-reduced-motion` policy | [04-interaction.md](04-interaction.md) | §9.4 |
 | Icon set & vocabulary | [04-interaction.md](04-interaction.md) | §10 |
 | Contrast audit | [05-accessibility.md](05-accessibility.md) | §11.1 |

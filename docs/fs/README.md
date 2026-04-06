@@ -20,6 +20,7 @@ This directory contains the Functional Specifications for TauTerm, split by feat
 | [03-remote-ssh.md](03-remote-ssh.md) | SSH session management and credential security |
 | [04-config-system.md](04-config-system.md) | Theming, preferences, accessibility, security hardening, and internationalisation |
 | [05-scope-constraints.md](05-scope-constraints.md) | Distribution, out-of-scope items, domain constraints, traceability matrix, and review notes |
+| [06-fullscreen.md](06-fullscreen.md) | Full-screen mode: enter/exit, keyboard shortcut, PTY resize, persistence |
 
 ---
 
@@ -45,6 +46,7 @@ This directory contains the Functional Specifications for TauTerm, split by feat
 | FS-SEC | Security Hardening | [04-config-system.md](04-config-system.md) |
 | FS-I18N | Internationalisation | [04-config-system.md](04-config-system.md) |
 | FS-DIST | Distribution | [05-scope-constraints.md](05-scope-constraints.md) |
+| FS-FULL | Full-Screen Mode | [06-fullscreen.md](06-fullscreen.md) |
 
 ---
 

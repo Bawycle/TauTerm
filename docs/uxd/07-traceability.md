@@ -49,6 +49,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | [§7.19](03-components.md#719-ssh-reconnection-separator-fs-ssh-042) | Reconnection separator injected into scrollback at reconnect; full-width rule + left-aligned timestamp label; non-interactive UI overlay | — | FS-SSH-042 |
 | [§7.20](03-components.md#720-theme-editor-fs-theme-003-fs-theme-004) | Theme editor with color pickers and contrast advisory | UR §8.2 (user-created themes) | FS-THEME-003, FS-THEME-004 |
 | [§7.21](03-components.md#721-deprecated-ssh-algorithm-warning-banner-fs-ssh-014) | Deprecated SSH algorithm warning banner | UR §9.3 (security awareness) | FS-SSH-014 |
+| [§7.22](03-components.md#722-full-screen-mode-fs-full-001--fs-full-006) | Full-screen mode: chrome hide/recall, exit badge, `aria-live` announcement, keyboard navigation in full-screen | UR §3.4 (full-screen mode) | FS-FULL-001, FS-FULL-002, FS-FULL-003, FS-FULL-004, FS-FULL-005, FS-FULL-006 |
 | [§8.2](04-interaction.md#82-focus-management) | Focus trap in modals | UR §3.1 (keyboard completeness) | FS-A11Y-003 |
 | [§8.5](04-interaction.md#85-clipboard) | Auto-copy to PRIMARY, paste from CLIPBOARD | UR §6.3 (clipboard) | FS-CLIP-004, FS-CLIP-005 |
 | [§8.5](04-interaction.md#85-clipboard) | Multi-line paste confirmation | — | FS-CLIP-009 |

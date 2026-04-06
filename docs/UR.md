@@ -52,6 +52,13 @@ This principle ensures that Sam (occasional user, §2.3) can use TauTerm effecti
 
 Inside the terminal area itself, keyboard input is necessarily the primary modality — it is transmitted directly to the running process. This is inherent to how terminals work and is not a design choice by TauTerm.
 
+### 3.4 Full-Screen Mode
+
+- The user can switch TauTerm to full-screen mode, expanding the terminal area to fill the entire display with no window chrome visible.
+- The user can exit full-screen mode and return to the windowed state at any time.
+- Entering and exiting full-screen must be accessible via both keyboard shortcut and a discoverable UI action.
+- The full-screen state does not affect the application's functionality: tabs, panes, preferences, and SSH connections remain fully accessible.
+
 ---
 
 ## 4. Terminal Multiplexing

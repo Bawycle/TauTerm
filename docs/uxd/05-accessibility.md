@@ -30,6 +30,7 @@ All color pairings used in the UI are documented in [§5.4](02-tokens.md#54-acce
 | `Ctrl+Tab` | Next tab | Always |
 | `Ctrl+Shift+Tab` | Previous tab | Always |
 | `Ctrl+,` | Open preferences | Always |
+| `F11` | Toggle full-screen mode | Always |
 | `Ctrl+Shift+F` | Open search overlay | When terminal pane is focused |
 | `Ctrl+Shift+V` | Paste from clipboard | When terminal pane is focused |
 
@@ -92,6 +93,8 @@ These are user-configurable defaults (FS-KBD-002).
 | Confirmation dialog | `alertdialog` | `aria-modal="true"` |
 | Connection manager | `complementary` | `aria-label="Connection Manager"` |
 | Status bar | `status` | Live region for SSH state changes |
+| Full-screen exit badge | `button` | `aria-label` bound to i18n key `exit_fullscreen`; `aria-describedby` pointing to tooltip |
+| Full-screen mode announcement | `aria-live="polite"` region | Hidden `<span>` at `position: absolute; clip-path: inset(50%)` announces the mode change to screen readers: "Entered full screen" / "Exited full screen". Located at the top of the root layout. |
 | Tooltip | `tooltip` | Referenced by trigger's `aria-describedby` |
 
 ### 11.4 Reduced Motion Policy
@@ -125,6 +128,7 @@ Per FS-A11Y-004, every status communicated through color also has a secondary in
 | Deprecated SSH algorithm | Amber banner | `AlertTriangle` icon + descriptive warning text |
 | Pane activity (output) | Green border pulse | Temporal change (border color shift for 800ms) |
 | Pane activity (bell) | Amber border pulse | Temporal change (border color shift for 800ms) |
+| Full-screen mode active | Exit badge visible in corner | `Minimize2` icon shape + `aria-live` announcement + tooltip text |
 
 ---
 

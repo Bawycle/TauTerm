@@ -4,6 +4,17 @@
 
 ## Fonctionnalités manquantes — UI / UXD
 
+- [ ] **Mode plein écran** (FS-FULL-001 à FS-FULL-010, UXD §7.22)
+  Spécifié dans `docs/fs/06-fullscreen.md` et `docs/uxd/03-components.md §7.22`. À implémenter :
+  - Commande Tauri `toggle_fullscreen` (Rust) + IPC frontend (`invoke`)
+  - Raccourci F11 intercepté dans `handleGlobalKeydown` (avant PTY) — ajout dans `defaultShortcuts` et `FS-KBD-003`
+  - Bouton UI discoverable dans la tab bar (badge `Minimize2`, opacity 0.7 au repos)
+  - Masquage/rappel de la tab bar et de la status bar en plein écran (hover 4px bord haut, auto-hide 1,5 s)
+  - SIGWINCH envoyé à tous les PTY après stabilisation de la géométrie (debounce existant FS-PTY-009)
+  - Persistance de l'état dans les préférences (FS-FULL-009)
+  - Token `--z-fullscreen-chrome: 45` déjà ajouté dans `docs/uxd/02-tokens.md`
+  - Annonce `aria-live="polite"` pour les lecteurs d'écran
+
 - [ ] **Distribution — signing GPG + SHA256SUMS** (FS-DIST-006)
   Aucun script de signing dans la CI/CD. Implémenter dans le pipeline de release : génération de `SHA256SUMS`, signature GPG, publication des artefacts signés.
 

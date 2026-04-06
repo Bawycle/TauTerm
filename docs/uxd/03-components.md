@@ -931,3 +931,111 @@ When an SSH connection is established and the negotiated host key algorithm is d
 
 - **Non-blocking:** The banner does not prevent terminal interaction. Keyboard input passes through to the PTY. The terminal content is visible and scrollable below the banner.
 - **Keyboard:** The dismiss button is focusable and activatable via Enter/Space. It appears in the tab order after the pane's terminal content focus.
+
+---
+
+### 7.22 Full-Screen Mode (FS-FULL-001 – FS-FULL-006)
+
+Full-screen mode expands the terminal content to fill the entire display, temporarily suppressing the tab bar and status bar. The design follows the Umbra principle of *managed density*: chrome recedes so the terminal surface can occupy the available space without visual interruption. The chrome is not destroyed — it can be recalled when needed.
+
+#### 7.22.1 Layout in Full-Screen Mode
+
+In full-screen mode the window anatomy changes from the four-band layout (§6.1) to a single surface:
+
+```
++----------------------------------------------------------+
+|                                                          |
+|  Terminal Area      (100% width × 100% height)           |
+|    (pane dividers, scrollbars, and in-pane overlays      |
+|     remain within this surface)                          |
+|                                                          |
++----------------------------------------------------------+
+```
+
+- The **tab bar** and **status bar** are hidden from view (not destroyed — their state is preserved).
+- All in-pane elements remain visible: pane dividers, scrollbars, the scroll-to-bottom button, the search overlay, in-pane SSH banners, the process-terminated banner, and the deprecated-algorithm banner.
+- The **window frame** (title bar, OS window borders) is suppressed — this is handled by Tauri at the window manager level. TauTerm UX takes effect only after the OS transition completes.
+
+#### 7.22.2 Entrance and Exit Transition
+
+Full-screen transitions are driven by the OS/window-manager compositor, not by TauTerm CSS. TauTerm cannot animate the physical expansion of pixels to fill the screen — that is outside the WebView boundary. TauTerm does control the *chrome visibility change*:
+
+| Surface | Entrance (entering full screen) | Exit (leaving full screen) |
+|---------|--------------------------------|---------------------------|
+| Tab bar | `opacity` 1 → 0, `--duration-fast` (80ms), `--ease-in` — hides as full screen activates | `opacity` 0 → 1, `--duration-base` (100ms), `--ease-out` — reveals as full screen exits |
+| Status bar | Same as tab bar: `opacity` 1 → 0, `--duration-fast`, `--ease-in` | `opacity` 0 → 1, `--duration-base`, `--ease-out` |
+| Full-screen indicator badge | `opacity` 0 → 1, `--duration-base`, `--ease-out` — appears after bars have hidden | `opacity` 1 → 0, `--duration-fast`, `--ease-in` |
+
+**Timing rationale:** Hiding is faster than revealing. The `--ease-in` on exit from view matches the convention used by all other dismissals in the system (§9.2). The 80ms exit is fast enough to feel instant but prevents a jarring cut.
+
+**`prefers-reduced-motion: reduce`:** All of the above transitions collapse to instant state changes (0ms). The chrome surfaces appear or disappear without animation.
+
+#### 7.22.3 Auto-Hide and Recall of Chrome
+
+When in full-screen mode:
+
+- The tab bar and status bar are hidden by default.
+- **Recall via hover:** Moving the mouse cursor to the top 4px of the window triggers the tab bar to appear. Moving it to the bottom 4px triggers the status bar to appear. The recall animation is `opacity` 0 → 1, `--duration-base` (100ms), `--ease-out`. The bars auto-hide again after the cursor moves away from the bar region for 1.5 seconds (same idle timeout as the scrollbar fade-out in §9.3), with `opacity` 1 → 0, `--duration-slow` (300ms), `--ease-in`.
+- **Recall via keyboard:** Pressing the full-screen toggle shortcut (F11) exits full-screen entirely and restores chrome. No separate "peek" shortcut exists — the keyboard path is exit, not recall. This is consistent with the precedent set by virtually every Linux desktop application and avoids adding a non-standard interaction that users would need to discover.
+- The hover zones are 4px tall to minimize accidental recalls while typing or moving the mouse normally.
+
+**`prefers-reduced-motion: reduce`:** Recall and auto-hide transitions are instant.
+
+#### 7.22.4 Full-Screen Indicator
+
+The user needs a persistent, non-intrusive signal that the window is in full-screen mode, and a mouse-accessible path to exit.
+
+**Full-Screen Exit Badge:**
+
+- **Position:** `position: fixed`, top-right corner of the viewport, offset `--space-3` (12px) from each edge.
+- **Z-index:** `--z-fullscreen-chrome` (see §3.10 — above all in-pane overlays but below modals and the recalled tab bar).
+- **Anatomy:** Lucide `Minimize2` icon, `--size-icon-md` (16px), inside a pill-shaped container.
+- **Size:** minimum 33×33px (same as scroll-to-bottom button). `border-radius: var(--radius-full)`.
+- **Colors:**
+
+| State | Background | Border | Icon color |
+|-------|-----------|--------|-----------|
+| Idle | `var(--color-bg-raised)` at `opacity: 0.7` | `1px solid var(--color-border)` | `var(--color-icon-default)` |
+| Hover | `var(--color-hover-bg)` at `opacity: 1` | `1px solid var(--color-border)` | `var(--color-icon-active)` |
+| Active | `var(--color-active-bg)` | `1px solid var(--color-border)` | `var(--color-icon-active)` |
+| Focus | `var(--color-bg-raised)` | focus ring: 2px `var(--color-focus-ring)`, offset `var(--color-focus-ring-offset)` | `var(--color-icon-active)` |
+
+- **Opacity:** The idle state uses `opacity: 0.7` to keep the badge present but at low visual temperature. Hover brings it to full opacity. This follows the Umbra principle — status indicators exist at reduced visual weight, stepping forward only when attended to.
+- **Behavior:** Clicking or activating the badge exits full-screen mode (equivalent to F11).
+- **Tooltip:** "Exit full screen (F11)", shown after `--duration-slow` (300ms) hover delay. `aria-describedby` on the badge element.
+- **ARIA:** `role="button"`, `tabindex="0"`, `aria-label` bound to i18n key `exit_fullscreen`.
+- **Auto-hide with chrome:** When the tab bar is recalled (via hover, §7.22.3), the exit badge hides — the tab bar and status bar provide sufficient context that the user is in full-screen mode. It reappears when the bars hide again.
+
+**Status bar indicator (normal mode):** Outside of full-screen mode, the status bar carries no full-screen indicator — there is nothing unusual to communicate. When entering full-screen, the status bar hides before an indicator in it would be useful. The exit badge (above) is the primary discoverable affordance.
+
+#### 7.22.5 Keyboard Navigation in Full-Screen Mode
+
+Full-screen mode does not alter the keyboard navigation model. All global shortcuts remain active. The tab bar and status bar, though hidden, are not removed from the DOM — when recalled via hover they re-enter the natural tab order. Focus management:
+
+- If focus was in the tab bar or status bar when full-screen was activated, focus moves to the active terminal pane.
+- The full-screen exit badge is in the tab order at all times (it is always visible in full-screen, unlike the recalled bars). It receives focus via `Tab` cycling, positioned after the terminal area in the tab order.
+- When full-screen is exited, focus returns to the active terminal pane (not the exit badge), consistent with the pattern that dismissing an overlay returns focus to the triggering context.
+
+#### 7.22.6 Token References
+
+All token values are defined in §3 (tokens) and §7.14 (buttons).
+
+| Token | Usage in this component |
+|-------|------------------------|
+| `--duration-fast` | Tab bar / status bar fade-out on enter |
+| `--duration-base` | Tab bar / status bar fade-in on exit; badge entrance; recall entrance |
+| `--duration-slow` | Auto-hide fade-out after cursor leaves |
+| `--ease-in` | Dismissal easing |
+| `--ease-out` | Appearance easing |
+| `--z-fullscreen-chrome` | Exit badge z-index |
+| `--color-bg-raised` | Badge idle background |
+| `--color-hover-bg` | Badge hover background |
+| `--color-active-bg` | Badge active background |
+| `--color-border` | Badge border |
+| `--color-icon-default` | Badge idle icon |
+| `--color-icon-active` | Badge hover/active/focus icon |
+| `--color-focus-ring` | Badge focus ring |
+| `--color-focus-ring-offset` | Badge focus ring offset |
+| `--radius-full` | Badge shape |
+| `--space-3` | Badge offset from viewport edges |
+| `--size-icon-md` | Badge icon size |

@@ -132,6 +132,10 @@ Motion in TauTerm is purposeful, brief, and non-distracting. Every animation com
 | Connection manager | TranslateX(100%→0), `--duration-base` (100ms), `--ease-out` | TranslateX(0→100%), `--duration-fast` (80ms), `--ease-in` | Instant |
 | Dropdown menu | Opacity 0→1 + translateY(-4px→0), `--duration-base` (100ms), `--ease-out` | Instant (0ms) | Instant |
 | First-launch hint | Opacity 0→1, `--duration-slow` (300ms), `--ease-out` (delayed 2s after first terminal output) | Opacity 1→0, `--duration-slow`, `--ease-in` | Instant |
+| Full-screen — tab bar hide | Opacity 1→0, `--duration-fast` (80ms), `--ease-in` (on full-screen enter) | Opacity 0→1, `--duration-base` (100ms), `--ease-out` (on full-screen exit) | Instant |
+| Full-screen — status bar hide | Same as tab bar hide row | Same as tab bar hide row | Instant |
+| Full-screen — exit badge | Opacity 0→1, `--duration-base` (100ms), `--ease-out` (after bars have hidden) | Opacity 1→0, `--duration-fast` (80ms), `--ease-in` (on full-screen exit) | Instant |
+| Full-screen — chrome recall (hover) | Opacity 0→1, `--duration-base` (100ms), `--ease-out` | Opacity 1→0, `--duration-slow` (300ms) after 1.5s idle, `--ease-in` | Instant |
 
 ### 9.3 State Transitions
 
@@ -153,6 +157,7 @@ Motion in TauTerm is purposeful, brief, and non-distracting. Every animation com
 | Connection group chevron | 150ms | `--ease-out` | Instant |
 | Terminal dimensions overlay (resize start) | Instant (0ms) — appears immediately | — | — |
 | Terminal dimensions overlay (fade-out, 2s after resize end) | `--duration-slow` (300ms), opacity 1→0 | `--ease-in` | Instant disappear (no transition) |
+| Full-screen chrome auto-hide (after cursor leaves recalled bar) | `--duration-slow` (300ms) after 1.5s idle, opacity 1→0 | `--ease-in` | Instant |
 
 ### 9.4 `prefers-reduced-motion` Policy
 
@@ -165,6 +170,7 @@ When `prefers-reduced-motion: reduce` is active:
 - Theme switching applies token changes instantly with no cross-fade.
 - Pane border activity pulses change color instantly (no transition), hold for the specified duration, then revert instantly.
 - Connection group chevron rotation is instant.
+- Full-screen chrome transitions (tab bar/status bar hide/show, exit badge fade, recalled chrome fade) are all instant. The exit badge appears or disappears without animation.
 
 ---
 
@@ -217,6 +223,7 @@ When `prefers-reduced-motion: reduce` is active:
 | Dropdown indicator | `ChevronDown` | sm | Dropdown/select fields |
 | Search prev | `ChevronUp` | sm | Search overlay navigation |
 | Search next | `ChevronDown` | sm | Search overlay navigation |
+| Exit full screen | `Minimize2` | md | Full-screen exit badge |
 | Tab scroll left | `ChevronLeft` | sm | Tab bar overflow scroll |
 | Tab scroll right | `ChevronRight` | sm | Tab bar overflow scroll |
 | Open externally | `ExternalLink` | sm | Connection manager "open in new tab" |

@@ -295,6 +295,7 @@ Base unit: 4px. All spacing values are multiples of 4px.
 | `--z-search` | `20` | Search overlay |
 | `--z-dropdown` | `30` | Dropdowns, context menus, tooltips |
 | `--z-overlay` | `40` | Preferences panel, connection manager |
+| `--z-fullscreen-chrome` | `45` | Full-screen exit badge and recalled chrome (above overlays, below modals) |
 | `--z-modal-backdrop` | `49` | Modal backdrop (sits behind the dialog panel) |
 | `--z-modal` | `50` | Dialogs, confirmation prompts |
 | `--z-tooltip` | `60` | Tooltips (topmost) |

@@ -4,7 +4,8 @@
   Displays all open tabs, active indicator, SSH badges,
   and notification indicators.
 
-  The new-tab button lives in TerminalView (outside the scrollable zone).
+  The new-tab button is the last element of this component, outside the scrollable
+  tabs container, fixed at the right of the scroll area (UXD §7.1.5, §7.1.1).
 
   Props:
     tabs        — list of TabState from session state
@@ -135,10 +136,17 @@
   // ── Horizontal scroll / overflow detection (UXD §6.2, §12.2) ────────────────
   // DOM reference for the scrollable tabs container.
   let tabsContainerEl = $state<HTMLDivElement | null>(null);
+  // DOM reference for the outer .tab-bar element (flex: 1 0 0, no overflow:auto).
+  // Used for reliable clientWidth measurement (WebKitGTK-safe).
+  let tabBarEl = $state<HTMLDivElement | null>(null);
+  // DOM reference for the new-tab button (needed for its offsetWidth).
+  let newTabBtnEl = $state<HTMLButtonElement | null>(null);
   // True when tabs overflow to the left of the scroll position.
   let canScrollLeft = $state(false);
   // True when tabs overflow to the right of the scroll position.
   let canScrollRight = $state(false);
+  // Fixed width of each scroll arrow button — must match CSS .tab-bar__scroll-arrow { width: 24px }.
+  const SCROLL_ARROW_WIDTH = 24;
 
   /**
    * Aggregate notification badge color for a given side's hidden tabs.
@@ -174,27 +182,39 @@
 
   function updateScrollState() {
     if (!tabsContainerEl || !tabsContainerEl.isConnected) return;
+    if (!tabBarEl || !newTabBtnEl) return;
 
-    const { scrollLeft, scrollWidth, clientWidth } = tabsContainerEl;
+    const { scrollLeft, scrollWidth } = tabsContainerEl;
+    const tabBarWidth = tabBarEl.clientWidth;
+    const newTabBtnWidth = newTabBtnEl.offsetWidth;
 
-    // Compare scrollWidth against tabsContainerEl.clientWidth directly.
+    // DO NOT use tabsContainerEl.clientWidth for overflow detection.
     //
-    // Earlier attempts used tabBar.clientWidth − newTabBtn.offsetWidth, but
-    // tabBar is content-sized in its parent flex row: adding a 24 px arrow
-    // expands tabBar.clientWidth by 24 px and inflates the denominator.
+    // WebKitGTK (used by Tauri/wry) resolves both flex-basis: max-content
+    // and max-width: max-content on overflow:auto containers to a value close
+    // to min-content (≈ the width of one tab ≈ 120 px), not the actual
+    // available space. This makes clientWidth unreliable: with 2 tabs the
+    // comparison scrollWidth (240) > clientWidth (120) + 2 fires spuriously.
     //
-    // Using clientWidth avoids that problem. The bistability concern (arrows
-    // shrink clientWidth → still looks like overflow → arrows stay) does NOT
-    // apply here because the overflow margin always exceeds the arrow width:
-    //   • without arrow: clientWidth = ~1800, scrollWidth = 1807 → margin = 7 px
-    //   • with right arrow: clientWidth = ~1776, scrollWidth = 1807 → margin = 31 px
-    // In both states overflow is detected, so arrows stay correctly once shown.
+    // Instead, use tabBarEl.clientWidth (the outer .tab-bar div, flex: 1 0 0,
+    // no overflow:auto). Its clientWidth is always the full available bar width
+    // and is WebKitGTK-safe.
     //
+    // totalTabsSpace = space available for the tabs container + navigation arrows.
     // 2 px tolerance absorbs sub-pixel rounding in flex layout.
-    const hasOverflow = scrollWidth > clientWidth + 2;
+    const totalTabsSpace = tabBarWidth - newTabBtnWidth;
+    const hasOverflow = scrollWidth > totalTabsSpace + 2;
+
+    // Visible tabs width = total space minus arrows currently shown.
+    // Uses the fixed CSS constant (SCROLL_ARROW_WIDTH) to avoid querying
+    // clientWidth on the overflow:auto container (unreliable in WebKitGTK).
+    const visibleTabsWidth =
+      totalTabsSpace -
+      (canScrollLeft ? SCROLL_ARROW_WIDTH : 0) -
+      (canScrollRight ? SCROLL_ARROW_WIDTH : 0);
 
     canScrollLeft = hasOverflow && scrollLeft > 1;
-    canScrollRight = hasOverflow && scrollLeft + clientWidth < scrollWidth - 1;
+    canScrollRight = hasOverflow && scrollLeft + visibleTabsWidth < scrollWidth - 1;
   }
 
   /** Scroll the tab container by a fixed pixel amount. */
@@ -210,11 +230,13 @@
   let tabsResizeObserver: ResizeObserver | null = null;
 
   onMount(() => {
-    if (tabsContainerEl) {
-      // ResizeObserver fires after layout (spec-guaranteed), so measurements
-      // are stable. No rAF deferral needed here.
+    if (tabsContainerEl && tabBarEl) {
+      // Observe tabBarEl (not tabsContainerEl) for resize events.
+      // tabBarEl is flex: 1 0 0 with no overflow:auto — its size changes
+      // reliably on window resize. tabsContainerEl.clientWidth is unreliable
+      // in WebKitGTK (see updateScrollState comment), so we do not observe it.
       tabsResizeObserver = new ResizeObserver(() => updateScrollState());
-      tabsResizeObserver.observe(tabsContainerEl);
+      tabsResizeObserver.observe(tabBarEl);
       updateScrollState();
     }
   });
@@ -431,7 +453,7 @@
   }
 </script>
 
-<div class="tab-bar" role="tablist" aria-label={m.tab_bar_tabs_aria_label()}>
+<div bind:this={tabBarEl} class="tab-bar" role="tablist" aria-label={m.tab_bar_tabs_aria_label()}>
   <!-- Left scroll arrow — visible only when tabs overflow left (UXD §6.2, §12.2) -->
   {#if canScrollLeft}
     <button
@@ -593,6 +615,7 @@
 
   <!-- New tab button — outside the scrollable zone, right of the scroll area (UXD §7.1.1) -->
   <button
+    bind:this={newTabBtnEl}
     class="tab-bar__new-tab"
     type="button"
     aria-label={m.tab_bar_new_tab()}
@@ -649,8 +672,18 @@
   .tab-bar__tabs {
     display: flex;
     align-items: stretch;
-    /* flex: 0 1 auto — sized by tab content, can shrink when bar hits max-width */
-    flex: 0 1 auto;
+    /* flex: 1 — fills available bar space so the "+" button lands at the far
+     * right of the tab strip area.
+     * max-width: max-content — caps growth at the actual tab content width so
+     * the "+" button lands right after the last tab rather than at the far
+     * right of the bar.
+     * IMPORTANT: clientWidth on this element is NOT used for overflow detection
+     * (see updateScrollState). WebKitGTK resolves max-width: max-content (and
+     * flex-basis: max-content) on overflow:auto elements to ~min-content, making
+     * clientWidth unreliable. Overflow detection uses tabBarEl.clientWidth
+     * (the outer .tab-bar div, no overflow:auto) instead. */
+    flex: 1;
+    max-width: max-content;
     height: 100%;
     overflow-x: auto;
     overflow-y: hidden;

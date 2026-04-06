@@ -3,33 +3,33 @@
 /**
  * TabBar scroll arrows — visibility logic tests.
  *
- * The bistability fix (FS-UX-012): comparing scrollWidth directly against
- * tabsContainerEl.clientWidth. Bistability protection is structural: the
- * `.tab-bar` uses `flex: 1 0 0` in its parent row, so tabsContainerEl.clientWidth
- * is always the correct available width at measurement time — it starts from 0
- * and grows to `rowWidth − newTabBtn − sshBtn`, never exceeding that budget.
+ * The overflow detection algorithm (updateScrollState) avoids
+ * tabsContainerEl.clientWidth because WebKitGTK resolves max-width:max-content
+ * on overflow:auto elements to ~min-content, making clientWidth unreliable.
  *
- * Note: the new-tab "+" button was moved out of TabBar into TerminalView, so
- * TabBar no longer needs to subtract a newTabBtn width from its measurements.
+ * Instead, the algorithm uses:
+ *   - tabBarEl.clientWidth     → outer .tab-bar div (flex: 1 0 0, no overflow:auto, WebKitGTK-safe)
+ *   - newTabBtnEl.offsetWidth  → fixed-size "+" button
+ *   - totalTabsSpace = tabBarWidth − newTabBtnWidth
+ *   - hasOverflow = tabsScrollWidth > totalTabsSpace + 2
  *
  * Part 1 — Pure logic tests (no DOM):
  *   TBTC-SCR-001 — no overflow → both arrows hidden
  *   TBTC-SCR-002 — overflow at right edge → right arrow shown, left hidden
  *   TBTC-SCR-003 — overflow, scrolled to end → left arrow shown, right hidden
  *   TBTC-SCR-004 — overflow, scrolled to middle → both arrows shown
- *   TBTC-SCR-005 — bistability protection: CSS-constrained clientWidth always
- *                   reflects the true available space; direct comparison is sound
+ *   TBTC-SCR-005 — bistability protection: tabBarEl.clientWidth is stable (no overflow:auto)
  *   TBTC-SCR-006 — 2 px sub-pixel tolerance boundary
  *   TBTC-SCR-007 — scrollLeft exactly at boundary thresholds
- *   TBTC-SCR-008 — (obsolete: newTabBtn no longer in TabBar)
+ *   TBTC-SCR-008 — newTabBtn width is subtracted from available space
  *
  * Part 2 — DOM integration tests (component mounted):
  *   TBTC-SCR-010 — arrows absent on initial render with zero-width DOM (jsdom)
- *   TBTC-SCR-011 — right arrow appears when scrollWidth > tabsClientWidth + 2
+ *   TBTC-SCR-011 — right arrow appears when tabs overflow
  *   TBTC-SCR-012 — left arrow appears when scrolled right
  *   TBTC-SCR-013 — both arrows appear in the middle of a long tab list
  *   TBTC-SCR-014 — arrows disappear after tab removal reduces scrollWidth
- *   TBTC-SCR-015 — no arrows when scrollWidth ≤ tabsClientWidth + 2 (no overflow)
+ *   TBTC-SCR-015 — no arrows when tabs fit in available space
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -43,27 +43,47 @@ import type { TabState, PaneState } from '$lib/ipc/types';
 
 /**
  * Mirror of the updateScrollState logic from TabBar.svelte.
- * Inputs are the raw DOM measurements the function reads.
- * Output is the derived { canScrollLeft, canScrollRight } state.
+ *
+ * Uses tabBarWidth and newTabBtnWidth (not tabsClientWidth) for overflow
+ * detection — matching the WebKitGTK-safe implementation.
+ *
+ * prevCanScrollLeft/Right represent the arrow state BEFORE this call, used
+ * to compute visibleTabsWidth for the canScrollRight check.
  */
 interface ScrollMeasurements {
-  /** tabsContainerEl.scrollWidth (total content width) */
+  /** tabsContainerEl.scrollWidth (total tab content width) */
   tabsScrollWidth: number;
-  /** tabsContainerEl.clientWidth (visible width of the scroll container) */
-  tabsClientWidth: number;
+  /** tabBarEl.clientWidth (outer .tab-bar div — WebKitGTK-safe) */
+  tabBarWidth: number;
+  /** newTabBtnEl.offsetWidth (the "+" button) */
+  newTabBtnWidth: number;
   /** tabsContainerEl.scrollLeft */
   tabsScrollLeft: number;
+  /** Arrow state before this call (defaults to false = initial state) */
+  prevCanScrollLeft?: boolean;
+  prevCanScrollRight?: boolean;
 }
+
+const SCROLL_ARROW_WIDTH = 24; // matches CSS .tab-bar__scroll-arrow { width: 24px }
 
 /**
  * Mirror of updateScrollState() from TabBar.svelte.
- * The implementation reads only tabsContainerEl properties — no parent bar measurement.
  */
 function computeScrollState(m: ScrollMeasurements): { canScrollLeft: boolean; canScrollRight: boolean } {
-  const hasOverflow = m.tabsScrollWidth > m.tabsClientWidth + 2;
+  const prevLeft = m.prevCanScrollLeft ?? false;
+  const prevRight = m.prevCanScrollRight ?? false;
+
+  const totalTabsSpace = m.tabBarWidth - m.newTabBtnWidth;
+  const hasOverflow = m.tabsScrollWidth > totalTabsSpace + 2;
+
+  const visibleTabsWidth =
+    totalTabsSpace -
+    (prevLeft ? SCROLL_ARROW_WIDTH : 0) -
+    (prevRight ? SCROLL_ARROW_WIDTH : 0);
+
   return {
     canScrollLeft: hasOverflow && m.tabsScrollLeft > 1,
-    canScrollRight: hasOverflow && m.tabsScrollLeft + m.tabsClientWidth < m.tabsScrollWidth - 1,
+    canScrollRight: hasOverflow && m.tabsScrollLeft + visibleTabsWidth < m.tabsScrollWidth - 1,
   };
 }
 
@@ -72,17 +92,19 @@ describe('TBTC-SCR-001: no overflow → both arrows hidden', () => {
   it('all tabs fit — no arrows', () => {
     const state = computeScrollState({
       tabsScrollWidth: 400,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,  // totalTabsSpace = 756
       tabsScrollLeft: 0,
     });
     expect(state.canScrollLeft).toBe(false);
     expect(state.canScrollRight).toBe(false);
   });
 
-  it('tabs width exactly equals tabsClientWidth → no arrows', () => {
+  it('tabs width exactly equals totalTabsSpace → no arrows', () => {
     const state = computeScrollState({
       tabsScrollWidth: 756,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,  // totalTabsSpace = 756 ; 756 > 756 + 2 = false
       tabsScrollLeft: 0,
     });
     expect(state.canScrollLeft).toBe(false);
@@ -92,10 +114,11 @@ describe('TBTC-SCR-001: no overflow → both arrows hidden', () => {
 
 // TBTC-SCR-002
 describe('TBTC-SCR-002: overflow at right edge → right arrow only', () => {
-  it('scrollLeft = 0, content wider than container → only canScrollRight', () => {
+  it('scrollLeft = 0, content wider than totalTabsSpace → only canScrollRight', () => {
     const state = computeScrollState({
       tabsScrollWidth: 900,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,  // totalTabsSpace = 756
       tabsScrollLeft: 0,
     });
     expect(state.canScrollLeft).toBe(false);
@@ -105,8 +128,9 @@ describe('TBTC-SCR-002: overflow at right edge → right arrow only', () => {
   it('scrollLeft = 1 (boundary) → still no left arrow', () => {
     const state = computeScrollState({
       tabsScrollWidth: 900,
-      tabsClientWidth: 756,
-      tabsScrollLeft: 1,       // not > 1 → no left arrow
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
+      tabsScrollLeft: 1,  // not > 1 → no left arrow
     });
     expect(state.canScrollLeft).toBe(false);
     expect(state.canScrollRight).toBe(true);
@@ -115,11 +139,14 @@ describe('TBTC-SCR-002: overflow at right edge → right arrow only', () => {
 
 // TBTC-SCR-003
 describe('TBTC-SCR-003: overflow, scrolled to end → left arrow only', () => {
-  it('scrolled fully right (scrollLeft + clientWidth >= scrollWidth - 1)', () => {
-    // scrollWidth=900, clientWidth=756, scrollLeft=144  → 144+756=900 >= 900-1=899 ✓ no right
+  it('scrolled fully right: scrollLeft + visibleTabsWidth >= scrollWidth - 1', () => {
+    // totalTabsSpace=756; no prev arrows → visibleTabsWidth=756
+    // scrollLeft=144: 144+756=900 >= 900-1=899 → no right
+    // scrollLeft=144 > 1 → left
     const state = computeScrollState({
       tabsScrollWidth: 900,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
       tabsScrollLeft: 144,
     });
     expect(state.canScrollLeft).toBe(true);
@@ -129,8 +156,9 @@ describe('TBTC-SCR-003: overflow, scrolled to end → left arrow only', () => {
   it('scrollLeft = 2 (just above threshold) → left arrow appears', () => {
     const state = computeScrollState({
       tabsScrollWidth: 900,
-      tabsClientWidth: 756,
-      tabsScrollLeft: 2,       // > 1 → left arrow
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
+      tabsScrollLeft: 2,  // > 1 → left arrow
     });
     expect(state.canScrollLeft).toBe(true);
   });
@@ -138,70 +166,94 @@ describe('TBTC-SCR-003: overflow, scrolled to end → left arrow only', () => {
 
 // TBTC-SCR-004
 describe('TBTC-SCR-004: overflow, scrolled to middle → both arrows', () => {
-  it('scrollLeft > 1 and scrollLeft + clientWidth < scrollWidth - 1', () => {
+  it('scrollLeft > 1 and scrollLeft + visibleTabsWidth < scrollWidth - 1', () => {
+    // totalTabsSpace=756; visibleTabsWidth=756
+    // scrollLeft=100: 100 > 1 ✓; 100+756=856 < 1200-1=1199 ✓
     const state = computeScrollState({
       tabsScrollWidth: 1200,
-      tabsClientWidth: 756,
-      tabsScrollLeft: 100,    // 100 > 1 ✓ ; 100+756=856 < 1199 ✓
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
+      tabsScrollLeft: 100,
     });
     expect(state.canScrollLeft).toBe(true);
     expect(state.canScrollRight).toBe(true);
   });
 });
 
-// TBTC-SCR-005 — bistability protection via CSS-constrained layout
-describe('TBTC-SCR-005: bistability protection via CSS flex: 1 0 0', () => {
-  // The previous bistability bug used tabBar.clientWidth (content-sized) to
-  // compute availableWidth.  Adding a 24 px arrow expanded tabBar.clientWidth
-  // by 24 px, inflating availableWidth and turning off overflow detection.
+// TBTC-SCR-005 — bistability protection via tabBarEl.clientWidth
+describe('TBTC-SCR-005: bistability protection via tabBarEl.clientWidth', () => {
+  // Previous bistability bug: used tabsContainerEl.clientWidth, which changed
+  // when scroll arrows appeared/disappeared (stealing flex space).
+  // This created a feedback loop: arrows appear → clientWidth shrinks → still looks
+  // like overflow → arrows stay.
   //
-  // The fix is two-part:
-  //   1. CSS: .tab-bar uses `flex: 1 0 0` (basis 0), so it is always
-  //      constrained to rowWidth − newTabBtn − sshBtn.  tabsClientWidth is
-  //      therefore the true available width at the time of measurement.
-  //   2. JS: compare scrollWidth > tabsClientWidth + 2 directly.
-  //
-  // When tabsClientWidth is properly constrained, the comparison is always
-  // measured in a stable state.
+  // Fix: use tabBarEl.clientWidth (flex: 1 0 0, no overflow:auto).
+  // tabBarEl.clientWidth is constant regardless of internal arrow visibility —
+  // it is always the full available bar width (row − SSH button).
+  // Therefore: arrows appearing inside tabBar do NOT affect the overflow threshold.
 
-  it('no overflow when scrollWidth ≤ tabsClientWidth + 2', () => {
-    // tabs fit comfortably — no arrows
+  it('no overflow when tabsScrollWidth ≤ totalTabsSpace + 2', () => {
+    // tabs fit comfortably
     const state = computeScrollState({
       tabsScrollWidth: 570,
-      tabsClientWidth: 600,
+      tabBarWidth: 644,   // totalTabsSpace = 644 - 44 = 600; 570 > 602 → false
+      newTabBtnWidth: 44,
       tabsScrollLeft: 0,
     });
     expect(state.canScrollLeft).toBe(false);
     expect(state.canScrollRight).toBe(false);
   });
 
-  it('genuine overflow when scrollWidth > tabsClientWidth + 2', () => {
-    // tabs genuinely exceed available space — right arrow shown
+  it('genuine overflow when tabsScrollWidth > totalTabsSpace + 2', () => {
     const state = computeScrollState({
       tabsScrollWidth: 650,
-      tabsClientWidth: 600,
+      tabBarWidth: 644,   // totalTabsSpace = 600; 650 > 602 → true
+      newTabBtnWidth: 44,
       tabsScrollLeft: 0,
     });
     expect(state.canScrollRight).toBe(true);
+  });
+
+  it('tabBarWidth stays constant when a 24 px arrow appears (no bistability)', () => {
+    // With tabsContainerEl.clientWidth the bug was: when arrow appeared (24px),
+    // clientWidth dropped by 24px, so the next check used a smaller baseline.
+    // With tabBarEl.clientWidth: it never changes. Same threshold, stable result.
+    const baseParams = {
+      tabsScrollWidth: 650,
+      tabBarWidth: 644,   // constant regardless of arrows inside
+      newTabBtnWidth: 44,
+      tabsScrollLeft: 0,
+    };
+
+    const initial = computeScrollState(baseParams);
+    // After right arrow appears, re-run with prevCanScrollRight = true
+    const afterArrow = computeScrollState({ ...baseParams, prevCanScrollRight: initial.canScrollRight });
+
+    // hasOverflow threshold is the same in both calls — no bistability
+    expect(initial.canScrollRight).toBe(true);
+    expect(afterArrow.canScrollRight).toBe(true);  // still overflowing — arrow stays
   });
 });
 
 // TBTC-SCR-006 — 2px tolerance
 describe('TBTC-SCR-006: 2 px sub-pixel tolerance', () => {
-  it('scrollWidth = tabsClientWidth + 2 → no overflow (within tolerance)', () => {
+  it('tabsScrollWidth = totalTabsSpace + 2 → no overflow (within tolerance)', () => {
+    // totalTabsSpace = 756; 758 > 758 → false
     const state = computeScrollState({
-      tabsScrollWidth: 758,   // 756 + 2 = at boundary, not >, so no overflow
-      tabsClientWidth: 756,
+      tabsScrollWidth: 758,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
       tabsScrollLeft: 0,
     });
     expect(state.canScrollLeft).toBe(false);
     expect(state.canScrollRight).toBe(false);
   });
 
-  it('scrollWidth = tabsClientWidth + 3 → overflow detected', () => {
+  it('tabsScrollWidth = totalTabsSpace + 3 → overflow detected', () => {
     const state = computeScrollState({
-      tabsScrollWidth: 759,   // 756 + 3 → overflow
-      tabsClientWidth: 756,
+      tabsScrollWidth: 759,   // 756 + 3 → 759 > 758 → overflow
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
       tabsScrollLeft: 0,
     });
     expect(state.canScrollRight).toBe(true);
@@ -213,7 +265,8 @@ describe('TBTC-SCR-007: scrollLeft boundary thresholds', () => {
   it('scrollLeft = 0 → no left arrow', () => {
     const state = computeScrollState({
       tabsScrollWidth: 1000,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
       tabsScrollLeft: 0,
     });
     expect(state.canScrollLeft).toBe(false);
@@ -222,7 +275,8 @@ describe('TBTC-SCR-007: scrollLeft boundary thresholds', () => {
   it('scrollLeft = 1 → no left arrow (threshold is > 1, not >= 1)', () => {
     const state = computeScrollState({
       tabsScrollWidth: 1000,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
       tabsScrollLeft: 1,
     });
     expect(state.canScrollLeft).toBe(false);
@@ -231,36 +285,59 @@ describe('TBTC-SCR-007: scrollLeft boundary thresholds', () => {
   it('scrollLeft = 2 → left arrow shown', () => {
     const state = computeScrollState({
       tabsScrollWidth: 1000,
-      tabsClientWidth: 756,
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
       tabsScrollLeft: 2,
     });
     expect(state.canScrollLeft).toBe(true);
   });
 
-  it('scrollLeft + clientWidth = scrollWidth - 1 → right arrow hidden (at boundary)', () => {
-    // 244 + 756 = 1000, not < 999 → no right arrow
+  it('scrollLeft + visibleTabsWidth = scrollWidth - 1 → right arrow hidden (at boundary)', () => {
+    // totalTabsSpace = 756; visibleTabsWidth = 756
+    // scrollLeft = 243: 243 + 756 = 999 = scrollWidth - 1 = 999 → not < → no right
     const state = computeScrollState({
       tabsScrollWidth: 1000,
-      tabsClientWidth: 756,
-      tabsScrollLeft: 244,   // 244 + 756 = 1000, not < 999
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
+      tabsScrollLeft: 243,
     });
     expect(state.canScrollRight).toBe(false);
   });
 
-  it('scrollLeft + clientWidth = scrollWidth - 2 → right arrow shown', () => {
-    // 242 + 756 = 998 < 999 → right arrow
+  it('scrollLeft + visibleTabsWidth = scrollWidth - 2 → right arrow shown', () => {
+    // scrollLeft = 242: 242 + 756 = 998 < 999 → right arrow shown
     const state = computeScrollState({
       tabsScrollWidth: 1000,
-      tabsClientWidth: 756,
-      tabsScrollLeft: 242,   // 242 + 756 = 998 < 999
+      tabBarWidth: 800,
+      newTabBtnWidth: 44,
+      tabsScrollLeft: 242,
     });
     expect(state.canScrollRight).toBe(true);
   });
 });
 
-// TBTC-SCR-008 — (obsolete: newTabBtn was moved out of TabBar into TerminalView)
-describe('TBTC-SCR-008: newTabBtn no longer in TabBar', () => {
-  it.todo('newTabBtn is now in TerminalView — TabBar no longer reads its width');
+// TBTC-SCR-008 — newTabBtn width is subtracted from available space
+describe('TBTC-SCR-008: newTabBtn width reduces available space for tabs', () => {
+  it('wider newTabBtn leaves less space — more likely to overflow', () => {
+    // With narrow newTabBtn (24px): totalTabsSpace = 776; 780 > 778 → overflow
+    // With wide newTabBtn (64px): totalTabsSpace = 736; 780 > 738 → overflow (same result)
+    // With tiny newTabBtn (0px): totalTabsSpace = 800; 780 > 802 → no overflow
+    const withNarrow = computeScrollState({
+      tabsScrollWidth: 780,
+      tabBarWidth: 800,
+      newTabBtnWidth: 24,   // totalTabsSpace = 776; 780 > 778 → overflow
+      tabsScrollLeft: 0,
+    });
+    expect(withNarrow.canScrollRight).toBe(true);
+
+    const withNoBtn = computeScrollState({
+      tabsScrollWidth: 780,
+      tabBarWidth: 800,
+      newTabBtnWidth: 0,    // totalTabsSpace = 800; 780 > 802 → no overflow
+      tabsScrollLeft: 0,
+    });
+    expect(withNoBtn.canScrollRight).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -302,25 +379,27 @@ function mockProp(el: Element, prop: string, value: number): void {
 
 /**
  * Set up DOM measurements and trigger updateScrollState via a scroll event.
- * The implementation reads only tabsContainerEl properties — tabBar width is
- * not used.
  *
- * @param _tabBar      - .tab-bar root element (unused, kept for call-site clarity)
- * @param tabsContainer - .tab-bar__tabs element
- * @param params       - tabsContainer measurements to inject
+ * Mocks:
+ *   - tabBar.clientWidth        → totalTabsSpace denominator (WebKitGTK-safe)
+ *   - newTabBtn.offsetWidth     → subtracted from tabBar.clientWidth
+ *   - tabsContainer.scrollWidth → tab content width
+ *   - tabsContainer.scrollLeft  → current scroll position
  */
 function triggerScrollState(
-  _tabBar: HTMLElement,
+  tabBar: HTMLElement,
   tabsContainer: HTMLElement,
+  newTabBtn: HTMLElement,
   params: {
+    tabBarClientWidth: number;
+    newTabBtnOffsetWidth: number;
     tabsScrollWidth: number;
-    tabsClientWidth: number;
     tabsScrollLeft: number;
   },
 ): void {
+  mockProp(tabBar, 'clientWidth', params.tabBarClientWidth);
+  mockProp(newTabBtn, 'offsetWidth', params.newTabBtnOffsetWidth);
   mockProp(tabsContainer, 'scrollWidth', params.tabsScrollWidth);
-  mockProp(tabsContainer, 'clientWidth', params.tabsClientWidth);
-  // scrollLeft is normally writable
   Object.defineProperty(tabsContainer, 'scrollLeft', {
     value: params.tabsScrollLeft,
     configurable: true,
@@ -365,7 +444,7 @@ describe('TBTC-SCR-010: no arrows on initial render (jsdom zero-width DOM)', () 
     mountedInstances.push(instance);
     flushSync();
 
-    // jsdom has no layout → all widths are 0 → no overflow → no arrows
+    // jsdom has no layout → all widths are 0 → totalTabsSpace = 0 → no overflow → no arrows
     expect(container.querySelector('.tab-bar__scroll-arrow--left')).toBeNull();
     expect(container.querySelector('.tab-bar__scroll-arrow--right')).toBeNull();
   });
@@ -373,7 +452,7 @@ describe('TBTC-SCR-010: no arrows on initial render (jsdom zero-width DOM)', () 
 
 // TBTC-SCR-011
 describe('TBTC-SCR-011: right arrow appears when tabs overflow to the right', () => {
-  it('right arrow rendered when scrollWidth > availableWidth + 2', () => {
+  it('right arrow rendered when tabsScrollWidth > totalTabsSpace + 2', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -392,10 +471,13 @@ describe('TBTC-SCR-011: right arrow appears when tabs overflow to the right', ()
 
     const tabBar = container.querySelector<HTMLElement>('.tab-bar')!;
     const tabsContainer = container.querySelector<HTMLElement>('.tab-bar__tabs')!;
+    const newTabBtn = container.querySelector<HTMLElement>('.tab-bar__new-tab')!;
 
-    triggerScrollState(tabBar, tabsContainer, {
-      tabsScrollWidth: 800,    // overflows 556px container
-      tabsClientWidth: 556,
+    // tabBarWidth=600, newTabBtnWidth=44 → totalTabsSpace=556; tabsScrollWidth=800 > 558 → overflow
+    triggerScrollState(tabBar, tabsContainer, newTabBtn, {
+      tabBarClientWidth: 600,
+      newTabBtnOffsetWidth: 44,
+      tabsScrollWidth: 800,
       tabsScrollLeft: 0,
     });
 
@@ -425,13 +507,14 @@ describe('TBTC-SCR-012: left arrow appears when scrolled right', () => {
 
     const tabBar = container.querySelector<HTMLElement>('.tab-bar')!;
     const tabsContainer = container.querySelector<HTMLElement>('.tab-bar__tabs')!;
+    const newTabBtn = container.querySelector<HTMLElement>('.tab-bar__new-tab')!;
 
-    // Simulate scrolled to the very end: scrollLeft + clientWidth >= scrollWidth - 1
-    // 244 + 556 = 800, 800 >= 800 - 1 = 799 → no right arrow
-    // scrollLeft 244 > 1 → left arrow shown
-    triggerScrollState(tabBar, tabsContainer, {
+    // totalTabsSpace = 600 - 44 = 556
+    // scrollLeft=244: 244 > 1 ✓; 244+556=800 >= 800-1=799 → no right arrow
+    triggerScrollState(tabBar, tabsContainer, newTabBtn, {
+      tabBarClientWidth: 600,
+      newTabBtnOffsetWidth: 44,
       tabsScrollWidth: 800,
-      tabsClientWidth: 556,
       tabsScrollLeft: 244,
     });
 
@@ -461,11 +544,13 @@ describe('TBTC-SCR-013: both arrows in middle of long tab list', () => {
 
     const tabBar = container.querySelector<HTMLElement>('.tab-bar')!;
     const tabsContainer = container.querySelector<HTMLElement>('.tab-bar__tabs')!;
+    const newTabBtn = container.querySelector<HTMLElement>('.tab-bar__new-tab')!;
 
-    // scrollLeft=100 > 1 ✓; 100+556=656 < 1200-1=1199 ✓
-    triggerScrollState(tabBar, tabsContainer, {
+    // totalTabsSpace = 556; scrollLeft=100: 100 > 1 ✓; 100+556=656 < 1200-1=1199 ✓
+    triggerScrollState(tabBar, tabsContainer, newTabBtn, {
+      tabBarClientWidth: 600,
+      newTabBtnOffsetWidth: 44,
       tabsScrollWidth: 1200,
-      tabsClientWidth: 556,
       tabsScrollLeft: 100,
     });
 
@@ -495,19 +580,22 @@ describe('TBTC-SCR-014: arrows disappear after tabs removed', () => {
 
     const tabBar = container.querySelector<HTMLElement>('.tab-bar')!;
     const tabsContainer = container.querySelector<HTMLElement>('.tab-bar__tabs')!;
+    const newTabBtn = container.querySelector<HTMLElement>('.tab-bar__new-tab')!;
 
     // First: overflow present
-    triggerScrollState(tabBar, tabsContainer, {
+    triggerScrollState(tabBar, tabsContainer, newTabBtn, {
+      tabBarClientWidth: 600,
+      newTabBtnOffsetWidth: 44,
       tabsScrollWidth: 800,
-      tabsClientWidth: 556,
       tabsScrollLeft: 0,
     });
     expect(container.querySelector('.tab-bar__scroll-arrow--right')).not.toBeNull();
 
-    // Simulate tabs removed → scrollWidth now fits
-    triggerScrollState(tabBar, tabsContainer, {
-      tabsScrollWidth: 400,   // now fits in 556
-      tabsClientWidth: 556,
+    // Simulate tabs removed → scrollWidth now fits (400 < 556 + 2)
+    triggerScrollState(tabBar, tabsContainer, newTabBtn, {
+      tabBarClientWidth: 600,
+      newTabBtnOffsetWidth: 44,
+      tabsScrollWidth: 400,
       tabsScrollLeft: 0,
     });
     expect(container.querySelector('.tab-bar__scroll-arrow--right')).toBeNull();
@@ -515,15 +603,10 @@ describe('TBTC-SCR-014: arrows disappear after tabs removed', () => {
   });
 });
 
-// TBTC-SCR-015 — no arrows when scrollWidth does not exceed tabsClientWidth + 2
+// TBTC-SCR-015 — no arrows when tabs fit in available space
 describe('TBTC-SCR-015: no overflow — no arrows (DOM level)', () => {
-  it('no arrows when scrollWidth ≤ tabsClientWidth + 2', () => {
-    // Scenario: scrollWidth = 545, clientWidth = 556.
-    // 545 > 558 → false → no arrows.
-    //
-    // Bistability protection is structural: .tab-bar uses flex: 1 0 0, so
-    // tabsClientWidth reflects the true available width from the start.
-    // The JS comparison is a simple direct check — no newTabBtn subtraction.
+  it('no arrows when tabsScrollWidth ≤ totalTabsSpace + 2', () => {
+    // totalTabsSpace = 600 - 44 = 556; 545 > 558 → false
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -542,10 +625,12 @@ describe('TBTC-SCR-015: no overflow — no arrows (DOM level)', () => {
 
     const tabBar = container.querySelector<HTMLElement>('.tab-bar')!;
     const tabsContainer = container.querySelector<HTMLElement>('.tab-bar__tabs')!;
+    const newTabBtn = container.querySelector<HTMLElement>('.tab-bar__new-tab')!;
 
-    triggerScrollState(tabBar, tabsContainer, {
-      tabsScrollWidth: 545,   // tabs fit within 556 + 2 tolerance
-      tabsClientWidth: 556,
+    triggerScrollState(tabBar, tabsContainer, newTabBtn, {
+      tabBarClientWidth: 600,
+      newTabBtnOffsetWidth: 44,
+      tabsScrollWidth: 545,   // 545 ≤ 556 + 2 = 558 → no overflow
       tabsScrollLeft: 0,
     });
 

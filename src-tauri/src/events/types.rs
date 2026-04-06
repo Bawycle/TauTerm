@@ -103,6 +103,9 @@ pub struct CellUpdate {
     pub row: u16,
     pub col: u16,
     pub content: String,
+    /// Visual width of the cell: 1 = normal, 2 = wide (CJK/emoji), 0 = phantom
+    /// (continuation slot of a wide character — the frontend must leave it blank).
+    pub width: u8,
     pub attrs: CellAttrsDto,
     /// OSC 8 hyperlink URI for this cell, if any.
     #[serde(skip_serializing_if = "Option::is_none")]

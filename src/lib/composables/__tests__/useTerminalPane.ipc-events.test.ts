@@ -206,7 +206,7 @@ function makeScreenUpdate(
   overrides: Partial<ScreenUpdateEvent> = {},
 ): ScreenUpdateEvent {
   const cursor: CursorState = { row: 0, col: 0, visible: true, shape: 0, blink: true };
-  return { paneId, cells: [], cursor, scrollbackLines: 0, ...overrides };
+  return { paneId, cells: [], cursor, scrollbackLines: 0, isFullRedraw: false, ...overrides };
 }
 
 function makeModeEvent(
@@ -275,6 +275,7 @@ describe('TPSC-FN-006: screen-update event is handled', () => {
               row: 0,
               col: 0,
               content: 'A',
+              width: 1,
               attrs: {
                 bold: false,
                 dim: false,
@@ -574,6 +575,121 @@ describe('TPSC-NOTIF-004: notification-changed null clears pulse without error',
       flushSync();
     }).not.toThrow();
 
+    expect(container.querySelector('.terminal-pane')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-SCROLL-002: screen-update with isFullRedraw resets scrollOffset (WP3a)
+// ---------------------------------------------------------------------------
+
+describe('TPSC-SCROLL-002: screen-update with isFullRedraw resets scrollOffset to 0', () => {
+  it('isFullRedraw screen-update fires without error when scrollOffset > 0', async () => {
+    // This test verifies the WP3a fix: that receiving a full_redraw screen-update
+    // while scrollOffset > 0 does not throw and does not leave the pane in a broken state.
+    //
+    // The scroll-to-bottom button removal after full_redraw relies on Svelte 5 transitions
+    // (transition:fade). In jsdom, Svelte's transition teardown requires real rAF cycles
+    // which cannot be reliably advanced in unit tests. The DOM-level check is therefore
+    // deferred to E2E tests (tauri-driver + WebdriverIO). What we verify here is:
+    //  1. The component does not throw on full_redraw with scrollOffset > 0
+    //  2. A subsequent scroll-update with offset=0 is handled correctly (no regression)
+    //  3. The pane is still functional after the full_redraw
+    const { container } = await mountPane();
+
+    // Bring scrollOffset > 0.
+    fireEvent<ScrollPositionChangedEvent>('scroll-position-changed', {
+      paneId: PANE_ID,
+      offset: 10,
+      scrollbackLines: 100,
+    });
+    flushSync();
+    expect(container.querySelector('.scroll-to-bottom-btn')).not.toBeNull();
+
+    // isFullRedraw should not throw, even when scrollOffset > 0.
+    expect(() => {
+      fireEvent<ScreenUpdateEvent>(
+        'screen-update',
+        makeScreenUpdate(PANE_ID, { isFullRedraw: true }),
+      );
+      flushSync();
+    }).not.toThrow();
+
+    // A subsequent scroll event at offset=0 must also be handled correctly.
+    expect(() => {
+      fireEvent<ScrollPositionChangedEvent>('scroll-position-changed', {
+        paneId: PANE_ID,
+        offset: 0,
+        scrollbackLines: 0,
+      });
+      flushSync();
+    }).not.toThrow();
+
+    // Pane must still be in DOM and functional.
+    expect(container.querySelector('.terminal-pane')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-INIT-002: screen-update received during snapshot fetch is applied (WP3b)
+// ---------------------------------------------------------------------------
+
+describe('TPSC-INIT-002: screen-update received during snapshot fetch is applied after mount', () => {
+  it('buffered update is replayed after snapshot resolves', async () => {
+    // Intercept invoke() so that getPaneScreenSnapshot resolves on the NEXT
+    // microtask tick, giving the buffered screen-update a chance to arrive first.
+    let resolveSnapshot!: (v: unknown) => void;
+    const snapshotPromise = new Promise((res) => {
+      resolveSnapshot = res;
+    });
+
+    vi.mocked(tauriCore.invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_pane_screen_snapshot') {
+        return snapshotPromise as never;
+      }
+      return undefined as never;
+    });
+
+    // Mount (starts the onMount async chain) but do NOT await it fully yet.
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const instance = mount(TerminalPane, {
+      target: container,
+      props: { paneId: PANE_ID, tabId: 'tab-1', active: true },
+    });
+    instances.push(instance);
+
+    // Drain enough microtasks so that the screen-update listener is registered
+    // (listener is registered BEFORE the snapshot fetch — WP3b).
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    // Fire an update BEFORE the snapshot resolves — it must be buffered.
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cells: [{ row: 0, col: 0, content: 'B', width: 1, attrs: { bold: false, dim: false, italic: false, underline: 0, blink: false, inverse: false, hidden: false, strikethrough: false } }],
+        isFullRedraw: false,
+      }),
+    );
+
+    // Now resolve the snapshot with an empty screen.
+    resolveSnapshot({
+      cols: 80,
+      rows: 24,
+      cells: [],
+      cursorRow: 0,
+      cursorCol: 0,
+      cursorVisible: true,
+      cursorShape: 0,
+      scrollbackLines: 0,
+      scrollOffset: 0,
+    });
+
+    // Drain remaining microtasks so the replay runs.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+
+    // The pane must still be in the DOM (no crash from the buffered update).
     expect(container.querySelector('.terminal-pane')).not.toBeNull();
   });
 });

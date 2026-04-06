@@ -161,6 +161,7 @@ function makeScreenUpdate(char: string, row = 0, col = 0): ScreenUpdateEvent {
         row,
         col,
         content: char,
+        width: 1,
         attrs: {
           bold: false,
           dim: false,
@@ -175,6 +176,7 @@ function makeScreenUpdate(char: string, row = 0, col = 0): ScreenUpdateEvent {
     ],
     cursor,
     scrollbackLines: 0,
+    isFullRedraw: false,
   };
 }
 
@@ -243,6 +245,7 @@ describe('CURSOR-BLOCK-004: data-char reflects character at cursor position', ()
           row: 0,
           col: 0,
           content: 'A',
+          width: 1,
           attrs: {
             bold: false,
             dim: false,
@@ -258,6 +261,7 @@ describe('CURSOR-BLOCK-004: data-char reflects character at cursor position', ()
           row: 0,
           col: 1,
           content: 'B',
+          width: 1,
           attrs: {
             bold: false,
             dim: false,
@@ -272,6 +276,7 @@ describe('CURSOR-BLOCK-004: data-char reflects character at cursor position', ()
       ],
       cursor,
       scrollbackLines: 0,
+      isFullRedraw: false,
     });
     flushSync();
 

@@ -123,15 +123,17 @@ describe('IPC types — structural smoke tests', () => {
     expect(typeof attrs.underline).toBe('number');
   });
 
-  it('ScreenUpdateEvent has cells, cursor, and scrollbackLines', () => {
+  it('ScreenUpdateEvent has cells, cursor, scrollbackLines, and isFullRedraw', () => {
     const event: ScreenUpdateEvent = {
       paneId: 'p1',
       cells: [],
       cursor: { row: 0, col: 0, visible: true, shape: 1, blink: false },
       scrollbackLines: 42,
+      isFullRedraw: false,
     };
     expect(event.cursor.row).toBe(0);
     expect(event.scrollbackLines).toBe(42);
+    expect(event.isFullRedraw).toBe(false);
   });
 
   it('ScrollPositionChangedEvent has offset and scrollbackLines', () => {
@@ -177,6 +179,7 @@ describe('IPC types — structural smoke tests', () => {
       row: 0,
       col: 5,
       content: 'A',
+      width: 1,
       attrs: {
         bold: true,
         italic: false,
@@ -190,6 +193,7 @@ describe('IPC types — structural smoke tests', () => {
     };
     expect(cell.content).toBe('A');
     expect(cell.attrs.bold).toBe(true);
+    expect(cell.width).toBe(1);
   });
 
   // Verify TabState shape.

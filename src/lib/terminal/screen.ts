@@ -72,10 +72,13 @@ export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
  * Build a CellStyle from a CellUpdate (incremental update event).
  * CellAttrsDto.ColorDto has a 'default' variant.
  * Bold color promotion (F5): ANSI fg 1–7 is promoted to 9–15 when bold=true.
+ *
+ * @param width - Cell display width from CellUpdate.width (1=normal, 2=wide, 0=phantom).
  */
 export function cellStyleFromUpdate(
   content: string,
   attrs: CellAttrsDto,
+  width: number,
   hyperlink?: string,
 ): CellStyle {
   // Apply bold color promotion: ColorDto 'default' variant is not a Color,
@@ -88,7 +91,7 @@ export function cellStyleFromUpdate(
     content,
     fg: resolveColorDto(promotedFg),
     bg: resolveColorDto(attrs.bg),
-    width: 1, // CellUpdate always represents a single-width cell position
+    width,
     bold: attrs.bold,
     dim: attrs.dim,
     italic: attrs.italic,
@@ -164,7 +167,7 @@ export function applyUpdates(grid: CellStyle[], updates: CellUpdate[], cols: num
   for (const update of updates) {
     const idx = update.row * cols + update.col;
     if (idx >= 0 && idx < grid.length) {
-      grid[idx] = cellStyleFromUpdate(update.content, update.attrs, update.hyperlink);
+      grid[idx] = cellStyleFromUpdate(update.content, update.attrs, update.width, update.hyperlink);
     }
   }
 }

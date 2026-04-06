@@ -92,6 +92,8 @@ pub struct VtProcessor {
     pub cursor_shape: u8,
     // Whether the cursor shape changed since last flush.
     pub cursor_shape_changed: bool,
+    // Whether cursor blinking is enabled (DECSET 12 / DECRST 12).
+    pub cursor_blink: bool,
     // Whether a rate-limited BEL event is pending since last flush.
     pub bell_pending: bool,
     // Timestamp of the last BEL that was allowed through (for rate-limiting).
@@ -302,6 +304,7 @@ impl VtProcessor {
             wrap_pending: false,
             cursor_shape: 0,
             cursor_shape_changed: false,
+            cursor_blink: false,
             bell_pending: false,
             last_bell_instant: None,
             current_hyperlink: None,

@@ -187,6 +187,7 @@ describe('TUITC-FN-070: applyUpdates patches only changed cells', () => {
       row: 1,
       col: 1,
       content: 'X',
+      width: 1,
       attrs: makeAttrs({ bold: true }),
     };
     applyUpdates(grid, [update], 3);
@@ -203,6 +204,7 @@ describe('TUITC-FN-070: applyUpdates patches only changed cells', () => {
       row: 99,
       col: 99,
       content: 'Z',
+      width: 1,
       attrs: makeAttrs(),
     };
     // Should not throw
@@ -237,17 +239,21 @@ describe('TUITC-SEC-001/002: cell content treated as opaque text', () => {
 // ---------------------------------------------------------------------------
 describe('cellStyleFromUpdate: handles ColorDto default variant', () => {
   it('fg with type=default → cell.fg is undefined', () => {
-    const cell = cellStyleFromUpdate('A', makeAttrs({ fg: { type: 'default' } }));
+    const cell = cellStyleFromUpdate('A', makeAttrs({ fg: { type: 'default' } }), 1);
     expect(cell.fg).toBeUndefined();
   });
 
   it('fg with type=rgb → resolved rgb string', () => {
-    const cell = cellStyleFromUpdate('A', makeAttrs({ fg: { type: 'rgb', r: 0, g: 128, b: 255 } }));
+    const cell = cellStyleFromUpdate(
+      'A',
+      makeAttrs({ fg: { type: 'rgb', r: 0, g: 128, b: 255 } }),
+      1,
+    );
     expect(cell.fg).toBe('rgb(0,128,255)');
   });
 
   it('bold=true from CellUpdate', () => {
-    const cell = cellStyleFromUpdate('A', makeAttrs({ bold: true }));
+    const cell = cellStyleFromUpdate('A', makeAttrs({ bold: true }), 1);
     expect(cell.bold).toBe(true);
   });
 });
@@ -318,12 +324,46 @@ describe('F4-001: blink attribute preserved through snapshot and update paths', 
   });
 
   it('blink=true from update → cell.blink is true', () => {
-    const cell = cellStyleFromUpdate('A', makeAttrs({ blink: true }));
+    const cell = cellStyleFromUpdate('A', makeAttrs({ blink: true }), 1);
     expect(cell.blink).toBe(true);
   });
 
   it('blink=false from update → cell.blink is false', () => {
-    const cell = cellStyleFromUpdate('A', makeAttrs({ blink: false }));
+    const cell = cellStyleFromUpdate('A', makeAttrs({ blink: false }), 1);
     expect(cell.blink).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TUITC-FN-030-b/c/d: cellStyleFromUpdate width propagation (WP2-TS)
+// ---------------------------------------------------------------------------
+describe('TUITC-FN-030-b: cellStyleFromUpdate with width=2 returns width 2', () => {
+  it('wide character update produces width=2 in CellStyle', () => {
+    const cell = cellStyleFromUpdate('你', makeAttrs(), 2);
+    expect(cell.width).toBe(2);
+  });
+});
+
+describe('TUITC-FN-030-c: cellStyleFromUpdate with width=0 returns width 0', () => {
+  it('phantom continuation cell produces width=0 in CellStyle', () => {
+    const cell = cellStyleFromUpdate('', makeAttrs(), 0);
+    expect(cell.width).toBe(0);
+  });
+});
+
+describe('TUITC-FN-030-d: applyUpdates propagates width=2 to grid', () => {
+  it('wide-char CellUpdate sets grid cell width to 2', () => {
+    const grid = buildGridFromSnapshot([], 1, 3);
+    const update: CellUpdate = {
+      row: 0,
+      col: 0,
+      content: '你',
+      width: 2,
+      attrs: makeAttrs(),
+      hyperlink: undefined,
+    };
+    applyUpdates(grid, [update], 3);
+    expect(grid[0].width).toBe(2);
+    expect(grid[0].content).toBe('你');
   });
 });

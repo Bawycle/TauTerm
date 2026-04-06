@@ -190,6 +190,7 @@ fn ipc_screen_update_event_serializes() {
             row: 0,
             col: 0,
             content: "A".to_string(),
+            width: 1,
             attrs: make_cell_attrs(),
             hyperlink: None,
         }],

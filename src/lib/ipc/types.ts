@@ -156,6 +156,7 @@ export interface SshStateChangedEvent {
  *   cells: Vec<CellUpdate> → cells
  *   cursor: CursorState    → cursor
  *   scrollback_lines: usize → scrollbackLines
+ *   is_full_redraw: bool   → isFullRedraw
  */
 export interface ScreenUpdateEvent {
   paneId: PaneId;
@@ -163,6 +164,12 @@ export interface ScreenUpdateEvent {
   cursor: CursorState;
   /** Total scrollback lines available — kept in sync on every screen update. */
   scrollbackLines: number;
+  /**
+   * True when this update represents a full screen repaint (e.g. alternate screen
+   * entry/exit, terminal resize). Used to reset scroll offset to 0.
+   * Mirrors Rust ScreenUpdateEvent.is_full_redraw.
+   */
+  isFullRedraw: boolean;
 }
 
 /**
@@ -170,6 +177,7 @@ export interface ScreenUpdateEvent {
  *
  * Mirrors Rust CellUpdate:
  *   content: String   → content  (single char or empty string)
+ *   width: u8         → width    (1 = normal, 2 = wide/CJK, 0 = phantom continuation)
  *   attrs: CellAttrsDto → attrs
  */
 export interface CellUpdate {
@@ -179,6 +187,11 @@ export interface CellUpdate {
   col: number;
   /** Single character, or empty string for a blank cell. */
   content: string;
+  /**
+   * Cell display width: 1 for normal, 2 for wide (CJK), 0 for phantom continuation cell.
+   * Mirrors Rust CellUpdate.width.
+   */
+  width: number;
   attrs: CellAttrsDto;
   /**
    * OSC 8 hyperlink URI for this cell, if any (FS-VT-070–073).

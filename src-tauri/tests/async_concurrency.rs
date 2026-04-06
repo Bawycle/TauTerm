@@ -379,6 +379,210 @@ fn async_pty_004_io_error_reader_causes_read_loop_exit() {
 }
 
 // ---------------------------------------------------------------------------
+// TEST-ASYNC-PTY-005 — Two-task debounce: channel closes on EOF, last flush fires
+//
+// Exercises the core invariant of the two-task design:
+// - Task 1 (reader) sends chunks then closes the channel on EOF.
+// - Task 2 (emitter) coalesces chunks and must flush on channel close.
+//
+// We simulate this without a real PTY/AppHandle by replicating the channel
+// protocol directly.
+// ---------------------------------------------------------------------------
+
+/// TEST-ASYNC-PTY-005: Channel close (EOF) triggers flush of accumulated data.
+///
+/// Verifies that closing the sender side of an mpsc channel causes the receiver
+/// side to drain the remaining message and exit cleanly within the debounce window.
+#[test]
+fn async_pty_005_channel_close_causes_final_flush() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build runtime");
+
+    rt.block_on(async {
+        // Mimic the two-task channel protocol: unbounded mpsc, sender in Task 1,
+        // receiver in Task 2.
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
+
+        // Send some values and then drop the sender (simulates PTY EOF).
+        tx.send(1).unwrap();
+        tx.send(2).unwrap();
+        tx.send(3).unwrap();
+        drop(tx); // Channel closed — simulates Task 1 EOF path.
+
+        // Task 2 pattern: receive until channel closes, accumulate, then flush.
+        let accumulator = tokio::spawn(async move {
+            let mut sum = 0u32;
+            loop {
+                match rx.recv().await {
+                    Some(v) => sum += v,
+                    None => break, // channel closed — flush and exit
+                }
+            }
+            sum
+        });
+
+        let result = tokio::time::timeout(Duration::from_millis(500), accumulator).await;
+        assert!(result.is_ok(), "accumulator must finish before timeout");
+        let sum = result.unwrap().expect("accumulator must not panic");
+        assert_eq!(
+            sum, 6,
+            "all values (1+2+3=6) must be received before channel close"
+        );
+    });
+}
+
+/// TEST-ASYNC-PTY-006: Debounce timer fires when channel is idle.
+///
+/// Verifies that a `tokio::select!` over an mpsc receiver and a timer correctly
+/// wakes on the timer when no messages arrive within the debounce window.
+/// This is the core property that fixes the WP4 bug (silent PTY → last batch
+/// was never flushed in the old single-task design).
+#[test]
+fn async_pty_006_debounce_timer_fires_when_channel_is_idle() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build runtime");
+
+    rt.block_on(async {
+        const DEBOUNCE_MS: u64 = 20;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
+
+        let flush_count = Arc::new(AtomicUsize::new(0));
+        let fc = flush_count.clone();
+
+        // Task 2 pattern with a timer-driven flush.
+        let emitter = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(DEBOUNCE_MS));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut pending: u32 = 0;
+            let mut done = false;
+
+            while !done {
+                tokio::select! {
+                    msg = rx.recv() => {
+                        match msg {
+                            Some(v) => pending += v,
+                            None => {
+                                // Channel closed — flush remaining and exit.
+                                if pending > 0 {
+                                    fc.fetch_add(1, Ordering::AcqRel);
+                                }
+                                done = true;
+                            }
+                        }
+                    }
+                    _ = interval.tick() => {
+                        if pending > 0 {
+                            fc.fetch_add(1, Ordering::AcqRel);
+                            pending = 0;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Send a burst, then keep the channel open and wait for the timer to fire.
+        tx.send(42).unwrap();
+
+        // Wait longer than the debounce window — the timer must have fired.
+        tokio::time::sleep(Duration::from_millis(DEBOUNCE_MS * 4)).await;
+
+        let count_before_close = flush_count.load(Ordering::Acquire);
+        assert!(
+            count_before_close >= 1,
+            "timer must flush at least once while channel is idle (count={count_before_close})"
+        );
+
+        // Drop the sender — Task 2 must exit cleanly.
+        drop(tx);
+        let result = tokio::time::timeout(Duration::from_millis(200), emitter).await;
+        assert!(
+            result.is_ok(),
+            "emitter must exit cleanly after sender drop"
+        );
+    });
+}
+
+/// TEST-ASYNC-PTY-007: Two-task coalescing — burst of chunks merged into one flush.
+///
+/// Sends many messages rapidly and verifies that the debounce timer coalesces
+/// them into fewer flushes (ideally one), not one flush per message.
+#[test]
+fn async_pty_007_burst_is_coalesced_before_flush() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build runtime");
+
+    rt.block_on(async {
+        const DEBOUNCE_MS: u64 = 30;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
+        let flush_count = Arc::new(AtomicUsize::new(0));
+        let total_flushed = Arc::new(AtomicUsize::new(0));
+
+        let fc = flush_count.clone();
+        let tf = total_flushed.clone();
+
+        let emitter = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(DEBOUNCE_MS));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut pending: u32 = 0;
+            let mut done = false;
+
+            while !done {
+                tokio::select! {
+                    msg = rx.recv() => {
+                        match msg {
+                            Some(v) => pending += v,
+                            None => {
+                                if pending > 0 {
+                                    fc.fetch_add(1, Ordering::AcqRel);
+                                    tf.fetch_add(pending as usize, Ordering::AcqRel);
+                                }
+                                done = true;
+                            }
+                        }
+                    }
+                    _ = interval.tick() => {
+                        if pending > 0 {
+                            fc.fetch_add(1, Ordering::AcqRel);
+                            tf.fetch_add(pending as usize, Ordering::AcqRel);
+                            pending = 0;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Send 50 messages rapidly — much faster than the debounce window.
+        for _ in 0..50u32 {
+            tx.send(1).unwrap();
+        }
+
+        // Close the sender and wait for Task 2 to finish.
+        drop(tx);
+        tokio::time::timeout(Duration::from_millis(500), emitter)
+            .await
+            .expect("emitter must finish")
+            .expect("emitter must not panic");
+
+        let flushes = flush_count.load(Ordering::Acquire);
+        let total = total_flushed.load(Ordering::Acquire);
+
+        // All 50 values must be accounted for.
+        assert_eq!(total, 50, "all 50 values must be flushed (total={total})");
+        // The burst must have been coalesced — substantially fewer than 50 flushes.
+        assert!(
+            flushes < 10,
+            "burst of 50 rapid messages must be coalesced (flushes={flushes})"
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
 // TEST-ASYNC-RESIZE-001 — Rapid resize then PTY death: no deadlock
 //
 // Verifies that scheduling many resizes rapidly and then dropping all handles

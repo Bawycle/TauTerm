@@ -1903,7 +1903,10 @@ mod tests {
         // A subsequent non-RI character must narrow it to 1 cell.
         vt.process("A".as_bytes());
         let w0_after = vt.active_buf_ref().get(0, 0).map(|c| c.width).unwrap_or(0);
-        assert_eq!(w0_after, 1, "RI must be narrowed to 1 cell when followed by non-RI");
+        assert_eq!(
+            w0_after, 1,
+            "RI must be narrowed to 1 cell when followed by non-RI"
+        );
         let g1 = vt
             .active_buf_ref()
             .get(0, 1)
@@ -1923,5 +1926,232 @@ mod tests {
         // not a second RI — the RI is unpaired.
         let w0 = vt.active_buf_ref().get(0, 0).map(|c| c.width).unwrap_or(0);
         assert_eq!(w0, 1, "lone RI before skin-tone must be narrowed to 1 cell");
+    }
+
+    // ---------------------------------------------------------------------------
+    // CHA — Cursor Horizontal Absolute (CSI G)
+    // ---------------------------------------------------------------------------
+
+    /// CHA positions the cursor at the column indicated (1-based → 0-indexed).
+    #[test]
+    fn test_cha_basic() {
+        let mut vt = make_vt(80, 24);
+        // CSI 5 G — move to column 5 (1-based), i.e. col=4 (0-based).
+        vt.process(b"\x1b[5G");
+        assert_eq!(vt.normal_cursor.col, 4, "CHA 5 must place cursor at col=4");
+    }
+
+    /// CHA with value exceeding column count is clamped to cols-1.
+    #[test]
+    fn test_cha_clamps_to_cols() {
+        let mut vt = make_vt(80, 24);
+        // CSI 999 G — far beyond 80 cols; must clamp to col=79.
+        vt.process(b"\x1b[999G");
+        assert_eq!(
+            vt.normal_cursor.col, 79,
+            "CHA beyond cols must clamp to cols-1"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // VPA — Vertical Position Absolute (CSI d)
+    // ---------------------------------------------------------------------------
+
+    /// VPA positions the cursor at the row indicated (1-based → 0-indexed).
+    #[test]
+    fn test_vpa_basic() {
+        let mut vt = make_vt(80, 24);
+        // CSI 3 d — move to row 3 (1-based), i.e. row=2 (0-based).
+        vt.process(b"\x1b[3d");
+        assert_eq!(vt.normal_cursor.row, 2, "VPA 3 must place cursor at row=2");
+    }
+
+    /// VPA with value exceeding row count is clamped to rows-1.
+    #[test]
+    fn test_vpa_clamps_to_rows() {
+        let mut vt = make_vt(80, 24);
+        // CSI 999 d — far beyond 24 rows; must clamp to row=23.
+        vt.process(b"\x1b[999d");
+        assert_eq!(
+            vt.normal_cursor.row, 23,
+            "VPA beyond rows must clamp to rows-1"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // HPA — Horizontal Position Absolute (CSI `)
+    // ---------------------------------------------------------------------------
+
+    /// HPA (backtick) behaves identically to CHA.
+    #[test]
+    fn test_hpa_equivalent_to_cha() {
+        let mut vt = make_vt(80, 24);
+        // CSI 10 ` — move to column 10 (1-based), i.e. col=9 (0-based).
+        vt.process(b"\x1b[10`");
+        assert_eq!(
+            vt.normal_cursor.col, 9,
+            "HPA must behave identically to CHA"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // ECH — Erase Character (CSI X)
+    // ---------------------------------------------------------------------------
+
+    /// ECH erases N chars at cursor position without moving the cursor.
+    #[test]
+    fn test_ech_erases_without_moving_cursor() {
+        let mut vt = make_vt(80, 24);
+        // Write "ABCDE" at row=0, then position cursor at col=1.
+        vt.process(b"ABCDE");
+        // Move cursor to col=1 (CHA 2).
+        vt.process(b"\x1b[2G");
+        // ECH 2 — erase 2 chars starting at col=1 (B and C).
+        vt.process(b"\x1b[2X");
+        // Cursor must remain at col=1.
+        assert_eq!(vt.normal_cursor.col, 1, "ECH must not move the cursor");
+        // Cell at col=0 must still be 'A'.
+        assert_eq!(
+            grapheme_at(&vt, 0, 0),
+            "A",
+            "ECH must not erase cells before cursor"
+        );
+        // Cells at col=1 and col=2 must be erased (default ' ').
+        let g1 = grapheme_at(&vt, 0, 1);
+        let g2 = grapheme_at(&vt, 0, 2);
+        assert!(
+            g1 == " " || g1.is_empty(),
+            "ECH must erase cell at col=1, got {:?}",
+            g1
+        );
+        assert!(
+            g2 == " " || g2.is_empty(),
+            "ECH must erase cell at col=2, got {:?}",
+            g2
+        );
+        // Cell at col=3 must still be 'D'.
+        assert_eq!(
+            grapheme_at(&vt, 0, 3),
+            "D",
+            "ECH must not erase cells past N"
+        );
+    }
+
+    /// ECH with N larger than remaining columns is clamped to end of line.
+    #[test]
+    fn test_ech_clamps_to_eol() {
+        let mut vt = make_vt(10, 5);
+        // Fill row=0 with 'X' chars.
+        vt.process(b"XXXXXXXXXX");
+        // Move to col=8 (CHA 9).
+        vt.process(b"\x1b[9G");
+        // ECH 999 — far beyond EOL; must clamp to remaining 2 cells (col=8, col=9).
+        vt.process(b"\x1b[999X");
+        // Cursor stays at col=8.
+        assert_eq!(vt.normal_cursor.col, 8, "ECH must not move cursor");
+        // Cells 8 and 9 must be erased.
+        let g8 = grapheme_at(&vt, 0, 8);
+        let g9 = grapheme_at(&vt, 0, 9);
+        assert!(
+            g8 == " " || g8.is_empty(),
+            "ECH must erase col=8 when N > remaining"
+        );
+        assert!(
+            g9 == " " || g9.is_empty(),
+            "ECH must erase col=9 when N > remaining"
+        );
+        // Cells before cursor must be intact.
+        assert_eq!(
+            grapheme_at(&vt, 0, 0),
+            "X",
+            "ECH must not erase before cursor"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // CNL — Cursor Next Line (CSI E)
+    // ---------------------------------------------------------------------------
+
+    /// CNL moves cursor down N lines and sets col=0.
+    #[test]
+    fn test_cnl_moves_cursor() {
+        let mut vt = make_vt(80, 24);
+        // Start at col=5 via CHA.
+        vt.process(b"\x1b[6G");
+        // CNL 3 — move down 3 lines.
+        vt.process(b"\x1b[3E");
+        assert_eq!(vt.normal_cursor.row, 3, "CNL 3 must move to row=3");
+        assert_eq!(vt.normal_cursor.col, 0, "CNL must set col=0");
+    }
+
+    /// CNL does not move the cursor below the scroll region bottom.
+    #[test]
+    fn test_cnl_respects_scroll_bottom() {
+        let mut vt = make_vt(80, 24);
+        // Set scroll region rows 2–5 (1-based): DECSTBM CSI 2 ; 5 r.
+        vt.process(b"\x1b[2;5r");
+        // Position cursor at row=4 (CUP row=5, col=1 in 1-based → row=4).
+        vt.process(b"\x1b[5;1H");
+        // CNL 999 — must not exceed scroll region bottom (row=4, 0-based).
+        vt.process(b"\x1b[999E");
+        assert_eq!(
+            vt.normal_cursor.row, 4,
+            "CNL must not exceed scroll region bottom"
+        );
+        assert_eq!(vt.normal_cursor.col, 0, "CNL must set col=0");
+    }
+
+    // ---------------------------------------------------------------------------
+    // CPL — Cursor Previous Line (CSI F)
+    // ---------------------------------------------------------------------------
+
+    /// CPL moves cursor up N lines and sets col=0.
+    #[test]
+    fn test_cpl_moves_cursor() {
+        let mut vt = make_vt(80, 24);
+        // Position at row=5 via CUP.
+        vt.process(b"\x1b[6;5H");
+        // CPL 2 — move up 2 lines.
+        vt.process(b"\x1b[2F");
+        assert_eq!(
+            vt.normal_cursor.row, 3,
+            "CPL 2 from row=5 must land at row=3"
+        );
+        assert_eq!(vt.normal_cursor.col, 0, "CPL must set col=0");
+    }
+
+    /// CPL does not move the cursor above the scroll region top.
+    #[test]
+    fn test_cpl_respects_scroll_top() {
+        let mut vt = make_vt(80, 24);
+        // Set scroll region rows 3–10 (1-based): DECSTBM CSI 3 ; 10 r → top=2, bottom=9 (0-based).
+        vt.process(b"\x1b[3;10r");
+        // Position cursor at row=3 (CUP row=4, col=1 → row=3 0-based).
+        vt.process(b"\x1b[4;1H");
+        // CPL 999 — must not go above scroll region top (row=2, 0-based).
+        vt.process(b"\x1b[999F");
+        assert_eq!(
+            vt.normal_cursor.row, 2,
+            "CPL must not exceed scroll region top"
+        );
+        assert_eq!(vt.normal_cursor.col, 0, "CPL must set col=0");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Cursor blink — DECSET 12 / DECRST 12
+    // ---------------------------------------------------------------------------
+
+    /// `?12h` enables cursor blinking; `?12l` disables it.
+    #[test]
+    fn test_cursor_blink_decset12() {
+        let mut vt = make_vt(80, 24);
+        // Default state: blink disabled.
+        assert!(!vt.cursor_blink, "cursor_blink must default to false");
+        // DECSET 12 — enable blink.
+        vt.process(b"\x1b[?12h");
+        assert!(vt.cursor_blink, "cursor_blink must be true after ?12h");
+        // DECRST 12 — disable blink.
+        vt.process(b"\x1b[?12l");
+        assert!(!vt.cursor_blink, "cursor_blink must be false after ?12l");
     }
 }

@@ -547,7 +547,10 @@ mod tests {
         // scroll_down with a 1-row region [2, 2] — must not panic.
         buf.scroll_down(2, 2, 1);
         // The single row in the region is cleared to Cell::default().
-        assert_eq!(buf.get(2, 0).map(|c| c.grapheme.as_str()), Some(&*Cell::default().grapheme));
+        assert_eq!(
+            buf.get(2, 0).map(|c| c.grapheme.as_str()),
+            Some(&*Cell::default().grapheme)
+        );
     }
 
     #[test]

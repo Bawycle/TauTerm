@@ -290,9 +290,8 @@ mod tests {
                 let jh = tokio::spawn(async {
                     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                 });
-                let handle = PtyTaskHandle {
-                    abort: jh.abort_handle(),
-                };
+                let abort = jh.abort_handle();
+                let handle = PtyTaskHandle::from_abort_handle(abort);
                 drop(handle);
                 jh.await
             });

@@ -312,6 +312,7 @@ impl Perform for VtPerformBridge<'_> {
                         6 => p.modes.decom = true,
                         7 => p.modes.decawm = true,
                         9 => p.modes.mouse_reporting = MouseReportingMode::X10,
+                        12 => p.cursor_blink = true,
                         25 => p.modes.cursor_visible = true,
                         47 => p.enter_alternate(false),
                         1000 => p.modes.mouse_reporting = MouseReportingMode::Normal,
@@ -355,6 +356,7 @@ impl Perform for VtPerformBridge<'_> {
                         9 | 1000 | 1002 | 1003 => {
                             p.modes.mouse_reporting = MouseReportingMode::None
                         }
+                        12 => p.cursor_blink = false,
                         25 => p.modes.cursor_visible = false,
                         47 => p.leave_alternate(false),
                         1004 => p.modes.focus_events = false,
@@ -460,6 +462,73 @@ impl Perform for VtPerformBridge<'_> {
                 let n = param0.max(1);
                 let (top, bottom) = p.modes.scroll_region;
                 p.active_buf_mut().scroll_down(top, bottom, n);
+            }
+            // CHA — Cursor Horizontal Absolute (ECMA-48 §8.3.10).
+            // Moves cursor to column Pn (1-based). Default Pn = 1.
+            ([], 'G') => {
+                let col = param0
+                    .max(1)
+                    .saturating_sub(1)
+                    .min(p.cols.saturating_sub(1));
+                p.active_cursor_mut().col = col;
+            }
+            // HPA — Horizontal Position Absolute (ECMA-48 §8.3.57).
+            // Identical to CHA; uses backtick final byte.
+            ([], '`') => {
+                let col = param0
+                    .max(1)
+                    .saturating_sub(1)
+                    .min(p.cols.saturating_sub(1));
+                p.active_cursor_mut().col = col;
+            }
+            // VPA — Vertical Position Absolute (ECMA-48 §8.3.158).
+            // Moves cursor to row Pn (1-based). Default Pn = 1.
+            ([], 'd') => {
+                let row = param0
+                    .max(1)
+                    .saturating_sub(1)
+                    .min(p.rows.saturating_sub(1));
+                p.active_cursor_mut().row = row;
+            }
+            // ECH — Erase Character (ECMA-48 §8.3.38).
+            // Erases Ps characters starting at cursor position without moving the cursor.
+            ([], 'X') => {
+                let n = param0.max(1);
+                let row = p.cursor_row();
+                let col = p.cursor_col();
+                let cols = p.cols;
+                // Clamp to end of line.
+                let end = (col + n).min(cols);
+                p.active_buf_mut().erase_cells(row, col, end);
+            }
+            // CNL — Cursor Next Line (ECMA-48 §8.3.12).
+            // Moves cursor down Ps lines to column 0. Respects scroll region bottom.
+            ([], 'E') => {
+                let n = param0.max(1);
+                let (_, bottom) = p.modes.scroll_region;
+                p.active_cursor_mut().row = (p.cursor_row() + n).min(bottom);
+                p.active_cursor_mut().col = 0;
+            }
+            // CPL — Cursor Previous Line (ECMA-48 §8.3.13).
+            // Moves cursor up Ps lines to column 0. Respects scroll region top.
+            ([], 'F') => {
+                let n = param0.max(1);
+                let (top, _) = p.modes.scroll_region;
+                p.active_cursor_mut().row = p.cursor_row().saturating_sub(n).max(top);
+                p.active_cursor_mut().col = 0;
+            }
+            // HPR — Horizontal Position Relative (ECMA-48 §8.3.59).
+            // Moves cursor right Ps columns. Equivalent to CUF.
+            ([], 'a') => {
+                let n = param0.max(1);
+                p.active_cursor_mut().col = (p.cursor_col() + n).min(p.cols.saturating_sub(1));
+            }
+            // VPR — Vertical Position Relative (ECMA-48 §8.3.160).
+            // Moves cursor down Ps rows. Respects scroll region bottom.
+            ([], 'e') => {
+                let n = param0.max(1);
+                let (_, bottom) = p.modes.scroll_region;
+                p.active_cursor_mut().row = (p.cursor_row() + n).min(bottom);
             }
             // DECSCUSR — set cursor shape (FS-VT-030).
             // Values: 0/1 = blinking block, 2 = steady block, 3 = blinking underline,

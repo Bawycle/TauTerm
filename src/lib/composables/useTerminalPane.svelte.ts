@@ -54,6 +54,7 @@ import type {
   BellType,
   SearchMatch,
   NotificationChangedEvent,
+  ScreenUpdateEvent,
 } from '$lib/ipc/types';
 import type { CellStyle } from '$lib/terminal/screen.js';
 
@@ -193,32 +194,35 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
         : 0,
   );
 
-  const gridRows = $derived(
-    Array.from({ length: rows }, (_, r) =>
-      Array.from({ length: cols }, (_, c) => {
-        const cell = grid[r * cols + c];
-        return (
-          cell ??
-          ({
-            content: ' ',
-            fg: undefined,
-            bg: undefined,
-            width: 1,
-            bold: false,
-            dim: false,
-            italic: false,
-            underline: 0,
-            blink: false,
-            inverse: false,
-            hidden: false,
-            strikethrough: false,
-            underlineColor: undefined,
-            hyperlink: undefined,
-          } satisfies CellStyle)
-        );
-      }),
-    ),
-  );
+  // WP3c: gridRows as $state updated differentially, not $derived rebuilding the entire 2D array.
+  // Svelte 5 Proxy arrays: gridRows[r] = newRow invalidates only consumers reading gridRows[r],
+  // not the full {#each} block. Full rebuild only on full_redraw or dimension change.
+  let gridRows = $state<CellStyle[][]>([]);
+
+  function defaultCell(): CellStyle {
+    return {
+      content: ' ',
+      fg: undefined,
+      bg: undefined,
+      width: 1,
+      bold: false,
+      dim: false,
+      italic: false,
+      underline: 0,
+      blink: false,
+      inverse: false,
+      hidden: false,
+      strikethrough: false,
+      underlineColor: undefined,
+      hyperlink: undefined,
+    };
+  }
+
+  function buildFullGridRows(r: number, c: number): CellStyle[][] {
+    return Array.from({ length: r }, (_, row) =>
+      Array.from({ length: c }, (_, col) => grid[row * c + col] ?? defaultCell()),
+    );
+  }
 
   const searchMatchSet = $derived.by(() => {
     const set = new Set<string>();
@@ -373,7 +377,52 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
   let unlistens: Array<() => void> = [];
 
+  // WP3c: Apply a screen update to the flat grid and update gridRows differentially.
+  // Full rebuild on full_redraw or dimension mismatch; row-level rebuild otherwise.
+  function applyScreenUpdate(update: ScreenUpdateEvent): void {
+    // WP3a: reset scroll offset on full repaint (alternate screen entry/exit, resize).
+    if (update.isFullRedraw) scrollOffset = 0;
+
+    applyUpdates(grid, update.cells, cols);
+    cursor = update.cursor;
+    if (typeof update.scrollbackLines === 'number') {
+      scrollbackLines = update.scrollbackLines;
+    }
+
+    if (update.isFullRedraw || gridRows.length !== rows) {
+      // Full rebuild: dimension change or explicit full repaint.
+      gridRows = buildFullGridRows(rows, cols);
+    } else {
+      // Differential: rebuild only rows that have changed cells.
+      const dirtyRows = new Set(update.cells.map((c) => c.row));
+      for (const r of dirtyRows) {
+        if (r >= 0 && r < rows) {
+          gridRows[r] = Array.from({ length: cols }, (_, c) => grid[r * cols + c] ?? defaultCell());
+        }
+      }
+    }
+
+    screenGeneration++;
+  }
+
   onMount(async () => {
+    // WP3b: Register screen-update listener BEFORE the snapshot IPC call so that
+    // updates emitted during the fetch are buffered and replayed after the snapshot.
+    const pendingUpdates: ScreenUpdateEvent[] = [];
+    let buffering = true;
+
+    unlistens.push(
+      await onScreenUpdate((update) => {
+        if (update.paneId !== props.paneId()) return;
+        if (buffering) {
+          pendingUpdates.push(update);
+          return;
+        }
+        applyScreenUpdate(update);
+      }),
+    );
+
+    // Fetch the initial screen snapshot.
     try {
       const snapshot = await getPaneScreenSnapshot(props.paneId());
       cols = snapshot.cols;
@@ -389,21 +438,19 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       scrollOffset = snapshot.scrollOffset;
       scrollbackLines = snapshot.scrollbackLines;
     } catch {
-      // Backend not ready — populated by first screen-update event
+      // Backend not ready — populated by first screen-update event.
     }
 
-    unlistens.push(
-      await onScreenUpdate((update) => {
-        if (update.paneId !== props.paneId()) return;
-        applyUpdates(grid, update.cells, cols);
-        cursor = update.cursor;
-        if (typeof update.scrollbackLines === 'number') {
-          scrollbackLines = update.scrollbackLines;
-        }
-        grid = grid.slice();
-        screenGeneration++;
-      }),
-    );
+    // Replay updates buffered during the snapshot fetch.
+    buffering = false;
+    for (const update of pendingUpdates) {
+      applyScreenUpdate(update);
+    }
+
+    // Initialize gridRows from the snapshot (+ any replayed updates).
+    if (gridRows.length !== rows) {
+      gridRows = buildFullGridRows(rows, cols);
+    }
 
     unlistens.push(
       await onScrollPositionChanged((pos) => {

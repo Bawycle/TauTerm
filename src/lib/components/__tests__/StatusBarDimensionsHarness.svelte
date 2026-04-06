@@ -12,6 +12,7 @@
   NOT part of the production build.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import StatusBar from '../StatusBar.svelte';
 
   interface Props {
@@ -20,11 +21,11 @@
     dimsVisible?: boolean;
   }
 
-  const { cols: initCols = null, rows: initRows = null, dimsVisible: initDimsVisible = false }: Props = $props();
+  const props: Props = $props();
 
-  let cols = $state<number | null>(initCols);
-  let rows = $state<number | null>(initRows);
-  let dimsVisible = $state<boolean>(initDimsVisible);
+  let cols = $state<number | null>(untrack(() => props.cols ?? null));
+  let rows = $state<number | null>(untrack(() => props.rows ?? null));
+  let dimsVisible = $state<boolean>(untrack(() => props.dimsVisible ?? false));
 
   export function setCols(v: number | null) { cols = v; }
   export function setRows(v: number | null) { rows = v; }

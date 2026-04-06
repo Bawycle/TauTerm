@@ -82,6 +82,33 @@
   import * as m from '$lib/paraglide/messages';
 
   // -------------------------------------------------------------------------
+  // Default preferences — used as fallback when get_preferences fails (Risk 3).
+  // Values mirror the Rust defaults in preferences.rs.
+  // -------------------------------------------------------------------------
+  const DEFAULT_PREFERENCES: Preferences = {
+    appearance: {
+      fontFamily: 'monospace',
+      fontSize: 13,
+      cursorStyle: 'block',
+      cursorBlinkMs: 530,
+      themeName: 'umbra',
+      opacity: 1.0,
+      language: 'en',
+      contextMenuHintShown: false,
+    },
+    terminal: {
+      scrollbackLines: 10000,
+      allowOsc52Write: false,
+      wordDelimiters: ' ,;:.{}[]()"`|\\/',
+      bellType: 'visual',
+      confirmMultilinePaste: true,
+    },
+    keyboard: { bindings: {} },
+    connections: [],
+    themes: [],
+  };
+
+  // -------------------------------------------------------------------------
   // State
   // -------------------------------------------------------------------------
 
@@ -164,6 +191,9 @@
   // Tâche #13: ConnectionManager panel toggle.
   let connectionManagerOpen = $state(false);
   let savedConnections = $state<SshConnectionConfig[]>([]);
+  // Error flag: set when open_ssh_connection or create_tab fails during handleConnectionOpen.
+  // Displayed as a transient banner; auto-clears when ConnectionManager is reopened.
+  let connectionOpenError = $state(false);
 
   // FS-UX-002: First-launch context menu hint.
   // Visible when preferences are loaded and hint has not been shown yet.
@@ -249,11 +279,13 @@
       // Backend not ready — will be populated by first session-state-changed event
     }
 
-    // Fetch preferences for PreferencesPanel
+    // Fetch preferences for PreferencesPanel.
+    // On IPC failure, fall back to DEFAULT_PREFERENCES so all $derived values
+    // remain defined and the UI remains functional (FS-PREF-003 graceful degradation).
     try {
       preferences = await invoke('get_preferences');
     } catch {
-      // Non-fatal — panel will use defaults
+      preferences = DEFAULT_PREFERENCES;
     }
 
     // Tâche #13: fetch saved SSH connections for ConnectionManager
@@ -569,27 +601,49 @@
     connectionId: string;
     target: 'tab' | 'pane';
   }) {
-    try {
-      if (target === 'tab') {
-        // Open a new tab, then start an SSH connection on its first pane.
-        const newTab: TabState = await invoke('create_tab', { config: { cols: 80, rows: 24 } });
-        tabs = [...tabs, newTab];
-        activeTabId = newTab.id;
-        // The layout has exactly one leaf pane after tab creation.
-        const panes = collectLeafPanes(newTab.layout);
-        if (panes.length > 0) {
-          await invoke('open_ssh_connection', { paneId: panes[0].paneId, connectionId });
-        }
-      } else {
-        // Open in active pane.
-        const activePaneId = activeTab?.activePaneId;
-        if (!activePaneId) return;
-        await invoke('open_ssh_connection', { paneId: activePaneId, connectionId });
+    if (target === 'tab') {
+      // Two-step operation: create_tab then open_ssh_connection.
+      // If the SSH step fails, roll back the orphan tab to keep state consistent (FS-SSH-032).
+      let newTab: TabState;
+      try {
+        newTab = await invoke('create_tab', { config: { cols: 80, rows: 24 } });
+      } catch {
+        connectionOpenError = true;
+        return;
       }
-      connectionManagerOpen = false;
-    } catch {
-      // Non-fatal
+      tabs = [...tabs, newTab];
+      activeTabId = newTab.id;
+      const panes = collectLeafPanes(newTab.layout);
+      if (panes.length > 0) {
+        try {
+          await invoke('open_ssh_connection', { paneId: panes[0].paneId, connectionId });
+        } catch {
+          // Roll back the orphan tab created above.
+          try {
+            await invoke('close_tab', { tabId: newTab.id });
+          } catch {
+            // close_tab also failed — backend may have already cleaned up.
+          }
+          tabs = tabs.filter((t) => t.id !== newTab.id);
+          if (activeTabId === newTab.id) {
+            activeTabId = tabs[tabs.length - 1]?.id ?? '';
+          }
+          connectionOpenError = true;
+          return;
+        }
+      }
+    } else {
+      // Open in active pane.
+      const activePaneId = activeTab?.activePaneId;
+      if (!activePaneId) return;
+      try {
+        await invoke('open_ssh_connection', { paneId: activePaneId, connectionId });
+      } catch {
+        connectionOpenError = true;
+        return;
+      }
     }
+    connectionManagerOpen = false;
   }
 
   // -------------------------------------------------------------------------
@@ -859,6 +913,14 @@
     contextMenuHintDismissed = true;
     try {
       await invoke('mark_context_menu_used');
+      // Sync local preferences snapshot so PreferencesPanel sees the updated flag
+      // without requiring a round-trip to get_preferences (FS-UX-002 / FS-PREF-003).
+      if (preferences !== undefined) {
+        preferences = {
+          ...preferences,
+          appearance: { ...preferences.appearance, contextMenuHintShown: true },
+        };
+      }
     } catch {
       // Non-fatal
     }
@@ -1066,8 +1128,29 @@
       onopen={handleConnectionOpen}
       onclose={() => {
         connectionManagerOpen = false;
+        connectionOpenError = false;
       }}
     />
+  {/if}
+
+  <!-- FS-SSH-032: connection open error banner — shown when create_tab or open_ssh_connection fails -->
+  {#if connectionOpenError}
+    <div
+      class="terminal-view__connection-error"
+      role="alert"
+      aria-live="assertive"
+      transition:fade={{ duration: 200 }}
+    >
+      <span>{m.error_connection_failed()}</span>
+      <button
+        type="button"
+        class="terminal-view__connection-error-close"
+        onclick={() => {
+          connectionOpenError = false;
+        }}
+        aria-label={m.action_close()}
+      >{m.action_close()}</button>
+    </div>
   {/if}
 </div>
 
@@ -1153,6 +1236,54 @@
     color: var(--color-text-tertiary);
     font-size: var(--font-size-ui-base);
     font-family: var(--font-ui);
+  }
+
+  /* FS-SSH-032: SSH connection open error banner */
+  .terminal-view__connection-error {
+    position: absolute;
+    bottom: calc(var(--size-status-bar-height) + var(--space-4));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--color-error-bg, #3a1a1a);
+    border: 1px solid var(--color-error-border, #7a2a2a);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-raised);
+    color: var(--color-error-fg, #f4a0a0);
+    font-size: var(--font-size-ui-sm);
+    font-family: var(--font-ui);
+    z-index: var(--z-overlay);
+    white-space: nowrap;
+    pointer-events: auto;
+  }
+
+  .terminal-view__connection-error-close {
+    background: none;
+    border: none;
+    padding: 0 var(--space-1);
+    color: inherit;
+    cursor: pointer;
+    font-size: var(--font-size-ui-sm);
+    font-family: var(--font-ui);
+    opacity: 0.8;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .terminal-view__connection-error-close:hover {
+    opacity: 1;
+  }
+
+  .terminal-view__connection-error-close:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 
   /* FS-UX-002: First-launch context menu hint (UXD §7.13) */

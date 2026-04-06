@@ -16,3 +16,6 @@ src/lib/paraglide/
 wdio-logs/
 .wdio-*
 *.log
+
+# cargo-fuzz build artifacts
+src-tauri/fuzz/target/

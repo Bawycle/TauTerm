@@ -20,11 +20,17 @@ This document translates the user needs expressed in [UR.md](UR.md) into precise
 - Priority classification (MoSCoW) for each requirement
 - Traceability to the originating user requirement
 
+**This is the only document in the project that uses normative language (`MUST`, `SHALL`, `SHOULD`, `MAY`).** Every functional constraint written as a requirement lives here and nowhere else — other documents reference FS IDs, they do not restate requirements.
+
 ### 1.3 What This Document Does Not Specify
 
-- Internal architecture, module decomposition, or data structures (see Architecture Decision Records in `docs/adr/`)
+- Internal architecture, module decomposition, or data structures (see `docs/adr/`)
 - Implementation technology choices beyond what is externally observable
-- Visual design details (layout, spacing, color values) — those are defined by the UX/UI designer and the design token system
+- Visual design details (layout, spacing, color values, component states) — see `docs/UXD.md`
+- Interaction design (animations, transitions, feedback patterns) — see `docs/UXD.md`
+- Implementation details (API names, CSS properties, algorithm choices) — see source code and comments
+
+**Corollary — no duplication with UXD.md:** if information belongs in UXD.md, it must not appear here. When a requirement has a visible design consequence, FS.md states the requirement; UXD.md specifies the design that satisfies it and references the FS ID. Writing the same constraint in both documents creates a SSOT violation and a future contradiction risk.
 
 ### 1.4 Conventions
 
@@ -315,6 +321,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 | FS-TAB-006 | Each tab MUST display a title. The title MUST be settable by the running process (via OSC sequences) and overridable by the user with a custom label. The user MUST be able to rename a tab via: (a) double-clicking the tab title, which makes it editable inline; (b) a "Rename" action in the tab's context menu (right-click). Pressing Enter or clicking outside the field confirms the new label; pressing Escape cancels. A user-defined label takes precedence over OSC-set titles for that tab. Clearing the label reverts to process-name or OSC-driven titles. | Must |
 | FS-TAB-007 | When a non-active tab produces output or a process terminates within it, the tab MUST display a visual activity notification without switching focus. | Must |
 | FS-TAB-008 | Closing the last tab MUST close the application window. | Must |
+| FS-TAB-009 | When a new tab is created while the tab bar is in overflow (horizontal scroll) mode, the tab bar MUST automatically scroll to make the newly created tab fully visible, without requiring any manual scroll action from the user. | Must |
 
 **Acceptance criteria:**
 - FS-TAB-001: Opening 10 tabs results in 10 independent terminal sessions.
@@ -323,6 +330,7 @@ Requirement identifiers follow the pattern `FS-<AREA>-<NNN>` where `<AREA>` is a
 - FS-TAB-005: Dragging a tab to a new position reorders it.
 - FS-TAB-006: Running `printf "\033]0;Custom\007"` changes the tab title. Double-clicking the tab title makes it editable inline; typing a new name and pressing Enter sets the custom label. Right-clicking the tab shows a "Rename" option that achieves the same result. Clearing the label reverts to the process-driven title.
 - FS-TAB-007: Output produced in a background tab causes a visible indicator on that tab's header.
+- FS-TAB-009: With enough tabs open to trigger the scroll arrows, pressing Ctrl+Shift+T creates a new tab and the tab bar scrolls so that the new tab is fully visible without any user scroll action.
 
 ---
 

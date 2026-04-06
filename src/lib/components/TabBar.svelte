@@ -217,6 +217,21 @@
     canScrollRight = hasOverflow && scrollLeft + visibleTabsWidth < scrollWidth - 1;
   }
 
+  /**
+   * Scroll the active tab into view if it is partially or fully outside
+   * the visible area of the tabs container.
+   *
+   * Called after a tab is added so the new (active) tab is always reachable
+   * without manual scrolling. `scrollIntoView` with `inline: 'nearest'` is a
+   * no-op when the element is already fully visible.
+   */
+  function scrollActiveTabIntoView() {
+    if (!tabsContainerEl) return;
+    const activeEl = tabsContainerEl.querySelector<HTMLElement>(`[data-tab-id="${activeTabId}"]`);
+    if (!activeEl) return;
+    activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }
+
   /** Scroll the tab container by a fixed pixel amount. */
   function scrollTabs(direction: 'left' | 'right') {
     if (!tabsContainerEl) return;
@@ -262,10 +277,22 @@
     const _len = tabCount;
     let done = false;
     const rafId = requestAnimationFrame(() => {
-      if (!done) { done = true; updateScrollState(); }
+      if (!done) {
+        done = true;
+        updateScrollState();
+        // Scroll the active tab (the newly added one) into view.
+        // activeTabId is read inside rAF — outside the effect's synchronous
+        // tracking window — so it is NOT added as a reactive dependency here.
+        // This effect only re-runs on tabCount changes, not on tab switches.
+        scrollActiveTabIntoView();
+      }
     });
     const timeoutId = setTimeout(() => {
-      if (!done) { done = true; updateScrollState(); }
+      if (!done) {
+        done = true;
+        updateScrollState();
+        scrollActiveTabIntoView();
+      }
       cancelAnimationFrame(rafId);
     }, 200);
     return () => {

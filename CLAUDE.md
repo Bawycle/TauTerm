@@ -10,9 +10,9 @@ La plateforme cible, pour cette première version, est Linux (x86, x86_64, ARM32
 ## Documentation
 
 - [`docs/UR.md`](docs/UR.md) — User Requirements: personas, interaction model, feature requirements (source of truth for what users need)
-- [`docs/FS.md`](docs/FS.md) — Functional Specifications: numbered requirements with acceptance criteria, MoSCoW priorities, and traceability to UR (source of truth for what the system must do)
+- [`docs/FS.md`](docs/FS.md) — Functional Specifications: numbered requirements (`FS-XXX-NNN`) with acceptance criteria, MoSCoW priorities, and traceability to UR. **The only document that uses normative language (`MUST`/`SHALL`/`SHOULD`/`MAY`). Source of truth for what the system must do.**
 - [`docs/AD.md`](docs/AD.md) — Artistic Direction: visual identity, Umbra theme design intent, typography and color philosophy (source of truth for aesthetic decisions)
-- [`docs/UXD.md`](docs/UXD.md) — UX/UI Design: complete design token system, component specifications, interaction patterns, IPC contract (source of truth for all visual and interactive decisions)
+- [`docs/UXD.md`](docs/UXD.md) — UX/UI Design: design token system, component specifications, interaction patterns, IPC contract. **Source of truth for how things look and behave from a UX perspective. Never restates FS requirements — references FS IDs instead.**
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Architecture: module decomposition, IPC contract, state machines, concurrency model, platform abstraction, security strategy (source of truth for how the system is built)
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0014)
 - [`docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md`](docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md) — Functional Test Protocol: 93 scenarios covering PTY/session, VT parser, SSH lifecycle, preferences & i18n, UI & accessibility, IPC contract
@@ -161,6 +161,23 @@ Before making any decision or modification — code or documentation — read th
 | Any new feature end-to-end | All of the above, section by section |
 
 This rule applies equally to all agents. Reading a section takes a few hundred lines; reading a whole document wastes context and defeats the purpose.
+
+### FS.md vs UXD.md — SSOT partition rule
+
+These two documents have a strict, non-overlapping responsibility boundary:
+
+| Question | Belongs in |
+|---|---|
+| What must the system do? | `FS.md` only |
+| How does it look / feel / animate? | `UXD.md` only |
+| Is it testable as a pass/fail criterion? | `FS.md` only |
+| Does a designer need it to draw a mockup? | `UXD.md` only |
+
+**Hard rules — violation = SSOT breach:**
+- Normative language (`MUST`, `SHALL`, `SHOULD`, `MAY`) is **exclusively** `FS.md`. Never write it in `UXD.md`.
+- If a requirement is in `FS.md`, `UXD.md` references its ID (`(FS-TAB-009)`) and describes only the *design expression* — it does not restate the requirement.
+- Implementation details (API names, CSS property names, algorithm choices) belong in source code and comments, not in either doc.
+- When adding to either document, check the other first: if the information already exists there in any form, add a cross-reference instead of duplicating.
 
 ## Constraints
 

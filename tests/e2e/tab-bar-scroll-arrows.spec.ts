@@ -308,34 +308,37 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
 
   /**
    * TBTC-E2E-SCR-004: Adding enough tabs to exceed the tab bar width must
-   * cause the right scroll arrow to appear.
+   * cause scroll arrows to appear.
    *
    * Each tab has min-width: 120px.  At 800px window width, after subtracting
    * the new-tab button (44px) and some padding, roughly 6 tabs will overflow.
-   * We open tabs until the right arrow appears (or give up after 15 tabs).
+   * We open tabs until any scroll arrow appears (or give up after 15 tabs).
    *
-   * We check for the right arrow specifically because the scroll position
-   * starts at 0 (leftmost), so only the right arrow should show initially.
+   * Note on scroll position: when a new tab is added, the tab bar auto-scrolls
+   * to keep the new (active) tab visible.  At overflow time the tab bar is
+   * therefore scrolled to the rightmost position — only the LEFT arrow appears
+   * (there is nothing further right to scroll to).  We therefore check for the
+   * presence of ANY arrow rather than the right arrow specifically.
    */
-  it("TBTC-E2E-SCR-004: right arrow appears when tabs overflow", async () => {
+  it("TBTC-E2E-SCR-004: scroll arrows appear when tabs overflow", async () => {
     // Start from whatever tab count we have (3 from previous test).
     let currentCount = await countTabs();
 
-    // Open tabs until the right arrow appears, up to a reasonable maximum.
+    // Open tabs until any arrow appears, up to a reasonable maximum.
     const MAX_TABS = 15;
     while (currentCount < MAX_TABS) {
       currentCount++;
       await openNewTab(currentCount);
 
-      if (await isRightArrowPresent()) break;
+      if (await isAnyArrowPresent()) break;
     }
 
-    // The right arrow must be visible at this point.
-    expect(await isRightArrowPresent()).toBe(true);
+    // At least one arrow must be visible — tabs genuinely overflow.
+    expect(await isAnyArrowPresent()).toBe(true);
 
-    // The left arrow should NOT be visible because we have not scrolled yet
-    // (scroll position is 0 = leftmost).
-    expect(await isLeftArrowPresent()).toBe(false);
+    // Auto-scroll brings the last tab into view: the bar is scrolled to the
+    // right end, so the LEFT arrow (hidden tabs to the left) must be present.
+    expect(await isLeftArrowPresent()).toBe(true);
   });
 
   // -----------------------------------------------------------------------
@@ -343,38 +346,38 @@ describe("TauTerm — TabBar scroll arrow visibility", () => {
   // -----------------------------------------------------------------------
 
   /**
-   * TBTC-E2E-SCR-005: Clicking the right scroll arrow shifts the tab strip
-   * and the left scroll arrow must appear.
+   * TBTC-E2E-SCR-005: Scrolling the tab strip back to the start causes the
+   * right scroll arrow to appear.
    *
-   * After clicking the right arrow, scrollLeft > 0, which satisfies the
-   * canScrollLeft condition.  Both arrows should be visible (there are tabs
-   * hidden on both sides).
+   * After TBTC-E2E-SCR-004 the bar is auto-scrolled to the rightmost position
+   * (left arrow present, right arrow absent).  Resetting scrollLeft to 0
+   * means all overflowing content is to the right → only the right arrow shows.
+   *
+   * We set scrollLeft directly (instant, no animation) to avoid racing against
+   * any residual smooth-scroll animation from the previous test.
    */
-  it("TBTC-E2E-SCR-005: left arrow appears after scrolling right", async () => {
-    // Prerequisite: the right arrow must be present (from TBTC-E2E-SCR-004).
-    expect(await isRightArrowPresent()).toBe(true);
+  it("TBTC-E2E-SCR-005: right arrow appears when scrolled back to the start", async () => {
+    // Prerequisite: the left arrow must be present (from TBTC-E2E-SCR-004).
+    expect(await isLeftArrowPresent()).toBe(true);
 
-    // Click the right scroll arrow via DOM dispatchEvent.
+    // Reset scroll position to 0 instantly (bypasses smooth-scroll animation).
+    // Dispatching the scroll event ensures updateScrollState() fires.
     await browser.execute((): void => {
-      const arrow = document.querySelector<HTMLElement>(
-        ".tab-bar__scroll-arrow--right",
-      );
-      arrow?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      const tabs = document.querySelector<HTMLElement>(".tab-bar__tabs");
+      if (!tabs) return;
+      // Override scroll-behavior so the assignment is instant.
+      tabs.style.scrollBehavior = "auto";
+      tabs.scrollLeft = 0;
+      tabs.dispatchEvent(new Event("scroll"));
     });
 
-    // Wait for the smooth scroll to complete and the left arrow to appear.
-    await browser.waitUntil(
-      () => isLeftArrowPresent(),
-      {
-        timeout: 3_000,
-        timeoutMsg:
-          "Left scroll arrow did not appear after clicking the right arrow",
-      },
-    );
+    // Allow Svelte to flush the DOM update.
+    await browser.pause(150);
 
-    expect(await isLeftArrowPresent()).toBe(true);
+    // At scrollLeft=0 there is content to the right → right arrow shown.
+    expect(await isRightArrowPresent()).toBe(true);
+    // At scrollLeft=0 nothing is hidden to the left → left arrow absent.
+    expect(await isLeftArrowPresent()).toBe(false);
   });
 
   // -----------------------------------------------------------------------

@@ -39,15 +39,24 @@ This document is the **single source of truth for every visual and interactive d
 | Document | Governs | This document's relationship |
 |----------|---------|------------------------------|
 | **UR.md** | What users need | Every design decision traces to a persona need or interaction model principle from UR.md. |
-| **FS.md** | What the system must do | This document specifies how functional requirements are expressed visually and interactively. FS.md defines *what* happens; this document defines *how it looks and feels*. |
+| **FS.md** | What the system must do | FS.md is the **only** source of functional requirements. This document specifies *how* those requirements are expressed visually and interactively — it never restates them. When a design decision satisfies a specific requirement, a reference `(FS-XXX-NNN)` is included. |
 | **AD.md** | Artistic direction, token definitions, palette | This document consumes AD.md's token values and palette verbatim. It extends them with component-level specifications, interaction patterns, and layout rules that AD.md intentionally does not cover. |
 
-### 1.2 Authoritativeness
+### 1.2 Authoritativeness and Scope Rules
 
 - **Token values** (colors, spacing, typography, radii, shadows, motion): AD.md is authoritative. This document references those values; it does not redefine them.
 - **Component specifications** (anatomy, states, dimensions, behavior): this document is authoritative.
 - **Interaction patterns** (focus management, drag behavior, keyboard navigation): this document is authoritative.
 - **Layout structure** (window anatomy, region placement, spatial rules): this document is authoritative.
+
+**What belongs here:** visual properties, interaction design, component anatomy, accessibility implementation, motion rules, UX behavior descriptions.
+
+**What does not belong here:**
+- Normative requirements (`MUST`, `SHALL`, `SHOULD`) — those belong exclusively in `FS.md`. Use descriptive language instead: "the tab bar scrolls to show the new tab" rather than "the tab bar MUST scroll".
+- Functional requirements — reference the FS ID instead of restating. `(FS-TAB-009)` is sufficient; do not write the requirement again.
+- Implementation details (API names, CSS property names, algorithm choices) — those belong in source code and comments.
+
+**Corollary — no duplication with FS.md:** if a behavior is already specified as a requirement in FS.md, this document describes only the *design expression* of that behavior (visual feedback, transition, layout consequence) and links to the FS ID. Writing the same constraint in both documents creates a SSOT violation and a future contradiction risk.
 
 ---
 
@@ -723,6 +732,7 @@ All indicators are cleared when the user switches to the indicated tab (FS-NOTIF
 - **Focus ring:** 2px solid `--color-focus-ring`, offset 2px.
 - **ARIA label:** "New tab".
 - **Tooltip:** "New Tab (Ctrl+Shift+T)" — shown after `--duration-slow` (300ms) hover delay.
+- **Overflow behaviour (FS-TAB-009):** If the tab bar is in horizontal scroll mode when the new tab is created, the tab bar scrolls to bring the new tab into view (see §12.2).
 
 #### 7.1.6 Tab Inline Rename
 
@@ -1921,6 +1931,7 @@ Per FS-A11Y-004, every status communicated through color also has a secondary in
   - Left/right scroll indicators (Lucide `ChevronLeft` / `ChevronRight`, 24px wide) appear at the edges when tabs overflow in that direction. These are click targets that scroll by one tab width.
   - Each scroll arrow displays a small dot badge (`--size-scroll-arrow-badge`, 4px, positioned in the top-right corner of the arrow button) when any hidden tab on that side has an active notification indicator. Badge color: `--color-indicator-output` for output activity, `--color-indicator-bell` for bell (bell takes priority).
   - The new-tab button remains fixed at the right edge of the tab bar (does not scroll with tabs).
+  - **New-tab scroll-into-view (FS-TAB-009):** When a new tab is created in overflow mode, the tab bar scrolls to bring the new tab into view. The scroll position updates smoothly; if the new tab is already visible, no scroll occurs.
 - **At 640px window width with default settings:** Approximately 4-5 tabs fit before scrolling activates.
 
 ### 12.3 Preferences Panel at Minimum Size

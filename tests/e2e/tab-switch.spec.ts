@@ -127,7 +127,15 @@ describe('TauTerm — Tab switch session isolation', () => {
         btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
     });
-    await browser.pause(300);
+    // Wait for the confirmation dialog to be gone before proceeding — this
+    // ensures the dismiss action (if a dialog was present) has been processed.
+    await browser.waitUntil(
+      () =>
+        browser.execute(function (): boolean {
+          return document.querySelector('[data-testid="close-confirm-cancel"]') === null;
+        }),
+      { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not disappear after dismiss" },
+    );
 
     // Wait for the active terminal pane to be present and interactive.
     await browser.waitUntil(

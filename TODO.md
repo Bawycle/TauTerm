@@ -82,16 +82,6 @@
 - [ ] **Middle-click tab close** (UXD §7.1.2)
   - `onmousedown` avec `button === 1` dans `TabBar.svelte`
 
-### Tests
-
-- [ ] **Créer `src-tauri/tests/vt_processor_integration.rs`** — référencé dans `TESTING.md §14.3` mais inexistant
-  - Pipe-pair remplaçant PTY, séquences multi-morceaux, bloc >4096 octets, resize mid-stream
-- [ ] **Tests directs pour `vt/charset.rs`, `vt/modes.rs`, `vt/sgr.rs`**
-  - `charset.rs` : vérifier les 27 mappings DEC Special Graphics
-  - `modes.rs` : tester chaque mode DECSET/DECRST individuellement
-- [ ] **Éliminer les 11× `browser.pause()` en E2E** — remplacer par `waitUntil` sur conditions DOM observables
-  - Priorité : pauses longues dans `ssh-connection-rollback.spec.ts` (300ms) et `tab-lifecycle.spec.ts` (500ms)
-
 ---
 
 ## P2 — Roadmap

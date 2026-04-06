@@ -46,6 +46,7 @@ import {
   sendInput,
   searchPane,
   markContextMenuUsed,
+  toggleFullscreen as ipcToggleFullscreen,
 } from '$lib/ipc/commands';
 import {
   onSessionStateChanged,
@@ -54,6 +55,7 @@ import {
   onCredentialPrompt,
   onNotificationChanged,
   onModeStateChanged,
+  onFullscreenStateChanged,
 } from '$lib/ipc/events';
 import {
   sessionState,
@@ -92,6 +94,7 @@ import {
   setPreferences,
   setPreferencesFallback,
 } from '$lib/state/preferences.svelte';
+import { fullscreenState, setFullscreen } from '$lib/state/fullscreen.svelte';
 import { applyPreferencesUpdate } from '$lib/preferences/applyUpdate';
 import { applyLocaleChange } from '$lib/state/locale.svelte';
 import { pasteToBytes } from '$lib/terminal/paste.js';
@@ -117,6 +120,7 @@ export {
   tabNotifications,
   terminatedPanes,
   preferences,
+  fullscreenState,
   getActiveTab,
   getActivePanes,
   collectLeafPanes,
@@ -233,6 +237,15 @@ export function useTerminalView() {
       // Non-fatal
     }
 
+    // Sync initial fullscreen state from the window
+    try {
+      const win = getCurrentWindow();
+      const isFs = await win.isFullscreen();
+      setFullscreen(isFs);
+    } catch {
+      /* non-fatal */
+    }
+
     unlistens.push(await onSessionStateChanged(applySessionDelta));
     unlistens.push(await onHostKeyPrompt(setHostKeyPrompt));
     unlistens.push(await onCredentialPrompt(setCredentialPrompt));
@@ -249,6 +262,12 @@ export function useTerminalView() {
     unlistens.push(
       await onModeStateChanged((mode) => {
         setBracketedPaste(mode.paneId, mode.bracketedPaste);
+      }),
+    );
+    // Listen for WM-driven fullscreen changes
+    unlistens.push(
+      await onFullscreenStateChanged((ev) => {
+        setFullscreen(ev.isFullscreen);
       }),
     );
   });
@@ -603,6 +622,7 @@ export function useTerminalView() {
     next_tab: 'Ctrl+Tab',
     prev_tab: 'Ctrl+Shift+Tab',
     rename_tab: 'F2',
+    toggle_fullscreen: 'F11',
     split_pane_h: 'Ctrl+Shift+D',
     split_pane_v: 'Ctrl+Shift+E',
     close_pane: 'Ctrl+Shift+Q',
@@ -635,8 +655,23 @@ export function useTerminalView() {
     return eventKey === requiredKey;
   }
 
+  async function handleToggleFullscreen(): Promise<void> {
+    try {
+      const result = await ipcToggleFullscreen();
+      setFullscreen(result.isFullscreen);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     if ((event.target as Element)?.closest?.('[role="dialog"], [role="alertdialog"]')) return;
+
+    if (matchesShortcut(event, effectiveShortcut('toggle_fullscreen'))) {
+      event.preventDefault();
+      handleToggleFullscreen();
+      return;
+    }
 
     if (matchesShortcut(event, effectiveShortcut('new_tab'))) {
       event.preventDefault();
@@ -800,6 +835,10 @@ export function useTerminalView() {
       return activeThemeLineHeight;
     },
 
+    get isFullscreen() {
+      return fullscreenState.value;
+    },
+
     // Handlers
     handleTabClick,
     handleTabClose,
@@ -826,5 +865,6 @@ export function useTerminalView() {
     handlePreferencesUpdate,
     handleGlobalKeydown,
     handleDimensionsChange,
+    handleToggleFullscreen,
   };
 }

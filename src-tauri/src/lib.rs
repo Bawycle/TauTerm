@@ -122,6 +122,21 @@ pub fn run() {
             }
 
             app.manage(registry);
+
+            // FS-FULL-009: restore full-screen state from saved preferences.
+            let saved_fullscreen = app
+                .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
+                .read()
+                .get()
+                .appearance
+                .fullscreen;
+            if saved_fullscreen
+                && let Some(window) = app.get_webview_window("main")
+                && let Err(e) = window.set_fullscreen(true)
+            {
+                tracing::warn!("Could not restore fullscreen state: {e}");
+            }
+
             Ok(())
         })
         // E2E testing commands — only compiled and registered when e2e-testing feature is active.
@@ -171,6 +186,7 @@ pub fn run() {
             commands::system_cmds::get_clipboard,
             commands::system_cmds::open_url,
             commands::system_cmds::mark_context_menu_used,
+            commands::system_cmds::toggle_fullscreen,
             // E2E testing commands (compiled only with --features e2e-testing)
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_pty_output,

@@ -23,14 +23,16 @@
   import SshHostKeyDialog from './SshHostKeyDialog.svelte';
   import SshCredentialDialog from './SshCredentialDialog.svelte';
   import ConnectionManager from './ConnectionManager.svelte';
+  import FullscreenExitBadge from './FullscreenExitBadge.svelte';
   import Dialog from '$lib/ui/Dialog.svelte';
   import Button from '$lib/ui/Button.svelte';
-  import { Network, MousePointerClick } from 'lucide-svelte';
+  import { Network, MousePointerClick, Maximize2, Minimize2 } from 'lucide-svelte';
   import { useTerminalView } from '$lib/composables/useTerminalView.svelte';
   import { sessionState, getActiveTab, getActivePanes } from '$lib/state/session.svelte';
   import { sshStates, hostKeyPrompt, credentialPrompt } from '$lib/state/ssh.svelte';
   import { terminatedPanes } from '$lib/state/notifications.svelte';
   import { preferences } from '$lib/state/preferences.svelte';
+  import { fullscreenState } from '$lib/state/fullscreen.svelte';
   import { setActivePane } from '$lib/ipc/commands';
   import * as m from '$lib/paraglide/messages';
 
@@ -56,13 +58,70 @@
       ? (activePanes.find((p) => p.paneId === activeTab.activePaneId)?.state ?? null)
       : null,
   );
+
+  // ---------------------------------------------------------------------------
+  // Fullscreen auto-hide: tab bar and status bar fade out after 1.5s in
+  // fullscreen mode, and reappear when the user hovers the top/bottom edge.
+  // ---------------------------------------------------------------------------
+
+  let tabBarVisible = $state(true);
+  let statusBarVisible = $state(true);
+  let tabBarHideTimer: ReturnType<typeof setTimeout> | null = null;
+  let statusBarHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function recallTabBar() {
+    tabBarVisible = true;
+    if (tabBarHideTimer) clearTimeout(tabBarHideTimer);
+    tabBarHideTimer = setTimeout(() => {
+      if (fullscreenState.value) tabBarVisible = false;
+      tabBarHideTimer = null;
+    }, 1500);
+  }
+
+  function recallStatusBar() {
+    statusBarVisible = true;
+    if (statusBarHideTimer) clearTimeout(statusBarHideTimer);
+    statusBarHideTimer = setTimeout(() => {
+      if (fullscreenState.value) statusBarVisible = false;
+      statusBarHideTimer = null;
+    }, 1500);
+  }
+
+  // When entering/exiting fullscreen, reset visibility state.
+  $effect(() => {
+    if (!fullscreenState.value) {
+      // Exiting fullscreen: restore bars immediately, cancel pending timers.
+      tabBarVisible = true;
+      statusBarVisible = true;
+      if (tabBarHideTimer) {
+        clearTimeout(tabBarHideTimer);
+        tabBarHideTimer = null;
+      }
+      if (statusBarHideTimer) {
+        clearTimeout(statusBarHideTimer);
+        statusBarHideTimer = null;
+      }
+    } else {
+      // Entering fullscreen: start the auto-hide sequence.
+      recallTabBar();
+      recallStatusBar();
+    }
+  });
 </script>
 
 <svelte:window onkeydown={tv.handleGlobalKeydown} />
 
 <div class="terminal-view" role="application" aria-label={m.terminal_view_aria_label()}>
+  <!-- Accessible aria-live region for fullscreen state announcements (WCAG 2.1 AA) -->
+  <div aria-live="polite" class="sr-only" aria-atomic="true">
+    {#if tv.isFullscreen}{m.fullscreen_entered()}{/if}
+  </div>
+
   <!-- Tab bar: renders tabs from session state -->
-  <div class="terminal-view__tab-row">
+  <div
+    class="terminal-view__tab-row"
+    class:terminal-view__tab-row--hidden={fullscreenState.value && !tabBarVisible}
+  >
     <TabBar
       tabs={sessionState.tabs}
       activeTabId={sessionState.activeTabId}
@@ -90,11 +149,31 @@
     >
       <Network size={16} aria-hidden="true" />
     </button>
+    <!-- Fullscreen toggle button (FS-FULL-004) -->
+    <button
+      class="terminal-view__ssh-btn"
+      type="button"
+      onclick={tv.handleToggleFullscreen}
+      aria-label={tv.isFullscreen ? m.exit_fullscreen() : m.enter_fullscreen()}
+      aria-pressed={tv.isFullscreen}
+      title={tv.isFullscreen ? m.exit_fullscreen() : m.enter_fullscreen()}
+      data-testid="fullscreen-toggle-btn"
+    >
+      {#if tv.isFullscreen}
+        <Minimize2 size={16} aria-hidden="true" />
+      {:else}
+        <Maximize2 size={16} aria-hidden="true" />
+      {/if}
+    </button>
   </div>
 
   <!-- Pane area: render the full split-tree layout for the active tab -->
   <!-- FS-UX-002: contextmenu bubbles up from TerminalPane to dismiss the first-launch hint -->
-  <div class="terminal-view__pane-area" role="region" oncontextmenu={tv.handleContextMenuHintDismiss}>
+  <div
+    class="terminal-view__pane-area"
+    role="region"
+    oncontextmenu={tv.handleContextMenuHintDismiss}
+  >
     {#key sessionState.activeTabId}
       {#if activeTab && activePanes.length > 0}
         <SplitPane
@@ -138,22 +217,31 @@
 
   <!-- FS-UX-002: First-launch context menu hint — non-blocking, bottom-right corner -->
   {#if tv.contextMenuHintVisible}
-    <div class="terminal-view__context-hint" aria-hidden="true" transition:fade={{ duration: fadeDurationHint }}>
+    <div
+      class="terminal-view__context-hint"
+      aria-hidden="true"
+      transition:fade={{ duration: fadeDurationHint }}
+    >
       <MousePointerClick size={14} aria-hidden="true" />
       <span>{m.context_menu_hint()}</span>
     </div>
   {/if}
 
   <!-- Status bar: reflects active pane state (DIV-UXD-008) -->
-  <StatusBar
-    {activePaneState}
-    cols={tv.activePaneCols}
-    rows={tv.activePaneRows}
-    dimsVisible={tv.dimsVisible}
-    onsettings={() => {
-      tv.prefsOpen = true;
-    }}
-  />
+  <div
+    class="terminal-view__status-row"
+    class:terminal-view__status-row--hidden={fullscreenState.value && !statusBarVisible}
+  >
+    <StatusBar
+      {activePaneState}
+      cols={tv.activePaneCols}
+      rows={tv.activePaneRows}
+      dimsVisible={tv.dimsVisible}
+      onsettings={() => {
+        tv.prefsOpen = true;
+      }}
+    />
+  </div>
 
   <!-- SearchOverlay: positioned relative to pane area (FS-SEARCH-007, UXD §7.4) -->
   {#if activePanes.length > 0}
@@ -226,8 +314,10 @@
         onclick={tv.handleCloseCancel}
         data-testid="close-confirm-cancel">{m.action_cancel()}</Button
       >
-      <Button variant="destructive" onclick={tv.handleCloseConfirm} data-testid="close-confirm-action"
-        >{m.close_confirm_action()}</Button
+      <Button
+        variant="destructive"
+        onclick={tv.handleCloseConfirm}
+        data-testid="close-confirm-action">{m.close_confirm_action()}</Button
       >
     {/snippet}
   </Dialog>
@@ -245,6 +335,24 @@
         tv.connectionOpenError = false;
       }}
     />
+  {/if}
+
+  <!-- Fullscreen: hover zones to recall hidden bars, and exit badge -->
+  {#if fullscreenState.value}
+    <!-- Top hover zone: recalls the tab bar -->
+    <div
+      class="terminal-view__fullscreen-hover-top"
+      onmouseenter={recallTabBar}
+      aria-hidden="true"
+    ></div>
+    <!-- Bottom hover zone: recalls the status bar -->
+    <div
+      class="terminal-view__fullscreen-hover-bottom"
+      onmouseenter={recallStatusBar}
+      aria-hidden="true"
+    ></div>
+    <!-- Exit badge: visible only when tab bar is hidden -->
+    <FullscreenExitBadge {tabBarVisible} onToggle={tv.handleToggleFullscreen} />
   {/if}
 
   <!-- FS-SSH-032: connection open error banner -->
@@ -283,6 +391,52 @@
     display: flex;
     align-items: stretch;
     flex-shrink: 0;
+    transition: opacity var(--duration-fast) var(--ease-in);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .terminal-view__tab-row {
+      transition: none;
+    }
+  }
+
+  .terminal-view__tab-row--hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .terminal-view__status-row {
+    flex-shrink: 0;
+    transition: opacity var(--duration-fast) var(--ease-in);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .terminal-view__status-row {
+      transition: none;
+    }
+  }
+
+  .terminal-view__status-row--hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Fullscreen hover zones — 4px strips at top/bottom edges */
+  .terminal-view__fullscreen-hover-top,
+  .terminal-view__fullscreen-hover-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: 4px;
+    z-index: var(--z-fullscreen-chrome);
+  }
+
+  .terminal-view__fullscreen-hover-top {
+    top: 0;
+  }
+
+  .terminal-view__fullscreen-hover-bottom {
+    bottom: 0;
   }
 
   .terminal-view__ssh-btn {

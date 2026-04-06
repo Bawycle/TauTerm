@@ -30,6 +30,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     opacity: 1.0,
     language: 'en',
     contextMenuHintShown: false,
+    fullscreen: false,
   },
   terminal: {
     scrollbackLines: 10000,

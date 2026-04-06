@@ -27,6 +27,7 @@ import type {
   UserTheme,
   Credentials,
   CreateTabConfig,
+  FullscreenState,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -217,6 +218,14 @@ export function openUrl(url: string, paneId?: string): Promise<void> {
 
 export function markContextMenuUsed(): Promise<void> {
   return invoke('mark_context_menu_used');
+}
+
+// ---------------------------------------------------------------------------
+// Window commands
+// ---------------------------------------------------------------------------
+
+export function toggleFullscreen(): Promise<FullscreenState> {
+  return invoke<FullscreenState>('toggle_fullscreen');
 }
 
 // Re-export CreateTabConfig so callers can use it from this module

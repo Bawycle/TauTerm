@@ -26,6 +26,7 @@ pub const EVENT_BELL_TRIGGERED: &str = "bell-triggered";
 pub const EVENT_OSC52_WRITE_REQUESTED: &str = "osc52-write-requested";
 pub const EVENT_SSH_WARNING: &str = "ssh-warning";
 pub const EVENT_SSH_RECONNECTED: &str = "ssh-reconnected";
+pub const EVENT_FULLSCREEN_STATE_CHANGED: &str = "fullscreen-state-changed";
 
 /// Emit a session topology change event.
 pub fn emit_session_state_changed(app: &AppHandle, event: SessionStateChangedEvent) {
@@ -115,5 +116,12 @@ pub fn emit_ssh_warning(app: &AppHandle, event: SshWarningEvent) {
 pub fn emit_ssh_reconnected(app: &AppHandle, event: SshReconnectedEvent) {
     if let Err(e) = app.emit(EVENT_SSH_RECONNECTED, event) {
         tracing::error!("Failed to emit ssh-reconnected: {e}");
+    }
+}
+
+/// Emit a full-screen state change event (FS-FULL-009).
+pub fn emit_fullscreen_state_changed(app: &AppHandle, event: FullscreenStateChangedEvent) {
+    if let Err(e) = app.emit(EVENT_FULLSCREEN_STATE_CHANGED, event) {
+        tracing::error!("Failed to emit fullscreen-state-changed: {e}");
     }
 }

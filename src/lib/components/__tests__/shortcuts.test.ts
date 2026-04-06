@@ -38,6 +38,7 @@ const defaultShortcuts: Record<string, string> = {
   next_tab: 'Ctrl+Tab',
   prev_tab: 'Ctrl+Shift+Tab',
   rename_tab: 'F2',
+  toggle_fullscreen: 'F11',
 };
 
 function effectiveShortcut(actionId: string, preferences: Preferences): string {
@@ -243,6 +244,37 @@ describe('TEST-SPRINT-006h: matchesShortcut single-char keys are case-insensitiv
   it('uppercase event key matches lowercase shortcut key', () => {
     // TEST-SPRINT-006h
     expect(matchesShortcut(key('T', { ctrl: true, shift: true }), 'Ctrl+Shift+t')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F11 — toggle_fullscreen shortcut
+// ---------------------------------------------------------------------------
+
+describe('toggle_fullscreen: F11 shortcut', () => {
+  it('default shortcut for toggle_fullscreen is F11', () => {
+    expect(effectiveShortcut('toggle_fullscreen', null)).toBe('F11');
+  });
+
+  it('matchesShortcut: plain F11 matches', () => {
+    expect(matchesShortcut(key('F11'), 'F11')).toBe(true);
+  });
+
+  it('matchesShortcut: F11 with Ctrl does not match plain F11', () => {
+    expect(matchesShortcut(key('F11', { ctrl: true }), 'F11')).toBe(false);
+  });
+
+  it('matchesShortcut: F11 with Shift does not match plain F11', () => {
+    expect(matchesShortcut(key('F11', { shift: true }), 'F11')).toBe(false);
+  });
+
+  it('matchesShortcut: F12 does not match F11', () => {
+    expect(matchesShortcut(key('F12'), 'F11')).toBe(false);
+  });
+
+  it('user can rebind toggle_fullscreen to a custom shortcut', () => {
+    const prefs: Preferences = { keyboard: { bindings: { toggle_fullscreen: 'Ctrl+F11' } } };
+    expect(effectiveShortcut('toggle_fullscreen', prefs)).toBe('Ctrl+F11');
   });
 });
 

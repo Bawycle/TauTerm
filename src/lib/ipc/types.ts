@@ -692,6 +692,8 @@ export interface AppearancePrefs {
   language: Language;
   /** Whether the context menu hint has been shown at least once. */
   contextMenuHintShown: boolean;
+  /** Whether the window starts in fullscreen mode. Default: false. */
+  fullscreen: boolean;
 }
 
 /** Mirrors Rust TerminalPrefs. */
@@ -724,6 +726,7 @@ export interface AppearancePatch {
   opacity?: number;
   language?: Language;
   contextMenuHintShown?: boolean;
+  fullscreen?: boolean;
 }
 
 /**
@@ -899,3 +902,24 @@ export type OpenUrlCommand = (args: { url: string; paneId?: string }) => Promise
  * @command mark_context_menu_used
  */
 export type MarkContextMenuUsedCommand = () => Promise<void>;
+
+// ---------------------------------------------------------------------------
+// Fullscreen types (ARCHITECTURE §4.x)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returned by `toggle_fullscreen` command.
+ * Mirrors Rust FullscreenState.
+ */
+export interface FullscreenState {
+  isFullscreen: boolean;
+}
+
+/**
+ * Emitted by the backend when the fullscreen state changes (e.g. via WM shortcut).
+ * Event name: "fullscreen-state-changed"
+ * Mirrors Rust FullscreenStateChangedEvent.
+ */
+export interface FullscreenStateChangedEvent {
+  isFullscreen: boolean;
+}

@@ -146,6 +146,12 @@
   "connection_duplicate_label_suffix": "{label} (copie)",
   "connection_group_ungrouped": "Sans groupe",
 
+  "enter_fullscreen": "Passer en plein écran",
+  "exit_fullscreen": "Quitter le plein écran",
+  "exit_fullscreen_tooltip": "Quitter le plein écran (F11)",
+  "fullscreen_entered": "Mode plein écran activé",
+  "fullscreen_exited": "Mode plein écran désactivé",
+
   "scroll_to_bottom": "Aller en bas",
 
   "ssh_host_key_dialog_title_changed": "Clé d'hôte modifiée — Risque de sécurité potentiel",

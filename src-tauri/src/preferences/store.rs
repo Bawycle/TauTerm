@@ -123,6 +123,9 @@ impl PreferencesStore {
             if let Some(v) = patch.context_menu_hint_shown {
                 a.context_menu_hint_shown = v;
             }
+            if let Some(v) = patch.fullscreen {
+                a.fullscreen = v;
+            }
         }
         if let Some(terminal) = patch.terminal {
             prefs.terminal = terminal;
@@ -222,6 +225,18 @@ impl PreferencesStore {
         drop(prefs);
         self.save_to_disk(&updated)?;
         Ok(Some(copy))
+    }
+
+    /// Persist the window full-screen state (FS-FULL-009).
+    ///
+    /// Called by `toggle_fullscreen` immediately after the OS transition so the
+    /// preference survives application restarts.
+    pub fn set_fullscreen(&self, value: bool) -> Result<(), PreferencesError> {
+        let mut prefs = self.prefs.write();
+        prefs.appearance.fullscreen = value;
+        let updated = prefs.clone();
+        drop(prefs);
+        self.save_to_disk(&updated)
     }
 
     /// Mark that the context menu hint has been shown to the user.

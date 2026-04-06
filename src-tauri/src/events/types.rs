@@ -14,6 +14,7 @@
 //! - `credential-prompt`
 //! - `host-key-prompt`
 //! - `notification-changed`
+//! - `fullscreen-state-changed`
 
 use serde::{Deserialize, Serialize};
 
@@ -293,6 +294,26 @@ pub struct SshReconnectedEvent {
     pub pane_id: PaneId,
     /// Unix timestamp in milliseconds at the moment of reconnection.
     pub timestamp_ms: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Full-screen state
+// ---------------------------------------------------------------------------
+
+/// Query result for the current window full-screen state.
+/// Returned synchronously by `toggle_fullscreen` (FS-FULL-009).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FullscreenState {
+    pub is_fullscreen: bool,
+}
+
+/// Emitted after the window geometry transition to full-screen or windowed.
+/// Informational — the frontend ResizeObserver + `resize_pane` handle SIGWINCH.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FullscreenStateChangedEvent {
+    pub is_fullscreen: bool,
 }
 
 // ---------------------------------------------------------------------------

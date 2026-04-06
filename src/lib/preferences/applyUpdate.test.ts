@@ -33,6 +33,7 @@ function makePreferences(overrides: Partial<Preferences['appearance']> = {}): Pr
       opacity: 1.0,
       language: 'en',
       contextMenuHintShown: false,
+      fullscreen: false,
       ...overrides,
     },
     terminal: {

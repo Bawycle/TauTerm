@@ -18,6 +18,12 @@ export const Selectors = {
   scrollArrowLeft: ".tab-bar__scroll-arrow--left",
   scrollArrowRight: ".tab-bar__scroll-arrow--right",
   newTabButton: ".tab-bar__new-tab",
+  // Fullscreen chrome
+  tabRow: ".terminal-view__tab-row",
+  tabRowHidden: ".terminal-view__tab-row--hidden",
+  fullscreenHoverTop: ".terminal-view__fullscreen-hover-top",
+  fullscreenExitBadge: '[data-testid="fullscreen-exit-badge"]',
+  fullscreenToggleBtn: '[data-testid="fullscreen-toggle-btn"]',
   // SSH connection manager
   sshButton: ".terminal-view__ssh-btn",
   connectionManager: ".connection-manager",

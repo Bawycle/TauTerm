@@ -21,6 +21,7 @@ import type {
   ScrollPositionChangedEvent,
   CursorStyleChangedEvent,
   BellTriggeredEvent,
+  FullscreenStateChangedEvent,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -101,4 +102,16 @@ export function onBellTriggered(
   handler: (event: BellTriggeredEvent) => void,
 ): Promise<() => void> {
   return listen<BellTriggeredEvent>('bell-triggered', (e) => handler(e.payload));
+}
+
+// ---------------------------------------------------------------------------
+// Fullscreen events
+// ---------------------------------------------------------------------------
+
+export function onFullscreenStateChanged(
+  handler: (event: FullscreenStateChangedEvent) => void,
+): Promise<() => void> {
+  return listen<FullscreenStateChangedEvent>('fullscreen-state-changed', (e) =>
+    handler(e.payload),
+  );
 }

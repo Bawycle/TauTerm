@@ -32,6 +32,7 @@ function makePrefs(language: 'en' | 'fr'): Preferences {
       opacity: 1.0,
       language,
       contextMenuHintShown: false,
+      fullscreen: false,
     },
     terminal: {
       scrollbackLines: 10000,

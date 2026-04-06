@@ -44,6 +44,11 @@ pub struct AppearancePrefs {
     /// Used to suppress the first-use onboarding hint after the user has seen it.
     #[serde(default)]
     pub context_menu_hint_shown: bool,
+    /// Whether the window should be in full-screen mode (FS-FULL-009).
+    /// `#[serde(default)]` ensures existing preferences files without this field
+    /// deserialize successfully with `false`.
+    #[serde(default)]
+    pub fullscreen: bool,
 }
 
 impl Default for AppearancePrefs {
@@ -57,6 +62,7 @@ impl Default for AppearancePrefs {
             opacity: 1.0,
             language: Language::default(),
             context_menu_hint_shown: false,
+            fullscreen: false,
         }
     }
 }
@@ -121,6 +127,7 @@ pub struct AppearancePatch {
     pub opacity: Option<f32>,
     pub language: Option<Language>,
     pub context_menu_hint_shown: Option<bool>,
+    pub fullscreen: Option<bool>,
 }
 
 /// A partial preferences update (only the fields the user changed).
@@ -479,6 +486,57 @@ mod tests {
         assert!(patch.opacity.is_none());
         assert!(patch.language.is_none());
         assert!(patch.context_menu_hint_shown.is_none());
+        assert!(patch.fullscreen.is_none());
+    }
+
+    // --- Fullscreen preference (FS-FULL-009) ---
+
+    /// AppearancePrefs::default() must have fullscreen = false.
+    #[test]
+    fn fullscreen_field_defaults_to_false() {
+        let prefs = AppearancePrefs::default();
+        assert!(!prefs.fullscreen, "fullscreen must default to false");
+    }
+
+    /// fullscreen = true round-trips through JSON.
+    #[test]
+    fn fullscreen_round_trips_through_json() {
+        let mut prefs = Preferences::default();
+        prefs.appearance.fullscreen = true;
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        let restored: Preferences = serde_json::from_str(&json).expect("deserialize");
+        assert!(
+            restored.appearance.fullscreen,
+            "fullscreen must survive JSON round-trip"
+        );
+    }
+
+    /// Existing preferences JSON without the `fullscreen` field must deserialize
+    /// with `fullscreen = false` (backward-compatibility, FS-FULL-009).
+    #[test]
+    fn fullscreen_absent_from_json_defaults_to_false() {
+        let json = r#"{"appearance":{"fontSize":16.0}}"#;
+        let prefs: Preferences = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            !prefs.appearance.fullscreen,
+            "Missing fullscreen field must default to false"
+        );
+    }
+
+    /// AppearancePatch with fullscreen = Some(true) serializes the field correctly.
+    #[test]
+    fn appearance_patch_fullscreen_serializes_correctly() {
+        let patch = AppearancePatch {
+            fullscreen: Some(true),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&patch).expect("serialize");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("parse");
+        assert_eq!(
+            value.get("fullscreen").and_then(|v| v.as_bool()),
+            Some(true),
+            "fullscreen must serialize to true"
+        );
     }
 
     /// AppearancePatch with only language set serializes to a JSON object

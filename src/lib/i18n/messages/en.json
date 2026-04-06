@@ -146,6 +146,12 @@
   "connection_duplicate_label_suffix": "{label} (copy)",
   "connection_group_ungrouped": "Ungrouped",
 
+  "enter_fullscreen": "Enter full screen",
+  "exit_fullscreen": "Exit full screen",
+  "exit_fullscreen_tooltip": "Exit full screen (F11)",
+  "fullscreen_entered": "Full-screen mode enabled",
+  "fullscreen_exited": "Full-screen mode disabled",
+
   "scroll_to_bottom": "Go to bottom",
 
   "ssh_host_key_dialog_title_changed": "Host Key Changed — Possible Security Risk",

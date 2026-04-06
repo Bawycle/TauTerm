@@ -1248,11 +1248,11 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
-    background-color: var(--color-error-bg, #3a1a1a);
-    border: 1px solid var(--color-error-border, #7a2a2a);
+    background-color: var(--color-error-bg);
+    border: 1px solid var(--color-error-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-raised);
-    color: var(--color-error-fg, #f4a0a0);
+    color: var(--color-error-fg);
     font-size: var(--font-size-ui-sm);
     font-family: var(--font-ui);
     z-index: var(--z-overlay);

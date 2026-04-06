@@ -89,6 +89,9 @@ pub fn run() {
             #[cfg(feature = "e2e-testing")]
             app.manage(injectable_registry.clone());
 
+            #[cfg(feature = "e2e-testing")]
+            app.manage(Arc::new(crate::commands::testing::SshFailureRegistry::new()));
+
             let prefs_for_registry = app
                 .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
                 .inner()
@@ -171,6 +174,8 @@ pub fn run() {
             // E2E testing commands (compiled only with --features e2e-testing)
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_pty_output,
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_ssh_failure,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

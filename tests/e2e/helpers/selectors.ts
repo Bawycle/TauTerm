@@ -18,4 +18,10 @@ export const Selectors = {
   scrollArrowLeft: ".tab-bar__scroll-arrow--left",
   scrollArrowRight: ".tab-bar__scroll-arrow--right",
   newTabButton: ".tab-bar__new-tab",
+  // SSH connection manager
+  sshButton: ".terminal-view__ssh-btn",
+  connectionManager: ".connection-manager",
+  connectionOpenInNewTabBtn: ".connection-manager__action-btn",
+  connectionErrorBanner: ".terminal-view__connection-error",
+  connectionErrorCloseBtn: ".terminal-view__connection-error-close",
 } as const;

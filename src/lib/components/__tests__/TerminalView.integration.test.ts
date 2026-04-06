@@ -411,6 +411,13 @@ describe('TV-RISK-001: handleContextMenuHintDismiss syncs contextMenuHintShown',
 
 // ---------------------------------------------------------------------------
 // TV-RISK-002: handleConnectionOpen rolls back orphan tab when open_ssh_connection fails
+//
+// The complete rollback scenario (tab count unchanged + error banner visible +
+// banner dismissal) is covered by the E2E test:
+//   tests/e2e/ssh-connection-rollback.spec.ts  (TEST-SSH-ROLLBACK-001/002/003)
+//
+// These unit tests cover what can be verified at jsdom level: that the IPC mock
+// setup correctly models the failure path and that the close_tab call is made.
 // ---------------------------------------------------------------------------
 
 describe('TV-RISK-002: handleConnectionOpen rollback on open_ssh_connection failure', () => {

@@ -135,7 +135,9 @@ Semantic tokens are the layer components consume. They map to primitives and can
 | `--color-bell` | `#d48a20` | Bell event indicator |
 | `--color-error` | `#c44444` | Error state foreground |
 | `--color-error-bg` | `#3d1212` | Error state background |
-| `--color-error-text` | `#d97878` | Error text on error background |
+| `--color-error-fg` | `#d97878` | Error foreground text on `--color-error-bg` — 5.34:1 (WCAG AA text ✓) |
+| `--color-error-border` | `#c44444` | Error banner border — 3.73:1 on terminal bg, 3.29:1 on error bg (WCAG AA UI ✓) |
+| `--color-error-text` | `#d97878` | Alias for `--color-error-fg`; retained for backward compatibility |
 | `--color-warning` | `#d48a20` | Warning state foreground |
 | `--color-warning-bg` | `#4d3000` | Warning state background |
 | `--color-warning-text` | `#e8b060` | Warning text on warning background |

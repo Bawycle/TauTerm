@@ -95,7 +95,9 @@
   --color-bell: var(--color-amber-400); /* #d48a20 */
   --color-error: var(--color-red-400); /* #c44444 */
   --color-error-bg: var(--color-red-700); /* #3d1212 */
-  --color-error-text: var(--color-red-300); /* #d97878 */
+  --color-error-fg: var(--color-red-300); /* #d97878 — 5.34:1 on error-bg (WCAG AA text) */
+  --color-error-border: var(--color-red-400); /* #c44444 — 3.73:1 on terminal-bg (WCAG AA UI) */
+  --color-error-text: var(--color-red-300); /* #d97878 — alias kept for backward compat */
   --color-warning: var(--color-amber-400); /* #d48a20 */
   --color-warning-bg: var(--color-amber-700); /* #4d3000 */
   --color-warning-text: var(--color-amber-300); /* #e8b060 */

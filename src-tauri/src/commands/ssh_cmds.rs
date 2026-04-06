@@ -16,14 +16,14 @@ use crate::session::SessionRegistry;
 use crate::session::ids::{ConnectionId, PaneId};
 use crate::ssh::{Credentials, SshManager};
 
-#[tauri::command]
-pub async fn open_ssh_connection(
+/// Inner implementation — shared by both the production and e2e-testing variants.
+async fn open_ssh_connection_impl(
     pane_id: PaneId,
     connection_id: ConnectionId,
-    ssh_manager: State<'_, Arc<SshManager>>,
-    prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
-    registry: State<'_, Arc<SessionRegistry>>,
-    credential_manager: State<'_, Arc<CredentialManager>>,
+    ssh_manager: &Arc<SshManager>,
+    prefs: &Arc<RwLock<PreferencesStore>>,
+    registry: &Arc<SessionRegistry>,
+    credential_manager: &Arc<CredentialManager>,
     app: AppHandle,
 ) -> Result<(), TauTermError> {
     let config = {
@@ -79,10 +79,70 @@ pub async fn open_ssh_connection(
             vt,
             cols,
             rows,
-            Arc::clone(&*registry),
+            Arc::clone(registry),
         )
         .await
         .map_err(TauTermError::from)
+}
+
+/// Production variant — registered when `e2e-testing` feature is NOT active.
+#[cfg(not(feature = "e2e-testing"))]
+#[tauri::command]
+pub async fn open_ssh_connection(
+    pane_id: PaneId,
+    connection_id: ConnectionId,
+    ssh_manager: State<'_, Arc<SshManager>>,
+    prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
+    registry: State<'_, Arc<SessionRegistry>>,
+    credential_manager: State<'_, Arc<CredentialManager>>,
+    app: AppHandle,
+) -> Result<(), TauTermError> {
+    open_ssh_connection_impl(
+        pane_id,
+        connection_id,
+        &ssh_manager,
+        &prefs,
+        &registry,
+        &credential_manager,
+        app,
+    )
+    .await
+}
+
+/// E2E testing variant — registered when `e2e-testing` feature IS active.
+///
+/// Checks the `SshFailureRegistry` before proceeding; if the pane was armed
+/// with `inject_ssh_failure`, returns a synthetic error immediately so E2E
+/// tests can assert the rollback path without needing a real SSH server.
+#[cfg(feature = "e2e-testing")]
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn open_ssh_connection(
+    pane_id: PaneId,
+    connection_id: ConnectionId,
+    ssh_manager: State<'_, Arc<SshManager>>,
+    prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
+    registry: State<'_, Arc<SessionRegistry>>,
+    credential_manager: State<'_, Arc<CredentialManager>>,
+    app: AppHandle,
+    failure_registry: State<'_, Arc<crate::commands::testing::SshFailureRegistry>>,
+) -> Result<(), TauTermError> {
+    if failure_registry.consume() {
+        return Err(TauTermError::new(
+            "E2E_INJECTED_FAILURE",
+            "Synthetic SSH failure injected by E2E test.",
+        ));
+    }
+    open_ssh_connection_impl(
+        pane_id,
+        connection_id,
+        &ssh_manager,
+        &prefs,
+        &registry,
+        &credential_manager,
+        app,
+    )
+    .await
 }
 
 #[tauri::command]

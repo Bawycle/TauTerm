@@ -90,6 +90,7 @@ pub trait PtySession: Send + Sync {
     fn injectable_sender(&self) -> Option<tokio::sync::mpsc::UnboundedSender<Vec<u8>>> {
         None
     }
+
 }
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@
 //! This isolates the validation layer from actual PTY I/O (which is a stub).
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod security_load {
     use std::time::Duration;
 

@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn fs_search_001_literal_case_insensitive_finds_match() {
-        let lines = vec![hard(make_row("Hello World", 20))];
+        let lines = [hard(make_row("Hello World", 20))];
         let query = SearchQuery {
             text: "hello".to_string(),
             case_sensitive: false,
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn fs_search_003_regex_finds_match() {
-        let lines = vec![hard(make_row("error: file not found", 30))];
+        let lines = [hard(make_row("error: file not found", 30))];
         let query = SearchQuery {
             text: r"error:\s+\w+".to_string(),
             case_sensitive: false,
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn fs_search_invalid_regex_returns_empty() {
-        let lines = vec![hard(make_row("test", 10))];
+        let lines = [hard(make_row("test", 10))];
         let query = SearchQuery {
             text: "[invalid(regex".to_string(),
             case_sensitive: false,
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn fs_search_empty_query_returns_empty() {
-        let lines = vec![hard(make_row("hello", 10))];
+        let lines = [hard(make_row("hello", 10))];
         let query = SearchQuery {
             text: String::new(),
             case_sensitive: false,
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn fs_search_multiple_matches_on_same_row() {
-        let lines = vec![hard(make_row("aabaa", 10))];
+        let lines = [hard(make_row("aabaa", 10))];
         let query = SearchQuery {
             text: "a".to_string(),
             case_sensitive: true,
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn fs_search_case_sensitive_no_match() {
-        let lines = vec![hard(make_row("Hello", 10))];
+        let lines = [hard(make_row("Hello", 10))];
         let query = SearchQuery {
             text: "hello".to_string(),
             case_sensitive: true,
@@ -442,7 +442,7 @@ mod tests {
     #[test]
     fn search_literal_regex_special_chars_treated_as_literal() {
         // Row contains the literal string "foo.*bar"
-        let lines = vec![hard(make_row("foo.*bar  ", 10))];
+        let lines = [hard(make_row("foo.*bar  ", 10))];
         let query = SearchQuery {
             text: "foo.*bar".to_string(),
             case_sensitive: true,
@@ -463,7 +463,7 @@ mod tests {
     /// SEARCH-LITERAL-002: regex metacharacter '(' as literal does not panic.
     #[test]
     fn search_literal_open_paren_does_not_panic() {
-        let lines = vec![hard(make_row("func(arg) rest", 20))];
+        let lines = [hard(make_row("func(arg) rest", 20))];
         let query = SearchQuery {
             text: "func(arg)".to_string(),
             case_sensitive: true,
@@ -489,7 +489,7 @@ mod tests {
     #[test]
     fn search_soft_wrap_word_spanning_two_rows_is_found() {
         // row0 is soft-wrapped (continues into row1); row1 is a hard newline.
-        let lines = vec![soft(make_row("hello", 5)), hard(make_row("world", 5))];
+        let lines = [soft(make_row("hello", 5)), hard(make_row("world", 5))];
 
         let query = SearchQuery {
             text: "helloworld".to_string(),
@@ -515,7 +515,7 @@ mod tests {
     /// Query: "abcdefghijkl" → one match starting on row 0.
     #[test]
     fn search_soft_wrap_word_spanning_three_rows_is_found() {
-        let lines = vec![
+        let lines = [
             soft(make_row("abcd", 4)),
             soft(make_row("efgh", 4)),
             hard(make_row("ijkl", 4)),
@@ -545,7 +545,7 @@ mod tests {
     /// Query: "bb" → spans col 2 of row0 and col 0 of row1.
     #[test]
     fn search_soft_wrap_boundary_chars_found() {
-        let lines = vec![soft(make_row("aab", 3)), hard(make_row("bcc", 3))];
+        let lines = [soft(make_row("aab", 3)), hard(make_row("bcc", 3))];
 
         let query = SearchQuery {
             text: "bb".to_string(),
@@ -625,7 +625,7 @@ mod tests {
     #[test]
     fn search_hard_newline_rows_are_not_joined() {
         // "hello" ends with a hard newline, so "world" is on a new logical line.
-        let lines = vec![hard(make_row("hello", 5)), hard(make_row("world", 5))];
+        let lines = [hard(make_row("hello", 5)), hard(make_row("world", 5))];
 
         let query = SearchQuery {
             text: "helloworld".to_string(),

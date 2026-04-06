@@ -34,15 +34,10 @@
 
 ### Rust — violations CLAUDE.md actives
 
-- [ ] **3× `unwrap()` sur `get_mut()`** dans `src-tauri/src/session/registry.rs:325,451,603`
-  - Remplacer par `ok_or_else(|| SessionError::TabNotFound(...))` — risque de panic backend en production
 - [ ] **`closed_tab_id` absent du payload `SessionStateChangedEvent`** — `src-tauri/src/events/types.rs`
   - Ajouter `closed_tab_id: Option<TabId>` dans la variante `TabClosed` côté Rust
   - Supprimer l'heuristique de fallback dans `TerminalView.svelte` (lignes 311–316)
   - Violation directe règle IPC events CLAUDE.md
-- [ ] **Downcast `unsafe` via raw pointer** dans `src-tauri/src/platform/pty_linux.rs` (bloc test)
-  - `Box::into_raw` + `Box::from_raw(raw as *mut LinuxPtySession)` — violation CLAUDE.md
-  - Ajouter une méthode accesseur au trait `PtySession` (ou `as_any()`) pour éliminer le cast
 
 ### UX/UI — accessibilité et tokens
 
@@ -56,12 +51,6 @@
 - [ ] **Mettre en place le pipeline CI GitHub Actions**
   - Jobs minimum : `cargo clippy -- -D warnings`, `cargo nextest run`, `pnpm check`, `pnpm vitest run`
   - Déclencheur : push sur `dev` et `main`, PR vers `main`
-- [ ] **Tests d'intégration sur les command handlers IPC**
-  - `session_cmds.rs`, `preferences_cmds.rs`, `ssh_cmds.rs`, `ssh_prompt_cmds.rs`
-  - Couvrir au minimum : validation des inputs (IDs malformés, champs manquants), chemins d'erreur
-- [ ] **Tests d'intégration sur la concurrence async**
-  - `session/pty_task.rs`, `session/ssh_task.rs`, `session/resize.rs`
-  - Cas nominaux + cas d'erreur (PTY mort, SSH drop, resize rapide)
 
 ---
 

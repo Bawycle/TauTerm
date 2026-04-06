@@ -322,7 +322,10 @@ impl SessionRegistry {
             .map(|(id, _)| id.clone())
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
 
-        let entry = inner.tabs.get_mut(&tab_id).unwrap();
+        let entry = inner
+            .tabs
+            .get_mut(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
 
         // Determine dimensions from the existing pane's VtProcessor.
         let (cols, rows) = {
@@ -448,7 +451,10 @@ impl SessionRegistry {
             .map(|(id, _)| id.clone())
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
 
-        let entry = inner.tabs.get_mut(&tab_id).unwrap();
+        let entry = inner
+            .tabs
+            .get_mut(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
         // Dropping the PaneSession also drops the PtyTaskHandle, which aborts the read task.
         entry.panes.remove(&pane_id);
 
@@ -600,7 +606,10 @@ impl SessionRegistry {
         inner.active_tab_id = Some(tab_id.clone());
 
         // Update the tab's active_pane_id.
-        let entry = inner.tabs.get_mut(&tab_id).unwrap();
+        let entry = inner
+            .tabs
+            .get_mut(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
         entry.state.active_pane_id = pane_id;
 
         Ok(entry.state.clone())
@@ -883,6 +892,42 @@ fn update_pane_title_in_tree(node: &mut PaneNode, target_id: &PaneId, title: &st
     }
 }
 
+/// Remove the leaf for `target_id`, collapsing its sibling upward.
+fn remove_pane_from_tree(node: PaneNode, target_id: &PaneId) -> PaneNode {
+    match node {
+        PaneNode::Leaf { ref pane_id, .. } if pane_id == target_id => {
+            // Caller ensures there is at least one other pane — this case
+            // should not be reached at the top level.
+            node
+        }
+        PaneNode::Leaf { .. } => node,
+        PaneNode::Split {
+            direction,
+            ratio,
+            first,
+            second,
+        } => {
+            let first_ids = first.pane_ids();
+            let second_ids = second.pane_ids();
+
+            if first_ids.contains(target_id) && first_ids.len() == 1 {
+                // First child is the sole target — collapse to second.
+                *second
+            } else if second_ids.contains(target_id) && second_ids.len() == 1 {
+                // Second child is the sole target — collapse to first.
+                *first
+            } else {
+                PaneNode::Split {
+                    direction,
+                    ratio,
+                    first: Box::new(remove_pane_from_tree(*first, target_id)),
+                    second: Box::new(remove_pane_from_tree(*second, target_id)),
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -958,41 +1003,5 @@ mod tests {
         let json = serde_json::to_string(&config).expect("serialize failed");
         let restored: CreateTabConfig = serde_json::from_str(&json).expect("deserialize failed");
         assert!(restored.login, "login:true must survive serde round-trip");
-    }
-}
-
-/// Remove the leaf for `target_id`, collapsing its sibling upward.
-fn remove_pane_from_tree(node: PaneNode, target_id: &PaneId) -> PaneNode {
-    match node {
-        PaneNode::Leaf { ref pane_id, .. } if pane_id == target_id => {
-            // Caller ensures there is at least one other pane — this case
-            // should not be reached at the top level.
-            node
-        }
-        PaneNode::Leaf { .. } => node,
-        PaneNode::Split {
-            direction,
-            ratio,
-            first,
-            second,
-        } => {
-            let first_ids = first.pane_ids();
-            let second_ids = second.pane_ids();
-
-            if first_ids.contains(target_id) && first_ids.len() == 1 {
-                // First child is the sole target — collapse to second.
-                *second
-            } else if second_ids.contains(target_id) && second_ids.len() == 1 {
-                // Second child is the sole target — collapse to first.
-                *first
-            } else {
-                PaneNode::Split {
-                    direction,
-                    ratio,
-                    first: Box::new(remove_pane_from_tree(*first, target_id)),
-                    second: Box::new(remove_pane_from_tree(*second, target_id)),
-                }
-            }
-        }
     }
 }

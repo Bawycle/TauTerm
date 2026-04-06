@@ -397,11 +397,11 @@ fn sec_sprint_008_50_nested_splits_no_stack_overflow() {
     let mut node = make_leaf(leaves[0].clone());
 
     // Wrap it 50 times: each iteration adds one Split level.
-    for i in 1..=50 {
+    for leaf_id in leaves.iter().skip(1) {
         node = make_split(
             SplitDirection::Horizontal,
             node,
-            make_leaf(leaves[i].clone()),
+            make_leaf(leaf_id.clone()),
         );
     }
 

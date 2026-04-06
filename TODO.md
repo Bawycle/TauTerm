@@ -22,16 +22,6 @@
 
 ## P0 — Bloquants release
 
-### VT Parser — séquences manquantes
-
-- [ ] **ICH / DCH / IL / DL / ESC M** — vim/neovim cassé en édition
-  - `CSI @ Ps` (ICH — insert N chars), `CSI P Ps` (DCH — delete N chars)
-  - `CSI L Ps` (IL — insert N lines), `CSI M Ps` (DL — delete N lines)
-  - `ESC M` (RI — Reverse Index : scroll inverse, utilisé par vim `<C-y>` et less)
-  - Tester avec `vim --noplugin` : insertion en mode `i` ne doit pas produire d'artefacts
-- [ ] **DECAWM (mode `?7`)** — tmux et htop désactivent le wrap auto, TauTerm l'ignore
-  - Ajouter `decawm: bool` dans `ModeState`, appliquer dans `write_char`
-
 ### Rust — violations CLAUDE.md actives
 
 - [ ] **3× `unwrap()` sur `get_mut()`** dans `src-tauri/src/session/registry.rs:325,451,603`

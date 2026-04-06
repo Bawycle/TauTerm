@@ -923,4 +923,295 @@ mod tests {
             "second call to take_osc52_write must return None (payload already drained)"
         );
     }
+
+    // ---------------------------------------------------------------------------
+    // ICH — CSI Ps @ — Insert Character (ECMA-48 §8.3.64)
+    // ---------------------------------------------------------------------------
+
+    /// ICH basic: insert 1 blank at col 2, existing chars shift right.
+    /// "ABCDE" at cols 0-4 → after CSI 1 @ at col 2 → "AB CDE" (E pushed off if line is 5 cols)
+    #[test]
+    fn ich_inserts_blank_and_shifts_right() {
+        let mut vt = make_vt(10, 5);
+        // Write "ABCDE" then move cursor back to col 2.
+        vt.process(b"ABCDE\x1b[1;3H"); // CUP row=1,col=3 → (row=0, col=2)
+        vt.process(b"\x1b[1@"); // ICH 1
+        assert_eq!(grapheme_at(&vt, 0, 0), "A");
+        assert_eq!(grapheme_at(&vt, 0, 1), "B");
+        assert_eq!(grapheme_at(&vt, 0, 2), " "); // blank inserted
+        assert_eq!(grapheme_at(&vt, 0, 3), "C");
+        assert_eq!(grapheme_at(&vt, 0, 4), "D");
+        // E is at col 5 — shifted but not lost because line is 10 wide.
+        assert_eq!(grapheme_at(&vt, 0, 5), "E");
+    }
+
+    /// ICH with N > remaining cols: remaining cells are blanked, nothing wraps.
+    #[test]
+    fn ich_clamps_to_line_end() {
+        let mut vt = make_vt(5, 5);
+        // "ABCDE", cursor at col 1.
+        vt.process(b"ABCDE\x1b[1;2H");
+        vt.process(b"\x1b[10@"); // ICH 10 — more than remaining cols
+        assert_eq!(grapheme_at(&vt, 0, 0), "A");
+        // cols 1-4 should all be blank.
+        for col in 1..5 {
+            assert_eq!(
+                grapheme_at(&vt, 0, col),
+                " ",
+                "col {col} should be blank after ICH overcount"
+            );
+        }
+    }
+
+    /// ICH with N=0 is treated as N=1 (ECMA-48: default is 1).
+    #[test]
+    fn ich_n0_treated_as_1() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ABCDE\x1b[1;1H"); // cursor at col 0
+        vt.process(b"\x1b[@"); // ICH with no param → default 1
+        assert_eq!(grapheme_at(&vt, 0, 0), " "); // blank at col 0
+        assert_eq!(grapheme_at(&vt, 0, 1), "A"); // A shifted right
+    }
+
+    // ---------------------------------------------------------------------------
+    // DCH — CSI Ps P — Delete Character (ECMA-48 §8.3.26)
+    // ---------------------------------------------------------------------------
+
+    /// DCH basic: delete 1 char at col 2, chars to the right shift left.
+    #[test]
+    fn dch_deletes_and_shifts_left() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ABCDE\x1b[1;3H"); // cursor at col 2
+        vt.process(b"\x1b[1P"); // DCH 1
+        assert_eq!(grapheme_at(&vt, 0, 0), "A");
+        assert_eq!(grapheme_at(&vt, 0, 1), "B");
+        assert_eq!(grapheme_at(&vt, 0, 2), "D"); // C deleted, D shifted left
+        assert_eq!(grapheme_at(&vt, 0, 3), "E");
+        assert_eq!(grapheme_at(&vt, 0, 4), " "); // trailing blank
+    }
+
+    /// DCH with N > remaining: all remaining cols become blank.
+    #[test]
+    fn dch_clamps_to_line_end() {
+        let mut vt = make_vt(5, 5);
+        vt.process(b"ABCDE\x1b[1;3H"); // cursor at col 2
+        vt.process(b"\x1b[10P"); // DCH 10 — more than remaining
+        assert_eq!(grapheme_at(&vt, 0, 0), "A");
+        assert_eq!(grapheme_at(&vt, 0, 1), "B");
+        for col in 2..5 {
+            assert_eq!(
+                grapheme_at(&vt, 0, col),
+                " ",
+                "col {col} should be blank after DCH overcount"
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // IL — CSI Ps L — Insert Line (ECMA-48 / xterm)
+    // ---------------------------------------------------------------------------
+
+    /// IL basic: insert 1 blank line at cursor row; lines below shift down.
+    /// Last line in scroll region is lost.
+    #[test]
+    fn il_inserts_blank_line_and_shifts_down() {
+        let mut vt = make_vt(10, 5);
+        // Fill rows 0-2 with distinguishable content.
+        vt.process(b"ROW0\r\nROW1\r\nROW2\r\nROW3\r\nROW4");
+        // Move cursor to row 1.
+        vt.process(b"\x1b[2;1H"); // CUP row=2 (1-based) → row=1 (0-based)
+        vt.process(b"\x1b[1L"); // IL 1
+        // Row 1 is now blank.
+        let row1_text: String = (0..10).map(|c| grapheme_at(&vt, 1, c)).collect();
+        assert!(
+            row1_text.trim().is_empty(),
+            "row 1 should be blank after IL, got: {row1_text:?}"
+        );
+        // Row 0 is unchanged.
+        assert_eq!(grapheme_at(&vt, 0, 0), "R");
+        assert_eq!(grapheme_at(&vt, 0, 1), "O");
+        // Original row 1 content is now at row 2.
+        assert_eq!(grapheme_at(&vt, 2, 0), "R");
+        assert_eq!(grapheme_at(&vt, 2, 3), "1");
+    }
+
+    /// IL within a scroll region: lines below bottom of region are unaffected.
+    #[test]
+    fn il_respects_scroll_region() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ROW0\r\nROW1\r\nROW2\r\nROW3\r\nROW4");
+        // Set scroll region rows 1-3 (1-based).
+        vt.process(b"\x1b[2;4r"); // DECSTBM top=2,bottom=4 → 0-based (1,3)
+        // Move cursor to row 1 (0-based), which is inside the region.
+        vt.process(b"\x1b[2;1H");
+        vt.process(b"\x1b[1L"); // IL 1
+        // Row 4 (0-based) is outside the region — must be unchanged.
+        assert_eq!(grapheme_at(&vt, 4, 0), "R");
+        assert_eq!(grapheme_at(&vt, 4, 3), "4");
+    }
+
+    // ---------------------------------------------------------------------------
+    // DL — CSI Ps M — Delete Line (ECMA-48 / xterm)
+    // ---------------------------------------------------------------------------
+
+    /// DL basic: delete 1 line at cursor row; lines below shift up.
+    #[test]
+    fn dl_deletes_line_and_shifts_up() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ROW0\r\nROW1\r\nROW2\r\nROW3\r\nROW4");
+        // Move cursor to row 1.
+        vt.process(b"\x1b[2;1H");
+        vt.process(b"\x1b[1M"); // DL 1
+        // Row 1 should now contain what was row 2.
+        assert_eq!(grapheme_at(&vt, 1, 0), "R");
+        assert_eq!(grapheme_at(&vt, 1, 3), "2");
+        // Row 4 (last) should now be blank.
+        let row4_text: String = (0..10).map(|c| grapheme_at(&vt, 4, c)).collect();
+        assert!(
+            row4_text.trim().is_empty(),
+            "last row should be blank after DL, got: {row4_text:?}"
+        );
+    }
+
+    /// DL respects the bottom of scroll region.
+    #[test]
+    fn dl_respects_scroll_region() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ROW0\r\nROW1\r\nROW2\r\nROW3\r\nROW4");
+        // Scroll region rows 1-3 (1-based).
+        vt.process(b"\x1b[2;4r");
+        vt.process(b"\x1b[2;1H");
+        vt.process(b"\x1b[1M");
+        // Row 4 (outside region) must be unchanged.
+        assert_eq!(grapheme_at(&vt, 4, 0), "R");
+        assert_eq!(grapheme_at(&vt, 4, 3), "4");
+    }
+
+    // ---------------------------------------------------------------------------
+    // RI — ESC M — Reverse Index
+    // ---------------------------------------------------------------------------
+
+    /// RI when cursor is NOT at the top of scroll region: cursor moves up one row.
+    #[test]
+    fn ri_moves_cursor_up_when_not_at_top() {
+        let mut vt = make_vt(10, 5);
+        // Move cursor to row 2.
+        vt.process(b"\x1b[3;1H");
+        vt.process(b"\x1bM"); // RI
+        assert_eq!(
+            vt.active_cursor().row,
+            1,
+            "RI should move cursor up one row"
+        );
+    }
+
+    /// RI when cursor is AT the top of scroll region: scrolls down (inserts blank at top).
+    #[test]
+    fn ri_scrolls_down_when_at_scroll_top() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ROW0\r\nROW1\r\nROW2\r\nROW3\r\nROW4");
+        // Cursor at row 0 (top of default scroll region).
+        vt.process(b"\x1b[1;1H");
+        vt.process(b"\x1bM"); // RI
+        // Row 0 should now be blank (new blank line inserted at top).
+        let row0_text: String = (0..10).map(|c| grapheme_at(&vt, 0, c)).collect();
+        assert!(
+            row0_text.trim().is_empty(),
+            "row 0 should be blank after RI at top of scroll region, got: {row0_text:?}"
+        );
+        // Original row 0 should now be at row 1.
+        assert_eq!(grapheme_at(&vt, 1, 0), "R");
+        assert_eq!(grapheme_at(&vt, 1, 3), "0");
+        // Cursor should remain at row 0.
+        assert_eq!(vt.active_cursor().row, 0);
+    }
+
+    /// RI at top of a non-default scroll region scrolls within that region.
+    #[test]
+    fn ri_at_top_of_partial_scroll_region() {
+        let mut vt = make_vt(10, 5);
+        vt.process(b"ROW0\r\nROW1\r\nROW2\r\nROW3\r\nROW4");
+        // Scroll region rows 2-4 (1-based) → 0-based (1,3).
+        vt.process(b"\x1b[2;4r");
+        // Move cursor to row 1 (0-based) = top of scroll region.
+        vt.process(b"\x1b[2;1H");
+        vt.process(b"\x1bM"); // RI
+        // Row 1 should be blank (inserted).
+        let row1_text: String = (0..10).map(|c| grapheme_at(&vt, 1, c)).collect();
+        assert!(
+            row1_text.trim().is_empty(),
+            "row 1 (top of partial scroll region) should be blank after RI, got: {row1_text:?}"
+        );
+        // Row 0 must be unchanged (outside scroll region).
+        assert_eq!(grapheme_at(&vt, 0, 0), "R");
+        assert_eq!(grapheme_at(&vt, 0, 3), "0");
+    }
+
+    // ---------------------------------------------------------------------------
+    // DECAWM — DEC Auto Wrap Mode (mode ?7)
+    // ---------------------------------------------------------------------------
+
+    /// DECAWM enabled (default): character at last column triggers auto-wrap.
+    #[test]
+    fn decawm_on_wraps_at_right_margin() {
+        let mut vt = make_vt(5, 5);
+        // Write 6 chars — the 6th should wrap to row 1 col 0.
+        vt.process(b"ABCDEF");
+        // Row 0: ABCDE, row 1: F
+        assert_eq!(grapheme_at(&vt, 0, 0), "A");
+        assert_eq!(grapheme_at(&vt, 0, 4), "E");
+        assert_eq!(grapheme_at(&vt, 1, 0), "F");
+    }
+
+    /// DECAWM disabled (?7l): characters at or beyond the last column overwrite
+    /// the last column, cursor stays at last column.
+    #[test]
+    fn decawm_off_does_not_wrap() {
+        let mut vt = make_vt(5, 5);
+        vt.process(b"\x1b[?7l"); // DECAWM off
+        // Write 7 chars — cols 0-4 fill normally, then chars 6 and 7 overwrite col 4.
+        vt.process(b"ABCDEFG");
+        // All chars should be on row 0; no wrap to row 1.
+        assert_eq!(grapheme_at(&vt, 0, 0), "A");
+        assert_eq!(grapheme_at(&vt, 0, 1), "B");
+        assert_eq!(grapheme_at(&vt, 0, 2), "C");
+        assert_eq!(grapheme_at(&vt, 0, 3), "D");
+        // The last 3 chars (E, F, G) all land on col 4 — G is the final value.
+        assert_eq!(grapheme_at(&vt, 0, 4), "G");
+        // Row 1 must remain blank.
+        let row1_text: String = (0..5).map(|c| grapheme_at(&vt, 1, c)).collect();
+        assert!(
+            row1_text.trim().is_empty(),
+            "row 1 should be empty when DECAWM is off, got: {row1_text:?}"
+        );
+    }
+
+    /// DECAWM can be re-enabled with ?7h after being disabled.
+    #[test]
+    fn decawm_can_be_reenabled() {
+        let mut vt = make_vt(5, 5);
+        vt.process(b"\x1b[?7l"); // disable
+        vt.process(b"\x1b[?7h"); // re-enable
+        vt.process(b"ABCDEF");
+        // F should wrap to row 1.
+        assert_eq!(grapheme_at(&vt, 1, 0), "F");
+    }
+
+    /// DECAWM off: cursor is clamped to last column, not one past it.
+    #[test]
+    fn decawm_off_cursor_stays_at_last_col() {
+        let mut vt = make_vt(5, 5);
+        vt.process(b"\x1b[?7l");
+        vt.process(b"ABCDE"); // fill the line exactly
+        // Cursor should be at col 4 (last column), not col 5 or wrap_pending.
+        assert_eq!(
+            vt.active_cursor().col,
+            4,
+            "cursor should be at last col after filling line with DECAWM off"
+        );
+        assert!(
+            !vt.wrap_pending,
+            "wrap_pending must be false when DECAWM is off"
+        );
+    }
 }

@@ -33,6 +33,11 @@ pub struct ModeState {
     /// DECSET 2004: bracketed paste mode.
     pub bracketed_paste: bool,
 
+    /// DECAWM (mode 7): auto-wrap mode.
+    /// When `true` (default), the cursor wraps to the next line when it reaches
+    /// the last column. When `false`, subsequent characters overwrite the last column.
+    pub decawm: bool,
+
     /// DECTCEM (mode 25): cursor visible.
     pub cursor_visible: bool,
 
@@ -60,6 +65,7 @@ impl ModeState {
             mouse_encoding: MouseEncoding::X10,
             focus_events: false,
             bracketed_paste: false,
+            decawm: true,
             cursor_visible: true,
             scroll_region: (0, rows.saturating_sub(1)),
             charset_slot: CharsetSlot::G0,

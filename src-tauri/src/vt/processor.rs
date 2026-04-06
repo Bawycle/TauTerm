@@ -331,8 +331,9 @@ impl VtProcessor {
 
         // DEC "delayed wrap": if the previous character set wrap_pending, apply
         // the implicit LF+CR now before writing the new character.
+        // DECAWM (mode ?7) controls whether delayed-wrap is active at all.
         let (mut row, mut col) = (row, col);
-        if self.wrap_pending {
+        if self.wrap_pending && self.modes.decawm {
             self.wrap_pending = false;
             let (top, bottom) = self.modes.scroll_region;
             let is_full = top == 0 && bottom == self.rows - 1;
@@ -367,9 +368,12 @@ impl VtProcessor {
         let advance = char_width as u16;
         let new_col = col + advance;
         if new_col >= cols {
-            // Cursor has reached the last column: set pending wrap.
-            // The actual line wrap occurs when the next printable character arrives.
-            self.wrap_pending = true;
+            if self.modes.decawm {
+                // DECAWM on: set the delayed-wrap flag.
+                // The actual line wrap occurs when the next printable character arrives.
+                self.wrap_pending = true;
+            }
+            // In both cases (DECAWM on or off), cursor stays at the last column.
             self.active_cursor_mut().col = cols - 1;
         } else {
             self.active_cursor_mut().col = new_col;

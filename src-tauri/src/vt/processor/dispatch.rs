@@ -274,6 +274,7 @@ impl Perform for VtPerformBridge<'_> {
                     let prev_bracketed_paste = p.modes.bracketed_paste;
                     match mode {
                         1 => p.modes.decckm = true,
+                        7 => p.modes.decawm = true,
                         9 => p.modes.mouse_reporting = MouseReportingMode::X10,
                         25 => p.modes.cursor_visible = true,
                         47 => p.enter_alternate(false),
@@ -309,6 +310,11 @@ impl Perform for VtPerformBridge<'_> {
                     let prev_bracketed_paste = p.modes.bracketed_paste;
                     match mode {
                         1 => p.modes.decckm = false,
+                        7 => {
+                            p.modes.decawm = false;
+                            // Disabling DECAWM cancels any pending wrap immediately.
+                            p.wrap_pending = false;
+                        }
                         9 | 1000 | 1002 | 1003 => {
                             p.modes.mouse_reporting = MouseReportingMode::None
                         }
@@ -350,6 +356,50 @@ impl Perform for VtPerformBridge<'_> {
                 };
                 if let Some(pos) = restored {
                     *p.active_cursor_mut() = pos;
+                }
+            }
+            // ICH — CSI Ps @ — Insert Character (ECMA-48 §8.3.64).
+            // Inserts Ps blank cells at the cursor position; cells to the right shift right.
+            // Cells shifted beyond the right margin are discarded. Default Ps = 1.
+            ([], '@') => {
+                let n = param0.max(1);
+                let row = p.cursor_row();
+                let col = p.cursor_col();
+                p.active_buf_mut().insert_cells(row, col, n);
+            }
+            // DCH — CSI Ps P — Delete Character (ECMA-48 §8.3.26).
+            // Deletes Ps cells starting at the cursor; remaining cells shift left.
+            // The right end of the line is filled with blanks. Default Ps = 1.
+            ([], 'P') => {
+                let n = param0.max(1);
+                let row = p.cursor_row();
+                let col = p.cursor_col();
+                p.active_buf_mut().delete_cells(row, col, n);
+            }
+            // IL — CSI Ps L — Insert Line.
+            // Inserts Ps blank lines at the cursor row; lines within the scroll
+            // region below shift down. Lines pushed below the scroll region bottom
+            // are discarded. Default Ps = 1.
+            ([], 'L') => {
+                let n = param0.max(1);
+                let row = p.cursor_row();
+                let (top, bottom) = p.modes.scroll_region;
+                // Cursor must be within the scroll region; otherwise ignore.
+                if row >= top && row <= bottom {
+                    p.active_buf_mut().scroll_down(row, bottom, n);
+                }
+            }
+            // DL — CSI Ps M — Delete Line.
+            // Deletes Ps lines at the cursor row; lines within the scroll region
+            // below shift up. Blank lines are inserted at the bottom. Default Ps = 1.
+            ([], 'M') => {
+                let n = param0.max(1);
+                let row = p.cursor_row();
+                let (top, bottom) = p.modes.scroll_region;
+                // Cursor must be within the scroll region; otherwise ignore.
+                if row >= top && row <= bottom {
+                    let is_full = top == 0 && bottom == p.rows - 1;
+                    p.active_buf_mut().scroll_up(row, bottom, n, is_full, false);
                 }
             }
             // CSI Ps S — scroll up Ps lines (default 1) within the scroll region (FS-VT-052).
@@ -401,6 +451,18 @@ impl Perform for VtPerformBridge<'_> {
                 };
                 if let Some(pos) = restored {
                     *p.active_cursor_mut() = pos;
+                }
+            }
+            // RI — Reverse Index (ESC M).
+            // If the cursor is at the top of the scroll region, scroll the region down
+            // by one line (insert a blank line at the top). Otherwise move cursor up one row.
+            ([], b'M') => {
+                let row = p.cursor_row();
+                let (top, bottom) = p.modes.scroll_region;
+                if row == top {
+                    p.active_buf_mut().scroll_down(top, bottom, 1);
+                } else {
+                    p.active_cursor_mut().row = row.saturating_sub(1);
                 }
             }
             // DECKPAM — application keypad mode (ESC =)

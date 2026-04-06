@@ -259,6 +259,56 @@ impl ScreenBuffer {
         }
     }
 
+    /// Insert `count` blank cells at `(row, col)`, shifting existing cells right.
+    /// Cells that would extend beyond the line are discarded (no wrap to next row).
+    /// Conforms to ECMA-48 §8.3.64 (ICH).
+    pub fn insert_cells(&mut self, row: u16, col: u16, count: u16) {
+        if let Some(r) = self.cells.get_mut(row as usize) {
+            let col = col as usize;
+            let count = count as usize;
+            let len = r.len();
+            if col >= len {
+                return; // cursor is beyond the line — no-op
+            }
+            // Shift cells [col .. len-count) to the right by `count` positions.
+            // Cells that overflow the right margin are discarded.
+            let shift = count.min(len - col);
+            // Move cells rightward by shifting from right to left.
+            let src_end = len - shift; // last source index (exclusive)
+            for i in (col..src_end).rev() {
+                r[i + shift] = r[i].clone();
+            }
+            // Fill the vacated cells with blank defaults.
+            for cell in r[col..col + shift].iter_mut() {
+                *cell = Cell::default();
+            }
+            self.dirty.mark_row(row);
+        }
+    }
+
+    /// Delete `count` cells at `(row, col)`, shifting remaining cells left.
+    /// Cells from the right fill with blanks. Conforms to ECMA-48 §8.3.26 (DCH).
+    pub fn delete_cells(&mut self, row: u16, col: u16, count: u16) {
+        if let Some(r) = self.cells.get_mut(row as usize) {
+            let col = col as usize;
+            let count = count as usize;
+            let len = r.len();
+            if col >= len {
+                return;
+            }
+            let shift = count.min(len - col);
+            // Move cells leftward.
+            for i in col..len - shift {
+                r[i] = r[i + shift].clone();
+            }
+            // Fill the vacated cells at the right with blanks.
+            for cell in r[len - shift..len].iter_mut() {
+                *cell = Cell::default();
+            }
+            self.dirty.mark_row(row);
+        }
+    }
+
     /// Scroll down by `count` lines within `[top, bottom]`.
     pub fn scroll_down(&mut self, top: u16, bottom: u16, count: u16) {
         if self.cells.is_empty() || top >= bottom {

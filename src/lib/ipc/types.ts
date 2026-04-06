@@ -383,6 +383,11 @@ export interface CreateTabConfig {
   cols: number;
   /** Initial terminal height in rows. */
   rows: number;
+  /**
+   * Whether to launch a login shell (FS-PTY-013).
+   * Pass `true` for the first tab so ~/.bash_profile / ~/.zprofile are sourced.
+   */
+  login?: boolean;
 }
 
 /**

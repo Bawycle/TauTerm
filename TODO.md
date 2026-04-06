@@ -49,10 +49,11 @@
 
 ### Architecture frontend
 
-- [ ] **Décomposer `TerminalView.svelte` (1315L) et `TerminalPane.svelte` (1438L)**
-  - Extraire les stores manquants : `state/session.svelte.ts`, `state/ssh.svelte.ts`, `state/notifications.svelte.ts`, `state/preferences.svelte.ts`, `state/scroll.svelte.ts`
-  - Créer les wrappers IPC : `ipc/commands.ts`, `ipc/events.ts`, `ipc/errors.ts`
-  - Cible : aucun composant > 250L de logique réactive (spec `docs/arch/05-frontend.md §11.2`)
+- [x] **Décomposer `TerminalView.svelte` (1315L) et `TerminalPane.svelte` (1438L)**
+  - Stores créés : `state/session.svelte.ts`, `state/ssh.svelte.ts`, `state/notifications.svelte.ts`, `state/preferences.svelte.ts`, `state/scroll.svelte.ts`
+  - Wrappers IPC créés : `ipc/commands.ts`, `ipc/events.ts`, `ipc/errors.ts`
+  - Composables créés : `composables/useTerminalView.svelte.ts`, `composables/useTerminalPane.svelte.ts`
+  - Résultat : TerminalView.svelte 32L script + TerminalPane.svelte 130L script (< 250L chacun)
 - [ ] **`mouse_reporting`/`mouse_encoding` : `String` libres dans `ModeStateChangedEvent`**
   - Remplacer par des enums Rust sérialisables (`#[serde(rename_all = "camelCase")]`)
   - Supprimer la conversion manuelle dans `build_mode_state_event()`

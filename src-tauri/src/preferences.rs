@@ -9,7 +9,7 @@ pub mod schema;
 pub mod store;
 
 pub use schema::{
-    AppearancePrefs, BellType, CursorStyle, KeyboardPrefs, Language, Preferences, PreferencesPatch,
-    TerminalPrefs, UserTheme,
+    AppearancePatch, AppearancePrefs, BellType, CursorStyle, KeyboardPrefs, Language, Preferences,
+    PreferencesPatch, TerminalPrefs, UserTheme,
 };
 pub use store::PreferencesStore;

@@ -5,7 +5,7 @@
  *
  * Wraps Paraglide's `setLocale` / `getLocale` with:
  * - A `$state` rune so components react to locale changes (FS-I18N-004)
- * - IPC persistence via `invoke('set_locale')` (FS-I18N-005)
+ * - IPC persistence via `update_preferences` (FS-I18N-005)
  * - Fallback to 'en' for unknown locale codes (FS-I18N-006)
  */
 
@@ -13,7 +13,9 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   setLocale as paraglideSetLocale,
   getLocale as paraglideGetLocale,
+  overwriteGetLocale,
 } from '$lib/paraglide/runtime';
+import type { Preferences } from '$lib/ipc/types';
 
 /** Supported locale codes (FS-I18N-002). */
 export type SupportedLocale = 'en' | 'fr';
@@ -37,6 +39,11 @@ function toSupportedLocale(raw: unknown): SupportedLocale {
  */
 let currentLocale = $state<SupportedLocale>(toSupportedLocale(paraglideGetLocale()));
 
+// Wire Paraglide's getLocale() to our $state so that all m.*() calls in Svelte 5
+// templates are tracked as reactive dependencies. When currentLocale changes,
+// Svelte 5 automatically re-evaluates any template expression that called m.*().
+overwriteGetLocale(() => currentLocale);
+
 /**
  * Returns the currently active locale.
  */
@@ -54,10 +61,12 @@ export function getActiveLocale(): SupportedLocale {
  */
 export async function setLocale(locale: SupportedLocale): Promise<void> {
   const safe = toSupportedLocale(locale);
-  paraglideSetLocale(safe);
+  paraglideSetLocale(safe, { reload: false });
   currentLocale = safe;
   try {
-    await invoke<void>('set_locale', { locale: safe });
+    await invoke<Preferences>('update_preferences', {
+      patch: { appearance: { language: safe } },
+    });
   } catch (err) {
     // Persistence failure is non-fatal: locale is applied in-session.
     // Callers may surface this error if appropriate; we do not swallow silently.
@@ -66,14 +75,29 @@ export async function setLocale(locale: SupportedLocale): Promise<void> {
 }
 
 /**
+ * Applies a locale that was already persisted by the backend (e.g., after
+ * `update_preferences` returns). Updates the reactive state and Paraglide's
+ * runtime without making an additional IPC call.
+ *
+ * Idempotent: no-op when the locale is already current.
+ * Unknown values fall back to 'en' (FS-I18N-006).
+ */
+export function applyLocaleChange(language: unknown): void {
+  const safe = toSupportedLocale(language);
+  if (safe === currentLocale) return;
+  paraglideSetLocale(safe, { reload: false });
+  currentLocale = safe;
+}
+
+/**
  * Initialises the locale from the persisted backend preference.
  * Must be called once at application startup (e.g., in `+layout.svelte`).
  */
 export async function initLocale(): Promise<void> {
   try {
-    const persisted = await invoke<string>('get_locale');
-    const safe = toSupportedLocale(persisted);
-    paraglideSetLocale(safe);
+    const prefs = await invoke<Preferences>('get_preferences');
+    const safe = toSupportedLocale(prefs.appearance.language);
+    paraglideSetLocale(safe, { reload: false });
     currentLocale = safe;
   } catch {
     // IPC unavailable (e.g., dev without backend) — keep default 'en'.

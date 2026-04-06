@@ -705,11 +705,49 @@ export interface KeyboardPrefs {
   bindings: Record<string, string>;
 }
 
+/**
+ * Partial appearance preferences for patch operations.
+ * All fields optional — only provided fields are updated.
+ * Mirrors Rust AppearancePatch: #[serde(rename_all = "camelCase")]
+ */
+export interface AppearancePatch {
+  fontFamily?: string;
+  fontSize?: number;
+  cursorStyle?: CursorStyle;
+  cursorBlinkMs?: number;
+  themeName?: string;
+  opacity?: number;
+  language?: Language;
+  contextMenuHintShown?: boolean;
+}
+
+/**
+ * Partial terminal preferences for patch operations.
+ * All fields optional — only provided fields are updated.
+ * Mirrors Rust TerminalPatch: #[serde(rename_all = "camelCase")]
+ */
+export interface TerminalPatch {
+  scrollbackLines?: number;
+  allowOsc52Write?: boolean;
+  wordDelimiters?: string;
+  bellType?: BellType;
+  confirmMultilinePaste?: boolean;
+}
+
+/**
+ * Partial keyboard preferences for patch operations.
+ * All fields optional — only provided fields are updated.
+ * Mirrors Rust KeyboardPatch: #[serde(rename_all = "camelCase")]
+ */
+export interface KeyboardPatch {
+  bindings?: Record<string, string>;
+}
+
 /** Mirrors Rust PreferencesPatch — all fields optional. */
 export interface PreferencesPatch {
-  appearance?: Partial<AppearancePrefs>;
-  terminal?: Partial<TerminalPrefs>;
-  keyboard?: Partial<KeyboardPrefs>;
+  appearance?: AppearancePatch;
+  terminal?: TerminalPatch;
+  keyboard?: KeyboardPatch;
 }
 
 /**

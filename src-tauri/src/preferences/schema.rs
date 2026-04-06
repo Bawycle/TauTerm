@@ -105,12 +105,30 @@ pub struct KeyboardPrefs {
     pub bindings: std::collections::HashMap<String, String>,
 }
 
+/// Partial update for appearance preferences — only the fields provided are changed.
+///
+/// Using a dedicated patch type (instead of `Option<AppearancePrefs>` in `PreferencesPatch`)
+/// allows field-by-field updates without read-before-write: e.g. changing the language
+/// without knowing or sending the current font size.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AppearancePatch {
+    pub font_family: Option<String>,
+    pub font_size: Option<f32>,
+    pub cursor_style: Option<CursorStyle>,
+    pub cursor_blink_ms: Option<u32>,
+    pub theme_name: Option<String>,
+    pub opacity: Option<f32>,
+    pub language: Option<Language>,
+    pub context_menu_hint_shown: Option<bool>,
+}
+
 /// A partial preferences update (only the fields the user changed).
 /// All fields are optional so the frontend can send minimal payloads.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PreferencesPatch {
-    pub appearance: Option<AppearancePrefs>,
+    pub appearance: Option<AppearancePatch>,
     pub terminal: Option<TerminalPrefs>,
     pub keyboard: Option<KeyboardPrefs>,
 }
@@ -433,7 +451,7 @@ mod tests {
     #[test]
     fn preferences_patch_round_trips_through_json() {
         let patch = PreferencesPatch {
-            appearance: Some(AppearancePrefs::default()),
+            appearance: Some(AppearancePatch::default()),
             terminal: None,
             keyboard: None,
         };
@@ -441,5 +459,40 @@ mod tests {
         let restored: PreferencesPatch = serde_json::from_str(&json).expect("deserialize failed");
         assert!(restored.appearance.is_some());
         assert!(restored.terminal.is_none());
+    }
+
+    // --- AppearancePatch ---
+
+    /// AppearancePatch::default() must have all fields set to None.
+    #[test]
+    fn appearance_patch_default_has_all_none_fields() {
+        let patch = AppearancePatch::default();
+        assert!(patch.font_family.is_none());
+        assert!(patch.font_size.is_none());
+        assert!(patch.cursor_style.is_none());
+        assert!(patch.cursor_blink_ms.is_none());
+        assert!(patch.theme_name.is_none());
+        assert!(patch.opacity.is_none());
+        assert!(patch.language.is_none());
+        assert!(patch.context_menu_hint_shown.is_none());
+    }
+
+    /// AppearancePatch with only language set serializes to a JSON object
+    /// containing the `language` field and no others that are present-and-non-null.
+    #[test]
+    fn appearance_patch_language_only_serializes_correctly() {
+        let patch = AppearancePatch {
+            language: Some(Language::Fr),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&patch).expect("serialize failed");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("deserialize failed");
+
+        // language field must be present with the correct value.
+        assert_eq!(
+            value.get("language").and_then(|v| v.as_str()),
+            Some("fr"),
+            "language must serialize to \"fr\""
+        );
     }
 }

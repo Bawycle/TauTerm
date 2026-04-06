@@ -18,11 +18,38 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as tauriCore from '@tauri-apps/api/core';
 import * as paraglide from '$lib/paraglide/runtime';
 import { getActiveLocale, setLocale, initLocale } from '$lib/state/locale.svelte';
+import type { Preferences } from '$lib/ipc/types';
+
+/** Minimal stub Preferences object returned by get_preferences. */
+function makePrefs(language: 'en' | 'fr'): Preferences {
+  return {
+    appearance: {
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cursorStyle: 'block',
+      cursorBlinkMs: 530,
+      themeName: 'Umbra',
+      opacity: 1.0,
+      language,
+      contextMenuHintShown: false,
+    },
+    terminal: {
+      scrollbackLines: 10000,
+      allowOsc52Write: false,
+      wordDelimiters: ' ',
+      bellType: 'none',
+      confirmMultilinePaste: true,
+    },
+    keyboard: { bindings: {} },
+    connections: [],
+    themes: [],
+  };
+}
 
 beforeEach(() => {
   vi.restoreAllMocks();
   // Reset paraglide stub locale to default so state reads correctly.
-  paraglide.setLocale('en');
+  paraglide.setLocale('en', { reload: false });
 });
 
 describe('locale state — getActiveLocale', () => {
@@ -43,14 +70,16 @@ describe('locale state — setLocale', () => {
   it('calls paraglide setLocale with the requested locale', async () => {
     const spy = vi.spyOn(paraglide, 'setLocale');
     await setLocale('fr');
-    expect(spy).toHaveBeenCalledWith('fr');
+    expect(spy).toHaveBeenCalledWith('fr', { reload: false });
     await setLocale('en');
   });
 
-  it('calls invoke("set_locale") with the locale', async () => {
-    const spy = vi.spyOn(tauriCore, 'invoke').mockResolvedValue(undefined);
+  it('calls invoke("update_preferences") with the language patch', async () => {
+    const spy = vi.spyOn(tauriCore, 'invoke').mockResolvedValue(makePrefs('en'));
     await setLocale('en');
-    expect(spy).toHaveBeenCalledWith('set_locale', { locale: 'en' });
+    expect(spy).toHaveBeenCalledWith('update_preferences', {
+      patch: { appearance: { language: 'en' } },
+    });
   });
 
   it('does not throw when invoke fails (non-fatal IPC error)', async () => {
@@ -65,7 +94,7 @@ describe('locale state — setLocale', () => {
 
 describe('locale state — initLocale', () => {
   it('sets locale from the persisted backend value', async () => {
-    vi.spyOn(tauriCore, 'invoke').mockResolvedValue('fr');
+    vi.spyOn(tauriCore, 'invoke').mockResolvedValue(makePrefs('fr'));
     await initLocale();
     expect(getActiveLocale()).toBe('fr');
     // Restore default.
@@ -73,7 +102,10 @@ describe('locale state — initLocale', () => {
   });
 
   it('falls back to "en" when invoke returns an unknown locale code (FS-I18N-006)', async () => {
-    vi.spyOn(tauriCore, 'invoke').mockResolvedValue('jp'); // unsupported code
+    const prefs = makePrefs('en');
+    // Force an unsupported value through an unsafe cast to simulate an unexpected backend value.
+    (prefs.appearance as unknown as Record<string, unknown>).language = 'jp';
+    vi.spyOn(tauriCore, 'invoke').mockResolvedValue(prefs);
     await initLocale();
     // The toSupportedLocale guard must apply.
     expect(getActiveLocale()).toBe('en');
@@ -88,9 +120,9 @@ describe('locale state — initLocale', () => {
     expect(getActiveLocale()).toBe('en');
   });
 
-  it('calls invoke("get_locale") to retrieve the persisted value', async () => {
-    const spy = vi.spyOn(tauriCore, 'invoke').mockResolvedValue('en');
+  it('calls invoke("get_preferences") to retrieve the persisted value', async () => {
+    const spy = vi.spyOn(tauriCore, 'invoke').mockResolvedValue(makePrefs('en'));
     await initLocale();
-    expect(spy).toHaveBeenCalledWith('get_locale');
+    expect(spy).toHaveBeenCalledWith('get_preferences');
   });
 });

@@ -20,6 +20,22 @@ export function getLocale(): Locale {
   return _locale;
 }
 
-export function setLocale(locale: Locale): void {
+export function overwriteGetLocale(_fn: () => Locale): void {
+  // No-op in tests: locale.svelte.ts calls this at module load to wire Paraglide's
+  // getLocale() to the $state. The mock already returns _locale from getLocale(),
+  // so no substitution is needed here.
+}
+
+export function setLocale(locale: Locale, options?: { reload?: boolean }): void {
+  if (options?.reload !== false && typeof window !== 'undefined') {
+    // Fail loudly in tests if caller forgets { reload: false }.
+    // The real Paraglide runtime calls window.location.reload() by default,
+    // which causes an infinite loop in a Tauri SPA. Tests must always pass
+    // { reload: false } explicitly.
+    throw new Error(
+      `[paraglide mock] setLocale('${locale}') called without { reload: false }. ` +
+        `The real runtime would reload the page — this is a bug in TauTerm code.`,
+    );
+  }
   _locale = locale;
 }

@@ -85,10 +85,37 @@ impl PreferencesStore {
     }
 
     /// Apply a partial update and persist to disk.
+    ///
+    /// `AppearancePatch` is merged field-by-field so that updating a single field
+    /// (e.g. `language`) does not clobber the rest of `AppearancePrefs`.
     pub fn apply_patch(&self, patch: PreferencesPatch) -> Result<Preferences, PreferencesError> {
         let mut prefs = self.prefs.write();
-        if let Some(appearance) = patch.appearance {
-            prefs.appearance = appearance;
+        if let Some(patch) = patch.appearance {
+            let a = &mut prefs.appearance;
+            if let Some(v) = patch.font_family {
+                a.font_family = v;
+            }
+            if let Some(v) = patch.font_size {
+                a.font_size = v;
+            }
+            if let Some(v) = patch.cursor_style {
+                a.cursor_style = v;
+            }
+            if let Some(v) = patch.cursor_blink_ms {
+                a.cursor_blink_ms = v;
+            }
+            if let Some(v) = patch.theme_name {
+                a.theme_name = v;
+            }
+            if let Some(v) = patch.opacity {
+                a.opacity = v;
+            }
+            if let Some(v) = patch.language {
+                a.language = v;
+            }
+            if let Some(v) = patch.context_menu_hint_shown {
+                a.context_menu_hint_shown = v;
+            }
         }
         if let Some(terminal) = patch.terminal {
             prefs.terminal = terminal;
@@ -197,6 +224,22 @@ impl PreferencesStore {
     }
 
     // -----------------------------------------------------------------------
+    // Test helpers
+    // -----------------------------------------------------------------------
+
+    /// Construct a store backed by `path` with default preferences — for unit tests only.
+    ///
+    /// Avoids environment mutation (`XDG_CONFIG_HOME`) in inline `#[cfg(test)]` modules
+    /// where nextest does not guarantee process-per-test isolation.
+    #[cfg(test)]
+    pub fn new_with_defaults(path: PathBuf) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self {
+            prefs: RwLock::new(Preferences::default()),
+            path,
+        }))
+    }
+
+    // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
 
@@ -257,7 +300,9 @@ fn load_from_disk(path: &PathBuf) -> Preferences {
                 prefs
             }
             Err(e) => {
-                tracing::warn!("Found preferences.json but failed to parse it, using defaults: {e}");
+                tracing::warn!(
+                    "Found preferences.json but failed to parse it, using defaults: {e}"
+                );
                 Preferences::default()
             }
         },
@@ -295,7 +340,9 @@ fn parse_toml_prefs(content: &str) -> Preferences {
     let camel_toml = match toml::to_string(&camel_value) {
         Ok(s) => s,
         Err(e) => {
-            tracing::warn!("Failed to re-serialize preferences for camelCase pass, using defaults: {e}");
+            tracing::warn!(
+                "Failed to re-serialize preferences for camelCase pass, using defaults: {e}"
+            );
             return Preferences::default();
         }
     };
@@ -305,7 +352,9 @@ fn parse_toml_prefs(content: &str) -> Preferences {
             prefs
         }
         Err(e) => {
-            tracing::warn!("Failed to deserialize preferences.toml after key rename, using defaults: {e}");
+            tracing::warn!(
+                "Failed to deserialize preferences.toml after key rename, using defaults: {e}"
+            );
             Preferences::default()
         }
     }
@@ -321,9 +370,11 @@ fn rename_toml_keys(value: toml::Value, rename_fn: fn(&str) -> String) -> toml::
                 .collect();
             toml::Value::Table(renamed)
         }
-        toml::Value::Array(arr) => {
-            toml::Value::Array(arr.into_iter().map(|v| rename_toml_keys(v, rename_fn)).collect())
-        }
+        toml::Value::Array(arr) => toml::Value::Array(
+            arr.into_iter()
+                .map(|v| rename_toml_keys(v, rename_fn))
+                .collect(),
+        ),
         other => other,
     }
 }
@@ -374,12 +425,97 @@ fn dirs_or_home() -> Result<PathBuf, PreferencesError> {
 }
 
 // ---------------------------------------------------------------------------
-// Unit tests — key conversion functions
+// Unit tests — apply_patch merge semantics and key conversion functions
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
-    use super::{camel_to_snake, snake_to_camel};
+    use super::{PreferencesStore, camel_to_snake, snake_to_camel};
+    use crate::preferences::schema::{AppearancePatch, Language, PreferencesPatch};
+
+    // -----------------------------------------------------------------------
+    // apply_patch — AppearancePatch merge semantics
+    // -----------------------------------------------------------------------
+
+    /// apply_patch with only `language` set must not modify `font_size`.
+    #[test]
+    fn apply_patch_language_only_does_not_touch_font_size() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        let default_font_size = store.read().get().appearance.font_size;
+
+        let patch = PreferencesPatch {
+            appearance: Some(AppearancePatch {
+                language: Some(Language::Fr),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+        assert_eq!(
+            updated.appearance.language,
+            Language::Fr,
+            "language must be updated"
+        );
+        assert_eq!(
+            updated.appearance.font_size, default_font_size,
+            "font_size must be unchanged"
+        );
+    }
+
+    /// apply_patch with only `font_size` set must not modify `language`.
+    #[test]
+    fn apply_patch_font_size_only_does_not_touch_language() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        let default_language = store.read().get().appearance.language;
+
+        let patch = PreferencesPatch {
+            appearance: Some(AppearancePatch {
+                font_size: Some(22.0),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+        assert_eq!(
+            updated.appearance.font_size, 22.0,
+            "font_size must be updated"
+        );
+        assert_eq!(
+            updated.appearance.language, default_language,
+            "language must be unchanged"
+        );
+    }
+
+    /// apply_patch with `appearance: None` must leave all appearance fields untouched.
+    #[test]
+    fn apply_patch_with_none_appearance_changes_nothing() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        let before = store.read().get().appearance.clone();
+
+        let patch = PreferencesPatch::default(); // all None
+        let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+        assert_eq!(updated.appearance.font_size, before.font_size);
+        assert_eq!(updated.appearance.language, before.language);
+        assert_eq!(updated.appearance.font_family, before.font_family);
+        assert_eq!(updated.appearance.theme_name, before.theme_name);
+        assert_eq!(updated.appearance.opacity, before.opacity);
+    }
+
+    // -----------------------------------------------------------------------
+    // camel_to_snake
+    // -----------------------------------------------------------------------
 
     // camel_to_snake
 

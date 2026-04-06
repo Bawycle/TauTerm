@@ -8,7 +8,8 @@
 use std::io::Write as IoWrite;
 
 use tau_term_lib::preferences::schema::{
-    AppearancePrefs, BellType, CursorStyle, Language, Preferences, PreferencesPatch, TerminalPrefs,
+    AppearancePatch, AppearancePrefs, BellType, CursorStyle, Language, Preferences,
+    PreferencesPatch, TerminalPrefs,
 };
 use tau_term_lib::preferences::store::PreferencesStore;
 
@@ -207,7 +208,7 @@ fn pref_roundtrip_keyboard_bindings_survive_json() {
 #[test]
 fn pref_roundtrip_patch_serializes_correctly() {
     let patch = PreferencesPatch {
-        appearance: Some(AppearancePrefs::default()),
+        appearance: Some(AppearancePatch::default()),
         terminal: None,
         keyboard: None,
     };
@@ -452,8 +453,11 @@ fn load_or_default_toml_takes_priority_over_json() {
     let prefs_dir = tmp.path().join("tauterm");
     std::fs::create_dir_all(&prefs_dir).expect("create prefs dir");
     // On-disk format is snake_case (ADR-0016)
-    std::fs::write(prefs_dir.join("preferences.toml"), b"[appearance]\nfont_size = 20.0\n")
-        .expect("write toml");
+    std::fs::write(
+        prefs_dir.join("preferences.toml"),
+        b"[appearance]\nfont_size = 20.0\n",
+    )
+    .expect("write toml");
     // Legacy JSON uses camelCase (serde rename_all)
     std::fs::write(
         prefs_dir.join("preferences.json"),
@@ -470,7 +474,10 @@ fn load_or_default_toml_takes_priority_over_json() {
 fn load_or_default_falls_back_to_defaults_on_corrupt_toml() {
     let (tmp, _) = write_temp_prefs_toml(b"[[[[not valid toml at all");
     let prefs = load_with_xdg(tmp.path());
-    assert_eq!(prefs.appearance.font_size, Preferences::default().appearance.font_size);
+    assert_eq!(
+        prefs.appearance.font_size,
+        Preferences::default().appearance.font_size
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -479,16 +486,16 @@ fn load_or_default_falls_back_to_defaults_on_corrupt_toml() {
 
 /// Helper: load a store with XDG pointing at `xdg_root`, call `apply_patch`,
 /// and return the raw bytes written to disk.
-fn save_via_store_and_read_file(
-    xdg_root: &std::path::Path,
-    patch: PreferencesPatch,
-) -> String {
+fn save_via_store_and_read_file(xdg_root: &std::path::Path, patch: PreferencesPatch) -> String {
     let orig = std::env::var_os("XDG_CONFIG_HOME");
     // SAFETY: nextest process-per-test isolation.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg_root) };
 
     let store = PreferencesStore::load_or_default();
-    store.read().apply_patch(patch).expect("apply_patch must succeed");
+    store
+        .read()
+        .apply_patch(patch)
+        .expect("apply_patch must succeed");
 
     // SAFETY: same as above.
     unsafe {
@@ -505,11 +512,14 @@ fn save_via_store_and_read_file(
 #[test]
 fn save_writes_snake_case_keys_to_disk() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
-    let mut appearance = AppearancePrefs::default();
-    appearance.font_size = 20.0;
-    appearance.language = Language::Fr;
-
-    let patch = PreferencesPatch { appearance: Some(appearance), ..Default::default() };
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            font_size: Some(20.0),
+            language: Some(Language::Fr),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
     let content = save_via_store_and_read_file(tmp.path(), patch);
 
     // File must contain snake_case keys, not camelCase
@@ -536,11 +546,14 @@ fn store_roundtrip_save_then_load_preserves_values() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
 
     // --- Save ---
-    let mut appearance = AppearancePrefs::default();
-    appearance.font_size = 17.5;
-    appearance.language = Language::Fr;
-
-    let patch = PreferencesPatch { appearance: Some(appearance), ..Default::default() };
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            font_size: Some(17.5),
+            language: Some(Language::Fr),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
     save_via_store_and_read_file(tmp.path(), patch);
 
     // --- Load from the file just written ---
@@ -554,10 +567,14 @@ fn store_roundtrip_save_then_load_preserves_values() {
 fn store_roundtrip_snake_case_file_survives_all_preference_fields() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
 
-    // Save a patch touching both appearance and terminal sections.
-    let mut appearance = AppearancePrefs::default();
-    appearance.font_size = 15.0;
-    let patch = PreferencesPatch { appearance: Some(appearance), ..Default::default() };
+    // Save a patch touching the appearance section.
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            font_size: Some(15.0),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
     let content = save_via_store_and_read_file(tmp.path(), patch);
 
     // Verify representative field names from each section are snake_case.

@@ -398,11 +398,7 @@ fn sec_sprint_008_50_nested_splits_no_stack_overflow() {
 
     // Wrap it 50 times: each iteration adds one Split level.
     for leaf_id in leaves.iter().skip(1) {
-        node = make_split(
-            SplitDirection::Horizontal,
-            node,
-            make_leaf(leaf_id.clone()),
-        );
+        node = make_split(SplitDirection::Horizontal, node, make_leaf(leaf_id.clone()));
     }
 
     // `pane_ids()` recurses over the entire tree — must not panic/overflow.

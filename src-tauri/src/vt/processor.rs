@@ -90,16 +90,15 @@ pub struct VtProcessor {
     pub(super) pending_osc52_write: Option<String>,
 }
 
-/// Cursor position and attributes.
-/// `attrs` and `charset_slot` are saved/restored with DECSC/DECRC — not yet wired
-/// in the full implementation, but present for correctness of the saved state.
+/// Cursor position and attributes saved/restored by DECSC/DECRC (ESC 7 / ESC 8).
+///
+/// `attrs` holds the SGR attribute state at save time; `charset_slot` holds the
+/// active G0/G1 slot. Both are fully restored on DECRC.
 #[derive(Debug, Clone, Default)]
 struct CursorPos {
     row: u16,
     col: u16,
-    #[allow(dead_code)]
     attrs: CellAttrs,
-    #[allow(dead_code)]
     charset_slot: CharsetSlot,
 }
 
@@ -336,13 +335,13 @@ impl VtProcessor {
         if self.wrap_pending && self.modes.decawm {
             self.wrap_pending = false;
             let (top, bottom) = self.modes.scroll_region;
-            let is_full = top == 0 && bottom == self.rows - 1;
+            let is_full = top == 0 && bottom == self.rows.saturating_sub(1);
             if row == bottom {
                 // The line being scrolled out is a soft-wrapped line.
                 self.active_buf_mut()
                     .scroll_up(top, bottom, 1, is_full, true);
             } else {
-                self.active_cursor_mut().row = (row + 1).min(self.rows - 1);
+                self.active_cursor_mut().row = (row + 1).min(self.rows.saturating_sub(1));
             }
             self.active_cursor_mut().col = 0;
             row = self.cursor_row();
@@ -405,6 +404,11 @@ impl VtProcessor {
         if let Some(saved) = self.saved_normal_modes.take() {
             self.modes = saved;
         }
+        // FS-VT-086: force mouse reporting off on alt-screen exit.
+        // Guards against apps that activate mouse tracking but crash without
+        // sending ?1000l (or equivalent reset). This makes mouse capture opt-in
+        // per screen, not sticky across screen switches.
+        self.modes.mouse_reporting = crate::vt::modes::MouseReportingMode::None;
         if restore_cursor && let Some(saved) = self.saved_normal_cursor.take() {
             self.normal_cursor = saved;
         }

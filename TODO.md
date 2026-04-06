@@ -33,20 +33,6 @@
 
 ## P1 — Sprint suivant la release
 
-### VT Parser — correctness
-
-- [ ] **DECSC/DECRC ne restaure pas `attrs` et `charset_slot`** — champs `#[allow(dead_code)]` non câblés
-  - `CursorPos` doit sauvegarder et restaurer les attributs courants + charset slot
-- [ ] **FS-VT-086 — mode mouse non réinitialisé à la sortie de l'alt screen**
-  - Dans `leave_alternate()`, forcer `self.modes.mouse_reporting = MouseReportingMode::None`
-  - Sinon, souris captive si une app crash sans envoyer `?1000l`
-- [ ] **Underflow `u16` sans garde zéro** dans `dispatch.rs` et `processor.rs`
-  - Expressions `p.rows - 1` / `p.cols - 1` sur `u16` sans vérification `> 0`
-  - Remplacer par `p.rows.saturating_sub(1)` ou ajouter guard `if p.rows > 0`
-- [ ] **Backpressure absente sur la PTY read loop** — `session/pty_task.rs` ligne 15
-  - Une app produisant du volume élevé (`yes`, `seq 1 1000000`) inonde le frontend d'events IPC
-  - Implémenter coalescing temporel ou rate limiting sur les émissions `screen-update`
-
 ### Architecture frontend
 
 - [ ] **Décomposer `TerminalView.svelte` (1315L) et `TerminalPane.svelte` (1438L)**

@@ -376,7 +376,9 @@ mod tests {
             &["-c", "printenv TERM; exit"],
             &[("TERM", "xterm-256color"), ("COLORTERM", "truecolor")],
         );
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
         let output =
             read_until_timeout(reader, "xterm-256color", std::time::Duration::from_secs(5));
         assert!(
@@ -395,7 +397,9 @@ mod tests {
             &["-c", "printenv COLORTERM; exit"],
             &[("TERM", "xterm-256color"), ("COLORTERM", "truecolor")],
         );
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "truecolor", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -420,7 +424,9 @@ mod tests {
                 ("COLUMNS", &cols.to_string()),
             ],
         );
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "30", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -445,7 +451,9 @@ mod tests {
                 ("COLUMNS", &cols.to_string()),
             ],
         );
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "132", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -467,7 +475,9 @@ mod tests {
                 ("TERM_PROGRAM", "TauTerm"),
             ],
         );
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, "TauTerm", std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -491,7 +501,9 @@ mod tests {
                 ("TERM_PROGRAM_VERSION", version),
             ],
         );
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
         let output = read_until_timeout(reader, version, std::time::Duration::from_secs(5));
         assert!(
             output.is_some(),
@@ -524,7 +536,9 @@ mod tests {
             )
             .expect("open session");
 
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
 
         // The reader must eventually return EOF or EIO after the child exits.
         // We poll until we get a 0-byte read or an error.
@@ -575,7 +589,9 @@ mod tests {
             )
             .expect("open session");
 
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
 
         let output = read_until_timeout(
             reader,
@@ -627,7 +643,9 @@ mod tests {
             )
             .expect("open session");
 
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
 
         // Wait for "READY" to confirm the shell trap is installed.
         let ready = read_until_timeout(reader.clone(), "READY", std::time::Duration::from_secs(5));
@@ -696,7 +714,9 @@ mod tests {
             )
             .expect("open session");
 
-        let reader = session.reader_handle().expect("LinuxPtySession must have a reader");
+        let reader = session
+            .reader_handle()
+            .expect("LinuxPtySession must have a reader");
 
         // Wait for the child to signal it's ready (trap is installed).
         let ready = read_until_timeout(reader.clone(), "READY", std::time::Duration::from_secs(5));

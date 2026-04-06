@@ -1215,4 +1215,147 @@ mod tests {
             "wrap_pending must be false when DECAWM is off"
         );
     }
+
+    // ---------------------------------------------------------------------------
+    // DECSC / DECRC — save and restore attrs + charset_slot (fix #1)
+    // ---------------------------------------------------------------------------
+
+    /// DECSC (ESC 7) saves current SGR attributes; DECRC (ESC 8) restores them.
+    #[test]
+    fn decsc_decrc_esc_saves_and_restores_attrs() {
+        let mut vt = make_vt(80, 24);
+        // Set bold + red foreground.
+        vt.process(b"\x1b[1;31m"); // bold + red
+        // Save cursor (ESC 7).
+        vt.process(b"\x1b7");
+        // Reset SGR.
+        vt.process(b"\x1b[0m");
+        // Confirm attrs are now default.
+        assert!(
+            !vt.current_attrs.bold,
+            "attrs should be reset after ESC [0m"
+        );
+        // Restore cursor (ESC 8).
+        vt.process(b"\x1b8");
+        // Attrs should be restored to bold + red.
+        assert!(vt.current_attrs.bold, "DECRC must restore bold attribute");
+        assert_eq!(
+            vt.current_attrs.fg,
+            Some(crate::vt::cell::Color::Ansi { index: 1 }),
+            "DECRC must restore fg color"
+        );
+    }
+
+    /// DECSC (ESC 7) saves charset_slot; DECRC (ESC 8) restores it.
+    #[test]
+    fn decsc_decrc_esc_saves_and_restores_charset_slot() {
+        use crate::vt::modes::CharsetSlot;
+        let mut vt = make_vt(80, 24);
+        // Switch to G1 (SO = 0x0E).
+        vt.process(b"\x0E"); // SO → G1
+        assert_eq!(vt.modes.charset_slot, CharsetSlot::G1);
+        // Save cursor.
+        vt.process(b"\x1b7");
+        // Switch back to G0 (SI = 0x0F).
+        vt.process(b"\x0F"); // SI → G0
+        assert_eq!(vt.modes.charset_slot, CharsetSlot::G0);
+        // Restore cursor — charset_slot should return to G1.
+        vt.process(b"\x1b8");
+        assert_eq!(
+            vt.modes.charset_slot,
+            CharsetSlot::G1,
+            "DECRC must restore charset_slot"
+        );
+    }
+
+    /// DECSC (CSI s) / DECRC (CSI u) also save/restore attrs.
+    #[test]
+    fn decsc_decrc_csi_saves_and_restores_attrs() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[1m"); // bold
+        vt.process(b"\x1b[s"); // CSI s = DECSC
+        vt.process(b"\x1b[0m"); // reset
+        assert!(!vt.current_attrs.bold);
+        vt.process(b"\x1b[u"); // CSI u = DECRC
+        assert!(vt.current_attrs.bold, "CSI u must restore bold");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Mouse mode reset on alt-screen exit (fix #2, FS-VT-086)
+    // ---------------------------------------------------------------------------
+
+    /// Mouse reporting mode must be None after leaving the alternate screen,
+    /// even when the app never sent the reset sequence.
+    #[test]
+    fn mouse_mode_reset_on_leave_alternate_mode_1049() {
+        use crate::vt::modes::MouseReportingMode;
+        let mut vt = make_vt(80, 24);
+        // Enter alt screen and activate normal mouse tracking.
+        vt.process(b"\x1b[?1049h"); // enter alt screen
+        vt.process(b"\x1b[?1000h"); // activate mouse normal tracking
+        assert_eq!(vt.modes.mouse_reporting, MouseReportingMode::Normal);
+        // Leave alt screen without sending reset — simulates app crash.
+        vt.process(b"\x1b[?1049l");
+        assert_eq!(
+            vt.modes.mouse_reporting,
+            MouseReportingMode::None,
+            "mouse reporting must be None after leaving alt screen (FS-VT-086)"
+        );
+    }
+
+    /// Mouse mode reset also applies to mode 47 exit.
+    #[test]
+    fn mouse_mode_reset_on_leave_alternate_mode_47() {
+        use crate::vt::modes::MouseReportingMode;
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[?47h");
+        vt.process(b"\x1b[?1000h");
+        vt.process(b"\x1b[?47l");
+        assert_eq!(
+            vt.modes.mouse_reporting,
+            MouseReportingMode::None,
+            "mouse reporting must be None after leaving alt screen via mode 47"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // u16 underflow guards — no panic on 1-row / 1-col terminal (fix #3)
+    // ---------------------------------------------------------------------------
+
+    /// Resize to 1 row must not panic on LF (scroll_up path uses rows - 1).
+    #[test]
+    fn no_panic_on_lf_with_one_row() {
+        let mut vt = make_vt(80, 1);
+        // LF on a 1-row terminal would have triggered u16 underflow before the fix.
+        vt.process(b"A\n");
+        // If we reach here without panic, the guard works.
+    }
+
+    /// Resize to 1 col must not panic on HT (tab stop uses cols - 1).
+    #[test]
+    fn no_panic_on_ht_with_one_col() {
+        let mut vt = make_vt(1, 24);
+        vt.process(b"\x09"); // HT
+    }
+
+    /// CUF (cursor forward) on a 1-col terminal must not panic.
+    #[test]
+    fn no_panic_on_cuf_with_one_col() {
+        let mut vt = make_vt(1, 24);
+        vt.process(b"\x1b[C"); // CUF 1
+    }
+
+    /// CUP on a 1×1 terminal must not panic.
+    #[test]
+    fn no_panic_on_cup_with_one_by_one() {
+        let mut vt = make_vt(1, 1);
+        vt.process(b"\x1b[1;1H"); // CUP 1,1
+    }
+
+    /// DECSTBM default (param1=0) on a 1-row terminal must not panic.
+    #[test]
+    fn no_panic_on_decstbm_with_one_row() {
+        let mut vt = make_vt(80, 1);
+        vt.process(b"\x1b[r"); // DECSTBM with defaults
+    }
 }

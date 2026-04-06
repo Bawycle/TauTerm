@@ -32,7 +32,9 @@ pub async fn close_tab(
     registry: State<'_, Arc<SessionRegistry>>,
     app: AppHandle,
 ) -> Result<(), TauTermError> {
-    let new_active_tab_id = registry.close_tab(tab_id.clone()).map_err(TauTermError::from)?;
+    let new_active_tab_id = registry
+        .close_tab(tab_id.clone())
+        .map_err(TauTermError::from)?;
 
     emit_session_state_changed(
         &app,

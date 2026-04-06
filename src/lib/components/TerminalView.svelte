@@ -259,6 +259,13 @@
 
   const activePanes = $derived(activeTab ? collectLeafPanes(activeTab.layout) : []);
 
+  /** Maps each leaf paneId to its 1-based display number for aria-label. */
+  const paneNumbers = $derived.by(() => {
+    const map = new Map<string, number>();
+    activePanes.forEach((p, i) => map.set(p.paneId, i + 1));
+    return map;
+  });
+
   const activePaneState = $derived(
     activeTab
       ? (activePanes.find((p) => p.paneId === activeTab.activePaneId)?.state ?? null)
@@ -984,6 +991,7 @@
           activePaneId={activeTab.activePaneId}
           {sshStates}
           {terminatedPanes}
+          {paneNumbers}
           wordDelimiters={preferences?.terminal.wordDelimiters}
           confirmMultilinePaste={preferences?.terminal.confirmMultilinePaste ?? true}
           cursorBlinkMs={preferences?.appearance.cursorBlinkMs}
@@ -1215,10 +1223,10 @@
 
   .terminal-view__search-container {
     position: absolute;
-    top: 44px; /* below tab bar */
+    top: var(--size-tab-height); /* below tab bar */
     right: 0;
     left: 0;
-    bottom: 28px; /* above status bar */
+    bottom: var(--size-status-bar-height); /* above status bar */
     pointer-events: none;
     z-index: 20;
   }

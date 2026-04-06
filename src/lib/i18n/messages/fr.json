@@ -173,6 +173,7 @@
   "tab_bar_rename_input_aria_label": "Renommer l'onglet",
   "tab_bar_rename_confirm": "Confirmer le renommage",
   "terminal_pane_aria_label": "Panneau de terminal",
+  "terminal_pane_n_aria_label": "Terminal {n}",
   "terminal_output_aria_label": "Sortie du terminal",
   "terminal_view_aria_label": "Terminal TauTerm",
   "connection_actions_aria_label": "Actions de connexion",

@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::session::{PaneId, TabId, TabState};
 use crate::ssh::SshLifecycleState;
+use crate::vt::modes::{MouseEncoding, MouseReportingMode};
 
 // ---------------------------------------------------------------------------
 // Session topology
@@ -163,10 +164,10 @@ pub struct ModeStateChangedEvent {
     pub decckm: bool,
     /// DECKPAM active (ESC =): application keypad mode.
     pub deckpam: bool,
-    /// Mouse reporting mode: "none", "x10", "normal", "buttonEvent", or "anyEvent".
-    pub mouse_reporting: String,
-    /// Mouse encoding: "x10", "sgr", or "urxvt".
-    pub mouse_encoding: String,
+    /// Mouse reporting mode.
+    pub mouse_reporting: MouseReportingMode,
+    /// Mouse encoding format.
+    pub mouse_encoding: MouseEncoding,
     /// DECSET 1004: focus events active.
     pub focus_events: bool,
     /// DECSET 2004: bracketed paste mode active.

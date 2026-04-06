@@ -6,6 +6,8 @@
 //! §5.3 of ARCHITECTURE.md. It is owned by `VtProcessor` and saved/restored on
 //! alternate screen buffer switches (mode 1049).
 
+use serde::{Deserialize, Serialize};
+
 /// The complete terminal mode state for one screen buffer.
 ///
 /// On transition to alternate screen (mode 1049): the current `ModeState` is
@@ -81,7 +83,11 @@ impl ModeState {
 }
 
 /// Mouse reporting modes (mutually exclusive; higher wins).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Serializes to camelCase strings for IPC: `"none"`, `"x10"`, `"normal"`,
+/// `"buttonEvent"`, `"anyEvent"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum MouseReportingMode {
     /// No mouse reporting.
     #[default]
@@ -97,7 +103,10 @@ pub enum MouseReportingMode {
 }
 
 /// Mouse event encoding format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Serializes to camelCase strings for IPC: `"x10"`, `"sgr"`, `"urxvt"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum MouseEncoding {
     /// Classic X10 encoding (limited to col/row ≤ 223).
     #[default]
@@ -124,4 +133,73 @@ pub enum Charset {
     Ascii,
     /// DEC Special Graphics — line-drawing characters (ESC ( 0).
     DecSpecialGraphics,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mouse_reporting_mode_serializes_to_camel_case() {
+        assert_eq!(
+            serde_json::to_string(&MouseReportingMode::None).unwrap(),
+            r#""none""#
+        );
+        assert_eq!(
+            serde_json::to_string(&MouseReportingMode::X10).unwrap(),
+            r#""x10""#
+        );
+        assert_eq!(
+            serde_json::to_string(&MouseReportingMode::Normal).unwrap(),
+            r#""normal""#
+        );
+        assert_eq!(
+            serde_json::to_string(&MouseReportingMode::ButtonEvent).unwrap(),
+            r#""buttonEvent""#
+        );
+        assert_eq!(
+            serde_json::to_string(&MouseReportingMode::AnyEvent).unwrap(),
+            r#""anyEvent""#
+        );
+    }
+
+    #[test]
+    fn mouse_encoding_serializes_to_camel_case() {
+        assert_eq!(
+            serde_json::to_string(&MouseEncoding::X10).unwrap(),
+            r#""x10""#
+        );
+        assert_eq!(
+            serde_json::to_string(&MouseEncoding::Sgr).unwrap(),
+            r#""sgr""#
+        );
+        assert_eq!(
+            serde_json::to_string(&MouseEncoding::Urxvt).unwrap(),
+            r#""urxvt""#
+        );
+    }
+
+    #[test]
+    fn mouse_reporting_mode_roundtrips() {
+        for variant in [
+            MouseReportingMode::None,
+            MouseReportingMode::X10,
+            MouseReportingMode::Normal,
+            MouseReportingMode::ButtonEvent,
+            MouseReportingMode::AnyEvent,
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            let decoded: MouseReportingMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(variant, decoded);
+        }
+    }
+
+    #[test]
+    fn mouse_encoding_roundtrips() {
+        for variant in [MouseEncoding::X10, MouseEncoding::Sgr, MouseEncoding::Urxvt] {
+            let json = serde_json::to_string(&variant).unwrap();
+            let decoded: MouseEncoding = serde_json::from_str(&json).unwrap();
+            assert_eq!(variant, decoded);
+        }
+    }
 }

@@ -42,6 +42,8 @@
     activePaneId: PaneId;
     sshStates: Map<PaneId, SshLifecycleState>;
     terminatedPanes: Set<PaneId>;
+    /** Maps each leaf paneId to its 1-based display number for aria-label. */
+    paneNumbers?: Map<PaneId, number>;
     wordDelimiters?: string;
     canClosePane?: boolean;
     confirmMultilinePaste?: boolean;
@@ -74,6 +76,7 @@
     activePaneId,
     sshStates,
     terminatedPanes,
+    paneNumbers,
     wordDelimiters,
     canClosePane = true,
     confirmMultilinePaste = true,
@@ -162,6 +165,7 @@
       paneId={node.paneId}
       {tabId}
       active={node.paneId === activePaneId}
+      paneNumber={paneNumbers?.get(node.paneId)}
       terminated={terminatedPanes.has(node.paneId)}
       {canClosePane}
       sshState={sshStates.get(node.paneId) ?? null}
@@ -204,6 +208,7 @@
         {activePaneId}
         {sshStates}
         {terminatedPanes}
+        {paneNumbers}
         {wordDelimiters}
         {canClosePane}
         {confirmMultilinePaste}
@@ -245,6 +250,7 @@
         {activePaneId}
         {sshStates}
         {terminatedPanes}
+        {paneNumbers}
         {wordDelimiters}
         {canClosePane}
         {confirmMultilinePaste}

@@ -201,13 +201,13 @@
 <div
   class="connection-manager"
   class:connection-manager--standalone={standalone}
-  role="region"
+  role="complementary"
   aria-label={m.connection_manager_title()}
 >
   {#if standalone}
     <!-- Slide-in panel header -->
     <div class="connection-manager__header">
-      <h2 class="text-[16px] font-semibold text-(--color-text-primary)">
+      <h2 class="text-(--font-size-ui-lg) font-semibold text-(--color-text-primary)">
         {m.connection_manager_title()}
       </h2>
       <button
@@ -230,7 +230,7 @@
     </div>
 
     {#if connections.length === 0}
-      <p class="text-[13px] text-(--color-text-secondary) px-1 mt-4">
+      <p class="text-(--font-size-ui-base) text-(--color-text-secondary) px-1 mt-4">
         {m.connection_empty_state()}
       </p>
     {:else}
@@ -374,12 +374,12 @@
 
         <!-- Auth method -->
         <div>
-          <p class="text-[12px] font-medium text-(--color-text-secondary) mb-2">
+          <p class="text-(--font-size-ui-sm) font-medium text-(--color-text-secondary) mb-2">
             {m.connection_field_auth_method()}
           </p>
           <div class="flex gap-4">
             <label
-              class="flex items-center gap-2 text-[13px] text-(--color-text-primary) cursor-pointer"
+              class="flex items-center gap-2 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer"
             >
               <input
                 type="radio"
@@ -393,7 +393,7 @@
               {m.connection_auth_identity_file()}
             </label>
             <label
-              class="flex items-center gap-2 text-[13px] text-(--color-text-primary) cursor-pointer"
+              class="flex items-center gap-2 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer"
             >
               <input
                 type="radio"

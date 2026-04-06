@@ -400,10 +400,10 @@
   }}
 >
   <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-[49] bg-(--color-bg-overlay)/60" />
+    <Dialog.Overlay class="fixed inset-0 z-(--z-modal-backdrop) bg-(--color-bg-overlay)/60" />
 
     <Dialog.Content
-      class="preferences-panel fixed z-[50] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+      class="preferences-panel fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
              w-[640px] max-w-[90vw] max-h-[80vh]
              bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
@@ -411,7 +411,7 @@
     >
       <!-- Header -->
       <div class="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
-        <Dialog.Title class="text-[16px] font-semibold text-(--color-text-primary)">
+        <Dialog.Title class="text-(--font-size-ui-lg) font-semibold text-(--color-text-primary)">
           {m.preferences_title()}
         </Dialog.Title>
         <Dialog.Close
@@ -433,7 +433,7 @@
         >
           {#each sections as section (section.id)}
             <button
-              class="preferences-panel__nav-item w-full text-left px-4 h-[40px] text-[13px] cursor-pointer
+              class="preferences-panel__nav-item w-full text-left px-4 h-[40px] text-(--font-size-ui-base) cursor-pointer
                      hover:bg-(--color-hover-bg) focus-visible:outline-2 focus-visible:outline-(--color-focus-ring)"
               class:preferences-panel__nav-item--active={activeSection === section.id}
               onclick={() => {
@@ -451,14 +451,16 @@
           <!-- ===== KEYBOARD SECTION ===== -->
           {#if activeSection === 'keyboard'}
             <p
-              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+              class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
             >
               {m.preferences_section_keyboard()}
             </p>
             <div class="space-y-1">
               {#each shortcutActions as action (action.id)}
                 <div class="flex items-center justify-between h-[44px]">
-                  <span class="text-[13px] text-(--color-text-primary)">{action.label()}</span>
+                  <span class="text-(--font-size-ui-base) text-(--color-text-primary)"
+                    >{action.label()}</span
+                  >
                   <KeyboardShortcutRecorder
                     value={shortcuts[action.id]}
                     existingShortcuts={shortcuts}
@@ -472,7 +474,7 @@
             <!-- ===== APPEARANCE SECTION ===== -->
           {:else if activeSection === 'appearance'}
             <p
-              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+              class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
             >
               {m.preferences_section_appearance()}
             </p>
@@ -505,7 +507,7 @@
             <!-- ===== TERMINAL BEHAVIOR SECTION ===== -->
           {:else if activeSection === 'terminal'}
             <p
-              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+              class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
             >
               {m.preferences_section_terminal()}
             </p>
@@ -557,13 +559,13 @@
             <!-- ===== THEMES SECTION ===== -->
           {:else if activeSection === 'themes'}
             <p
-              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+              class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
             >
               {m.preferences_section_themes()}
             </p>
 
             {#if themeError}
-              <p class="text-[13px] text-(--color-error-text) mb-3" role="alert">
+              <p class="text-(--font-size-ui-base) text-(--color-error-text) mb-3" role="alert">
                 {themeError}
               </p>
             {/if}
@@ -571,7 +573,7 @@
             {#if editingTheme !== null}
               <!-- ---- Theme editor form ---- -->
               <div class="space-y-4">
-                <p class="text-[13px] font-medium text-(--color-text-primary) mb-2">
+                <p class="text-(--font-size-ui-base) font-medium text-(--color-text-primary) mb-2">
                   {isNewTheme ? m.theme_create_title() : m.theme_edit_title()}
                 </p>
 
@@ -624,7 +626,7 @@
                 <div class="flex flex-col gap-1">
                   <label
                     for="theme-line-height"
-                    class="text-[12px] font-medium text-(--color-text-secondary)"
+                    class="text-(--font-size-ui-sm) font-medium text-(--color-text-secondary)"
                   >
                     {m.theme_line_height_label()}
                   </label>
@@ -637,7 +639,7 @@
                     value={editingTheme.lineHeight ?? ''}
                     placeholder="1.2"
                     class="h-[36px] px-3 rounded-[2px] border border-(--color-border)
-                           bg-(--color-bg-input) text-(--color-text-primary) text-[13px]
+                           bg-(--color-bg-input) text-(--color-text-primary) text-(--font-size-ui-base)
                            focus:outline-2 focus:outline-(--color-focus-ring)"
                     oninput={(e) => {
                       if (!editingTheme) return;
@@ -647,14 +649,14 @@
                     }}
                     aria-label={m.theme_line_height_label()}
                   />
-                  <span class="text-[11px] text-(--color-text-tertiary)"
+                  <span class="text-(--font-size-ui-xs) text-(--color-text-tertiary)"
                     >{m.theme_line_height_hint()}</span
                   >
                 </div>
 
                 <fieldset class="border border-(--color-border) rounded-[2px] p-3">
                   <legend
-                    class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider px-1"
+                    class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider px-1"
                   >
                     {m.theme_palette_label()}
                   </legend>
@@ -692,7 +694,9 @@
                     role="alert"
                     aria-live="polite"
                   >
-                    <span class="text-[13px] text-(--color-warning-text) leading-snug">
+                    <span
+                      class="text-(--font-size-ui-base) text-(--color-warning-text) leading-snug"
+                    >
                       {m.theme_contrast_warning({
                         ratio: editingContrastRatio.toFixed(2),
                         threshold: String(WCAG_AA_THRESHOLD),
@@ -710,7 +714,7 @@
                   role="img"
                 >
                   <div
-                    class="p-3 font-mono text-[13px] leading-relaxed"
+                    class="p-3 font-mono text-(--font-size-ui-base) leading-relaxed"
                     style="background: var(--preview-bg); color: var(--preview-fg);"
                   >
                     <!-- Simulated terminal output with ANSI colors -->
@@ -765,18 +769,22 @@
               <div class="space-y-4">
                 <!-- Built-in theme row -->
                 <div>
-                  <p class="text-[11px] text-(--color-text-tertiary) uppercase tracking-wider mb-2">
+                  <p
+                    class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider mb-2"
+                  >
                     {m.theme_section_builtin()}
                   </p>
                   <div
                     class="flex items-center justify-between h-[44px] px-3 rounded-[2px] border border-(--color-border)"
                   >
-                    <span class="text-[13px] text-(--color-text-primary)">
+                    <span class="text-(--font-size-ui-base) text-(--color-text-primary)">
                       {m.theme_default_label()}
                     </span>
                     <div class="flex items-center gap-2">
                       {#if preferences?.appearance?.themeName === DEFAULT_THEME_NAME}
-                        <span class="text-[11px] text-(--color-accent-text) font-medium">
+                        <span
+                          class="text-(--font-size-ui-xs) text-(--color-accent-text) font-medium"
+                        >
                           {m.theme_active_label()}
                         </span>
                       {:else}
@@ -794,12 +802,14 @@
 
                 <!-- Custom themes -->
                 <div>
-                  <p class="text-[11px] text-(--color-text-tertiary) uppercase tracking-wider mb-2">
+                  <p
+                    class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider mb-2"
+                  >
                     {m.theme_section_custom()}
                   </p>
 
                   {#if themes.length === 0}
-                    <p class="text-[13px] text-(--color-text-secondary) mb-3">
+                    <p class="text-(--font-size-ui-base) text-(--color-text-secondary) mb-3">
                       {m.theme_empty_state()}
                     </p>
                   {:else}
@@ -808,12 +818,16 @@
                         <div
                           class="flex items-center justify-between h-[44px] px-3 rounded-[2px] border border-(--color-border)"
                         >
-                          <span class="text-[13px] text-(--color-text-primary) truncate mr-2">
+                          <span
+                            class="text-(--font-size-ui-base) text-(--color-text-primary) truncate mr-2"
+                          >
                             {theme.name}
                           </span>
                           <div class="flex items-center gap-1 flex-shrink-0">
                             {#if preferences?.appearance?.themeName === theme.name}
-                              <span class="text-[11px] text-(--color-accent-text) font-medium mr-1">
+                              <span
+                                class="text-(--font-size-ui-xs) text-(--color-accent-text) font-medium mr-1"
+                              >
                                 {m.theme_active_label()}
                               </span>
                             {:else}
@@ -855,11 +869,11 @@
             <!-- ===== CONNECTIONS SECTION ===== -->
           {:else if activeSection === 'connections'}
             <p
-              class="text-[11px] font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+              class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
             >
               {m.preferences_section_connections()}
             </p>
-            <p class="text-[13px] text-(--color-text-secondary) mb-4">
+            <p class="text-(--font-size-ui-base) text-(--color-text-secondary) mb-4">
               {m.connection_empty_state()}
             </p>
             <!-- Known-hosts import -->

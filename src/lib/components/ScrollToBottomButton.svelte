@@ -58,9 +58,9 @@
     border-radius: var(--radius-full);
     border: 1px solid var(--color-border);
 
-    /* Minimum size: 33×33px (auxiliary control) */
-    min-width: 33px;
-    min-height: 33px;
+    /* Minimum size: 44×44px (WCAG 2.5.5) */
+    min-width: var(--size-target-min);
+    min-height: var(--size-target-min);
     padding: var(--space-1);
 
     /* Colors — idle state */

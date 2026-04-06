@@ -110,17 +110,17 @@
   });
 
   const menuContentClass =
-    'z-[30] min-w-[180px] max-w-[280px] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) py-1';
+    'z-(--z-dropdown) min-w-[180px] max-w-[280px] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) py-1';
 
   const menuItemClass =
-    'flex items-center justify-between gap-2 h-[44px] px-3 text-[13px] text-(--color-text-primary) cursor-pointer select-none outline-none hover:bg-(--color-hover-bg) focus:bg-(--color-hover-bg) active:bg-(--color-active-bg) data-[disabled]:text-(--color-text-tertiary) data-[disabled]:pointer-events-none';
+    'flex items-center justify-between gap-2 h-[44px] px-3 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer select-none outline-none hover:bg-(--color-hover-bg) focus:bg-(--color-hover-bg) active:bg-(--color-active-bg) data-[disabled]:text-(--color-text-tertiary) data-[disabled]:pointer-events-none';
 
   /** Left side of a menu item: icon + label. */
   const menuItemLabelClass = 'flex items-center gap-2 min-w-0';
 
   /** Right-aligned shortcut hint (UXD §7.8.1). */
   const menuItemShortcutClass =
-    'ml-4 shrink-0 font-mono text-[11px] text-(--color-text-tertiary) leading-none';
+    'ml-4 shrink-0 font-mono text-(--font-size-ui-xs) text-(--color-text-tertiary) leading-none';
 
   const separatorClass = 'my-1 mx-3 h-px bg-(--color-border)';
 </script>

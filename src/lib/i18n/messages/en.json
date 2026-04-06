@@ -173,6 +173,7 @@
   "tab_bar_rename_input_aria_label": "Rename tab",
   "tab_bar_rename_confirm": "Confirm rename",
   "terminal_pane_aria_label": "Terminal pane",
+  "terminal_pane_n_aria_label": "Terminal {n}",
   "terminal_output_aria_label": "Terminal output",
   "terminal_view_aria_label": "TauTerm terminal",
   "connection_actions_aria_label": "Connection actions",

@@ -64,6 +64,8 @@
     paneId: PaneId;
     tabId: TabId;
     active: boolean;
+    /** 1-based pane number used to generate a unique aria-label ("Terminal 1", "Terminal 2", …). */
+    paneNumber?: number;
     /** Set to true when the PTY process has exited (from session-state-changed event). */
     terminated?: boolean;
     exitCode?: number;
@@ -122,6 +124,7 @@
     paneId,
     tabId: _tabId,
     active,
+    paneNumber,
     terminated = false,
     exitCode = 0,
     signalName,
@@ -1040,7 +1043,9 @@
   data-pane-id={paneId}
   data-active={active ? 'true' : undefined}
   role="region"
-  aria-label={m.terminal_pane_aria_label()}
+  aria-label={paneNumber != null
+    ? m.terminal_pane_n_aria_label({ n: paneNumber })
+    : m.terminal_pane_aria_label()}
 >
   <!-- ContextMenu wraps the viewport so right-click opens it -->
   <ContextMenu

@@ -123,6 +123,7 @@ describe('TP-MIN-006: TabBar component keys present in both catalogues', () => {
 describe('TP-MIN-007: TerminalPane component keys present in both catalogues', () => {
   const terminalPaneKeys = [
     'terminal_pane_aria_label',
+    'terminal_pane_n_aria_label',
     'terminal_output_aria_label',
     'pane_split_horizontal',
     'pane_split_vertical',

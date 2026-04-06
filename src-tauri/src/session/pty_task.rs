@@ -32,7 +32,7 @@ use crate::events::{
 };
 use crate::session::ids::PaneId;
 use crate::session::registry::SessionRegistry;
-use crate::vt::{DirtyRegion, VtProcessor, modes::MouseEncoding, modes::MouseReportingMode};
+use crate::vt::{DirtyRegion, VtProcessor};
 
 /// Handle to a running PTY read task.
 /// Dropping this handle signals the task to stop.
@@ -210,24 +210,12 @@ pub(crate) fn build_mode_state_event(
 ) -> ModeStateChangedEvent {
     let proc = vt.read();
     let modes = proc.mode_state();
-    let mouse_reporting = match modes.mouse_reporting {
-        MouseReportingMode::None => "none",
-        MouseReportingMode::X10 => "x10",
-        MouseReportingMode::Normal => "normal",
-        MouseReportingMode::ButtonEvent => "buttonEvent",
-        MouseReportingMode::AnyEvent => "anyEvent",
-    };
-    let mouse_encoding = match modes.mouse_encoding {
-        MouseEncoding::X10 => "x10",
-        MouseEncoding::Sgr => "sgr",
-        MouseEncoding::Urxvt => "urxvt",
-    };
     ModeStateChangedEvent {
         pane_id: pane_id.clone(),
         decckm: modes.decckm,
         deckpam: modes.deckpam,
-        mouse_reporting: mouse_reporting.to_string(),
-        mouse_encoding: mouse_encoding.to_string(),
+        mouse_reporting: modes.mouse_reporting,
+        mouse_encoding: modes.mouse_encoding,
         focus_events: modes.focus_events,
         bracketed_paste: modes.bracketed_paste,
     }

@@ -58,10 +58,10 @@
   }}
 >
   <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-[49] bg-(--color-bg-overlay)/60" />
+    <Dialog.Overlay class="fixed inset-0 z-(--z-modal-backdrop) bg-(--color-bg-overlay)/60" />
 
     <Dialog.Content
-      class="fixed z-[50] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+      class="fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
              {contentWidth} max-w-[90vw]
              bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
              shadow-(--shadow-overlay) p-6"
@@ -70,7 +70,9 @@
     >
       <!-- Header: title + close button -->
       <div class="flex items-start justify-between mb-3">
-        <Dialog.Title class="text-[16px] font-semibold text-(--color-text-primary) leading-snug">
+        <Dialog.Title
+          class="text-(--font-size-ui-lg) font-semibold text-(--color-text-primary) leading-snug"
+        >
           {title}
         </Dialog.Title>
 
@@ -86,7 +88,7 @@
       <Dialog.Description class="sr-only">{title}</Dialog.Description>
 
       <!-- Body content -->
-      <div class="text-[14px] text-(--color-text-primary)">
+      <div class="text-(--font-size-ui-md) text-(--color-text-primary)">
         {@render children()}
       </div>
 

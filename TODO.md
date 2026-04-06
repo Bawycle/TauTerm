@@ -53,28 +53,8 @@
   - Extraire les stores manquants : `state/session.svelte.ts`, `state/ssh.svelte.ts`, `state/notifications.svelte.ts`, `state/preferences.svelte.ts`, `state/scroll.svelte.ts`
   - Créer les wrappers IPC : `ipc/commands.ts`, `ipc/events.ts`, `ipc/errors.ts`
   - Cible : aucun composant > 250L de logique réactive (spec `docs/arch/05-frontend.md §11.2`)
-- [ ] **`mouse_reporting`/`mouse_encoding` : `String` libres dans `ModeStateChangedEvent`**
-  - Remplacer par des enums Rust sérialisables (`#[serde(rename_all = "camelCase")]`)
-  - Supprimer la conversion manuelle dans `build_mode_state_event()`
-
 ### UX/UI
 
-- [ ] **Z-index hardcodés dans 7 fichiers** — remplacer par tokens `z-(--z-xxx)` (Tailwind 4)
-  - `ContextMenu.svelte` : `z-[30]` → `z-(--z-dropdown)`
-  - `Dropdown.svelte` : `z-[30]` → `z-(--z-dropdown)`
-  - `Dialog.svelte` : `z-[49]` → `z-(--z-modal-backdrop)`, `z-[50]` → `z-(--z-modal)`
-  - `PreferencesPanel.svelte` : `z-[49]` / `z-[50]` idem
-  - `Tooltip.svelte` : `z-[60]` → `z-(--z-tooltip)`
-- [ ] **`top:44px` / `bottom:28px` hardcodés** dans `.terminal-view__search-container` (`TerminalView.svelte:1223,1226`)
-  - Remplacer par `var(--size-tab-height)` et `var(--size-status-bar-height)`
-- [ ] **`ScrollToBottomButton` : 33×33px** — incohérence entre spec §11.5 (44px) et §7.22.4 (33px)
-  - Trancher en faveur de WCAG 2.5.5 (44px) et mettre à jour §7.22.4
-- [ ] **`aria-label` TerminalPane non différencié** — multi-panes illisible pour les lecteurs d'écran
-  - Passer un prop `paneNumber` et générer `aria-label="Terminal {N}"`
-- [ ] **`role="region"` → `role="complementary"`** dans `ConnectionManager.svelte:204` (spec §11.3)
-- [ ] **~25 occurrences `text-[Npx]`** hardcodées — remplacer par `text-(--font-size-ui-*)`
-  - `text-[13px]` → `text-(--font-size-ui-base)`, `text-[12px]` → `text-(--font-size-ui-sm)`, etc.
-  - Fichiers : `ConnectionManager`, `PreferencesPanel`, `Dialog`, `TextInput`, `Dropdown`, `ContextMenu`, `Tooltip`
 - [ ] **Implémenter SSH Deprecated Algorithm Banner** (UXD §7.21)
   - Le type IPC `dismiss_deprecated_algorithm_banner` existe dans `ipc/types.ts` mais aucun composant ne l'affiche
 - [ ] **Implémenter SSH Reconnection Separator** (UXD §7.19)

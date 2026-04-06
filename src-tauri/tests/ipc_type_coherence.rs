@@ -27,6 +27,7 @@ use tau_term_lib::{
         tab::{PaneNode, SplitDirection, TabState},
     },
     ssh::SshLifecycleState,
+    vt::modes::{MouseEncoding, MouseReportingMode},
 };
 
 // ---------------------------------------------------------------------------
@@ -218,12 +219,20 @@ fn ipc_mode_state_changed_event_serializes() {
         pane_id: make_pane_id(),
         decckm: false,
         deckpam: false,
-        mouse_reporting: "none".to_string(),
-        mouse_encoding: "x10".to_string(),
+        mouse_reporting: MouseReportingMode::None,
+        mouse_encoding: MouseEncoding::X10,
         focus_events: false,
         bracketed_paste: true,
     };
     let json = serde_json::to_string(&event).expect("ModeStateChangedEvent must serialize");
+    assert!(
+        json.contains("\"mouseReporting\":\"none\""),
+        "mouseReporting must serialize to \"none\": {json}"
+    );
+    assert!(
+        json.contains("\"mouseEncoding\":\"x10\""),
+        "mouseEncoding must serialize to \"x10\": {json}"
+    );
     assert!(
         json.contains("bracketed") || json.contains("Paste"),
         "bracketed_paste field missing: {json}"

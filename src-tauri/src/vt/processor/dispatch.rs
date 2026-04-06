@@ -541,6 +541,28 @@ impl Perform for VtPerformBridge<'_> {
                     p.cursor_shape_changed = true;
                 }
             }
+            // DSR — Device Status Report (ECMA-48 §8.3.35).
+            // CSI 5n → terminal ready: respond `\x1b[0n`.
+            // CSI 6n → cursor position: respond `\x1b[row;colR` (1-based).
+            ([], 'n') => match param0 {
+                5 => p.pending_responses.push(b"\x1b[0n".to_vec()),
+                6 => {
+                    let row = p.cursor_row() + 1;
+                    let col = p.cursor_col() + 1;
+                    p.pending_responses
+                        .push(format!("\x1b[{row};{col}R").into_bytes());
+                }
+                _ => {}
+            },
+
+            // DA — Primary Device Attributes (ECMA-48 §8.3.24).
+            // CSI c / CSI 0c → report VT100 with AVO: `\x1b[?1;2c`.
+            ([], 'c') => {
+                if param0 == 0 {
+                    p.pending_responses.push(b"\x1b[?1;2c".to_vec());
+                }
+            }
+
             _ => {} // Unknown CSI sequence — ignore.
         }
     }

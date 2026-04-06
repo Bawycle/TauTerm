@@ -119,6 +119,11 @@ pub struct VtProcessor {
     //
     // Tuple: (codepoint, col, row) at which the provisional cell was written.
     pending_ri: Option<(char, u16, u16)>,
+    // Responses to be written back to the PTY master (DSR, DA, CPR).
+    // Drained by `take_responses()` in Task 1 of the PTY read task.
+    // The write-lock MUST be released before writing these to the PTY master
+    // to avoid deadlocking when the shell echoes back the response.
+    pending_responses: Vec<Vec<u8>>,
     // Pending base codepoint for variation selector look-ahead (FS-VT-017, R6).
     //
     // FE0F/FE0E arrive *after* the base codepoint.  We buffer the base here so
@@ -313,6 +318,7 @@ impl VtProcessor {
             pending_osc52_write: None,
             pending_ri: None,
             pending_emoji: None,
+            pending_responses: Vec::new(),
         }
     }
 
@@ -435,6 +441,19 @@ impl VtProcessor {
     /// drains and returns the payload. Returns `None` otherwise.
     pub fn take_osc52_write(&mut self) -> Option<String> {
         self.pending_osc52_write.take()
+    }
+
+    /// Drain all pending PTY responses (sequences to write back to the PTY master).
+    ///
+    /// Called by Task 1 of the PTY read task immediately after `process()`,
+    /// while the write-lock is still held. The caller MUST release the
+    /// write-lock before writing the returned bytes to the PTY master to
+    /// avoid a deadlock when the shell echoes back the response.
+    ///
+    /// Covers: DSR ready (`CSI 5n` → `\x1b[0n`), CPR (`CSI 6n` → `\x1b[row;colR`),
+    /// and Primary DA (`CSI c` / `CSI 0c` → `\x1b[?1;2c`).
+    pub fn take_responses(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.pending_responses)
     }
 
     // -----------------------------------------------------------------------

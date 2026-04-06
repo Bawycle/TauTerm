@@ -121,11 +121,20 @@ impl LinuxPtySession {
     pub fn reader_handle(&self) -> Arc<Mutex<Box<dyn Read + Send>>> {
         self.reader.clone()
     }
+
+    /// Borrow the writer for the PTY read task (DSR/DA/CPR responses).
+    pub fn writer_handle(&self) -> Arc<Mutex<Box<dyn Write + Send>>> {
+        self.writer.clone()
+    }
 }
 
 impl PtySession for LinuxPtySession {
     fn reader_handle(&self) -> Option<Arc<Mutex<Box<dyn Read + Send>>>> {
         Some(self.reader.clone())
+    }
+
+    fn writer_handle(&self) -> Option<Arc<Mutex<Box<dyn Write + Send>>>> {
+        Some(self.writer.clone())
     }
 
     fn write(&mut self, data: &[u8]) -> Result<(), PtyError> {

@@ -94,6 +94,10 @@ pub struct ScreenUpdateEvent {
     /// appended to the scrollback buffer while the user is scrolled up
     /// (scroll-freeze policy).
     pub scrollback_lines: usize,
+    /// True when the entire screen must be repainted (alternate screen switch,
+    /// resize, or ED2). The frontend uses this to reset scroll offset and
+    /// rebuild `gridRows` fully rather than applying a partial diff.
+    pub is_full_redraw: bool,
 }
 
 /// A single updated cell in the screen buffer.

@@ -196,6 +196,7 @@ fn ipc_screen_update_event_serializes() {
         }],
         cursor: make_cursor_state(),
         scrollback_lines: 0,
+        is_full_redraw: false,
     };
     let json = serde_json::to_string(&event).expect("ScreenUpdateEvent must serialize");
     assert!(json.contains("cells"));
@@ -209,6 +210,7 @@ fn ipc_screen_update_empty_cells_serializes() {
         cells: vec![],
         cursor: make_cursor_state(),
         scrollback_lines: 100,
+        is_full_redraw: false,
     };
     let json = serde_json::to_string(&event).expect("serialize");
     assert!(json.contains("\"cells\":[]"));
@@ -559,6 +561,7 @@ fn ipc_screen_update_payload_includes_pane_id() {
         cells: vec![],
         cursor: make_cursor_state(),
         scrollback_lines: 0,
+        is_full_redraw: false,
     };
     let json = serde_json::to_string(&event).expect("serialize");
     // Verify the pane ID value is present in the serialized payload.

@@ -227,6 +227,7 @@ impl SessionRegistry {
         // We downcast to `LinuxPtySession` to access `reader_handle()`.
         // To avoid coupling the registry to the Linux type, we use a helper trait.
         let reader_handle = get_reader_handle(&*pty_box);
+        let writer_handle = get_writer_handle(&*pty_box);
 
         // Extract the injectable sender BEFORE pty_box is moved into pane.pty_session.
         // This must happen here so the PaneId is already known (it was generated above)
@@ -243,6 +244,7 @@ impl SessionRegistry {
                 pane.vt.clone(),
                 self.app.clone(),
                 reader,
+                writer_handle,
                 registry,
             );
             pane.pty_task = Some(task);
@@ -412,6 +414,7 @@ impl SessionRegistry {
         new_pane.lifecycle = PaneLifecycleState::Running;
 
         let reader_handle = get_reader_handle(&*pty_box);
+        let writer_handle = get_writer_handle(&*pty_box);
 
         // Extract the injectable sender BEFORE pty_box is moved into new_pane.pty_session.
         // See ADR-0015-implementation-notes.md §5.3 (split_pane variant).
@@ -426,6 +429,7 @@ impl SessionRegistry {
                 new_pane.vt.clone(),
                 self.app.clone(),
                 reader,
+                writer_handle,
                 registry,
             );
             new_pane.pty_task = Some(task);
@@ -847,6 +851,17 @@ fn get_reader_handle(
     pty: &dyn PtySession,
 ) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Read + Send>>>> {
     pty.reader_handle()
+}
+
+/// Extract a writer handle from a `Box<dyn PtySession>` for the read task.
+///
+/// Used by Task 1 to write DSR/DA/CPR responses back to the PTY master after
+/// releasing the `VtProcessor` write-lock. Sessions that do not support
+/// back-writes (e.g. injectable E2E sessions) return `None`.
+fn get_writer_handle(
+    pty: &dyn PtySession,
+) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Write + Send>>>> {
+    pty.writer_handle()
 }
 
 // ---------------------------------------------------------------------------

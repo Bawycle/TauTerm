@@ -81,6 +81,16 @@ pub trait PtySession: Send + Sync {
         None
     }
 
+    /// Get a shared writer handle for writing responses back to the PTY master.
+    ///
+    /// Used by the PTY read task to send DSR/DA/CPR responses without holding
+    /// the `VtProcessor` write-lock. The default returns `None`.
+    fn writer_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Write + Send>>>> {
+        None
+    }
+
     /// Return the injectable sender for this session, if this is an
     /// `InjectablePtySession`.
     ///

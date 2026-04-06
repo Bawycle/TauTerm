@@ -142,7 +142,19 @@ async function createConnectionViaForm(): Promise<void> {
       id,
       value,
     );
-    await browser.pause(50);
+    // Wait for the input value to be reflected in the DOM before proceeding.
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          function (elId: string, val: string): boolean {
+            const input = document.getElementById(elId) as HTMLInputElement | null;
+            return input !== null && input.value === val;
+          },
+          id,
+          value,
+        ),
+      { timeout: 2_000, timeoutMsg: `Input #${id} did not reflect value "${value}"` },
+    );
   }
 
   await typeIntoInput("cm-label", "E2E Test Connection");
@@ -163,8 +175,18 @@ async function createConnectionViaForm(): Promise<void> {
     radio.dispatchEvent(new Event("change", { bubbles: true }));
   });
 
-  // Wait for Svelte reactive state to settle.
-  await browser.pause(300);
+  // Wait for Svelte reactive state to reflect the radio change: the
+  // password auth method radio must be checked in the DOM before proceeding.
+  await browser.waitUntil(
+    () =>
+      browser.execute(function (): boolean {
+        const radio = document.querySelector<HTMLInputElement>(
+          'input[name="cm-auth-method"][value="password"]',
+        );
+        return radio !== null && radio.checked;
+      }),
+    { timeout: 3_000, timeoutMsg: "Password auth radio did not become checked" },
+  );
 
   // Click the first button inside the form footer div (the "Save" button,
   // whichever locale is active).  The form footer renders as a `<div class="flex

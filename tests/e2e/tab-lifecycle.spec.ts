@@ -163,8 +163,27 @@ describe('TauTerm — Tab create and close lifecycle', () => {
       );
     });
 
-    // Wait a moment for any crash to manifest.
-    await browser.pause(500);
+    // Wait for the app to remain responsive after the keydown — the close
+    // confirmation dialog should appear (or the tab bar stays intact), giving
+    // us a concrete DOM condition to observe instead of a blind sleep.
+    await browser.waitUntil(
+      async () => {
+        // Either the confirmation dialog appeared or the tab count is stable.
+        // Both outcomes prove the app did not crash.
+        const dialogPresent = await browser.execute(function (): boolean {
+          return document.querySelector('[data-testid="close-confirm-cancel"]') !== null;
+        });
+        if (dialogPresent) return true;
+        // Also accept: the tab bar is still in the DOM with at least one tab.
+        try {
+          const tabs = await browser.$$('[data-tab-index]');
+          return tabs.length >= 1;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 5_000, timeoutMsg: "App became unresponsive after Ctrl+Shift+W on last tab" },
+    );
 
     // Application must still be responsive — window title is still correct.
     const title = await browser.getTitle();

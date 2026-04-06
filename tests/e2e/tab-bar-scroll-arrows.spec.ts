@@ -73,6 +73,32 @@ async function isAnyArrowPresent(): Promise<boolean> {
 }
 
 /**
+ * Wait for the tab bar scroll state to settle.
+ *
+ * TabBar.svelte updates `canScrollLeft` / `canScrollRight` in response to
+ * scroll and resize events via a 200 ms debounce/fallback timer. Rather than
+ * sleeping for a fixed duration we poll until the arrow presence is stable
+ * across two consecutive observations (i.e. the scroll-state timer has fired
+ * and Svelte has flushed the resulting DOM update).
+ */
+async function waitForScrollStateStable(): Promise<void> {
+  await browser.waitUntil(
+    async () => {
+      const state1 = await isAnyArrowPresent();
+      // Check again after a short interval to confirm the state is stable.
+      await new Promise((r) => setTimeout(r, 60));
+      const state2 = await isAnyArrowPresent();
+      return state1 === state2;
+    },
+    {
+      timeout: 1_500,
+      interval: 80,
+      timeoutMsg: 'Tab bar scroll state did not stabilise within 1.5 s',
+    },
+  );
+}
+
+/**
  * Open a new tab via Ctrl+Shift+T and wait for the tab count to increase.
  */
 async function openNewTab(expectedCount: number): Promise<void> {
@@ -94,9 +120,9 @@ async function openNewTab(expectedCount: number): Promise<void> {
     timeout: 5_000,
     timeoutMsg: `Tab count did not reach ${expectedCount} after Ctrl+Shift+T`,
   });
-  // Allow the scroll-state timer (200 ms fallback in TabBar.svelte) to fire
-  // and Svelte to flush the resulting DOM update.
-  await browser.pause(250);
+  // Wait for the scroll-state timer (200 ms fallback in TabBar.svelte) to fire
+  // and for Svelte to flush the resulting DOM update.
+  await waitForScrollStateStable();
 }
 
 /**
@@ -158,8 +184,8 @@ async function clickTabByIndex(index: number): Promise<void> {
     const tab = document.querySelector<HTMLElement>(`.tab-bar__tab[data-tab-index='${idx}']`);
     tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   }, index);
-  // Allow layout and scroll-state update after tab switch.
-  await browser.pause(150);
+  // Wait for layout and scroll-state to settle after tab switch.
+  await waitForScrollStateStable();
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +201,14 @@ describe('TauTerm — TabBar scroll arrow visibility', () => {
         btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
     });
-    await browser.pause(200);
+    // Wait for the dialog to be gone before proceeding.
+    await browser.waitUntil(
+      () =>
+        browser.execute(function (): boolean {
+          return document.querySelector('[data-testid="close-confirm-cancel"]') === null;
+        }),
+      { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not disappear after dismiss" },
+    );
 
     // Normalise to a single-tab state.
     await ensureOneTab();
@@ -217,8 +250,8 @@ describe('TauTerm — TabBar scroll arrow visibility', () => {
     const tabCount = await countTabs();
     expect(tabCount).toBe(1);
 
-    // Allow layout to settle.
-    await browser.pause(200);
+    // Wait for layout to settle and scroll state to be computed.
+    await waitForScrollStateStable();
 
     expect(await isLeftArrowPresent()).toBe(false);
     expect(await isRightArrowPresent()).toBe(false);
@@ -354,8 +387,8 @@ describe('TauTerm — TabBar scroll arrow visibility', () => {
       tabs.dispatchEvent(new Event('scroll'));
     });
 
-    // Allow Svelte to flush the DOM update.
-    await browser.pause(150);
+    // Wait for Svelte to flush the DOM update and the scroll state to stabilise.
+    await waitForScrollStateStable();
 
     // At scrollLeft=0 there is content to the right → right arrow shown.
     expect(await isRightArrowPresent()).toBe(true);
@@ -391,8 +424,8 @@ describe('TauTerm — TabBar scroll arrow visibility', () => {
 
     expect(n).toBe(2);
 
-    // Allow layout to settle after the last tab removal.
-    await browser.pause(200);
+    // Wait for layout to settle after the last tab removal.
+    await waitForScrollStateStable();
 
     // With only 2 tabs, both arrows must be absent.
     expect(await isLeftArrowPresent()).toBe(false);

@@ -167,7 +167,14 @@ describe('TauTerm — Terminal viewport auto-focus (FS-UX-003)', () => {
         btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
     });
-    await browser.pause(200);
+    // Wait for the dialog to be gone before proceeding.
+    await browser.waitUntil(
+      () =>
+        browser.execute(function (): boolean {
+          return document.querySelector('[data-testid="close-confirm-cancel"]') === null;
+        }),
+      { timeout: 3_000, timeoutMsg: "Close confirmation dialog did not disappear after dismiss" },
+    );
 
     // Normalise to a single-tab state.
     await ensureOneTab();

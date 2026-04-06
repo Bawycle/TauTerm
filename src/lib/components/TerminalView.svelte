@@ -56,6 +56,7 @@
   import Button from '$lib/ui/Button.svelte';
   import { Network, MousePointerClick } from 'lucide-svelte';
   import { applyLocaleChange } from '$lib/state/locale.svelte';
+  import { applyPreferencesUpdate } from '$lib/preferences/applyUpdate';
   import type {
     Preferences,
     PreferencesPatch,
@@ -869,11 +870,7 @@
 
   async function handlePreferencesUpdate(patch: PreferencesPatch) {
     try {
-      preferences = await invoke<Preferences>('update_preferences', { patch });
-      // Sync locale state immediately if the language field changed (FS-I18N-004).
-      // update_preferences already persisted the new value; applyLocaleChange only
-      // updates the reactive frontend state without a redundant IPC call.
-      applyLocaleChange(preferences.appearance.language);
+      preferences = await applyPreferencesUpdate(patch, invoke, applyLocaleChange);
     } catch {
       // Non-fatal
     }

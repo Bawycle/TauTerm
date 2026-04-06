@@ -137,6 +137,9 @@
   --color-pane-border-active: var(--color-blue-400); /* #4a92bf */
   --color-pane-border-inactive: var(--color-neutral-700); /* #35312a */
 
+  /* Form inputs */
+  --color-bg-input: var(--color-neutral-900); /* #16140f — slightly recessed vs surface, creates inset effect */
+
   /* Scrollbar */
   --color-scrollbar-track: transparent;
   --color-scrollbar-thumb: var(--color-neutral-600); /* #4a4640 */

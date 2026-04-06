@@ -308,17 +308,12 @@
             break;
 
           case 'tab-closed': {
-            // Determine which tab was closed: prefer explicit closedTabId,
-            // otherwise find the tab that is no longer referenced.
-            const closedId =
-              change.closedTabId ??
-              tabs.find((t) => t.id !== change.activeTabId && t.id !== activeTabId)?.id ??
-              activeTabId; // last resort fallback — old behavior
-            tabs = tabs.filter((t) => t.id !== closedId);
+            const closedId = change.closedTabId;
+            if (closedId !== undefined) {
+              tabs = tabs.filter((t) => t.id !== closedId);
+            }
             if (change.activeTabId !== undefined) {
               activeTabId = change.activeTabId;
-            } else if (activeTabId === closedId && tabs.length > 0) {
-              activeTabId = tabs[tabs.length - 1].id;
             } else if (tabs.length === 0) {
               activeTabId = '';
             }

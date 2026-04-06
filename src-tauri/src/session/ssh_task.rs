@@ -93,6 +93,7 @@ pub fn spawn_ssh_read_task(
                                 change_type: SessionChangeType::PaneMetadataChanged,
                                 tab: Some(tab_state),
                                 active_tab_id: None,
+                                closed_tab_id: None,
                             },
                         );
                     }
@@ -128,6 +129,7 @@ pub fn spawn_ssh_read_task(
                                 change_type: SessionChangeType::PaneMetadataChanged,
                                 tab: Some(tab_state),
                                 active_tab_id: None,
+                                closed_tab_id: None,
                             },
                         );
                     }

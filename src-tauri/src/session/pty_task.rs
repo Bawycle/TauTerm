@@ -150,6 +150,7 @@ pub fn spawn_pty_read_task(
                         change_type: SessionChangeType::PaneMetadataChanged,
                         tab: Some(tab_state),
                         active_tab_id: None,
+                        closed_tab_id: None,
                     },
                 );
             }

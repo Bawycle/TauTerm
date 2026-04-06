@@ -36,20 +36,9 @@
 
 - [ ] **3× `unwrap()` sur `get_mut()`** dans `src-tauri/src/session/registry.rs:325,451,603`
   - Remplacer par `ok_or_else(|| SessionError::TabNotFound(...))` — risque de panic backend en production
-- [ ] **`closed_tab_id` absent du payload `SessionStateChangedEvent`** — `src-tauri/src/events/types.rs`
-  - Ajouter `closed_tab_id: Option<TabId>` dans la variante `TabClosed` côté Rust
-  - Supprimer l'heuristique de fallback dans `TerminalView.svelte` (lignes 311–316)
-  - Violation directe règle IPC events CLAUDE.md
 - [ ] **Downcast `unsafe` via raw pointer** dans `src-tauri/src/platform/pty_linux.rs` (bloc test)
   - `Box::into_raw` + `Box::from_raw(raw as *mut LinuxPtySession)` — violation CLAUDE.md
   - Ajouter une méthode accesseur au trait `PtySession` (ou `as_any()`) pour éliminer le cast
-
-### UX/UI — accessibilité et tokens
-
-- [ ] **Bouton Settings 24×24px** dans `StatusBar.svelte` — violation WCAG 2.5.5 (min 44×44px)
-  - Agrandir la zone de clic via padding, sans nécessairement agrandir l'icône
-- [ ] **`--color-bg-input` non défini** dans `src/app.css` — fond d'input silencieusement transparent
-  - Définir le token avec la valeur sémantique correcte dans la couche `component`
 
 ### Tests et CI
 

@@ -39,6 +39,11 @@ pub struct SessionStateChangedEvent {
     /// Present when `change_type` is `active-tab-changed` or `tab-closed`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_tab_id: Option<String>,
+    /// Present when `change_type` is `tab-closed` — the ID of the tab that was closed.
+    /// Required by IPC event rules: every event affecting a specific entity must include
+    /// that entity's ID explicitly in the payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closed_tab_id: Option<TabId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

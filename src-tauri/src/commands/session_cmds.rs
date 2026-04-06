@@ -30,8 +30,21 @@ pub async fn create_tab(
 pub async fn close_tab(
     tab_id: TabId,
     registry: State<'_, Arc<SessionRegistry>>,
+    app: AppHandle,
 ) -> Result<(), TauTermError> {
-    registry.close_tab(tab_id).map_err(TauTermError::from)
+    let new_active_tab_id = registry.close_tab(tab_id.clone()).map_err(TauTermError::from)?;
+
+    emit_session_state_changed(
+        &app,
+        SessionStateChangedEvent {
+            change_type: SessionChangeType::TabClosed,
+            tab: None,
+            active_tab_id: new_active_tab_id.map(|id| id.to_string()),
+            closed_tab_id: Some(tab_id),
+        },
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -91,6 +104,7 @@ pub async fn set_active_tab(
             change_type: SessionChangeType::ActiveTabChanged,
             tab: Some(tab_state),
             active_tab_id: Some(tab_id.to_string()),
+            closed_tab_id: None,
         },
     );
 
@@ -113,6 +127,7 @@ pub async fn set_active_pane(
             change_type: SessionChangeType::ActivePaneChanged,
             tab: Some(tab_state),
             active_tab_id: None,
+            closed_tab_id: None,
         },
     );
 

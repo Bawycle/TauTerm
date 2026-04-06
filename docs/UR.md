@@ -223,7 +223,7 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 
 - For the v1 release, TauTerm is distributed as an **AppImage** for Linux.
 - The AppImage must be self-contained: the user must be able to run it without installing system dependencies beyond what a standard Linux desktop provides.
-- The AppImage must run on the supported architectures: x86, x86_64, ARM32, ARM64, RISC-V.
+- The AppImage is distributed for x86_64 only. ARM64 (aarch64) is supported but without distributed binaries or packages — interested users must build TauTerm from source. x86 32-bit, ARM32, and RISC-V are not supported (WebKitGTK unavailable or unmaintained on those targets).
 
 ---
 

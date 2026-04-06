@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project
 
 TauTerm is a terminal emulator built with Tauri 2. The Rust backend handles PTY management and terminal state; the Svelte frontend renders the terminal UI.
-La plateforme cible, pour cette première version, est Linux (x86, x86_64, ARM32, ARM64, RISC-V).
+La plateforme cible, pour cette première version, est Linux (x86_64). ARM64 (aarch64) est supporté mais sans binaires ni packages distribués — les utilisateurs doivent compiler depuis les sources.
 
 ## Documentation
 

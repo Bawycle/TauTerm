@@ -83,8 +83,8 @@ Frontend keydown → invoke('send_input', {pane_id, data})
 
 | Platform | v1 Status | v2+ Path |
 |----------|-----------|---------|
-| Linux x86\_64 | Supported | — |
-| Linux x86, ARM32, ARM64, RISC-V | Supported | — |
+| Linux x86\_64 | Supported (AppImage distributed) | — |
+| Linux ARM64 (aarch64) | Supported (source build only — no distributed binary) | — |
 | macOS | Not supported | PAL stubs ready; russh cross-platform; Keychain via PAL |
 | Windows | Not supported | PAL stubs ready; russh/ssh2-rs cross-platform; ConPTY via portable-pty |
 

@@ -254,22 +254,21 @@ src/
 
 ### 10.6 Distribution: AppImage
 
-**Artefact:** One AppImage binary per target architecture (FS-DIST-003). Naming convention: `TauTerm-{version}-{arch}.AppImage`.
+**Artefact:** One AppImage binary for x86_64 (FS-DIST-003). Naming convention: `TauTerm-{version}-{arch}.AppImage`. ARM64 (aarch64) is supported for source builds only — no AppImage artefact is distributed for that architecture.
 
 **Bundler:** Tauri's native AppImage bundler. Configured via `bundle.targets: ["appimage"]` in `tauri.conf.json`. No external toolchain (`appimagetool`, `linuxdeploy`) is required. See ADR-0014.
 
 **Runtime dependency:** WebKitGTK (`libwebkit2gtk-4.1` on Ubuntu 22.04+, `libwebkit2gtk-4.0` on older distributions). This is the only dependency not bundled in the AppImage — it is a standard component of any GNOME-compatible Linux desktop environment. All other dependencies (Rust binary, frontend assets, locale JSON files, application icon, `.desktop` entry) are bundled (FS-DIST-002, FS-DIST-005).
 
-**Multi-architecture build strategy:** Cross-compilation is avoided. Tauri's AppImage bundler requires WebKitGTK headers and libraries matching the target architecture at build time, making cross-compilation impractical without a full matching sysroot. The strategy is **separate CI jobs per architecture**, each running on a native or QEMU-emulated runner (FS-DIST-003):
+**Multi-architecture build strategy:** Cross-compilation is avoided. Tauri's AppImage bundler requires WebKitGTK headers and libraries matching the target architecture at build time, making cross-compilation impractical without a full matching sysroot.
 
-| Architecture | Rust target triple | CI runner strategy |
-|---|---|---|
-| x86_64 | `x86_64-unknown-linux-gnu` | Native x86_64 runner |
-| x86 (i686) | `i686-unknown-linux-gnu` | Native x86_64 runner with `--target i686` + multilib |
-| ARM64 (aarch64) | `aarch64-unknown-linux-gnu` | Native ARM64 runner or QEMU |
-| ARM32 (armhf) | `armv7-unknown-linux-gnueabihf` | QEMU or cross-compiler toolchain |
-| RISC-V (riscv64) | `riscv64gc-unknown-linux-gnu` | QEMU or cross-compiler toolchain |
+The CI strategy is as follows (FS-DIST-003):
 
-Each CI job produces a single AppImage artefact. Release artefacts are published as a set of five files.
+| Architecture | Rust target triple | CI artefact | CI runner strategy |
+|---|---|---|---|
+| x86_64 | `x86_64-unknown-linux-gnu` | AppImage released | Native x86_64 runner |
+| ARM64 (aarch64) | `aarch64-unknown-linux-gnu` | Source build only — no AppImage | Native ARM64 runner (`ubuntu-24.04-arm`) |
+
+The release publishes a single AppImage artefact (`TauTerm-{version}-x86_64.AppImage`). The ARM64 CI job validates that the source builds and tests pass on aarch64, but produces no distributable package.
 
 **Minimum supported WebKitGTK version:** `libwebkit2gtk-4.1 >= 2.38` (Ubuntu 22.04+) or `libwebkit2gtk-4.0 >= 2.38` (older distributions). Version 2.38 is the threshold that introduced post-2022 WebKit security patches addressing multiple CVE-class vulnerabilities. Distributions shipping an older WebKitGTK release are not officially supported; TauTerm may run but security properties are not guaranteed. The CI build environment enforces this minimum by targeting Ubuntu 22.04 as the baseline.

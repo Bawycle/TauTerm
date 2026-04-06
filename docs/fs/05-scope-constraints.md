@@ -11,7 +11,7 @@
 |----|-------------|----------|
 | FS-DIST-001 | TauTerm v1 MUST be distributed as an AppImage. | Must |
 | FS-DIST-002 | The AppImage MUST be self-contained: it MUST bundle all application dependencies (Rust runtime, frontend assets, shared libraries not guaranteed to be present on a target system). It MUST NOT require the user to install external packages beyond a standard Linux desktop environment (display server, `libwebkit2gtk-4.1` on Ubuntu 22.04+ or `libwebkit2gtk-4.0` on older distributions). | Must |
-| FS-DIST-003 | The AppImage MUST run on the following architectures: x86 (i686), x86_64, ARM32 (armhf), ARM64 (aarch64), RISC-V (riscv64). A separate AppImage binary MAY be produced per architecture. | Must |
+| FS-DIST-003 | The AppImage MUST target x86_64. ARM64 (aarch64) is supported but without distributed binaries: users on ARM64 MUST build TauTerm from source. | Must |
 | FS-DIST-004 | The AppImage MUST be executable directly after download (no installation step required). A user who downloads and `chmod +x`es the AppImage MUST be able to run TauTerm immediately. | Must |
 | FS-DIST-005 | The AppImage SHOULD integrate with the host desktop environment: it SHOULD provide a `.desktop` entry and application icon accessible via the AppImage integration daemon (`appimaged`) or equivalent. | Should |
 | FS-DIST-006 | TauTerm release artefacts MUST be cryptographically signed. Each AppImage MUST be accompanied by a detached GPG signature (`.asc`) and a SHA-256 checksum file (`SHA256SUMS`). The `SHA256SUMS` file itself MUST also be GPG-signed. The public signing key MUST be published on a separate trusted channel (project website or a public keyserver). | Must |
@@ -19,7 +19,7 @@
 **Acceptance criteria:**
 - FS-DIST-001: The release artefact is an `.AppImage` file.
 - FS-DIST-002: On a clean minimal Linux installation (e.g., Ubuntu Server with a desktop environment added but no TauTerm-specific dependencies), the AppImage runs without prompting for package installation.
-- FS-DIST-003: The AppImage (or per-architecture variant) launches and passes a basic smoke test (`pnpm wdio`) on each of the five target architectures.
+- FS-DIST-003: The x86_64 AppImage launches and passes a basic smoke test (`pnpm wdio`) on an x86_64 system. ARM64 support is validated by a source build on an aarch64 runner (no AppImage artefact produced).
 - FS-DIST-004: `chmod +x TauTerm-x86_64.AppImage && ./TauTerm-x86_64.AppImage` opens the application on a clean x86_64 system.
 - FS-DIST-005: After running the AppImage with `appimaged` active, TauTerm appears in the desktop application launcher with its icon.
 - FS-DIST-006: Each release includes a `.asc` detached GPG signature and a signed `SHA256SUMS` file alongside every AppImage artefact. Running `gpg --verify TauTerm-x86_64.AppImage.asc TauTerm-x86_64.AppImage` succeeds with the published public key. Running `sha256sum --check SHA256SUMS` passes for every listed artefact.

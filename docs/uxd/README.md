@@ -76,5 +76,6 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 | Theme optional tokens | [06-themes.md](06-themes.md) | §13.3 |
 | Non-themeable tokens | [06-themes.md](06-themes.md) | §13.4 |
 | Theme validation rules | [06-themes.md](06-themes.md) | §13.5 |
+| Theme switching interaction (entry points, live preview, keyboard nav, swatch spec) | [06-themes.md](06-themes.md) | §13.6 |
 | Traceability matrix | [07-traceability.md](07-traceability.md) | §14 |
 | IPC contract reference | [07-traceability.md](07-traceability.md) | §15 |

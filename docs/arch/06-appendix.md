@@ -22,11 +22,15 @@ Every `#[tauri::command]` that accepts user-provided data applies validation at 
 
 | Sub-key | Type | Description |
 |---------|------|-------------|
-| `appearance` | `AppearancePrefs` | Font, font size, cursor style, theme name, opacity, language |
+| `appearance` | `AppearancePrefs` | Font, font size, cursor style, active theme name, opacity, language |
 | `terminal` | `TerminalPrefs` | Scrollback size, `allow_osc52_write`, word delimiters, bell type |
 | `keyboard` | `KeyboardPrefs` | Shortcut bindings |
 | `connections` | `Vec<SshConnectionConfig>` | Saved SSH connections. **Authoritative source for connection configs** — `SshManager` reads and writes this list via `State<PreferencesStore>`; it holds no independent connection store. |
-| `themes` | `Vec<UserTheme>` | User-defined themes |
+| `themes` | `Vec<UserTheme>` | User-defined themes only. Built-in themes (Umbra, Solstice, Archipel) are shipped as static assets with the application and are never stored in this list. |
+
+**Built-in theme model:** TauTerm ships three built-in themes (FS-THEME-011): Umbra (default), Solstice, and Archipel. Built-in themes are static CSS/token bundles embedded in the frontend bundle. They are enumerated by the frontend as a fixed, ordered list distinct from `Vec<UserTheme>`. The `appearance.theme_name` field in `preferences.toml` holds the name of the active theme — either a built-in name (`"umbra"`, `"solstice"`, `"archipel"`) or the name of a user-created theme. On first launch (no preferences file), `theme_name` defaults to `"umbra"` (FS-THEME-013). No new IPC commands, no new Rust types, and no new storage layer are required to support three built-in themes; the expansion from one to three built-in themes is transparent to the backend.
+
+**Unknown `theme_name` fallback:** When `appearance.theme_name` resolves to neither a built-in ID (`"umbra"`, `"solstice"`, `"archipel"`) nor a known entry in `Vec<UserTheme>` — for example, the user manually edited the file, or a user-created theme was deleted while it was the active theme — the application falls back silently to `"umbra"` and emits a diagnostic-level log message (not a user-visible error). This is consistent with the general preferences validation model (FS-SEC-003): invalid values are replaced with defaults without surfacing errors to the user, matching the pattern established for unknown locale codes (FS-I18N-006). The valid set of built-in IDs is treated as a fixed enum during schema validation on load; user-created theme IDs are resolved dynamically against `Vec<UserTheme>` after the preferences file is fully loaded.
 
 ### 8.2 PTY Isolation
 
@@ -82,7 +86,7 @@ A plugin system would allow third parties to add new session types (e.g., serial
 
 ### 12.3 Cloud Sync (Post-v1 — explicitly out of scope)
 
-Preferences and saved connections are stored in `~/.config/tauterm/preferences.toml` (TOML format, validated on load). A cloud sync feature would add a sync layer above `PreferencesStore`. The `PreferencesStore` interface (`get`, `apply_patch`, `get_themes`, `save_theme`, `delete_theme`) is the abstraction boundary. No structural change is required; a `SyncedPreferencesStore` could wrap the base store.
+Preferences and saved connections are stored in `~/.config/tauterm/preferences.toml` (TOML format, validated on load). A cloud sync feature would add a sync layer above `PreferencesStore`. The `PreferencesStore` interface (`get`, `apply_patch`, `get_user_themes`, `save_user_theme`, `delete_user_theme`) is the abstraction boundary — note that only user-defined themes are managed through this interface; built-in themes are frontend-static and out of scope for sync. No structural change is required; a `SyncedPreferencesStore` could wrap the base store.
 
 ### 12.4 Kitty Keyboard Protocol (Post-v1)
 

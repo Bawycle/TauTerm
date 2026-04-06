@@ -2,7 +2,7 @@
 
 # TauTerm — Architecture Index
 
-> **Version:** 1.6.0
+> **Version:** 1.7.0
 > **Status:** Living document — update when architectural decisions change
 > **Author:** Software Architect — TauTerm team
 
@@ -70,6 +70,7 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | Keyboard shortcut interception (`isRecordingShortcut`) | [05-frontend.md](05-frontend.md) §11.3 |
 | IPC boundary validation (paths, URIs, titles, sequence length) | [06-appendix.md](06-appendix.md) §8.1 |
 | `PreferencesStore` structure (sub-keys table) | [06-appendix.md](06-appendix.md) §8.1 |
+| Built-in theme model (Umbra, Solstice, Archipel — static assets, no backend storage) | [06-appendix.md](06-appendix.md) §8.1 |
 | PTY isolation (`O_CLOEXEC`, OSC 52 write policy) | [06-appendix.md](06-appendix.md) §8.2 |
 | SSH security (TOFU, known-hosts, agent forwarding disabled) | [06-appendix.md](06-appendix.md) §8.3 |
 | Content Security Policy | [06-appendix.md](06-appendix.md) §8.4 |

@@ -151,24 +151,37 @@ These sequences are not intercepted by TauTerm. They are listed here for documen
 
 ## 8. Theming
 
-### 8.1 Default Theme
+### 8.1 Built-in Themes
 
-- TauTerm ships with a **single, carefully designed default theme** produced by the UX/UI designer.
-- The default theme reflects a deliberate artistic direction (typography, color palette, spacing, iconography) and studied UX/UI decisions. It is not a generic placeholder.
-- The default theme cannot be deleted, but it can be overridden by a user-created theme set as active.
+TauTerm ships with **three curated built-in themes**, each produced by the UX/UI designer with a deliberate artistic direction. Built-in themes cannot be deleted, but any of them can be overridden by a user-created theme set as active.
+
+#### 8.1.1 Umbra (default)
+
+A dark theme grounded in understated precision. The terminal surface reads as deep without being void; the chrome uses warm-shifted neutrals rather than cold grey, giving the workspace a quality closer to incandescent light on a dark wall than to a blank screen. The accent color is steel blue — functional rather than decorative. Umbra is the default because it works for all-day use without producing fatigue or visual noise. Users who do not actively choose a theme get a coherent, studied result.
+
+#### 8.1.2 Solstice
+
+A light theme inspired by Nordic winter: the stark brightness of the shortest day, frozen water, birch bark, and the pale absolute grey of overcast northern sky. The palette is cold and high-contrast — no warmth, no softness. Accent colors draw from aurora borealis phenomena: electric greens and blue-violets that appear vivid against the cold light base. The overall effect is severe and precise, with more visual tension than Umbra. Solstice serves users who work in bright environments, prefer a light terminal, or want a theme that asserts a strong aesthetic position.
+
+#### 8.1.3 Archipel
+
+A dark theme inspired by the Caribbean archipelago: deep lagoon water as a base, with saturated tropical accent colors — coral, turquoise, lime — that carry genuine energy against the deep background. Where Umbra is restrained, Archipel is committed to color. ANSI colors are vivid and intentionally warm-shifted rather than neutral. The theme reads as high-energy without sacrificing legibility. It serves users who find dark neutral themes visually flat and want a workspace that feels more alive during long sessions.
 
 ### 8.2 User-Created Themes
 
-- The user can create one or more custom themes.
+- The user can create one or more custom themes, either by duplicating an existing theme (built-in or user-created) and editing the copy — the recommended path — or by starting from a blank canvas pre-filled with the Umbra defaults.
 - A theme defines at minimum: background color, foreground color, cursor color, selection color, and the 16 ANSI palette colors.
 - Themes may also define: font family, font size, line height, border/panel colors, and UI accent colors.
-- The active theme can be switched at any time from the preferences UI.
 - Themes are stored persistently alongside other user preferences.
 
 ### 8.3 Design Tokens
 
 - The theming system is based on design tokens (colors, spacing, sizing, radius). No hardcoded visual values are allowed in the UI layer.
 - User-created themes map to those same tokens, ensuring visual consistency across all UI surfaces.
+
+### 8.4 Theme Switching
+
+The user can switch the active theme at any time from the preferences panel. Selecting a theme applies it immediately — the entire application reflects the new theme on the next rendered frame, with no separate "Apply" step required. This allows the user to evaluate any theme in context before committing to it. There is no dedicated undo action: reverting to a previous theme is done by selecting it from the list. All themes remain available in the list at all times, so no selection is permanent.
 
 ---
 

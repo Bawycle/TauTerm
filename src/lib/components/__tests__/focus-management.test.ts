@@ -1159,7 +1159,7 @@ describe('TEST-FOCUS-018: Preferences panel onclose restores focus to activeView
     const oncloseIdx = source.indexOf('tv.prefsOpen = false');
     expect(oncloseIdx).toBeGreaterThan(-1);
 
-    const oncloseBlock = source.slice(oncloseIdx, oncloseIdx + 200);
+    const oncloseBlock = source.slice(oncloseIdx, oncloseIdx + 400);
     expect(oncloseBlock).toContain('activeViewportEl');
     expect(oncloseBlock).toContain('focus');
     expect(oncloseBlock).toContain('preventScroll');

@@ -277,7 +277,14 @@
     preferences={preferences.value}
     onclose={() => {
       tv.prefsOpen = false;
-      tv.activeViewportEl?.focus({ preventScroll: true });
+      // Defer past Bits UI FocusScope's trigger-restoration microtask,
+      // which fires synchronously on dialog unmount and would otherwise
+      // override our focus call.
+      setTimeout(() => {
+        if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
+          tv.activeViewportEl?.focus({ preventScroll: true });
+        }
+      }, 0);
     }}
     onupdate={tv.handlePreferencesUpdate}
   />

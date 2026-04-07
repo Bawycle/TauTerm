@@ -22,28 +22,21 @@
     - Scroll arrow badges when hidden tabs have active notifications (UXD §7.1.3)
 
   Libraries:
-    - lucide-svelte: X, Bell, CheckCircle, XCircle, Network, ChevronLeft, ChevronRight icons
+    - lucide-svelte: Plus icon (new-tab button)
     - ContextMenu: tab context menu
 
   Security:
     - Tab titles via Svelte text interpolation only — no {@html} (TUITC-SEC-010)
 -->
 <script lang="ts">
-  import {
-    Plus,
-    X,
-    Bell,
-    CheckCircle,
-    XCircle,
-    Network,
-    ChevronLeft,
-    ChevronRight,
-  } from 'lucide-svelte';
+  import { Plus } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount, onDestroy } from 'svelte';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
-  import ContextMenu from './ContextMenu.svelte';
+  import { useTabBarScroll } from '$lib/composables/TabBar.scroll.svelte';
+  import TabBarItem from './TabBarItem.svelte';
+  import TabBarScroll from './TabBarScroll.svelte';
+  import TabBarContextMenu from './TabBarContextMenu.svelte';
 
   interface Props {
     tabs: TabState[];
@@ -77,34 +70,27 @@
   // Memoised tab count — used to detect add/remove without reacting to tab
   // content changes (e.g. active tab switch causes tabs = tabs.map(…) in the
   // parent, which creates a new array reference with the same length).
-  // $derived memoises by value: effects reading tabCount only rerun when the
-  // number actually changes, not on every new array reference.
   const tabCount = $derived(tabs.length);
 
   // ── Inline rename state (FS-TAB-006) ────────────────────────────────────────
-  // ID of the tab currently being renamed, or null.
   let renamingTabId = $state<string | null>(null);
-  // Current value of the rename input.
   let renameValue = $state('');
-  // Reference to the input element so we can focus it programmatically.
-  let renameInputEl = $state<HTMLInputElement | null>(null);
+  // Note: input focus is handled locally within TabBarItem ($effect on isRenaming).
 
   /** Enter rename mode for the given tab. */
   function startRename(tabId: string, currentTitle: string) {
     renamingTabId = tabId;
     renameValue = currentTitle;
-    // Focus is applied via the bind:this + $effect below.
   }
 
   /** Confirm rename: send IPC, then exit rename mode. */
   async function confirmRename(tabId: string) {
     if (renamingTabId !== tabId) return;
-    // Empty value → clear label and revert to OSC/process title.
     const label: string | null = renameValue.trim() === '' ? null : renameValue.trim();
     try {
       await invoke('rename_tab', { tabId, label });
     } catch {
-      // IPC errors are non-fatal for the UI; the title will stay unchanged on next state update.
+      // IPC errors are non-fatal; title stays unchanged on next state update.
     }
     renamingTabId = null;
     renameValue = '';
@@ -116,14 +102,6 @@
     renameValue = '';
   }
 
-  // Focus the input whenever rename mode activates.
-  $effect(() => {
-    if (renamingTabId !== null && renameInputEl !== null) {
-      renameInputEl.focus();
-      renameInputEl.select();
-    }
-  });
-
   // React to an external rename request (e.g. F2 global shortcut from TerminalView).
   $effect(() => {
     if (requestedRenameTabId === null || requestedRenameTabId === undefined) return;
@@ -133,186 +111,30 @@
     onRenameHandled?.();
   });
 
-  // ── Horizontal scroll / overflow detection (UXD §6.2, §12.2) ────────────────
-  // DOM reference for the scrollable tabs container.
+  // ── DOM refs for scroll composable ──────────────────────────────────────────
   let tabsContainerEl = $state<HTMLDivElement | null>(null);
-  // DOM reference for the outer .tab-bar element (flex: 1 0 0, no overflow:auto).
-  // Used for reliable clientWidth measurement (WebKitGTK-safe).
   let tabBarEl = $state<HTMLDivElement | null>(null);
-  // DOM reference for the new-tab button (needed for its offsetWidth).
   let newTabBtnEl = $state<HTMLButtonElement | null>(null);
-  // True when tabs overflow to the left of the scroll position.
-  let canScrollLeft = $state(false);
-  // True when tabs overflow to the right of the scroll position.
-  let canScrollRight = $state(false);
-  // Fixed width of each scroll arrow button — must match CSS .tab-bar__scroll-arrow { width: 24px }.
-  const SCROLL_ARROW_WIDTH = 24;
 
-  /**
-   * Aggregate notification badge color for a given side's hidden tabs.
-   * Returns 'bell' (amber, higher priority), 'output' (green), or null.
-   */
-  function hiddenTabsBadge(side: 'left' | 'right'): 'bell' | 'output' | null {
-    if (!tabsContainerEl) return null;
-    const containerRect = tabsContainerEl.getBoundingClientRect();
-    let hasBell = false;
-    let hasOutput = false;
-    const tabEls = tabsContainerEl.querySelectorAll<HTMLElement>('[data-tab-id]');
-    for (const el of tabEls) {
-      const rect = el.getBoundingClientRect();
-      // A tab is "hidden" if it is fully outside the container's visible bounds.
-      const isHiddenLeft = rect.right <= containerRect.left;
-      const isHiddenRight = rect.left >= containerRect.right;
-      if (side === 'left' ? isHiddenLeft : isHiddenRight) {
-        const tabId = el.getAttribute('data-tab-id');
-        const tab = sortedTabs.find((t) => t.id === tabId);
-        if (!tab) continue;
-        const notif = tabNotification(tab);
-        if (notif?.type === 'bell') hasBell = true;
-        else if (notif?.type === 'backgroundOutput') hasOutput = true;
-      }
-    }
-    if (hasBell) return 'bell';
-    if (hasOutput) return 'output';
-    return null;
-  }
-
-  const leftBadge = $derived(canScrollLeft ? hiddenTabsBadge('left') : null);
-  const rightBadge = $derived(canScrollRight ? hiddenTabsBadge('right') : null);
-
-  function updateScrollState() {
-    if (!tabsContainerEl || !tabsContainerEl.isConnected) return;
-    if (!tabBarEl || !newTabBtnEl) return;
-
-    const { scrollLeft, scrollWidth } = tabsContainerEl;
-    const tabBarWidth = tabBarEl.clientWidth;
-    const newTabBtnWidth = newTabBtnEl.offsetWidth;
-
-    // DO NOT use tabsContainerEl.clientWidth for overflow detection.
-    //
-    // WebKitGTK (used by Tauri/wry) resolves both flex-basis: max-content
-    // and max-width: max-content on overflow:auto containers to a value close
-    // to min-content (≈ the width of one tab ≈ 120 px), not the actual
-    // available space. This makes clientWidth unreliable: with 2 tabs the
-    // comparison scrollWidth (240) > clientWidth (120) + 2 fires spuriously.
-    //
-    // Instead, use tabBarEl.clientWidth (the outer .tab-bar div, flex: 1 0 0,
-    // no overflow:auto). Its clientWidth is always the full available bar width
-    // and is WebKitGTK-safe.
-    //
-    // totalTabsSpace = space available for the tabs container + navigation arrows.
-    // 2 px tolerance absorbs sub-pixel rounding in flex layout.
-    const totalTabsSpace = tabBarWidth - newTabBtnWidth;
-    const hasOverflow = scrollWidth > totalTabsSpace + 2;
-
-    // Visible tabs width = total space minus arrows currently shown.
-    // Uses the fixed CSS constant (SCROLL_ARROW_WIDTH) to avoid querying
-    // clientWidth on the overflow:auto container (unreliable in WebKitGTK).
-    const visibleTabsWidth =
-      totalTabsSpace -
-      (canScrollLeft ? SCROLL_ARROW_WIDTH : 0) -
-      (canScrollRight ? SCROLL_ARROW_WIDTH : 0);
-
-    canScrollLeft = hasOverflow && scrollLeft > 1;
-    canScrollRight = hasOverflow && scrollLeft + visibleTabsWidth < scrollWidth - 1;
-  }
-
-  /**
-   * Scroll the active tab into view if it is partially or fully outside
-   * the visible area of the tabs container.
-   *
-   * Called after a tab is added so the new (active) tab is always reachable
-   * without manual scrolling. `scrollIntoView` with `inline: 'nearest'` is a
-   * no-op when the element is already fully visible.
-   */
-  function scrollActiveTabIntoView() {
-    if (!tabsContainerEl) return;
-    const activeEl = tabsContainerEl.querySelector<HTMLElement>(`[data-tab-id="${activeTabId}"]`);
-    if (!activeEl) return;
-    activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-  }
-
-  /** Scroll the tab container by a fixed pixel amount. */
-  function scrollTabs(direction: 'left' | 'right') {
-    if (!tabsContainerEl) return;
-    const SCROLL_STEP = 120;
-    tabsContainerEl.scrollBy({
-      left: direction === 'left' ? -SCROLL_STEP : SCROLL_STEP,
-      behavior: 'smooth',
-    });
-  }
-
-  let tabsResizeObserver: ResizeObserver | null = null;
-
-  onMount(() => {
-    if (tabsContainerEl && tabBarEl) {
-      // Observe tabBarEl (not tabsContainerEl) for resize events.
-      // tabBarEl is flex: 1 0 0 with no overflow:auto — its size changes
-      // reliably on window resize. tabsContainerEl.clientWidth is unreliable
-      // in WebKitGTK (see updateScrollState comment), so we do not observe it.
-      tabsResizeObserver = new ResizeObserver(() => updateScrollState());
-      tabsResizeObserver.observe(tabBarEl);
-      updateScrollState();
-    }
-  });
-
-  onDestroy(() => {
-    tabsResizeObserver?.disconnect();
-  });
-
-  // Re-check overflow whenever the tab count changes (tab added/removed).
-  //
-  // IMPORTANT: read `tabCount` (a $derived primitive) — NOT `tabs.length`
-  // directly inside the effect. Both yield the same number, but reading
-  // `tabs.length` subscribes to the full `tabs` signal: whenever the parent
-  // does `tabs = tabs.map(…)` (e.g. on active-tab-changed events), the effect
-  // would rerun even though the count hasn't changed. `tabCount` is memoised
-  // by value — Svelte only propagates when the number actually changes.
-  //
-  // Two-path scheduling: requestAnimationFrame fires post-layout in live
-  // browsers (exact, zero-delay). setTimeout(50) is a fallback for headless
-  // WebKitGTK (tauri-driver E2E) where rAF callbacks are unreliable. The
-  // `done` guard ensures only the first path calls updateScrollState().
-  $effect(() => {
-    const _len = tabCount;
-    let done = false;
-    const rafId = requestAnimationFrame(() => {
-      if (!done) {
-        done = true;
-        updateScrollState();
-        // Scroll the active tab (the newly added one) into view.
-        // activeTabId is read inside rAF — outside the effect's synchronous
-        // tracking window — so it is NOT added as a reactive dependency here.
-        // This effect only re-runs on tabCount changes, not on tab switches.
-        scrollActiveTabIntoView();
-      }
-    });
-    const timeoutId = setTimeout(() => {
-      if (!done) {
-        done = true;
-        updateScrollState();
-        scrollActiveTabIntoView();
-      }
-      cancelAnimationFrame(rafId);
-    }, 200);
-    return () => {
-      cancelAnimationFrame(rafId);
-      clearTimeout(timeoutId);
-    };
+  // ── Scroll composable ────────────────────────────────────────────────────────
+  const scroll = useTabBarScroll({
+    tabsContainerEl: () => tabsContainerEl,
+    tabBarEl: () => tabBarEl,
+    newTabBtnEl: () => newTabBtnEl,
+    activeTabId: () => activeTabId,
+    sortedTabs: () => sortedTabs,
+    tabNotification,
+    tabCount: () => tabCount,
   });
 
   // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────
-  // ID of the tab currently being dragged.
   let dragTabId = $state<string | null>(null);
-  // Index (in sortedTabs) where the drop indicator is shown — between tabs.
-  // 0 = before first tab, N = after last tab.
   let dropIndicatorIndex = $state<number | null>(null);
 
   function handleDragStart(event: DragEvent, tabId: string) {
     dragTabId = tabId;
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
-      // Store the tab ID so we can identify the source on drop.
       event.dataTransfer.setData('text/plain', tabId);
     }
   }
@@ -324,7 +146,6 @@
   }
 
   function handleDragLeave(event: DragEvent) {
-    // Only clear the indicator when leaving the tab bar entirely.
     const relatedTarget = event.relatedTarget as Node | null;
     const bar = (event.currentTarget as HTMLElement).closest('.tab-bar__tabs');
     if (bar && relatedTarget && bar.contains(relatedTarget)) return;
@@ -345,31 +166,21 @@
       return;
     }
 
-    // Compute new_order for the Rust backend.
-    // The tab will be inserted at position targetIndex in the sorted list
-    // (after removing the source). We derive the desired order value from
-    // neighbours in the remaining list.
     const remaining = sorted.filter((t) => t.id !== sourceId);
     let newOrder: number;
     if (targetIndex === 0) {
-      // Drop before all tabs: use a value lower than the first remaining tab.
       newOrder = remaining.length > 0 ? remaining[0].order - 1 : 0;
     } else {
-      // Drop after index (targetIndex - 1) in the remaining list.
-      // Adjust targetIndex for the removed element.
       const insertAfter = sourceIdx < targetIndex ? targetIndex - 1 : targetIndex;
       const clampedInsert = Math.min(insertAfter, remaining.length - 1);
       if (clampedInsert < remaining.length - 1) {
-        // Between two tabs: midpoint.
         newOrder = Math.floor(
           (remaining[clampedInsert].order + remaining[clampedInsert + 1].order) / 2,
         );
-        // If midpoint equals one of the neighbours (integers too close), use neighbour + 1.
         if (newOrder === remaining[clampedInsert].order) {
           newOrder = remaining[clampedInsert].order + 1;
         }
       } else {
-        // After last remaining tab.
         newOrder = remaining[clampedInsert].order + 1;
       }
     }
@@ -377,7 +188,7 @@
     try {
       await invoke('reorder_tab', { tabId: sourceId, newOrder });
     } catch {
-      // Non-fatal; the backend is the source of truth.
+      // Non-fatal; backend is source of truth.
     }
     resetDrag();
   }
@@ -392,11 +203,7 @@
   }
 
   // ── Tab context menu state (UXD §7.8.2) ─────────────────────────────────────
-  // ID of the tab whose context menu is open, or null.
   let contextMenuTabId = $state<string | null>(null);
-  // Position for the DropdownMenu content — used as a CSS anchor override.
-  // Bits UI DropdownMenu doesn't natively support anchor-to-pointer positioning,
-  // so we place an absolutely-positioned trigger at the pointer location.
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
 
@@ -443,7 +250,7 @@
 
   /** Keyboard handler for tab items (TUITC-UX-111 to 113). */
   function handleTabKeydown(event: KeyboardEvent, tabId: string, title: string) {
-    if (renamingTabId === tabId) return; // Let the input handle keys.
+    if (renamingTabId === tabId) return;
 
     if (event.key === 'F2') {
       event.preventDefault();
@@ -481,32 +288,20 @@
 </script>
 
 <div bind:this={tabBarEl} class="tab-bar" role="tablist" aria-label={m.tab_bar_tabs_aria_label()}>
-  <!-- Left scroll arrow — visible only when tabs overflow left (UXD §6.2, §12.2) -->
-  {#if canScrollLeft}
-    <button
-      class="tab-bar__scroll-arrow tab-bar__scroll-arrow--left"
-      type="button"
-      aria-label={m.tab_bar_scroll_left()}
-      tabindex={-1}
-      onclick={() => scrollTabs('left')}
-    >
-      <ChevronLeft size={14} aria-hidden="true" />
-      {#if leftBadge !== null}
-        <span
-          class="tab-bar__scroll-badge"
-          class:tab-bar__scroll-badge--bell={leftBadge === 'bell'}
-          class:tab-bar__scroll-badge--output={leftBadge === 'output'}
-          aria-hidden="true"
-        ></span>
-      {/if}
-    </button>
-  {/if}
+  <TabBarScroll
+    canScrollLeft={scroll.canScrollLeft}
+    canScrollRight={false}
+    leftBadge={scroll.leftBadge}
+    rightBadge={null}
+    onScrollLeft={() => scroll.scrollTabs('left')}
+    onScrollRight={() => scroll.scrollTabs('right')}
+  />
 
   <div
     bind:this={tabsContainerEl}
     class="tab-bar__tabs"
     ondragleave={handleDragLeave}
-    onscroll={updateScrollState}
+    onscroll={scroll.updateScrollState}
     role="presentation"
   >
     {#each sortedTabs as tab, index (tab.id)}
@@ -516,108 +311,34 @@
       {@const isRenaming = renamingTabId === tab.id}
       {@const isDragging = dragTabId === tab.id}
 
-      <!-- Drop indicator: shown before this tab -->
-      {#if dropIndicatorIndex === index && dragTabId !== null}
-        <div class="tab-bar__drop-indicator" aria-hidden="true"></div>
-      {/if}
-
-      <!-- Tab item — TUITC-UX-010 to 016 -->
-      <!-- svelte-ignore a11y_interactive_supports_focus -->
-      <div
-        class="tab-bar__tab"
-        class:tab-bar__tab--active={isActive}
-        class:tab-bar__tab--dragging={isDragging}
-        role="tab"
-        aria-selected={isActive}
-        tabindex={isActive ? 0 : -1}
-        data-tab-id={tab.id}
-        data-tab-index={index}
-        draggable="true"
-        onclick={() => {
-          if (!isRenaming) onTabClick(tab.id);
+      <TabBarItem
+        {tab}
+        {index}
+        {isActive}
+        {isDragging}
+        {isRenaming}
+        {renameValue}
+        {notification}
+        {title}
+        isSSH={isSSHTab(tab)}
+        {dropIndicatorIndex}
+        {dragTabId}
+        onTabClick={onTabClick}
+        onTabClose={onTabClose}
+        onStartRename={startRename}
+        onConfirmRename={confirmRename}
+        onCancelRename={cancelRename}
+        onRenameValueChange={(v) => {
+          renameValue = v;
         }}
-        ondblclick={(e) => {
-          e.preventDefault();
-          startRename(tab.id, title);
-        }}
-        onmousedown={(e) => {
-          // Middle-click (button 1) closes the tab (UXD §7.1.2)
-          if (e.button === 1) {
-            e.preventDefault();
-            onTabClose(tab.id);
-          }
-        }}
-        oncontextmenu={(e) => handleTabContextMenu(e, tab.id)}
-        onkeydown={(e) => handleTabKeydown(e, tab.id, title)}
-        ondragstart={(e) => handleDragStart(e, tab.id)}
-        ondragover={(e) => handleDragOver(e, index)}
-        ondrop={(e) => handleDrop(e, index)}
-        ondragend={handleDragEnd}
-      >
-        <!-- SSH badge (UXD §7.1.7) -->
-        {#if isSSHTab(tab)}
-          <span class="tab-bar__ssh-badge" aria-label={m.tab_bar_ssh_badge_aria_label()}>
-            <Network size={12} aria-hidden="true" />
-          </span>
-        {/if}
-
-        <!-- Inline rename input (UXD §7.1.6) -->
-        {#if isRenaming}
-          <input
-            bind:this={renameInputEl}
-            class="tab-bar__rename-input"
-            type="text"
-            aria-label={m.tab_bar_rename_input_aria_label()}
-            bind:value={renameValue}
-            onkeydown={(e) => handleRenameKeydown(e, tab.id)}
-            onblur={() => confirmRename(tab.id)}
-            onclick={(e) => e.stopPropagation()}
-          />
-        {:else}
-          <!-- Title: text interpolation — NEVER {@html} (TUITC-SEC-010/011) -->
-          <span class="tab-bar__tab-title">{title}</span>
-        {/if}
-
-        <!-- Activity indicator (TUITC-UX-020 to 024) — only on inactive tabs -->
-        {#if !isActive && notification && !isRenaming}
-          <span class="tab-bar__activity" aria-hidden="true">
-            {#if notification.type === 'backgroundOutput'}
-              <span class="tab-bar__activity-dot"></span>
-            {:else if notification.type === 'processExited'}
-              {#if (notification as { type: 'processExited'; exitCode: number }).exitCode === 0}
-                <CheckCircle size={14} class="activity-icon activity-icon--success" />
-              {:else}
-                <XCircle size={14} class="activity-icon activity-icon--error" />
-              {/if}
-            {:else if notification.type === 'bell'}
-              <Bell size={14} class="activity-icon activity-icon--bell" />
-            {/if}
-          </span>
-        {/if}
-
-        <!-- Close button — TUITC-UX-030 to 034 (44×44 hit area) -->
-        {#if !isRenaming}
-          <button
-            class="tab-bar__close"
-            type="button"
-            aria-label={m.tab_bar_close_tab()}
-            tabindex={-1}
-            onclick={(e) => {
-              e.stopPropagation();
-              onTabClose(tab.id);
-            }}
-            onkeydown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                e.stopPropagation();
-                onTabClose(tab.id);
-              }
-            }}
-          >
-            <X size={14} aria-hidden="true" />
-          </button>
-        {/if}
-      </div>
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDrop={handleDrop}
+        onContextMenu={handleTabContextMenu}
+        onTabKeydown={handleTabKeydown}
+        onRenameKeydown={handleRenameKeydown}
+      />
     {/each}
 
     <!-- Drop indicator: shown after the last tab -->
@@ -626,26 +347,14 @@
     {/if}
   </div>
 
-  <!-- Right scroll arrow — visible only when tabs overflow right (UXD §6.2, §12.2) -->
-  {#if canScrollRight}
-    <button
-      class="tab-bar__scroll-arrow tab-bar__scroll-arrow--right"
-      type="button"
-      aria-label={m.tab_bar_scroll_right()}
-      tabindex={-1}
-      onclick={() => scrollTabs('right')}
-    >
-      <ChevronRight size={14} aria-hidden="true" />
-      {#if rightBadge !== null}
-        <span
-          class="tab-bar__scroll-badge"
-          class:tab-bar__scroll-badge--bell={rightBadge === 'bell'}
-          class:tab-bar__scroll-badge--output={rightBadge === 'output'}
-          aria-hidden="true"
-        ></span>
-      {/if}
-    </button>
-  {/if}
+  <TabBarScroll
+    canScrollLeft={false}
+    canScrollRight={scroll.canScrollRight}
+    leftBadge={null}
+    rightBadge={scroll.rightBadge}
+    onScrollLeft={() => scroll.scrollTabs('left')}
+    onScrollRight={() => scroll.scrollTabs('right')}
+  />
 
   <!-- New tab button — outside the scrollable zone, right of the scroll area (UXD §7.1.1) -->
   <button
@@ -659,25 +368,22 @@
     <Plus size={16} aria-hidden="true" />
   </button>
 
-  <!-- Tab context menu (UXD §7.8.2) — DropdownMenu anchored to pointer position.
-       Rendered once; controlled by contextMenuTabId. The ContextMenu trigger is
-       fixed-positioned at the right-click coordinates via anchorX/anchorY. -->
+  <!-- Tab context menu (UXD §7.8.2) -->
   {#if contextMenuTabId !== null}
     {@const ctxTab = sortedTabs.find((t) => t.id === contextMenuTabId)}
     {#if ctxTab}
       {@const ctxTitle = tabDisplayTitle(ctxTab)}
-      <ContextMenu
-        variant="tab"
-        open={true}
-        anchorX={contextMenuX}
-        anchorY={contextMenuY}
-        onclose={handleContextMenuClose}
-        onnewtab={onNewTab}
-        onrename={() => handleContextMenuRename(ctxTab.id, ctxTitle)}
-        onclosetab={() => {
+      <TabBarContextMenu
+        {contextMenuTabId}
+        {contextMenuX}
+        {contextMenuY}
+        onNewTab={onNewTab}
+        onRename={() => handleContextMenuRename(ctxTab.id, ctxTitle)}
+        onCloseTab={() => {
           handleContextMenuClose();
           onTabClose(ctxTab.id);
         }}
+        onClose={handleContextMenuClose}
       />
     {/if}
   {/if}
@@ -711,10 +417,9 @@
      * the "+" button lands right after the last tab rather than at the far
      * right of the bar.
      * IMPORTANT: clientWidth on this element is NOT used for overflow detection
-     * (see updateScrollState). WebKitGTK resolves max-width: max-content (and
-     * flex-basis: max-content) on overflow:auto elements to ~min-content, making
-     * clientWidth unreliable. Overflow detection uses tabBarEl.clientWidth
-     * (the outer .tab-bar div, no overflow:auto) instead. */
+     * (see updateScrollState in TabBar.scroll.svelte.ts). WebKitGTK resolves
+     * max-width: max-content (and flex-basis: max-content) on overflow:auto
+     * elements to ~min-content, making clientWidth unreliable. */
     flex: 1;
     max-width: max-content;
     height: 100%;
@@ -731,7 +436,7 @@
   }
 
   /* Scroll arrow buttons (UXD §6.2, §12.2) */
-  .tab-bar__scroll-arrow {
+  :global(.tab-bar__scroll-arrow) {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -750,32 +455,32 @@
       background-color var(--duration-instant);
   }
 
-  .tab-bar__scroll-arrow:hover {
+  :global(.tab-bar__scroll-arrow:hover) {
     color: var(--color-tab-new-hover-fg);
     background-color: var(--color-hover-bg);
   }
 
-  .tab-bar__scroll-arrow:active {
+  :global(.tab-bar__scroll-arrow:active) {
     background-color: var(--color-active-bg);
   }
 
-  .tab-bar__scroll-arrow:focus-visible {
+  :global(.tab-bar__scroll-arrow:focus-visible) {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
 
   /* Left arrow: subtle right border to separate from tabs area */
-  .tab-bar__scroll-arrow--left {
+  :global(.tab-bar__scroll-arrow--left) {
     border-right: 1px solid var(--color-border-subtle);
   }
 
   /* Right arrow: subtle left border */
-  .tab-bar__scroll-arrow--right {
+  :global(.tab-bar__scroll-arrow--right) {
     border-left: 1px solid var(--color-border-subtle);
   }
 
   /* Activity badge on scroll arrows (UXD §7.1.3, §12.2) */
-  .tab-bar__scroll-badge {
+  :global(.tab-bar__scroll-badge) {
     position: absolute;
     top: 6px;
     right: 4px;
@@ -785,16 +490,16 @@
     pointer-events: none;
   }
 
-  .tab-bar__scroll-badge--output {
+  :global(.tab-bar__scroll-badge--output) {
     background-color: var(--color-indicator-output);
   }
 
-  .tab-bar__scroll-badge--bell {
+  :global(.tab-bar__scroll-badge--bell) {
     background-color: var(--color-indicator-bell);
   }
 
   /* Tab item — TUITC-UX-010 to 016 */
-  .tab-bar__tab {
+  :global(.tab-bar__tab) {
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -816,35 +521,35 @@
     position: relative;
   }
 
-  .tab-bar__tab[draggable='true'] {
+  :global(.tab-bar__tab[draggable='true']) {
     cursor: grab;
   }
 
   /* Dragging state: lifted appearance (UXD §8.4) */
-  .tab-bar__tab--dragging {
+  :global(.tab-bar__tab--dragging) {
     opacity: 0.9;
     box-shadow: var(--shadow-raised);
     cursor: grabbing;
   }
 
-  .tab-bar__tab:hover:not(.tab-bar__tab--active) {
+  :global(.tab-bar__tab:hover:not(.tab-bar__tab--active)) {
     background-color: var(--color-tab-hover-bg);
     color: var(--color-tab-hover-fg);
   }
 
-  .tab-bar__tab--active {
+  :global(.tab-bar__tab--active) {
     background-color: var(--color-tab-active-bg);
     color: var(--color-tab-active-fg);
     font-weight: var(--font-weight-semibold);
   }
 
-  .tab-bar__tab:focus-visible {
+  :global(.tab-bar__tab:focus-visible) {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
 
   /* Title: ellipsis truncation — TUITC-UX-014 */
-  .tab-bar__tab-title {
+  :global(.tab-bar__tab-title) {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -853,7 +558,7 @@
   }
 
   /* Inline rename input (UXD §7.1.6) */
-  .tab-bar__rename-input {
+  :global(.tab-bar__rename-input) {
     flex: 1;
     min-width: 0;
     height: calc(var(--size-tab-height) - var(--space-2) * 2);
@@ -871,7 +576,7 @@
   }
 
   /* SSH badge */
-  .tab-bar__ssh-badge {
+  :global(.tab-bar__ssh-badge) {
     display: flex;
     align-items: center;
     color: var(--color-ssh-badge-fg);
@@ -879,13 +584,13 @@
   }
 
   /* Activity indicators — TUITC-UX-020 to 024 */
-  .tab-bar__activity {
+  :global(.tab-bar__activity) {
     display: flex;
     align-items: center;
     flex-shrink: 0;
   }
 
-  .tab-bar__activity-dot {
+  :global(.tab-bar__activity-dot) {
     display: inline-block;
     width: var(--size-badge, 6px);
     height: var(--size-badge, 6px);
@@ -905,7 +610,7 @@
   }
 
   /* Close button — TUITC-UX-030 to 034 */
-  .tab-bar__close {
+  :global(.tab-bar__close) {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -928,25 +633,25 @@
   }
 
   /* Always visible on active tab */
-  .tab-bar__tab--active .tab-bar__close {
+  :global(.tab-bar__tab--active .tab-bar__close) {
     opacity: 1;
   }
 
   /* Visible on hover (any tab) */
-  .tab-bar__tab:hover .tab-bar__close {
+  :global(.tab-bar__tab:hover .tab-bar__close) {
     opacity: 1;
   }
 
-  .tab-bar__close:hover {
+  :global(.tab-bar__close:hover) {
     color: var(--color-tab-close-hover-fg);
     background-color: var(--color-hover-bg);
   }
 
-  .tab-bar__close:active {
+  :global(.tab-bar__close:active) {
     background-color: var(--color-active-bg);
   }
 
-  .tab-bar__close:focus-visible {
+  :global(.tab-bar__close:focus-visible) {
     opacity: 1;
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 2px;
@@ -985,7 +690,7 @@
   }
 
   /* Drop insertion indicator (UXD §8.4) — 2px vertical bar in accent color */
-  .tab-bar__drop-indicator {
+  :global(.tab-bar__drop-indicator) {
     width: 2px;
     height: 100%;
     background-color: var(--color-accent);

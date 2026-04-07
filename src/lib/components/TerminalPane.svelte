@@ -2,12 +2,16 @@
 <!--
   TerminalPane — an individual terminal pane bound to a PTY session.
 
-  Renders the character cell grid (DOM-based, rows of spans), cursor overlay,
-  selection highlighting, and scrollbar. Handles keyboard input, mouse events,
-  and resize observation.
+  Orchestrates the composable (useTerminalPane) and delegates rendering to:
+    - TerminalPaneViewport    — cell grid, cursor, keyboard/mouse bindings
+    - TerminalPaneScrollbar   — interactive scrollbar overlay
+    - TerminalPaneScrollToBottom — scroll-to-bottom button
+    - TerminalPaneBanners     — SSH deprecated, ProcessTerminated, SSH disconnected
+    - TerminalPaneReconnectionSeparators — reconnection separator overlays
+    - TerminalPanePasteDialog — multiline paste confirmation dialog
 
   Reactive logic is extracted to TerminalPane.svelte.ts (composable, §11.2).
-  This file contains only template markup and DOM event binding.
+  This file contains only template markup, state ownership, and event binding.
 
   Props:
     paneId  — unique pane identifier (PaneId from IPC contract)
@@ -19,20 +23,18 @@
     - Resize dimensions clamped to minimum 1 (TUITC-SEC-050)
 -->
 <script lang="ts">
-  import { fade } from 'svelte/transition';
   import { onMount, onDestroy } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
   import { useTerminalPane } from '$lib/composables/useTerminalPane.svelte';
-  import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
-  import SshDeprecatedAlgorithmBanner from './SshDeprecatedAlgorithmBanner.svelte';
-  import SshReconnectionSeparator from './SshReconnectionSeparator.svelte';
   import ContextMenu from './ContextMenu.svelte';
-  import ScrollToBottomButton from './ScrollToBottomButton.svelte';
-  import Dialog from '$lib/ui/Dialog.svelte';
-  import Button from '$lib/ui/Button.svelte';
-  import Toggle from '$lib/ui/Toggle.svelte';
+  import TerminalPaneViewport from './TerminalPaneViewport.svelte';
+  import TerminalPaneScrollbar from './TerminalPaneScrollbar.svelte';
+  import TerminalPaneScrollToBottom from './TerminalPaneScrollToBottom.svelte';
+  import TerminalPaneBanners from './TerminalPaneBanners.svelte';
+  import TerminalPaneReconnectionSeparators from './TerminalPaneReconnectionSeparators.svelte';
+  import TerminalPanePasteDialog from './TerminalPanePasteDialog.svelte';
   import * as m from '$lib/paraglide/messages';
   import type {
     PaneId,
@@ -229,14 +231,6 @@
     ? m.terminal_pane_n_aria_label({ n: paneNumber })
     : m.terminal_pane_aria_label()}
 >
-  <!-- Deprecated SSH algorithm banner — displaces terminal content downward (UXD §7.21) -->
-  {#if deprecatedAlgorithm !== null}
-    <SshDeprecatedAlgorithmBanner
-      algorithm={deprecatedAlgorithm}
-      ondismiss={handleDismissAlgorithmBanner}
-    />
-  {/if}
-
   <!-- ContextMenu wraps the viewport so right-click opens it -->
   <ContextMenu
     variant="terminal"
@@ -249,166 +243,32 @@
     {onsplitV}
     {onclosepane}
   >
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      bind:this={tp.viewportEl}
-      class="terminal-pane__viewport terminal-grid"
-      data-screen-generation={tp.screenGeneration}
-      style={lineHeight != null ? `--line-height-terminal: ${lineHeight}` : undefined}
-      tabindex={active ? 0 : -1}
-      role="textbox"
-      aria-multiline="true"
-      aria-label={m.terminal_output_aria_label()}
-      aria-readonly="false"
-      onkeydown={handleKeydown}
-      onmousedown={tp.handleMousedown}
-      onmousemove={tp.handleMousemove}
-      onmouseup={tp.handleMouseup}
-      onwheel={tp.handleWheel}
-      onfocus={tp.handleFocus}
-      onblur={tp.handleBlur}
-    >
-      <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
-      {#each tp.gridRows as row, rowIdx}
-        <div class="terminal-pane__row">
-          {#each row as cell, colIdx}
-            {#if cell.width !== 0}
-              <span
-                class="terminal-pane__cell"
-                class:terminal-pane__cell--wide={cell.width === 2}
-                class:terminal-pane__cell--hyperlink={cell.hyperlink != null}
-                class:terminal-pane__cell--blink={cell.blink}
-                class:terminal-pane__cell--strikethrough={cell.strikethrough}
-                class:terminal-pane__cell--selected={tp.isSelected(rowIdx, colIdx) &&
-                  active &&
-                  !tp.selectionFlashing}
-                class:terminal-pane__cell--selected-flash={tp.isSelected(rowIdx, colIdx) &&
-                  active &&
-                  tp.selectionFlashing}
-                class:terminal-pane__cell--selected-inactive={tp.isSelected(rowIdx, colIdx) &&
-                  !active}
-                class:terminal-pane__cell--search-active={tp.activeSearchMatchSet.has(
-                  `${rowIdx}:${colIdx}`,
-                )}
-                class:terminal-pane__cell--search-match={!tp.activeSearchMatchSet.has(
-                  `${rowIdx}:${colIdx}`,
-                ) && tp.searchMatchSet.has(`${rowIdx}:${colIdx}`)}
-                style={tp.cellStyle(cell)}>{cell.content === '' ? '\u00a0' : cell.content}</span
-              >
-            {/if}
-          {/each}
-        </div>
-      {/each}
-
-      <!-- Cursor overlay (TUITC-FN-001 to 006, TUITC-UX-050 to 053) -->
-      <!-- F7: data-char carries the glyph under the block cursor so the CSS
-           pseudo-element can re-render it in var(--term-cursor-fg) without
-           mix-blend-mode tricks. -->
-      {#if tp.cursor.visible && (tp.cursorVisible || !tp.currentCursorBlinks)}
-        <div
-          class="terminal-pane__cursor"
-          class:terminal-pane__cursor--block={tp.currentCursorShape === 'block'}
-          class:terminal-pane__cursor--underline={tp.currentCursorShape === 'underline'}
-          class:terminal-pane__cursor--bar={tp.currentCursorShape === 'bar'}
-          class:terminal-pane__cursor--unfocused={!active}
-          style="--cursor-top:{tp.cursor.row}lh; top:var(--cursor-top); left:{tp.cursor.col}ch"
-          data-char={tp.gridRows[tp.cursor.row]?.[tp.cursor.col]?.content || ' '}
-          aria-hidden="true"
-        ></div>
-      {/if}
-    </div>
-
-    <!-- Scrollbar overlay — interactive (FS-SB-007, TUITC-UX-070 to 073) -->
-    {#if tp.showScrollbar && tp.scrollbackLines > 0}
-      <div
-        bind:this={tp.scrollbarEl}
-        class="terminal-pane__scrollbar"
-        transition:fade={{ duration: 300 }}
-        class:terminal-pane__scrollbar--dragging={tp.scrollbarDragging}
-        aria-hidden="true"
-        onpointerdown={tp.handleScrollbarPointerdown}
-        onpointermove={tp.handleScrollbarPointermove}
-        onpointerup={tp.handleScrollbarPointerup}
-        onpointerleave={tp.handleScrollbarPointerup}
-        onwheel={tp.handleScrollbarWheel}
-        onmouseenter={() => {
-          tp.scrollbarHover = true;
-        }}
-        onmouseleave={() => {
-          tp.scrollbarHover = false;
-        }}
-      >
-        <div
-          class="terminal-pane__scrollbar-thumb"
-          class:terminal-pane__scrollbar-thumb--hover={tp.scrollbarHover || tp.scrollbarDragging}
-          style:height="{tp.scrollbarThumbHeightPct}%"
-          style:top="{tp.scrollbarThumbTopPct}%"
-        ></div>
-      </div>
-    {/if}
-
-    <!-- Scroll-to-bottom button — shown when scrolled up into scrollback history -->
-    {#if tp.scrollOffset > 0}
-      <div transition:fade={{ duration: 150 }}>
-        <ScrollToBottomButton onclick={tp.handleScrollToBottom} />
-      </div>
-    {/if}
+    <TerminalPaneViewport {tp} {active} {lineHeight} onkeydown={handleKeydown} />
+    <TerminalPaneScrollbar {tp} />
+    <TerminalPaneScrollToBottom scrollOffset={tp.scrollOffset} onclick={tp.handleScrollToBottom} />
   </ContextMenu>
 
   <!-- SSH reconnection separators — UI overlay injected at reconnect events
        (FS-SSH-042, UXD §7.19). Not interactive; aria-hidden (purely decorative). -->
-  {#if reconnectionSeparators.length > 0}
-    <div class="terminal-pane__reconnection-separators" aria-hidden="true">
-      {#each reconnectionSeparators as ts (ts)}
-        <SshReconnectionSeparator timestampMs={ts} />
-      {/each}
-    </div>
-  {/if}
+  <TerminalPaneReconnectionSeparators separators={reconnectionSeparators} />
 
-  <!-- ProcessTerminatedPane banner — shown when PTY process exits (FS-PTY-005/006) -->
-  {#if terminated}
-    <ProcessTerminatedPane {exitCode} {signalName} {onrestart} onclose={onclosepane} />
-  {/if}
-
-  <!-- SSH disconnected banner — shown when SSH connection drops (FS-SSH-040/041) -->
-  {#if sshState?.type === 'disconnected'}
-    <div class="terminal-pane__ssh-disconnected" role="status" aria-live="polite">
-      <span class="terminal-pane__ssh-disconnected-label"
-        >{m.ssh_banner_disconnected({ reason: '' })}</span
-      >
-      <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={tp.handleReconnect}
-        >{m.ssh_reconnect()}</button
-      >
-    </div>
-  {/if}
+  <!-- Banners: deprecated SSH algorithm, process terminated, SSH disconnected -->
+  <TerminalPaneBanners
+    {deprecatedAlgorithm}
+    {terminated}
+    {exitCode}
+    {signalName}
+    {sshState}
+    {canClosePane}
+    onDismissAlgorithm={handleDismissAlgorithmBanner}
+    {onrestart}
+    {onclosepane}
+    onReconnect={tp.handleReconnect}
+  />
 </div>
 
-<!-- FS-CLIP-009: Multiline paste confirmation dialog -->
-<Dialog
-  open={tp.pasteConfirmOpen}
-  title={m.paste_confirm_title()}
-  size="small"
-  onclose={tp.handlePasteCancel}
->
-  {#snippet children()}
-    <p class="text-[14px] text-(--color-text-secondary) leading-relaxed">
-      {m.paste_confirm_body({ lines: tp.pasteConfirmText.split('\n').length })}
-    </p>
-    <div class="mt-4">
-      <Toggle
-        checked={!confirmMultilinePaste}
-        label={m.paste_confirm_dont_ask()}
-        onchange={(v) => {
-          if (v) ondisableConfirmMultilinePaste?.();
-        }}
-      />
-    </div>
-  {/snippet}
-  {#snippet footer()}
-    <Button variant="ghost" onclick={tp.handlePasteCancel}>{m.action_cancel()}</Button>
-    <Button variant="primary" onclick={tp.handlePasteConfirm}>{m.paste_confirm_action()}</Button>
-  {/snippet}
-</Dialog>
+<!-- FS-CLIP-009: Multiline paste confirmation dialog (outside .terminal-pane for z-index) -->
+<TerminalPanePasteDialog {tp} {confirmMultilinePaste} {ondisableConfirmMultilinePaste} />
 
 <style>
   .terminal-pane {
@@ -424,7 +284,8 @@
     border: 2px solid var(--color-pane-border-active);
   }
 
-  .terminal-pane__viewport {
+  /* Viewport styles remain here since TerminalPaneViewport renders inside .terminal-pane */
+  :global(.terminal-pane__viewport) {
     position: relative;
     width: 100%;
     height: 100%;
@@ -440,14 +301,14 @@
     user-select: none;
   }
 
-  .terminal-pane__row {
+  :global(.terminal-pane__row) {
     display: flex;
     flex-wrap: nowrap;
     height: 1lh;
     min-height: 1lh;
   }
 
-  .terminal-pane__cell {
+  :global(.terminal-pane__cell) {
     display: inline-block;
     width: 1ch;
     min-width: 1ch;
@@ -457,13 +318,13 @@
     flex-shrink: 0;
   }
 
-  .terminal-pane__cell--wide {
+  :global(.terminal-pane__cell--wide) {
     width: 2ch;
     min-width: 2ch;
   }
 
   /* OSC 8 hyperlink cells (FS-VT-071): pointer cursor on hover to indicate Ctrl+Click affordance */
-  .terminal-pane__cell--hyperlink {
+  :global(.terminal-pane__cell--hyperlink) {
     cursor: pointer;
   }
 
@@ -489,18 +350,18 @@
     }
   }
 
-  .terminal-pane__cell--blink {
+  :global(.terminal-pane__cell--blink) {
     animation: term-blink calc(var(--term-blink-on-duration) + var(--term-blink-off-duration))
       step-end infinite;
   }
 
   /* Pause blink when pane is not focused */
-  .terminal-pane:not(.terminal-pane--active) .terminal-pane__cell--blink {
+  .terminal-pane:not(.terminal-pane--active) :global(.terminal-pane__cell--blink) {
     animation-play-state: paused;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .terminal-pane__cell--blink {
+    :global(.terminal-pane__cell--blink) {
       animation: none;
     }
   }
@@ -512,11 +373,11 @@
    * positioned line is rendered at var(--term-strikethrough-position) (50%),
    * shifted up by half its own thickness via translateY(-50%).
    */
-  .terminal-pane__cell--strikethrough {
+  :global(.terminal-pane__cell--strikethrough) {
     position: relative;
   }
 
-  .terminal-pane__cell--strikethrough::after {
+  :global(.terminal-pane__cell--strikethrough::after) {
     content: '';
     position: absolute;
     top: var(--term-strikethrough-position); /* 50% */
@@ -529,12 +390,12 @@
   }
 
   /* Search match highlighting (FS-SEARCH-006) */
-  .terminal-pane__cell--search-match {
+  :global(.terminal-pane__cell--search-match) {
     background-color: var(--term-search-match-bg) !important;
     color: var(--term-search-match-fg) !important;
   }
 
-  .terminal-pane__cell--search-active {
+  :global(.terminal-pane__cell--search-active) {
     background-color: var(--term-search-active-bg) !important;
     color: var(--term-search-active-fg) !important;
   }
@@ -544,16 +405,16 @@
    * selection takes priority over search highlights when both apply to the same
    * cell (same specificity + !important → last declaration wins in the cascade).
    */
-  .terminal-pane__cell--selected {
+  :global(.terminal-pane__cell--selected) {
     background-color: var(--term-selection-bg) !important;
   }
 
-  .terminal-pane__cell--selected-inactive {
+  :global(.terminal-pane__cell--selected-inactive) {
     background-color: var(--term-selection-bg-inactive) !important;
   }
 
   /* Copy flash (UXD §7.12) — 80ms bright flash on selection to confirm auto-copy */
-  .terminal-pane__cell--selected-flash {
+  :global(.terminal-pane__cell--selected-flash) {
     background-color: var(--term-selection-flash) !important;
   }
 
@@ -585,13 +446,13 @@
   }
 
   /* Cursor (TUITC-UX-050 to 053) */
-  .terminal-pane__cursor {
+  :global(.terminal-pane__cursor) {
     position: absolute;
     pointer-events: none;
     z-index: var(--z-cursor, 10);
   }
 
-  .terminal-pane__cursor--block {
+  :global(.terminal-pane__cursor--block) {
     width: 1ch;
     height: 1lh;
     background-color: var(--term-cursor-bg);
@@ -604,7 +465,7 @@
      */
   }
 
-  .terminal-pane__cursor--block::after {
+  :global(.terminal-pane__cursor--block::after) {
     content: attr(data-char);
     position: absolute;
     inset: 0;
@@ -619,7 +480,7 @@
     pointer-events: none;
   }
 
-  .terminal-pane__cursor--underline {
+  :global(.terminal-pane__cursor--underline) {
     width: 1ch;
     height: var(--size-cursor-underline-height, 2px);
     /*
@@ -634,21 +495,21 @@
     background-color: var(--term-cursor-bg);
   }
 
-  .terminal-pane__cursor--bar {
+  :global(.terminal-pane__cursor--bar) {
     width: var(--size-cursor-bar-width, 2px);
     height: 1lh;
     background-color: var(--term-cursor-bg);
   }
 
   /* Unfocused: hollow outline per FS-VT-034, UXD §7.3.1 */
-  .terminal-pane__cursor--unfocused {
+  :global(.terminal-pane__cursor--unfocused) {
     background-color: transparent !important;
     border: var(--size-cursor-outline-width) solid var(--term-cursor-unfocused);
     mix-blend-mode: normal;
   }
 
   /* Scrollbar overlay (FS-SB-007, TUITC-UX-070 to 073) */
-  .terminal-pane__scrollbar {
+  :global(.terminal-pane__scrollbar) {
     position: absolute;
     top: 0;
     right: 0;
@@ -659,11 +520,11 @@
     transition: opacity var(--duration-slow, 300ms);
   }
 
-  .terminal-pane__scrollbar--dragging {
+  :global(.terminal-pane__scrollbar--dragging) {
     cursor: grabbing;
   }
 
-  .terminal-pane__scrollbar-thumb {
+  :global(.terminal-pane__scrollbar-thumb) {
     position: absolute;
     right: 0;
     width: 100%;
@@ -674,63 +535,28 @@
     cursor: grab;
   }
 
-  .terminal-pane__scrollbar--dragging .terminal-pane__scrollbar-thumb {
+  :global(.terminal-pane__scrollbar--dragging .terminal-pane__scrollbar-thumb) {
     cursor: grabbing;
   }
 
-  .terminal-pane__scrollbar-thumb--hover {
+  :global(.terminal-pane__scrollbar-thumb--hover) {
     background-color: var(--color-scrollbar-thumb-hover);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .terminal-pane__scrollbar {
+    :global(.terminal-pane__scrollbar) {
       transition: none;
     }
-    .terminal-pane__scrollbar-thumb {
+    :global(.terminal-pane__scrollbar-thumb) {
       transition: none;
     }
   }
 
-  /* SSH disconnected banner (FS-SSH-040/041) */
-  .terminal-pane__ssh-disconnected {
+  /* Reconnection separators overlay (FS-SSH-042) */
+  :global(.terminal-pane__reconnection-separators) {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-4);
-    background-color: var(--color-bg-overlay);
-    border-top: 1px solid var(--color-border-subtle);
-    z-index: var(--z-overlay);
-  }
-
-  .terminal-pane__ssh-disconnected-label {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-ui-sm);
-  }
-
-  .terminal-pane__ssh-reconnect-btn {
-    padding: var(--space-1) var(--space-3);
-    background-color: var(--color-accent);
-    color: var(--term-fg);
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-ui-sm);
-    cursor: pointer;
-    min-height: var(--size-target-min);
-    min-width: var(--size-target-min);
-  }
-
-  .terminal-pane__ssh-reconnect-btn:hover {
-    background-color: var(--color-accent);
-    filter: brightness(1.15);
-  }
-
-  .terminal-pane__ssh-reconnect-btn:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 2px;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
   }
 </style>

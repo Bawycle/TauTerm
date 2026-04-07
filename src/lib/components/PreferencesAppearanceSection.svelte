@@ -1,0 +1,99 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!--
+  PreferencesAppearanceSection — appearance section of the preferences panel.
+  Font family, font size, active theme selection, language.
+
+  Props:
+    preferences — current Preferences object
+    themes      — loaded user themes (for the theme dropdown)
+    onupdate    — called with PreferencesPatch when a preference changes
+-->
+<script lang="ts">
+  import TextInput from '$lib/ui/TextInput.svelte';
+  import Dropdown from '$lib/ui/Dropdown.svelte';
+  import * as m from '$lib/paraglide/messages';
+  import type { Preferences, PreferencesPatch } from '$lib/ipc/types';
+  import { BUILT_IN_THEME_NAMES } from '$lib/theming/built-in-themes';
+  import type { UserTheme } from '$lib/ipc/types';
+
+  interface Props {
+    preferences?: Preferences;
+    themes: UserTheme[];
+    onupdate?: (patch: PreferencesPatch) => void;
+  }
+
+  let { preferences, themes, onupdate }: Props = $props();
+
+  const languageOptions = [
+    { value: 'en', label: m.locale_en() },
+    { value: 'fr', label: m.locale_fr() },
+  ];
+
+  function handleFontFamilyChange(val: string) {
+    if (!preferences?.appearance) return;
+    onupdate?.({ appearance: { ...preferences.appearance, fontFamily: val } });
+  }
+
+  function handleFontSizeChange(val: string) {
+    if (!preferences?.appearance) return;
+    const n = parseInt(val, 10);
+    if (isNaN(n)) return;
+    const clamped = Math.max(8, Math.min(32, n));
+    onupdate?.({ appearance: { ...preferences.appearance, fontSize: clamped } });
+  }
+
+  function handleThemeChange(val: string) {
+    if (!preferences?.appearance) return;
+    onupdate?.({ appearance: { ...preferences.appearance, themeName: val } });
+  }
+
+  function handleLanguageChange(val: string) {
+    if (!preferences?.appearance) return;
+    if (val === 'en' || val === 'fr') {
+      onupdate?.({ appearance: { ...preferences.appearance, language: val } });
+    }
+  }
+</script>
+
+<p class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+  {m.preferences_section_appearance()}
+</p>
+
+<div class="space-y-4">
+  <TextInput
+    id="pref-font-family"
+    label={m.preferences_appearance_font_family()}
+    value={preferences?.appearance?.fontFamily ?? ''}
+    oninput={handleFontFamilyChange}
+  />
+
+  <TextInput
+    id="pref-font-size"
+    label={m.preferences_appearance_font_size_range()}
+    type="number"
+    value={String(preferences?.appearance?.fontSize ?? 13)}
+    oninput={handleFontSizeChange}
+  />
+
+  <Dropdown
+    id="pref-theme"
+    label={m.preferences_appearance_theme()}
+    options={[
+      ...BUILT_IN_THEME_NAMES.map(name => ({
+        value: name,
+        label: name.charAt(0).toUpperCase() + name.slice(1)
+      })),
+      ...themes.map(t => ({ value: t.name, label: t.name }))
+    ]}
+    value={preferences?.appearance?.themeName ?? 'umbra'}
+    onchange={handleThemeChange}
+  />
+
+  <Dropdown
+    id="pref-language"
+    label={m.preferences_appearance_language()}
+    options={languageOptions}
+    value={preferences?.appearance?.language ?? 'en'}
+    onchange={handleLanguageChange}
+  />
+</div>

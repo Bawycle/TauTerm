@@ -57,6 +57,19 @@ import type {
   ScreenUpdateEvent,
 } from '$lib/ipc/types';
 import type { CellStyle } from '$lib/terminal/screen.js';
+import {
+  defaultCell,
+  buildFullGridRows,
+  pixelToCell as pixelToCellPure,
+  mouseButtonCode,
+  cellStyle,
+} from './useTerminalPane.handlers.js';
+import {
+  scrollbarThumbHeightPct as calcScrollbarThumbHeightPct,
+  scrollbarThumbTopPct as calcScrollbarThumbTopPct,
+  scrollbarYToOffset as scrollbarYToOffsetPure,
+} from './useTerminalPane.scrollbar.js';
+import type { BorderPulse } from './useTerminalPane.bell.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,7 +161,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let bellFlashing = $state(false);
   let bellFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
-  type BorderPulse = 'output' | 'bell' | 'exit' | null;
+  // BorderPulse type is imported from useTerminalPane.bell.ts
   let borderPulse = $state<BorderPulse>(null);
   let borderPulseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -180,18 +193,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     scrollbarVisible || scrollOffset > 0 || scrollbarHover || scrollbarDragging,
   );
 
-  const scrollbarThumbHeightPct = $derived(
-    scrollbackLines > 0
-      ? Math.max((32 / (rows * 16 || 400)) * 100, (rows / (rows + scrollbackLines)) * 100)
-      : 0,
-  );
+  const scrollbarThumbHeightPct = $derived(calcScrollbarThumbHeightPct(rows, scrollbackLines));
 
   const scrollbarThumbTopPct = $derived(
-    scrollbackLines > 0 && scrollOffset > 0
-      ? ((scrollbackLines - scrollOffset) / (scrollbackLines + rows)) * 100
-      : scrollOffset === 0
-        ? 100 - scrollbarThumbHeightPct
-        : 0,
+    calcScrollbarThumbTopPct(rows, scrollbackLines, scrollOffset, scrollbarThumbHeightPct),
   );
 
   // WP3c: gridRows as $state updated differentially, not $derived rebuilding the entire 2D array.
@@ -199,29 +204,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // not the full {#each} block. Full rebuild only on full_redraw or dimension change.
   let gridRows = $state<CellStyle[][]>([]);
 
-  function defaultCell(): CellStyle {
-    return {
-      content: ' ',
-      fg: undefined,
-      bg: undefined,
-      width: 1,
-      bold: false,
-      dim: false,
-      italic: false,
-      underline: 0,
-      blink: false,
-      inverse: false,
-      hidden: false,
-      strikethrough: false,
-      underlineColor: undefined,
-      hyperlink: undefined,
-    };
-  }
-
-  function buildFullGridRows(r: number, c: number): CellStyle[][] {
-    return Array.from({ length: r }, (_, row) =>
-      Array.from({ length: c }, (_, col) => grid[row * c + col] ?? defaultCell()),
-    );
+  // defaultCell and buildFullGridRows are imported from useTerminalPane.handlers.ts.
+  // Local wrappers bind the `grid` closure so callers don't need to pass it.
+  function buildFullGridRowsBound(r: number, c: number): CellStyle[][] {
+    return buildFullGridRows(r, c, grid);
   }
 
   const searchMatchSet = $derived.by(() => {
@@ -436,7 +422,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
     if (update.isFullRedraw || gridRows.length !== update.rows) {
       // Full rebuild: dimension change or explicit full repaint.
-      gridRows = buildFullGridRows(update.rows, update.cols);
+      gridRows = buildFullGridRowsBound(update.rows, update.cols);
     } else {
       // Differential: rebuild only rows that have changed cells.
       const dirtyRows = new Set(update.cells.map((c) => c.row));
@@ -506,7 +492,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
     // Initialize gridRows from the snapshot (+ any replayed updates).
     if (gridRows.length !== rows) {
-      gridRows = buildFullGridRows(rows, cols);
+      gridRows = buildFullGridRowsBound(rows, cols);
     }
 
     unlistens.push(
@@ -619,15 +605,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // Mouse helpers
   // -------------------------------------------------------------------------
 
+  // pixelToCell is imported from useTerminalPane.handlers.ts.
+  // This wrapper binds the composable's viewportEl, cols, and rows.
   function pixelToCell(event: MouseEvent): { row: number; col: number } {
-    if (!viewportEl) return { row: 0, col: 0 };
-    const rect = viewportEl.getBoundingClientRect();
-    const cw = Math.max(1, rect.width / cols);
-    const ch = Math.max(1, rect.height / rows);
-    return {
-      col: Math.max(0, Math.min(cols - 1, Math.floor((event.clientX - rect.left) / cw))),
-      row: Math.max(0, Math.min(rows - 1, Math.floor((event.clientY - rect.top) / ch))),
-    };
+    return pixelToCellPure(event, viewportEl, cols, rows);
   }
 
   async function sendMouseEvent(
@@ -652,18 +633,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     await sendBytes(new TextEncoder().encode(seq));
   }
 
-  function mouseButtonCode(event: MouseEvent): number {
-    switch (event.button) {
-      case 0:
-        return 0;
-      case 1:
-        return 1;
-      case 2:
-        return 2;
-      default:
-        return 3;
-    }
-  }
+  // mouseButtonCode is imported from useTerminalPane.handlers.ts — used directly.
 
   // -------------------------------------------------------------------------
   // Selection
@@ -870,13 +840,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // Scrollbar interaction
   // -------------------------------------------------------------------------
 
+  // scrollbarYToOffset is imported from useTerminalPane.scrollbar.ts.
+  // This wrapper binds the composable's scrollbarEl, scrollbackLines, rows, scrollOffset.
   function scrollbarYToOffset(clientY: number): number {
-    if (!scrollbarEl) return scrollOffset;
-    const rect = scrollbarEl.getBoundingClientRect();
-    const fraction = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    const totalLines = rows + scrollbackLines;
-    const targetLine = Math.round(fraction * totalLines);
-    return Math.max(0, Math.min(scrollbackLines, scrollbackLines - targetLine + rows));
+    return scrollbarYToOffsetPure(clientY, scrollbarEl, scrollbackLines, rows, scrollOffset);
   }
 
   async function scrollToOffset(offset: number) {
@@ -1034,39 +1001,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // Cell rendering helper
   // -------------------------------------------------------------------------
 
-  function cellStyle(cell: CellStyle): string {
-    const parts: string[] = [];
-    const fg = cell.inverse ? cell.bg : cell.fg;
-    const bg = cell.inverse ? cell.fg : cell.bg;
-    if (fg) parts.push(`color:${fg}`);
-    if (bg) parts.push(`background-color:${bg}`);
-    if (cell.bold) parts.push('font-weight:bold');
-    if (cell.italic) parts.push('font-style:italic');
-    if (cell.dim) parts.push('opacity:var(--term-dim-opacity)');
-    if (cell.hidden) parts.push('color:transparent');
-
-    // Build text-decoration (F6 — extended underline styles SGR 4:1–4:5).
-    // F9: strikethrough is rendered via .terminal-pane__cell--strikethrough CSS class
-    // (::after pseudo-element at 50% height) — not via text-decoration: line-through.
-    const decLines: string[] = [];
-    if (cell.underline > 0) decLines.push('underline');
-    if (decLines.length) parts.push(`text-decoration-line:${decLines.join(' ')}`);
-
-    if (cell.underline > 0) {
-      const underlineStyleMap: Record<number, string> = {
-        2: 'double',
-        3: 'wavy',
-        4: 'dotted',
-        5: 'dashed',
-      };
-      const underlineStyle = underlineStyleMap[cell.underline];
-      if (underlineStyle) parts.push(`text-decoration-style:${underlineStyle}`);
-      const underlineColor = cell.underlineColor ?? 'var(--term-underline-color-default)';
-      parts.push(`text-decoration-color:${underlineColor}`);
-    }
-
-    return parts.join(';');
-  }
+  // cellStyle is imported from useTerminalPane.handlers.ts — used directly.
 
   // -------------------------------------------------------------------------
   // Return all state and handlers for TerminalPane.svelte

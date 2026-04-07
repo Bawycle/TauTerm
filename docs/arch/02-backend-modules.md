@@ -23,10 +23,25 @@ src-tauri/src/
                         CellAttrs, SearchQuery, SearchMatch, DirtyRegion
   vt/
     processor.rs      — VtProcessor: struct, public API (new/process/resize/get_snapshot/
-                        get_scrollback_line/search), private helpers; declares sub-modules
+                        get_scrollback_line/search), state queries (take_*/mode_state/
+                        register_bell); declares sub-modules
     processor/
+      write.rs        — write_char(), apply_wrap_pending(), write_char_at_width():
+                        core character placement logic (pub(super) helpers)
+      emoji.rs        — is_emoji_vs_eligible() (Unicode VS-16 table), flush_pending_emoji()
+      regional_indicator.rs — handle_regional_indicator(), RI pairing and narrow flush
+      screen.rs       — enter_alternate(), leave_alternate(), cursor/buffer helpers
       dispatch.rs     — impl vte::Perform for VtPerformBridge: CSI/OSC/ESC/execute dispatch
-      tests.rs        — unit + security tests (cfg(test))
+      tests.rs        — unit + security test entry point (cfg(test)); declares test sub-modules
+      tests/
+        helpers.rs    — make_vt(), grapheme_at(), attrs_at() (shared test utilities)
+        security.rs   — SEC-PTY-001..007 security tests
+        basic.rs      — TEST-VT-002..007: split CSI, UTF-8, wide chars, SGR
+        modes.rs      — TEST-VT-008..023: cursor, alt screen, scroll region, charset
+        editing.rs    — ICH/DCH/IL/DL/RI/DECAWM/CSI scroll/cursor shape/BEL
+        features.rs   — TEST-SB-002, TEST-OSC8 (hyperlinks), TEST-OSC52 (clipboard)
+        cursor_dirty.rs — DirtyRegion.cursor_moved tracking
+        resize_full_redraw.rs — full_redraw flag on resize
     screen_buffer.rs  — ScreenBuffer: cell grid (normal + alternate), scrollback ring,
                         dirty tracking, resize, snapshot. Scrollback policy: only lines
                         scrolled off the top of a full-screen scroll region enter the ring.
@@ -55,8 +70,21 @@ src-tauri/src/
                         SessionState, PaneState, TabState, TabId, PaneId,
                         SplitDirection, CreateTabConfig
   session/
-    registry.rs       — SessionRegistry: HashMap<TabId, TabSession>; public API;
-                        emits session-state-changed; State<Arc<SessionRegistry>>
+    registry.rs       — SessionRegistry: struct, new(), get_state_snapshot(),
+                        CreateTabConfig, ScrollPositionState, constants; declares sub-modules
+    registry/
+      tab_ops.rs      — create_tab, close_tab, rename_tab, reorder_tab, set_active_tab,
+                        update_pane_title, get_state_snapshot (tab-level state reads)
+      pane_ops.rs     — split_pane, close_pane, send_input, scroll_pane, resize_pane,
+                        set_active_pane
+      pane_state.rs   — accessors: get_pane_vt/dims/snapshot/termination_info;
+                        lifecycle: mark_pane_terminated, has_foreground_process;
+                        queries: is_active_pane, get_tab_state_for_pane, is_local_pane
+      shell.rs        — resolve_shell_path(): login shell detection, $SHELL fallback
+      layout.rs       — PaneNode tree helpers: replace_leaf_with_split,
+                        update_pane_title_in_tree, remove_pane_from_tree
+      pty_helpers.rs  — get_reader_handle(), get_writer_handle(): PTY I/O access
+      tests.rs        — unit tests (login shell detection, etc.)
     tab.rs            — TabSession: Vec<PaneId>, metadata, notification state
     pane.rs           — PaneSession: owns PtyTaskHandle or SshChannelHandle;
                         Arc<RwLock<VtProcessor>>; PaneLifecycleState
@@ -91,7 +119,15 @@ src-tauri/src/
   preferences.rs      — re-exports: PreferencesStore, Preferences, UserTheme,
                         PreferencesPatch
   preferences/
-    store.rs          — PreferencesStore: load/save from disk with schema validation
+    store.rs          — PreferencesStore: struct, public API (load/apply_patch/save_theme/
+                        save_connection/etc.); declares sub-modules
+    store/
+      io.rs           — load_from_disk(), clamp_connections(), parse_toml_prefs():
+                        disk I/O, TOML parsing, JSON migration fallback
+      schema_convert.rs — rename_toml_keys(), camel_to_snake(), snake_to_camel():
+                          key conversion bridge (IPC camelCase ↔ TOML snake_case)
+      path.rs         — preferences_path(), dirs_or_home(): XDG config path resolution
+      tests.rs        — unit tests: apply_patch, key conversion, connection limits
     schema.rs         — Preferences struct and all nested types (serde + validation)
 
   credentials.rs      — public API: CredentialManager (wraps PAL CredentialStore)

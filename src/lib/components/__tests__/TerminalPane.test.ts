@@ -136,12 +136,16 @@ describe('CSS-PRIORITY-001: selection classes declared after search-match in sty
    * since it does not compute cascade priorities for scoped <style> blocks.
    */
   it('--selected is declared after --search-match in TerminalPane.svelte source', async () => {
+    // CSS styles are in TerminalPane.svelte (as :global() rules).
+    // The order check uses indexOf for --search-match and lastIndexOf for --selected
+    // to verify cascade priority regardless of :global() wrapper syntax.
     const fs = await import('fs');
     const path = await import('path');
     const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
     const searchMatchIdx = source.indexOf('terminal-pane__cell--search-match');
-    const selectedIdx = source.lastIndexOf('terminal-pane__cell--selected {');
+    // Match both `.terminal-pane__cell--selected {` and `:global(.terminal-pane__cell--selected)`
+    const selectedIdx = source.lastIndexOf('terminal-pane__cell--selected');
     expect(searchMatchIdx).toBeGreaterThan(-1);
     expect(selectedIdx).toBeGreaterThan(-1);
     expect(selectedIdx).toBeGreaterThan(searchMatchIdx);
@@ -182,13 +186,20 @@ describe('F4-CSS-001: --blink CSS class exists in TerminalPane.svelte source', (
   });
 
   it('cell.blink === true produces --blink class binding in template', async () => {
+    // Template is in TerminalPaneViewport.svelte (refactored from TerminalPane.svelte).
+    // CSS rule remains in TerminalPane.svelte as :global().
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
-    const source = fs.readFileSync(filePath, 'utf-8');
+    const viewportPath = path.resolve(
+      process.cwd(),
+      'src/lib/components/TerminalPaneViewport.svelte',
+    );
+    const panePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const viewportSource = fs.readFileSync(viewportPath, 'utf-8');
+    const paneSource = fs.readFileSync(panePath, 'utf-8');
     // The template must bind --blink class based on cell.blink
-    expect(source).toContain('cell.blink');
-    expect(source).toContain('terminal-pane__cell--blink');
+    expect(viewportSource).toContain('cell.blink');
+    expect(viewportSource + paneSource).toContain('terminal-pane__cell--blink');
   });
 });
 
@@ -216,12 +227,19 @@ describe('F9-CSS-001: --strikethrough class uses ::after pseudo-element position
   });
 
   it('cell.strikethrough === true produces --strikethrough class binding in template', async () => {
+    // Template is in TerminalPaneViewport.svelte (refactored from TerminalPane.svelte).
+    // CSS rule remains in TerminalPane.svelte as :global().
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
-    const source = fs.readFileSync(filePath, 'utf-8');
-    expect(source).toContain('cell.strikethrough');
-    expect(source).toContain('terminal-pane__cell--strikethrough');
+    const viewportPath = path.resolve(
+      process.cwd(),
+      'src/lib/components/TerminalPaneViewport.svelte',
+    );
+    const panePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const viewportSource = fs.readFileSync(viewportPath, 'utf-8');
+    const paneSource = fs.readFileSync(panePath, 'utf-8');
+    expect(viewportSource).toContain('cell.strikethrough');
+    expect(viewportSource + paneSource).toContain('terminal-pane__cell--strikethrough');
   });
 });
 

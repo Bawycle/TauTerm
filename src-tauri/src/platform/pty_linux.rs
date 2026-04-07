@@ -207,6 +207,14 @@ impl PtySession for LinuxPtySession {
     fn shell_pid(&self) -> Option<u32> {
         self.shell_pid
     }
+
+    fn try_wait_exit_code(&self) -> Option<Option<i32>> {
+        let mut child = self._child.lock().ok()?;
+        let status = child.try_wait().ok()??;
+        // ExitStatus::exit_code() returns u32; cast safely (capped at i32::MAX).
+        let code = i32::try_from(status.exit_code()).unwrap_or(i32::MAX);
+        Some(Some(code))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -878,6 +886,91 @@ mod tests {
         assert!(
             fg_pgid > 0,
             "FPL-FG-003: foreground PGID must be positive; got: {fg_pgid}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // FPL-EXIT — try_wait_exit_code (FS-PTY-005)
+    // -----------------------------------------------------------------------
+
+    /// FPL-EXIT-001: try_wait_exit_code() returns None while the process is running.
+    #[test]
+    fn fpl_exit_001_returns_none_while_running() {
+        let session = open_sh_session(80, 24).expect("open session");
+        // Process has not exited — try_wait_exit_code must return None.
+        assert_eq!(
+            session.try_wait_exit_code(),
+            None,
+            "FPL-EXIT-001: try_wait_exit_code must return None for a running process"
+        );
+    }
+
+    /// Wait for reader EOF then poll try_wait_exit_code until it resolves.
+    ///
+    /// After the PTY reader reaches EOF the child process may still be in
+    /// zombie state for a brief moment — poll with backoff to avoid flakiness.
+    fn wait_for_exit(
+        session: &Box<dyn PtySession>,
+        reader: Arc<Mutex<Box<dyn Read + Send>>>,
+        deadline: std::time::Instant,
+    ) -> Option<Option<i32>> {
+        // Step 1: drain reader until EOF or error.
+        loop {
+            let mut buf = [0u8; 64];
+            let n = reader.lock().ok().and_then(|mut r| r.read(&mut buf).ok());
+            match n {
+                Some(0) | None => break,
+                _ => {}
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!("process did not produce EOF within deadline");
+            }
+        }
+        // Step 2: poll try_wait_exit_code until it returns Some (zombie reaped).
+        let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if let result @ Some(_) = session.try_wait_exit_code() {
+                return result;
+            }
+            if std::time::Instant::now() >= poll_deadline {
+                return None; // timed out waiting for reap
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    /// FPL-EXIT-002: try_wait_exit_code() returns Some(Some(0)) after a clean exit.
+    #[test]
+    fn fpl_exit_002_returns_exit_code_zero_after_clean_exit() {
+        let backend = LinuxPtyBackend::new();
+        let session = backend
+            .open_session(80, 24, "/bin/sh", &["-c", "exit 0"], &[("TERM", "xterm-256color")])
+            .expect("open session");
+        let reader = session.reader_handle().expect("must have reader");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+
+        let code = wait_for_exit(&session, reader, deadline);
+        assert_eq!(
+            code,
+            Some(Some(0)),
+            "FPL-EXIT-002: try_wait_exit_code must return Some(Some(0)) after exit 0"
+        );
+    }
+
+    /// FPL-EXIT-003: try_wait_exit_code() returns Some(Some(non-zero)) after exit 1.
+    #[test]
+    fn fpl_exit_003_returns_nonzero_exit_code() {
+        let backend = LinuxPtyBackend::new();
+        let session = backend
+            .open_session(80, 24, "/bin/sh", &["-c", "exit 1"], &[("TERM", "xterm-256color")])
+            .expect("open session");
+        let reader = session.reader_handle().expect("must have reader");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+
+        let code = wait_for_exit(&session, reader, deadline);
+        assert!(
+            matches!(code, Some(Some(c)) if c != 0),
+            "FPL-EXIT-003: try_wait_exit_code must return Some(Some(non-zero)) after exit 1; got: {code:?}"
         );
     }
 }

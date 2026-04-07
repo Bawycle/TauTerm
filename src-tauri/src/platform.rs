@@ -89,6 +89,19 @@ pub trait PtySession: Send + Sync {
         None
     }
 
+    /// Attempt a non-blocking wait on the child process to obtain its exit code.
+    ///
+    /// Returns `Some(exit_code)` where `exit_code` is:
+    ///   - `Some(0)` for a clean exit
+    ///   - `Some(n)` for a non-zero exit or a signal-killed process (best-effort code)
+    ///   - `None` if the exit code could not be determined
+    ///
+    /// Returns `None` if the process has not yet exited or this session type
+    /// does not support it (SSH sessions, stubs).
+    fn try_wait_exit_code(&self) -> Option<Option<i32>> {
+        None
+    }
+
     /// Get a shared reader handle for the PTY read task.
     ///
     /// Platform implementations that support a read task return `Some(...)`.

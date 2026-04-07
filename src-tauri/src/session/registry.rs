@@ -754,6 +754,32 @@ impl SessionRegistry {
             .map(|(tab_id, e)| (tab_id.clone(), e.state.clone()))
     }
 
+    /// Transition a pane to `Terminated` state and return its `(exit_code, signal_name)`.
+    ///
+    /// Called by the PTY emit task after EOF: queries the child process exit status
+    /// via `PtySession::try_wait_exit_code()`, sets `pane.lifecycle = Terminated`,
+    /// and returns the exit info for the `ProcessExited` notification.
+    ///
+    /// Returns `(None, None)` if the pane is not found.
+    pub fn mark_pane_terminated(
+        &self,
+        pane_id: &PaneId,
+    ) -> (Option<i32>, Option<String>) {
+        let mut inner = self.inner.write();
+        let Some(pane) = inner.tabs.values_mut().find_map(|e| e.panes.get_mut(pane_id)) else {
+            return (None, None);
+        };
+        let exit_code = pane
+            .pty_session
+            .as_ref()
+            .and_then(|s| s.try_wait_exit_code())
+            .flatten();
+        pane.lifecycle =
+            crate::session::lifecycle::PaneLifecycleState::Terminated { exit_code, error: None };
+        // signal_name detection deferred (requires extending PaneLifecycleState)
+        (exit_code, None)
+    }
+
     /// Returns `(exit_code, signal_name)` for a pane that is in `Terminated` state.
     ///
     /// `exit_code` is `None` when the process was killed by a signal.

@@ -338,10 +338,10 @@ pub fn spawn_pty_read_task(
             }
         }
 
-        // FS-NOTIF-002: PTY process exited — emit notification with exit code / signal.
-        let (exit_code, signal_name) = registry_e
-            .get_pane_termination_info(&pane_id_e)
-            .unwrap_or((None, None));
+        // FS-NOTIF-002: PTY process exited — transition to Terminated and get exit info.
+        // mark_pane_terminated() calls try_wait() on the child to recover the exit
+        // code and sets pane.lifecycle = Terminated before we emit the notification.
+        let (exit_code, signal_name) = registry_e.mark_pane_terminated(&pane_id_e);
         if let Some((_, tab_state)) = registry_e.get_tab_state_for_pane(&pane_id_e) {
             emit_notification_changed(
                 &app_e,

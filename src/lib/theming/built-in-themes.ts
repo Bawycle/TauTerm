@@ -77,6 +77,8 @@ const SOLSTICE_TOKENS: Record<string, string> = {
   'color-focus-ring-offset': 'var(--color-neutral-50)',
 
   'color-activity': 'var(--color-green-600)',
+  'color-indicator-output': 'var(--color-green-600)',
+  'color-indicator-bell': 'var(--color-amber-600)',
   'color-process-end': 'var(--color-neutral-400)',
   'color-bell': 'var(--color-amber-600)',
   'color-error': 'var(--color-red-600)',
@@ -102,6 +104,7 @@ const SOLSTICE_TOKENS: Record<string, string> = {
   'color-tab-new-hover-fg': 'var(--color-neutral-850)',
 
   // SSH indicators
+  'color-ssh-connected': 'var(--color-arctic-500)',
   'color-ssh-badge-bg': 'var(--color-arctic-100)',
   'color-ssh-badge-fg': 'var(--color-arctic-700)',
   'color-ssh-disconnected-bg': 'var(--color-red-100)',
@@ -117,6 +120,9 @@ const SOLSTICE_TOKENS: Record<string, string> = {
   'color-scrollbar-thumb': 'var(--color-neutral-300)',
   'color-scrollbar-thumb-hover': 'var(--color-neutral-400)',
 
+  // Form inputs
+  'color-bg-input': 'var(--color-neutral-100)',
+
   // Terminal surface tokens (§8.5 terminal section)
   'term-bg': 'var(--color-neutral-50)',
   'term-fg': 'var(--color-neutral-950)',
@@ -128,6 +134,7 @@ const SOLSTICE_TOKENS: Record<string, string> = {
   'term-selection-bg': 'var(--color-arctic-200)',
   'term-selection-fg': 'inherit',
   'term-selection-bg-inactive': 'var(--color-arctic-100)',
+  'term-selection-flash': 'var(--color-arctic-300)',
 
   'term-search-match-bg': 'var(--color-amber-100)',
   'term-search-match-fg': 'var(--color-amber-800)',
@@ -240,6 +247,8 @@ const ARCHIPEL_TOKENS: Record<string, string> = {
   'color-focus-ring-offset': 'var(--color-neutral-950)',
 
   'color-activity': 'var(--color-lime-400)',
+  'color-indicator-output': 'var(--color-lime-400)',
+  'color-indicator-bell': 'var(--color-amber-400)',
   'color-process-end': 'var(--color-neutral-400)',
   'color-bell': 'var(--color-amber-400)',
   'color-error': 'var(--color-red-400)',
@@ -265,6 +274,7 @@ const ARCHIPEL_TOKENS: Record<string, string> = {
   'color-tab-new-hover-fg': 'var(--color-neutral-300)',
 
   // SSH indicators
+  'color-ssh-connected': 'var(--color-turquoise-300)',
   'color-ssh-badge-bg': 'var(--color-turquoise-700)',
   'color-ssh-badge-fg': 'var(--color-turquoise-300)',
   'color-ssh-disconnected-bg': 'var(--color-red-700)',
@@ -280,6 +290,9 @@ const ARCHIPEL_TOKENS: Record<string, string> = {
   'color-scrollbar-thumb': 'var(--color-neutral-600)',
   'color-scrollbar-thumb-hover': 'var(--color-neutral-500)',
 
+  // Form inputs
+  'color-bg-input': 'var(--color-neutral-850)',
+
   // Terminal surface tokens (§9.5 terminal section)
   'term-bg': 'var(--color-neutral-900)',
   'term-fg': 'var(--color-neutral-100)',
@@ -291,6 +304,7 @@ const ARCHIPEL_TOKENS: Record<string, string> = {
   'term-selection-bg': 'var(--color-turquoise-700)',
   'term-selection-fg': 'inherit',
   'term-selection-bg-inactive': 'var(--color-neutral-800)',
+  'term-selection-flash': 'var(--color-turquoise-400)',
 
   'term-search-match-bg': 'var(--color-amber-700)',
   'term-search-match-fg': 'var(--color-amber-300)',

@@ -230,6 +230,9 @@
   "theme_line_height_hint": "Multiplier 1.0–2.0 (default: 1.2). Leave empty to use the global default.",
   "theme_contrast_warning": "Contrast ratio {ratio}:1 is below the WCAG 2.1 AA threshold of {threshold}:1. Text may be hard to read.",
   "theme_preview_label": "Theme preview",
+  "theme_error_load": "Failed to load themes",
+  "theme_error_save": "Failed to save theme",
+  "theme_error_delete": "Failed to delete theme",
 
   "context_menu_hint": "Right-click for more options",
 

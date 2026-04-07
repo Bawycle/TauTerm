@@ -31,7 +31,7 @@
     BellType,
   } from '$lib/ipc/types';
   import { contrastRatio, WCAG_AA_THRESHOLD } from '$lib/utils/contrast';
-  import { isBuiltInTheme, BUILT_IN_THEME_NAMES, getThemeSwatch } from '$lib/theming/built-in-themes';
+  import { isBuiltInTheme, BUILT_IN_THEME_NAMES, getThemeSwatch, getBuiltInThemeTokens } from '$lib/theming/built-in-themes';
   import { buildMinimalValidTheme } from '$lib/theming/validate';
 
   // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@
       themes = await invoke<UserTheme[]>('get_themes');
       themesLoaded = true;
     } catch {
-      themeError = 'Failed to load themes';
+      themeError = m.theme_error_load();
     }
   }
 
@@ -256,7 +256,7 @@
       editingTheme = null;
       isNewTheme = false;
     } catch {
-      themeError = 'Failed to save theme';
+      themeError = m.theme_error_save();
     } finally {
       themeBusy = false;
     }
@@ -274,7 +274,7 @@
         onupdate?.({ appearance: { ...preferences.appearance, themeName: 'umbra' } });
       }
     } catch {
-      themeError = 'Failed to delete theme';
+      themeError = m.theme_error_delete();
     } finally {
       themeBusy = false;
     }
@@ -301,23 +301,35 @@
 
   function handleDuplicateTheme(sourceName: string) {
     const defaults = buildMinimalValidTheme();
-    const source = themes.find(t => t.name === sourceName);
-    const basePalette = source
-      ? [...source.palette] as UserTheme['palette']
+    const userSource = themes.find(t => t.name === sourceName);
+
+    // For built-in themes, derive colors from their token map rather than
+    // falling back silently to Umbra defaults.
+    const builtInTokens = isBuiltInTheme(sourceName) ? getBuiltInThemeTokens(sourceName) : null;
+    const resolveToken = (key: string): string =>
+      builtInTokens?.[key] ?? defaults[key] ?? '';
+
+    const basePalette = userSource
+      ? [...userSource.palette] as UserTheme['palette']
       : [
-          defaults['term-color-0'], defaults['term-color-1'], defaults['term-color-2'], defaults['term-color-3'],
-          defaults['term-color-4'], defaults['term-color-5'], defaults['term-color-6'], defaults['term-color-7'],
-          defaults['term-color-8'], defaults['term-color-9'], defaults['term-color-10'], defaults['term-color-11'],
-          defaults['term-color-12'], defaults['term-color-13'], defaults['term-color-14'], defaults['term-color-15'],
+          resolveToken('term-color-0'), resolveToken('term-color-1'),
+          resolveToken('term-color-2'), resolveToken('term-color-3'),
+          resolveToken('term-color-4'), resolveToken('term-color-5'),
+          resolveToken('term-color-6'), resolveToken('term-color-7'),
+          resolveToken('term-color-8'), resolveToken('term-color-9'),
+          resolveToken('term-color-10'), resolveToken('term-color-11'),
+          resolveToken('term-color-12'), resolveToken('term-color-13'),
+          resolveToken('term-color-14'), resolveToken('term-color-15'),
         ] as UserTheme['palette'];
+
     editingTheme = {
       name: `Copy of ${sourceName}`,
       palette: basePalette,
-      foreground: source?.foreground ?? defaults['term-fg'],
-      background: source?.background ?? defaults['term-bg'],
-      cursorColor: source?.cursorColor ?? defaults['term-cursor-bg'],
-      selectionBg: source?.selectionBg ?? defaults['term-selection-bg'],
-      lineHeight: source?.lineHeight,
+      foreground: userSource?.foreground ?? resolveToken('term-fg'),
+      background: userSource?.background ?? resolveToken('term-bg'),
+      cursorColor: userSource?.cursorColor ?? resolveToken('term-cursor-bg'),
+      selectionBg: userSource?.selectionBg ?? resolveToken('term-selection-bg'),
+      lineHeight: userSource?.lineHeight,
     };
     isNewTheme = true;
     themeError = null;

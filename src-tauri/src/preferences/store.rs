@@ -751,7 +751,7 @@ mod tests {
             "scrollbackLines",
             "cursorBlinkMs",
             "fontFamily",
-            "themeeName",
+            "themeName",
             "allowOsc52Write",
             "wordDelimiters",
             "contextMenuHintShown",

@@ -108,9 +108,9 @@ describe('TUITC-FN-016: strikethrough attribute', () => {
 // TUITC-FN-020: ANSI color via cellStyleFromSnapshot
 // ---------------------------------------------------------------------------
 describe('TUITC-FN-020: ANSI fg color resolves to CSS var', () => {
-  it('fg ansi index 1 → var(--ansi-red)', () => {
+  it('fg ansi index 1 → var(--term-color-1)', () => {
     const cell = cellStyleFromSnapshot(makeSnapshotCell({ fg: { type: 'ansi', index: 1 } }));
-    expect(cell.fg).toBe('var(--ansi-red)');
+    expect(cell.fg).toBe('var(--term-color-1)');
   });
 });
 

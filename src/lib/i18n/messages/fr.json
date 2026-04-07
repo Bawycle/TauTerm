@@ -230,6 +230,9 @@
   "theme_line_height_hint": "Multiplicateur 1.0–2.0 (défaut : 1.2). Laisser vide pour utiliser la valeur globale.",
   "theme_contrast_warning": "Le ratio de contraste {ratio}:1 est inférieur au seuil WCAG 2.1 AA de {threshold}:1. Le texte peut être difficile à lire.",
   "theme_preview_label": "Aperçu du thème",
+  "theme_error_load": "Impossible de charger les thèmes",
+  "theme_error_save": "Impossible d'enregistrer le thème",
+  "theme_error_delete": "Impossible de supprimer le thème",
 
   "context_menu_hint": "Clic droit pour plus d'options",
 

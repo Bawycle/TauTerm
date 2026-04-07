@@ -142,7 +142,7 @@ describe('ULINE-COLOR-001: underlineColor present → text-decoration-color reso
       underlineColor: { type: 'ansi', index: 1 },
     });
     const style = cellToCssVars(cell);
-    expect(style['text-decoration-color']).toBe('var(--ansi-red)');
+    expect(style['text-decoration-color']).toBe('var(--term-color-1)');
   });
 });
 

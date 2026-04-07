@@ -49,27 +49,25 @@ export function applyTheme(name: string, userThemes: UserTheme[]): void {
   const styleEl = getOrCreateStyleElement();
 
   if (name === 'umbra') {
-    styleEl.innerHTML = '';
+    styleEl.textContent = '';
     return;
   }
 
   if (isBuiltInTheme(name)) {
     const tokens = getBuiltInThemeTokens(name);
-    if (tokens) {
-      styleEl.innerHTML = tokensToCSS(tokens);
-    } else {
-      styleEl.innerHTML = '';
-    }
+    // textContent is used instead of innerHTML to prevent any risk of HTML injection
+    // from user-supplied color values. CSS in a <style> element is parsed as CSS, not HTML.
+    styleEl.textContent = tokens ? tokensToCSS(tokens) : '';
     return;
   }
 
   const userTheme = userThemes.find((t) => t.name === name);
   if (userTheme) {
-    styleEl.innerHTML = userThemeToCSS(userTheme);
+    styleEl.textContent = userThemeToCSS(userTheme);
     return;
   }
 
   // Unknown theme — fall back to Umbra
   console.warn(`[TauTerm] Unknown theme '${name}', falling back to Umbra`);
-  styleEl.innerHTML = '';
+  styleEl.textContent = '';
 }

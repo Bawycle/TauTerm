@@ -226,6 +226,7 @@ export function createIoHandlers(
     s.searchOpen = false;
     s.searchMatches = [];
     s.searchCurrentIdx = 0;
+    s.activeViewportEl?.focus({ preventScroll: true });
   }
 
   // -------------------------------------------------------------------------

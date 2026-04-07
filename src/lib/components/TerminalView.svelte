@@ -132,6 +132,14 @@
       onRenameHandled={() => {
         tv.requestedRenameTabId = null;
       }}
+      onRenameComplete={() => {
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+        tv.activeViewportEl?.focus({ preventScroll: true });
+      }}
+      onEscapeTabBar={() => {
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+        tv.activeViewportEl?.focus({ preventScroll: true });
+      }}
     />
     <!-- SSH connections toggle button (FS-SSH-031, UXD §7.1.8) -->
     <button
@@ -141,6 +149,7 @@
       onclick={() => {
         tv.connectionManagerOpen = !tv.connectionManagerOpen;
       }}
+      onmousedown={(e) => e.preventDefault()}
       aria-label={tv.connectionManagerOpen
         ? m.ssh_connections_panel_close()
         : m.ssh_connections_panel_open()}
@@ -158,6 +167,7 @@
       aria-pressed={tv.isFullscreen}
       title={tv.isFullscreen ? m.exit_fullscreen() : m.enter_fullscreen()}
       data-testid="fullscreen-toggle-btn"
+      onmousedown={(e) => e.preventDefault()}
     >
       {#if tv.isFullscreen}
         <Minimize2 size={16} aria-hidden="true" />
@@ -206,6 +216,9 @@
           ondisableConfirmMultilinePaste={() =>
             tv.handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
           ondimensionschange={(paneId, c, r) => tv.handleDimensionsChange(paneId, c, r)}
+          onviewportactive={(el) => {
+            tv.activeViewportEl = el;
+          }}
         />
       {:else}
         <div class="terminal-view__empty">
@@ -364,6 +377,9 @@
       onclose={() => {
         tv.connectionManagerOpen = false;
         tv.connectionOpenError = false;
+        if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
+          tv.activeViewportEl?.focus({ preventScroll: true });
+        }
       }}
     />
   {/if}

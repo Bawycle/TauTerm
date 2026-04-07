@@ -68,6 +68,8 @@
     ondisableConfirmMultilinePaste?: () => void;
     /** Called when a pane's terminal dimensions change (DIV-UXD-008). */
     ondimensionschange?: (paneId: PaneId, cols: number, rows: number) => void;
+    /** Called when the active pane's viewport element changes (focus management). */
+    onviewportactive?: (el: HTMLElement | null) => void;
   }
 
   const {
@@ -92,6 +94,7 @@
     onsplitv,
     ondisableConfirmMultilinePaste,
     ondimensionschange,
+    onviewportactive,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -182,6 +185,7 @@
       onsplitV={() => onsplitv?.(node.paneId)}
       {ondisableConfirmMultilinePaste}
       ondimensionschange={(c, r) => ondimensionschange?.(node.paneId, c, r)}
+      {onviewportactive}
     />
   </div>
 {:else}
@@ -224,6 +228,7 @@
         {onsplitv}
         {ondisableConfirmMultilinePaste}
         {ondimensionschange}
+        {onviewportactive}
       />
     </div>
 
@@ -266,6 +271,7 @@
         {lineHeight}
         {searchMatches}
         {activeSearchMatchIndex}
+        {onviewportactive}
       />
     </div>
   </div>

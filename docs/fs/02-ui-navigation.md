@@ -136,3 +136,28 @@
 - FS-UX-003: On application launch, the user can type a command immediately without clicking the terminal area first.
 - FS-UX-003: After Ctrl+Shift+T creates a new tab, the user can type immediately in the new session without clicking.
 - FS-UX-003: After clicking a tab in the tab bar, the user can type immediately without clicking the terminal area.
+
+---
+
+## 3.16 FS-UX: Focus Management
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FS-UX-010 | The terminal viewport MUST be the permanent keyboard focus sink. Any mouse click on a toolbar element MUST preserve keyboard focus on the active terminal viewport. | Must |
+| FS-UX-011 | Toolbar buttons that do not require keyboard input (SSH toggle, fullscreen toggle, tab bar scroll arrows, scroll-to-bottom button) MUST NOT capture DOM focus on mouse click. Implementation pattern: `onmousedown.preventDefault()`. | Must |
+| FS-UX-012 | Tab bar keyboard navigation (Arrow keys within tablist): pressing Escape MUST return keyboard focus to the active terminal viewport without changing the active tab. | Must |
+| FS-UX-013 | When a non-modal overlay or panel closes (search overlay, SSH connection manager panel), keyboard focus MUST automatically return to the active terminal viewport without additional user action. | Must |
+| FS-UX-014 | Exception — elements that require keyboard input (search input, inline tab rename input, preferences panel fields, Bits UI dialog content) are permitted to temporarily capture focus. They MUST return focus to the active terminal viewport when dismissed. | Must |
+| FS-UX-015 | In a multi-pane split layout, focus always returns to the pane identified as active (`activePaneId` of the current tab). There is no separate "last focused pane" tracking. | Must |
+
+**Acceptance criteria:**
+- FS-UX-010: Clicking the SSH toggle button in the toolbar does not remove keyboard focus from the terminal viewport; typing immediately after the click sends characters to the PTY.
+- FS-UX-010: Clicking the fullscreen toggle does not require the user to click the terminal area to resume typing.
+- FS-UX-011: After clicking a tab bar scroll arrow, `document.activeElement` remains the terminal viewport element (not the arrow button).
+- FS-UX-012: With the tab bar focused via keyboard navigation, pressing Escape moves focus to the active terminal viewport and the active tab does not change.
+- FS-UX-013: Closing the search overlay (Escape or close button) returns focus to the terminal viewport; the user can type immediately.
+- FS-UX-013: Closing the SSH connection manager panel returns focus to the terminal viewport without a click.
+- FS-UX-014: Typing in the search input field works normally. Pressing Escape in the search input closes the overlay and returns focus to the terminal viewport.
+- FS-UX-014: After confirming or cancelling an inline tab rename (Enter or Escape), focus returns to the terminal viewport.
+- FS-UX-014: Closing the preferences dialog returns focus to the terminal viewport.
+- FS-UX-015: In a two-pane split, clicking a toolbar button while the left pane is active returns focus to the left pane (not the right pane). The `activePaneId` determines which pane receives focus.

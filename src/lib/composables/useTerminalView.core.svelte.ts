@@ -100,6 +100,10 @@ export interface ViewState {
   get requestedRenameTabId(): string | null;
   set requestedRenameTabId(v: string | null);
 
+  // Focus management
+  get activeViewportEl(): HTMLElement | null;
+  set activeViewportEl(v: HTMLElement | null);
+
   // Derived
   get activeThemeLineHeight(): number | undefined;
   get isFullscreen(): boolean;
@@ -144,6 +148,8 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
   let windowCloseConfirmCancelBtn = $state<HTMLButtonElement | undefined>(undefined);
 
   let requestedRenameTabId = $state<string | null>(null);
+
+  let activeViewportEl = $state<HTMLElement | null>(null);
 
   // --- Derived ---
 
@@ -190,12 +196,26 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
     };
   });
 
+  // --- Focus guard (safety net) ---
+  // Recaptures focus to the active terminal viewport whenever focus lands on
+  // document.body (e.g. after a transient element like ScrollToBottomButton
+  // disappears). Skipped when a modal dialog is open.
+
+  function onFocusIn(e: FocusEvent) {
+    if (e.target !== document.body) return;
+    if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+    const el = activeViewportEl;
+    if (!el || !document.contains(el)) return;
+    el.focus({ preventScroll: true });
+  }
+
   // --- Mount / Destroy ---
 
   let unlistens: Array<() => void> = [];
   let closeUnlisten: (() => void) | null = null;
 
   onMount(async () => {
+    document.addEventListener('focusin', onFocusIn, { capture: true });
     try {
       const state = await getSessionState();
       setInitialSession(state);
@@ -274,15 +294,23 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
         setBracketedPaste(mode.paneId, mode.bracketedPaste);
       }),
     );
-    // Listen for WM-driven fullscreen changes
+    // Listen for WM-driven fullscreen changes.
+    // The backend emits this event after a 200 ms delay to let the WM stabilise
+    // the window geometry before the frontend reads dimensions. Restoring focus
+    // here (rather than in the onclick handler) ensures the element is focused
+    // only once the window is in its final state.
     unlistens.push(
       await onFullscreenStateChanged((ev) => {
         setFullscreen(ev.isFullscreen);
+        if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
+          bag.activeViewportEl?.focus({ preventScroll: true });
+        }
       }),
     );
   });
 
   onDestroy(() => {
+    document.removeEventListener('focusin', onFocusIn, { capture: true });
     bag.closeUnlisten?.();
     bag.closeUnlisten = null;
     for (const unlisten of unlistens) unlisten();
@@ -397,6 +425,13 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
     },
     set requestedRenameTabId(v) {
       requestedRenameTabId = v;
+    },
+
+    get activeViewportEl() {
+      return activeViewportEl;
+    },
+    set activeViewportEl(v) {
+      activeViewportEl = v;
     },
 
     get activeThemeLineHeight() {

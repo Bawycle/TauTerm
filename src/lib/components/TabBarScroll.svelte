@@ -38,6 +38,7 @@
     aria-label={m.tab_bar_scroll_left()}
     tabindex={-1}
     onclick={onScrollLeft}
+    onmousedown={(e) => e.preventDefault()}
   >
     <ChevronLeft size={14} aria-hidden="true" />
     {#if leftBadge !== null}
@@ -59,6 +60,7 @@
     aria-label={m.tab_bar_scroll_right()}
     tabindex={-1}
     onclick={onScrollRight}
+    onmousedown={(e) => e.preventDefault()}
   >
     <ChevronRight size={14} aria-hidden="true" />
     {#if rightBadge !== null}

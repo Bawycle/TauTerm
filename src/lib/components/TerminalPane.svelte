@@ -116,6 +116,8 @@
     ondisableConfirmMultilinePaste?: () => void;
     /** Called whenever the terminal dimensions (cols × rows) change (DIV-UXD-008). */
     ondimensionschange?: (cols: number, rows: number) => void;
+    /** Called when this pane becomes/ceases to be the active viewport for focus management. */
+    onviewportactive?: (el: HTMLElement | null) => void;
   }
 
   const {
@@ -144,6 +146,7 @@
     onsplitV,
     ondisableConfirmMultilinePaste,
     ondimensionschange,
+    onviewportactive,
   }: Props = $props();
 
   // ── SSH deprecated algorithm banner state (FS-SSH-014, UXD §7.21) ─────────
@@ -201,6 +204,16 @@
     fontFamily: () => fontFamily,
     fontSize: () => fontSize,
     lineHeight: () => lineHeight,
+  });
+
+  // Notify parent of the active viewport element for focus management.
+  $effect(() => {
+    if (active && tp.viewportEl) {
+      onviewportactive?.(tp.viewportEl);
+    }
+    return () => {
+      onviewportactive?.(null);
+    };
   });
 
   function handleKeydown(event: KeyboardEvent) {

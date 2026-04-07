@@ -22,14 +22,72 @@
 
 ### 8.2 Focus Management
 
-- **Focus ring style:** 2px solid `--color-focus-ring` (`#4a92bf`), with 2px offset in `--color-focus-ring-offset` (`#0e0d0b`). Applied via `outline` property (not `box-shadow`) for correct behavior across border-radius values.
-- **Focus ring timing:** `--duration-instant` (0ms) — focus rings appear and disappear instantly (no transition).
-- **Tab order:** Tab bar tabs → Tab bar new-tab button → Terminal area → Status bar elements. Within the terminal area, Tab key is captured by the PTY; pane navigation uses dedicated shortcuts.
-- **Focus trap in modals:** When a dialog or the preferences panel is open, Tab key cycles only through focusable elements within the modal. Shift+Tab cycles backward. Focus starts on the default action (typically the safe/cancel action for destructive dialogs).
-- **Focus restoration:** When a modal closes, focus returns to the element that triggered it.
-- **Auto-focus on active pane (FS-UX-003):** The active terminal pane's viewport receives keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created, (3) when the user switches to a different tab. Focus is applied immediately after mount, without scrolling the page. This does not apply to terminated panes.
+#### 8.2.1 Principle: Terminal-as-Focus-Sink
 
-**Input fields:** Use an inset outline to keep the focus ring within the field's border, avoiding visual overlap with adjacent elements. Use `outline` rather than `box-shadow` for focus rings on inputs, so the ring respects `prefers-reduced-motion` and renders correctly in clipped containers.
+The terminal viewport is the permanent default destination for keyboard focus. Every interaction that does not explicitly require keyboard input (typing into a search field, renaming a tab, filling a dialog form) leaves focus on — or returns it to — the active terminal pane's viewport. The user never needs to click the terminal area to "re-enter" it after using toolbar controls (FS-UX-010).
+
+#### 8.2.2 Focus Ring Visual Treatment
+
+- **Style:** 2px solid `--color-focus-ring` (`#4a92bf`), with 2px offset in `--color-focus-ring-offset` (`#0e0d0b`). Applied via `outline` property (not `box-shadow`) for correct behavior across border-radius values.
+- **Timing:** `--duration-instant` (0ms) — focus rings appear and disappear instantly (no transition).
+- **Input fields:** Use an inset outline to keep the focus ring within the field's border, avoiding visual overlap with adjacent elements. Use `outline` rather than `box-shadow` for focus rings on inputs, so the ring respects `prefers-reduced-motion` and renders correctly in clipped containers.
+
+#### 8.2.3 Two-Tier Focus Protection
+
+Focus protection operates in two layers:
+
+1. **Prevention at source** — interactive elements that do not need keyboard input use `onmousedown.preventDefault()` to prevent the browser from moving DOM focus away from the terminal viewport on click. This is the primary mechanism.
+2. **Safety-net listener** — a document-level `focusin` handler catches any case where focus lands on `document.body` (e.g., when a focused element is removed from the DOM) and redirects it back to the active terminal viewport. This is a fallback, not the main strategy.
+
+#### 8.2.4 Toolbar Button Focus Treatment
+
+Each toolbar button falls into one of three categories depending on how it interacts with the focus model:
+
+| Element | Focus treatment | Rationale |
+|---------|----------------|-----------|
+| SSH toggle button | `onmousedown.preventDefault()` (FS-UX-011) | Toggles the connection manager panel; no keyboard input needed from the button itself. |
+| Fullscreen toggle | `onmousedown.preventDefault()` (FS-UX-011) | Toggles full-screen mode; no keyboard input needed. |
+| Tab bar scroll arrows (left/right) | `onmousedown.preventDefault()` (FS-UX-011) | Scroll navigation; no keyboard input needed. |
+| ScrollToBottomButton | `onmousedown.preventDefault()` (FS-UX-011) | Scrolls the viewport to live bottom; no keyboard input needed. |
+| TabBarItem tabs | Excluded from `onmousedown.preventDefault()` | These elements carry `draggable="true"` for tab reorder (FS-TAB-005). Preventing default on `mousedown` would break the HTML5 drag-and-drop initiation on WebKitGTK. Focus is managed reactively instead. |
+| New tab (+) button | Handled by reactive focus (`$effect`) | Creating a new tab triggers a new `activePaneId`; the `$effect` that watches `activePaneId` applies focus to the new pane's viewport after mount. |
+| Tab close (x) button | Handled by the safety-net focus guard | When the close button's DOM element is removed (tab closes), focus falls to `document.body`; the `focusin` guard redirects it to the active terminal viewport. |
+
+#### 8.2.5 Tab Bar Keyboard Model
+
+The tab bar follows the ARIA `tablist` keyboard pattern (FS-UX-012):
+
+| Key | Behavior |
+|-----|----------|
+| Arrow Left / Arrow Right | Navigate between tabs within the tablist. Focus moves to the adjacent tab header. |
+| Enter / Space | Activate the focused tab. Focus then moves to the terminal viewport of that tab's active pane. |
+| Escape | Return focus to the active terminal viewport without changing which tab is active. |
+| F2 | Enter inline rename mode on the focused tab. Focus moves to the rename input field (FS-UX-014). |
+
+Tab order: Tab bar tabs -> Tab bar new-tab button -> Terminal area -> Status bar elements. Within the terminal area, Tab key is captured by the PTY; pane navigation uses dedicated shortcuts.
+
+#### 8.2.6 Focus Trap in Modals
+
+When a dialog or the preferences panel is open, Tab key cycles only through focusable elements within the modal. Shift+Tab cycles backward. Focus starts on the default action (typically the safe/cancel action for destructive dialogs).
+
+#### 8.2.7 Overlay and Panel Close — Focus Restoration
+
+When a non-modal overlay or panel is dismissed, focus returns to the active terminal viewport (FS-UX-013, FS-UX-014). Each surface uses the mechanism best suited to its lifecycle:
+
+| Surface | Restoration mechanism |
+|---------|----------------------|
+| Search overlay | Explicit `focus()` call in the `handleSearchClose()` callback. The close action (Escape key or close button click) triggers this directly. |
+| SSH connection manager panel | Captured by the safety-net focus guard. When the panel is removed from the DOM, focus falls to `document.body` and the `focusin` listener redirects it. |
+| Bits UI dialogs (preferences, close confirmation, SSH dialogs) | Bits UI's built-in `FocusScope` handles restoration automatically. No custom code needed. |
+| Inline tab rename | The `onRenameComplete` callback (fired on Enter confirm or Escape cancel) explicitly returns focus to the active terminal viewport. |
+
+#### 8.2.8 Auto-Focus on Active Pane (FS-UX-003)
+
+The active terminal pane's viewport receives keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created, (3) when the user switches to a different tab. Focus is applied immediately after mount, without scrolling the page. This does not apply to terminated panes.
+
+#### 8.2.9 Multi-Pane Focus Rule (FS-UX-015)
+
+In a multi-pane split layout, `activeViewportEl` always points to the terminal viewport element of the pane identified by `activePaneId` on the current tab. All focus restoration — whether from toolbar clicks, overlay dismissals, or the safety-net listener — targets this single reference. There is no separate "last focused pane" memory; the `activePaneId` is the sole authority for which pane receives focus.
 
 ### 8.3 Scroll Behavior
 

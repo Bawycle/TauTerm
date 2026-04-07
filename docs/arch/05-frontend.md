@@ -168,3 +168,70 @@ if (isRecordingShortcut) return; // pass all keys through to ShortcutRecorder
 `ShortcutRecorder.svelte` sets `isRecordingShortcut = true` when it enters recording mode (focus or explicit activation) and resets it to `false` on Enter, Escape, or blur. The flag is the single coordination point between the global interceptor and any component that legitimately needs to capture all keyboard input.
 
 **Generalization:** any future component that needs to capture keyboard input unconditionally (e.g., a search input inside the terminal, a modal text field that must receive Escape) follows the same pattern: import and set `isRecordingShortcut` for the duration of its capture window. The name reflects the original use case but the mechanism is general.
+
+### 11.4 Focus Management
+
+Terminal emulators depend on reliable keyboard focus — if the active viewport loses focus, all keyboard input is silently dropped. The frontend uses a two-tier architecture: prevention at source (tier 1) and a safety-net focus guard (tier 2).
+
+#### 11.4.1 Tier 1 — Prevention at source
+
+Toolbar buttons that do not need keyboard input themselves use `onmousedown={(e) => e.preventDefault()}` in their Svelte template. This prevents the browser from transferring DOM focus to the button element on mouse click; the button's `onclick` handler still fires normally, and keyboard activation via Tab + Enter/Space is unaffected.
+
+Components using this pattern:
+
+- `ScrollToBottomButton.svelte`
+- SSH toggle in `TerminalView.svelte`
+- Fullscreen button in `TerminalView.svelte`
+- Scroll arrows in `TabBarScroll.svelte`
+
+**Exception — `TabBarItem.svelte`:** tabs carry `draggable="true"`. On WebKitGTK, `onmousedown.preventDefault()` interferes with drag-and-drop initiation, so tabs are excluded from this pattern. The focus guard (tier 2) covers the gaps left by this exception.
+
+#### 11.4.2 Tier 2 — Focus guard (safety net)
+
+Location: `useTerminalView.core.svelte.ts`, function `onFocusIn`, registered in `onMount` and removed in `onDestroy`.
+
+```
+document.addEventListener('focusin', onFocusIn, { capture: true })
+```
+
+The guard fires whenever a `focusin` event bubbles. Its logic:
+
+1. Check that `e.target === document.body` — focus has fallen to the document root with no real target.
+2. Check that no `[role="dialog"][aria-modal="true"]` element exists in the document — a modal is open and owns focus intentionally.
+3. Check that `activeViewportEl` is currently in the document.
+4. If all three conditions hold, call `activeViewportEl.focus({ preventScroll: true })`.
+
+This catches cases where tier 1 is absent (tabs) or insufficient (elements that disappear from the DOM after an action, such as the new-tab button before an `$effect` fires, or a tab close button when the tab it belongs to is being removed).
+
+#### 11.4.3 Active viewport registration
+
+`ViewState` in `useTerminalView.core.svelte.ts` holds `activeViewportEl: HTMLElement | null` as `$state`. This reference is kept current through a callback chain:
+
+- `TerminalPane.svelte` declares an `onviewportactive?: (el: HTMLElement | null) => void` callback prop.
+- When a pane is active and `viewportEl` is available, the pane calls `onviewportactive(viewportEl)`; the cleanup path calls `onviewportactive(null)`.
+- The prop is threaded down: `TerminalView.svelte` → `SplitPane.svelte` → `TerminalPane.svelte`.
+- `TerminalView.svelte` wires it: `onviewportactive={(el) => { tv.activeViewportEl = el; }}`.
+
+`useTerminalPane.svelte.ts` also contains an existing `$effect` that calls `viewportEl?.focus({ preventScroll: true })` when `props.active()` transitions to `true`. This handles the normal pane-activation flow (user clicking a pane, backend reassigning `active_pane_id`). The guard in tier 2 covers the edge cases that this `$effect` cannot anticipate.
+
+#### 11.4.4 Explicit focus restoration
+
+**Rule:** every component or handler that releases keyboard focus — by closing a panel, completing an async transition, or ending a modal interaction — must actively call `activeViewportEl?.focus({ preventScroll: true })` (with modal guard) when done. Never rely on focus returning by itself. This mirrors the pattern used by GNOME Terminal (`gtk_widget_grab_focus` after every transition) and iTerm2 (`makeFirstResponder:` after tab switch).
+
+**Timing constraint:** for transitions driven by OS events (e.g. window manager fullscreen confirmation), restoration must happen *after* the transition is stable — not in the `onclick` handler. In TauTerm, the backend emits `fullscreen-state-changed` after a 200 ms WM stabilisation delay; focus is restored inside that event handler, not in the button's `onclick`.
+
+| Flow | Location | Mechanism |
+|---|---|---|
+| Search overlay close | `useTerminalView.io-handlers.svelte.ts` `handleSearchClose()` | `s.activeViewportEl?.focus({ preventScroll: true })` |
+| Tab rename complete | `TerminalView.svelte` `onRenameComplete` prop | `tv.activeViewportEl?.focus()` with modal guard |
+| Tab bar Escape | `TabBar.svelte` `handleTabKeydown` | `onEscapeTabBar?.()` callback |
+| Tab bar printable key | `TabBar.svelte` `handleTabKeydown` catch-all | `onEscapeTabBar?.()` — tab bar is a transient navigation surface, not a permanent focus owner |
+| SSH panel close | `TerminalView.svelte` `ConnectionManager` `onclose` prop | `tv.activeViewportEl?.focus()` with modal guard |
+| Fullscreen toggle | `useTerminalView.core.svelte.ts` `onFullscreenStateChanged` handler | `bag.activeViewportEl?.focus()` — deferred to post-WM-stabilisation event |
+| Bits UI dialogs | Bits UI `FocusScope` | Automatic restoration to the element that opened the dialog |
+| Pane split | Backend sets `active_pane_id` to the new pane | `$effect` in `useTerminalPane` fires |
+| Pane close | Backend reassigns `active_pane_id` | `$effect` in `useTerminalPane` fires |
+
+#### 11.4.5 Multi-pane rule
+
+In a split layout, `activeViewportEl` always points to the viewport of the pane identified by `activePaneId` in the current `TabState`. There is no separate "last focused pane" tracking — `activePaneId` is the single source of truth, and `activeViewportEl` is a derived reference to the DOM node that corresponds to it.

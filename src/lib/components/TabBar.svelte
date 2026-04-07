@@ -52,6 +52,10 @@
      */
     requestedRenameTabId?: string | null;
     onRenameHandled?: () => void;
+    /** Called when inline rename exits (confirm or cancel) so focus can be restored. */
+    onRenameComplete?: () => void;
+    /** Called when Escape is pressed on a focused tab (not in rename mode) so focus can return to the terminal viewport. */
+    onEscapeTabBar?: () => void;
   }
 
   const {
@@ -62,6 +66,8 @@
     onNewTab,
     requestedRenameTabId = null,
     onRenameHandled,
+    onRenameComplete,
+    onEscapeTabBar,
   }: Props = $props();
 
   // Sort tabs by order field
@@ -94,12 +100,14 @@
     }
     renamingTabId = null;
     renameValue = '';
+    onRenameComplete?.();
   }
 
   /** Cancel rename without saving. */
   function cancelRename() {
     renamingTabId = null;
     renameValue = '';
+    onRenameComplete?.();
   }
 
   // React to an external rename request (e.g. F2 global shortcut from TerminalView).
@@ -272,6 +280,15 @@
           : sorted[(idx - 1 + sorted.length) % sorted.length];
       const nextEl = document.querySelector<HTMLElement>(`[data-tab-id="${next.id}"]`);
       nextEl?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      onEscapeTabBar?.();
+    } else if (!event.isComposing && !event.ctrlKey && !event.altKey && !event.metaKey && event.key.length === 1) {
+      // Printable character: return focus to terminal so the keystroke lands there.
+      // The key itself is intentionally NOT forwarded — focus change alone is sufficient
+      // (the user will retype). This mirrors GNOME Terminal / iTerm2 behaviour: the
+      // tab list is a transient navigation surface, not a permanent focus owner.
+      onEscapeTabBar?.();
     }
   }
 
@@ -363,6 +380,7 @@
     type="button"
     aria-label={m.tab_bar_new_tab()}
     title={m.tab_bar_new_tab_tooltip()}
+    onmousedown={(e) => e.preventDefault()}
     onclick={onNewTab}
   >
     <Plus size={16} aria-hidden="true" />

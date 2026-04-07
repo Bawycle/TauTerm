@@ -173,6 +173,14 @@ export function useTerminalView() {
       return s.isFullscreen;
     },
 
+    // Focus management
+    get activeViewportEl() {
+      return s.activeViewportEl;
+    },
+    set activeViewportEl(v: HTMLElement | null) {
+      s.activeViewportEl = v;
+    },
+
     // Handlers — session
     handleTabClick: session.handleTabClick,
     handleTabClose: session.handleTabClose,

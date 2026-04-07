@@ -39,6 +39,7 @@
   aria-label={m.scroll_to_bottom()}
   {onclick}
   onkeydown={handleKeydown}
+  onmousedown={(e) => e.preventDefault()}
 >
   <ArrowDown size="var(--size-icon-md)" aria-hidden="true" />
 </div>

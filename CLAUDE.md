@@ -133,10 +133,11 @@ Development is coordinated by a multi-agent team defined in `.claude/agents/`. A
 | `tauterm-rust-dev.md` | `rust-dev` | Rust Developer — PTY, VT parser, screen buffer, Tauri commands |
 | `tauterm-frontend-dev.md` | `frontend-dev` | Frontend Developer — Svelte 5, terminal rendering, Tauri IPC |
 | `tauterm-test-engineer.md` | `test-engineer` | Test Engineer — nextest, vitest, WebdriverIO, no-regression policy |
+| `tauterm-perf-expert.md` | `perf-expert` | Performance Expert — profiling, throughput/latency analysis, Rust + Svelte 5 optimization |
 
 **Team name:** `tauterm-team` — runtime config at `~/.claude/teams/tauterm-team/config.json`
 
-**Typical feature flow:** `domain-expert` + `architect` (constraints) → `ux-designer` + `user-rep` (UX/acceptance) → `rust-dev` + `frontend-dev` in parallel (implementation) → `test-engineer` + `security-expert` (review). `moe` arbitrates when specialists disagree and validates quality gates.
+**Typical feature flow:** `domain-expert` + `architect` (constraints) → `ux-designer` + `user-rep` (UX/acceptance) → `rust-dev` + `frontend-dev` in parallel (implementation) → `test-engineer` + `security-expert` + `perf-expert` (review). `moe` arbitrates when specialists disagree and validates quality gates.
 
 ## License
 

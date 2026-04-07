@@ -340,17 +340,36 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const rect = viewportEl.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
-    // F8: measure cell dimensions via Canvas 2D (more precise than DOM offsetWidth).
-    // Falls back to grid-based estimate when OffscreenCanvas is unavailable (tests).
+    // Bug 1a: measure 1lh and 1ch via a DOM probe so dimensions exactly match the
+    // CSS units used by the terminal grid cells (height:1lh, width:1ch).
+    // Falls back to measureCellDimensions (Canvas 2D) then to a grid-based estimate.
     let cellW: number;
     let cellH: number;
     try {
-      const family = props.fontFamily?.() ?? 'monospace';
-      const size = props.fontSize?.() ?? 13;
-      const lh = props.lineHeight?.() ?? 1.2;
-      const dims = measureCellDimensions(family, size, lh);
-      cellW = dims.width > 0 ? dims.width : Math.max(1, rect.width / cols);
-      cellH = dims.height > 0 ? dims.height : Math.max(1, rect.height / rows);
+      let probeRect: DOMRect | null = null;
+      const probe = document.createElement('div');
+      probe.style.cssText =
+        'position:absolute;visibility:hidden;pointer-events:none;height:1lh;width:1ch;';
+      viewportEl.appendChild(probe);
+      try {
+        probeRect = probe.getBoundingClientRect();
+      } finally {
+        // Guarantee probe removal even if getBoundingClientRect throws.
+        viewportEl.removeChild(probe);
+      }
+
+      if (probeRect !== null && probeRect.height > 0 && probeRect.width > 0) {
+        cellH = probeRect.height;
+        cellW = probeRect.width;
+      } else {
+        // Fallback: CSS lh/ch not supported or probe returned zero.
+        const family = props.fontFamily?.() ?? 'monospace';
+        const size = props.fontSize?.() ?? 13;
+        const lh = props.lineHeight?.() ?? 1.2;
+        const dims = measureCellDimensions(family, size, lh);
+        cellW = dims.width > 0 ? dims.width : Math.max(1, rect.width / cols);
+        cellH = dims.height > 0 ? dims.height : Math.max(1, rect.height / rows);
+      }
     } catch {
       cellW = Math.max(1, rect.width / cols);
       cellH = Math.max(1, rect.height / rows);
@@ -361,13 +380,22 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const pixelWidth = Math.max(1, Math.floor(rect.width));
     const pixelHeight = Math.max(1, Math.floor(rect.height));
 
+    // Bug 3b: update cols/rows optimistically BEFORE the await so that any
+    // screen-update event emitted by the backend during resizePane() uses the
+    // correct new stride. Rollback on IPC failure to keep UI state consistent.
+    const prevCols = cols;
+    const prevRows = rows;
+    cols = newCols;
+    rows = newRows;
     props.ondimensionschange()?.(newCols, newRows);
     try {
       await resizePane(props.paneId(), newCols, newRows, pixelWidth, pixelHeight);
-      cols = newCols;
-      rows = newRows;
     } catch {
-      // Non-fatal
+      // Rollback on IPC failure to keep UI state consistent with backend.
+      cols = prevCols;
+      rows = prevRows;
+      // Notify parent of the reverted dimensions so it doesn't display stale values.
+      props.ondimensionschange()?.(prevCols, prevRows);
     }
   }
 

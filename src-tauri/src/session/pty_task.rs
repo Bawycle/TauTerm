@@ -316,6 +316,13 @@ pub fn spawn_pty_read_task(
 
                 // Debounce timer — flush accumulated output.
                 _ = interval.tick() => {
+                    // Drain any output buffered during this tick before emitting.
+                    // Prevents splitting application redraw bursts (e.g. CSI 2J + redraw)
+                    // across two separate screen-update events. try_recv() is non-blocking
+                    // and returns Err immediately when the channel is empty.
+                    while let Ok(output) = rx_e.try_recv() {
+                        pending.merge(output);
+                    }
                     if !pending.is_empty() {
                         emit_all_pending(
                             &app_e,

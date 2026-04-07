@@ -2084,7 +2084,7 @@ mod tests {
         assert_eq!(vt.normal_cursor.col, 0, "CNL must set col=0");
     }
 
-    /// CNL does not move the cursor below the scroll region bottom.
+    /// CNL with DECOM off clamps to screen bottom, not scroll region bottom.
     #[test]
     fn test_cnl_respects_scroll_bottom() {
         let mut vt = make_vt(80, 24);
@@ -2092,11 +2092,11 @@ mod tests {
         vt.process(b"\x1b[2;5r");
         // Position cursor at row=4 (CUP row=5, col=1 in 1-based → row=4).
         vt.process(b"\x1b[5;1H");
-        // CNL 999 — must not exceed scroll region bottom (row=4, 0-based).
+        // CNL 999 — with DECOM off, must clamp to screen bottom (row=23), not scroll region bottom.
         vt.process(b"\x1b[999E");
         assert_eq!(
-            vt.normal_cursor.row, 4,
-            "CNL must not exceed scroll region bottom"
+            vt.normal_cursor.row, 23,
+            "CNL with DECOM off must clamp to screen bottom (row 23), not scroll region bottom"
         );
         assert_eq!(vt.normal_cursor.col, 0, "CNL must set col=0");
     }
@@ -2120,7 +2120,7 @@ mod tests {
         assert_eq!(vt.normal_cursor.col, 0, "CPL must set col=0");
     }
 
-    /// CPL does not move the cursor above the scroll region top.
+    /// CPL with DECOM off clamps to screen top, not scroll region top.
     #[test]
     fn test_cpl_respects_scroll_top() {
         let mut vt = make_vt(80, 24);
@@ -2128,11 +2128,11 @@ mod tests {
         vt.process(b"\x1b[3;10r");
         // Position cursor at row=3 (CUP row=4, col=1 → row=3 0-based).
         vt.process(b"\x1b[4;1H");
-        // CPL 999 — must not go above scroll region top (row=2, 0-based).
+        // CPL 999 — with DECOM off, must clamp to screen top (row=0), not scroll region top.
         vt.process(b"\x1b[999F");
         assert_eq!(
-            vt.normal_cursor.row, 2,
-            "CPL must not exceed scroll region top"
+            vt.normal_cursor.row, 0,
+            "CPL with DECOM off must clamp to screen top (row 0), not scroll region top"
         );
         assert_eq!(vt.normal_cursor.col, 0, "CPL must set col=0");
     }
@@ -2153,5 +2153,189 @@ mod tests {
         // DECRST 12 — disable blink.
         vt.process(b"\x1b[?12l");
         assert!(!vt.cursor_blink, "cursor_blink must be false after ?12l");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Bug A — wrap_pending must be cleared by explicit cursor movements
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn wrap_pending_cleared_by_cup() {
+        let mut vt = make_vt(80, 24);
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending, "wrap_pending must be true after filling line");
+        vt.process(b"\x1b[1;1H");
+        assert!(!vt.wrap_pending, "CUP must clear wrap_pending");
+        vt.process(b"X");
+        assert_eq!(grapheme_at(&vt, 0, 0), "X", "X must land at row=0, col=0");
+        assert_eq!(vt.normal_cursor.row, 0, "cursor must remain on row 0");
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_cuu() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[3;1H");
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[2A");
+        assert!(!vt.wrap_pending, "CUU must clear wrap_pending");
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_cud() {
+        let mut vt = make_vt(80, 24);
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[1B");
+        assert!(!vt.wrap_pending, "CUD must clear wrap_pending");
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_cha() {
+        let mut vt = make_vt(80, 24);
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[1G");
+        assert!(!vt.wrap_pending, "CHA must clear wrap_pending");
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_vpa() {
+        let mut vt = make_vt(80, 24);
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[5d");
+        assert!(!vt.wrap_pending, "VPA must clear wrap_pending");
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_decrc() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b7");
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending, "wrap_pending must be true before restore");
+        vt.process(b"\x1b8");
+        assert!(!vt.wrap_pending, "DECRC (ESC 8) must clear wrap_pending");
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_decstbm() {
+        let mut vt = make_vt(80, 24);
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[1;20r");
+        assert!(!vt.wrap_pending, "DECSTBM must clear wrap_pending");
+        assert_eq!(vt.normal_cursor.row, 0);
+        assert_eq!(vt.normal_cursor.col, 0);
+    }
+
+    #[test]
+    fn wrap_pending_cleared_by_ed2() {
+        let mut vt = make_vt(80, 24);
+        vt.process(&[b'A'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[2J");
+        assert!(!vt.wrap_pending, "ED 2 must clear wrap_pending");
+    }
+
+    #[test]
+    fn htop_footer_scenario() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[23;1H");
+        vt.process(&[b'X'; 79]);
+        assert!(!vt.wrap_pending);
+        vt.process(b"\x1b[1;23r");
+        assert!(!vt.wrap_pending, "DECSTBM must clear wrap_pending");
+        assert_eq!(vt.normal_cursor.row, 0);
+        vt.process(b"\x1b[24;1H");
+        assert_eq!(vt.normal_cursor.row, 23);
+        vt.process(b"FOOTER");
+        assert_eq!(grapheme_at(&vt, 23, 0), "F");
+        assert_eq!(grapheme_at(&vt, 23, 1), "O");
+        assert_eq!(grapheme_at(&vt, 22, 0), "X");
+    }
+
+    #[test]
+    fn htop_footer_scenario_with_wrap_pending() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[23;1H");
+        vt.process(&[b'X'; 80]);
+        assert!(vt.wrap_pending);
+        vt.process(b"\x1b[1;23r");
+        assert!(!vt.wrap_pending, "DECSTBM must clear wrap_pending");
+        assert_eq!(vt.normal_cursor.row, 0);
+        vt.process(b"\x1b[24;1H");
+        assert_eq!(vt.normal_cursor.row, 23);
+        vt.process(b"FOOTER");
+        assert_eq!(grapheme_at(&vt, 23, 0), "F", "footer must land on row 23");
+        assert_eq!(grapheme_at(&vt, 22, 0), "X");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Bug B — CUU/CUD/CNL/CPL/VPR clamp to screen edges when DECOM is off
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn cuu_clamps_to_screen_top_when_decom_off() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[5;20r");
+        vt.process(b"\x1b[7;1H");
+        assert_eq!(vt.normal_cursor.row, 6);
+        vt.process(b"\x1b[10A");
+        assert_eq!(
+            vt.normal_cursor.row, 0,
+            "CUU with DECOM off must clamp to screen top (row 0), not scroll region top (row 4)"
+        );
+    }
+
+    #[test]
+    fn cud_clamps_to_screen_bottom_when_decom_off() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[1;15r");
+        vt.process(b"\x1b[14;1H");
+        assert_eq!(vt.normal_cursor.row, 13);
+        vt.process(b"\x1b[10B");
+        assert_eq!(
+            vt.normal_cursor.row, 23,
+            "CUD with DECOM off must clamp to screen bottom (row 23), not scroll region bottom (row 14)"
+        );
+    }
+
+    #[test]
+    fn cuu_clamps_to_region_top_when_decom_on() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[5;20r");
+        vt.process(b"\x1b[?6h");
+        vt.process(b"\x1b[3;1H");
+        assert_eq!(vt.normal_cursor.row, 6);
+        vt.process(b"\x1b[10A");
+        assert_eq!(
+            vt.normal_cursor.row, 4,
+            "CUU with DECOM on must clamp to scroll region top (row 4)"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Bug C — DECSTBM single-row region (top == bottom) must be accepted
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn decstbm_single_row_region_accepted() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[5;5r");
+        assert_eq!(
+            vt.modes.scroll_region,
+            (4, 4),
+            "single-row DECSTBM must set scroll_region to (4, 4)"
+        );
+    }
+
+    #[test]
+    fn decstbm_single_row_region_cursor_home() {
+        let mut vt = make_vt(80, 24);
+        vt.process(b"\x1b[10;5H");
+        vt.process(b"\x1b[5;5r");
+        assert_eq!(vt.normal_cursor.row, 0, "DECSTBM must home cursor row to 0");
+        assert_eq!(vt.normal_cursor.col, 0, "DECSTBM must home cursor col to 0");
     }
 }

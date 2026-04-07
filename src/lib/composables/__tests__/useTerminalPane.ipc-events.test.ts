@@ -631,6 +631,452 @@ describe('TPSC-SCROLL-002: screen-update with isFullRedraw resets scrollOffset t
 });
 
 // ---------------------------------------------------------------------------
+// TPSC-RESIZE-001: DOM probe is used for row calculation in sendResize
+// ---------------------------------------------------------------------------
+
+describe('TPSC-RESIZE-001: DOM probe used for row calculation', () => {
+  it('uses 1lh probe height to compute rows instead of analytical formula', async () => {
+    // Without the fix, measureCellDimensions returns height = Math.ceil(13 * 1.2) = 16.
+    // rows = floor(480 / 16) = 30.
+    //
+    // With the fix, the DOM probe (mocked to height=20) is used instead.
+    // rows = floor(480 / 20) = 24.
+    //
+    // To make the test discriminant we stub OffscreenCanvas so that
+    // measureCellDimensions does NOT throw and returns the analytical height=16.
+    // Without the fix this produces rows=30. With the fix, the probe wins and
+    // produces rows=24.
+
+    // Stub OffscreenCanvas so measureCellDimensions returns height=16 (13*1.2 ceil).
+    class OffscreenCanvasStub {
+      constructor(
+        public width: number,
+        public height: number,
+      ) {}
+      getContext(_type: string) {
+        return {
+          font: '',
+          // width=8 → with viewport 800px → cols=100; irrelevant for this test.
+          measureText: (_text: string) => ({ width: 8 }),
+        };
+      }
+    }
+    const savedOC = (globalThis as Record<string, unknown>).OffscreenCanvas;
+    (globalThis as Record<string, unknown>).OffscreenCanvas = OffscreenCanvasStub;
+
+    // DOM probe: height=20 (different from analytical 16 — this is what discriminates).
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.style?.height === '1lh') {
+        // Probe element — return cell dimensions.
+        return {
+          height: 20,
+          width: 8,
+          top: 0,
+          left: 0,
+          right: 8,
+          bottom: 20,
+          x: 0,
+          y: 0,
+          toJSON() {
+            return this;
+          },
+        } as DOMRect;
+      }
+      // Viewport: 480px tall, 800px wide.
+      return {
+        height: 480,
+        width: 800,
+        top: 0,
+        left: 0,
+        right: 800,
+        bottom: 480,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      } as DOMRect;
+    });
+
+    const invokeSpy = vi.mocked(tauriCore.invoke);
+
+    await mountPane();
+
+    // Wait for the debounce (50ms) to fire sendResize.
+    await new Promise((res) => setTimeout(res, 60));
+    flushSync();
+
+    // Restore OffscreenCanvas.
+    if (savedOC !== undefined) {
+      (globalThis as Record<string, unknown>).OffscreenCanvas = savedOC;
+    } else {
+      delete (globalThis as Record<string, unknown>).OffscreenCanvas;
+    }
+
+    // Find the resize_pane call.
+    const resizeCalls = invokeSpy.mock.calls.filter(([cmd]) => cmd === 'resize_pane');
+    expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
+
+    const lastCall = resizeCalls[resizeCalls.length - 1];
+    const calledRows = (lastCall[1] as { rows: number }).rows;
+
+    // With the fix (probe height=20): rows = floor(480/20) = 24.
+    // Without the fix (analytical height=16): rows = floor(480/16) = 30.
+    expect(calledRows).toBe(24);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-RESIZE-002: Race condition — cols/rows updated before await resizePane
+// ---------------------------------------------------------------------------
+
+describe('TPSC-RESIZE-002: Race condition — cols/rows updated before await resizePane', () => {
+  it('cols updated optimistically so resize_pane sees new value immediately after resolution', async () => {
+    // This test verifies the optimistic-update contract introduced by Bug 3b fix.
+    //
+    // Race scenario:
+    //   1. sendResize() computes newCols=20 from the viewport.
+    //   2. resizePane(paneId, 20, ...) is called and suspended (awaiting).
+    //   3. Backend emits screen-update with isFullRedraw:true (stride should be 20).
+    //   4. Without the fix: cols is still 10 at step 3 → applyScreenUpdate uses
+    //      stride=10 → cell at col=19 mapped to wrong index → corrupted grid.
+    //   5. With the fix: cols=20 is set before the await → correct stride.
+    //
+    // The corrupted-grid effect is silent (no throw) and not observable via DOM
+    // in jsdom. We therefore assert two observable properties of the fix:
+    //   A. The component does not throw or crash during the race (no regression).
+    //   B. After resolution, resize_pane was indeed called with the new cols=20
+    //      (confirms the optimistic update reached the IPC command).
+    //
+    // Full correctness of the stride value during the race is validated by
+    // E2E tests where the rendered terminal output can be inspected visually.
+
+    let resolveResize!: () => void;
+    const resizePromise = new Promise<void>((res) => {
+      resolveResize = res;
+    });
+
+    vi.mocked(tauriCore.invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_pane_screen_snapshot') {
+        return {
+          cols: 10,
+          rows: 5,
+          cells: [],
+          cursorRow: 0,
+          cursorCol: 0,
+          cursorVisible: true,
+          cursorShape: 0,
+          scrollbackLines: 0,
+          scrollOffset: 0,
+        } as never;
+      }
+      if (cmd === 'resize_pane') {
+        return resizePromise as never;
+      }
+      return undefined as never;
+    });
+
+    // Probe: height=20, width=10 → viewport: height=100, width=200
+    // → newCols = floor(200/10) = 20, newRows = floor(100/20) = 5.
+    // (OffscreenCanvas is NOT stubbed here so measureCellDimensions throws →
+    //  fallback to probe, which is exactly the post-fix path.)
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.style?.height === '1lh') {
+        return {
+          height: 20,
+          width: 10,
+          top: 0,
+          left: 0,
+          right: 10,
+          bottom: 20,
+          x: 0,
+          y: 0,
+          toJSON() {
+            return this;
+          },
+        } as DOMRect;
+      }
+      return {
+        height: 100,
+        width: 200,
+        top: 0,
+        left: 0,
+        right: 200,
+        bottom: 100,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      } as DOMRect;
+    });
+
+    const invokeSpy = vi.mocked(tauriCore.invoke);
+    const { container } = await mountPane();
+
+    // Wait for the debounce to fire and resizePane to enter its suspended await.
+    await new Promise((res) => setTimeout(res, 60));
+
+    // Assertion A: screen-update with col=19 (only valid with cols=20) must not throw.
+    expect(() => {
+      fireEvent<ScreenUpdateEvent>(
+        'screen-update',
+        makeScreenUpdate(PANE_ID, {
+          isFullRedraw: true,
+          cells: [
+            {
+              row: 0,
+              col: 19,
+              content: 'Z',
+              width: 1,
+              attrs: {
+                bold: false,
+                dim: false,
+                italic: false,
+                underline: 0,
+                blink: false,
+                inverse: false,
+                hidden: false,
+                strikethrough: false,
+              },
+            },
+          ],
+        }),
+      );
+      flushSync();
+    }).not.toThrow();
+
+    // Resolve resizePane and drain.
+    resolveResize();
+    await new Promise((res) => setTimeout(res, 10));
+    flushSync();
+
+    // Component must still be in DOM and functional.
+    expect(container.querySelector('.terminal-pane')).not.toBeNull();
+
+    // Assertion B: resize_pane was called with cols=20 (optimistic update reached IPC).
+    const resizeCalls = invokeSpy.mock.calls.filter(([cmd]) => cmd === 'resize_pane');
+    expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
+    const lastResizeArgs = resizeCalls[resizeCalls.length - 1][1] as {
+      cols: number;
+      rows: number;
+    };
+    expect(lastResizeArgs.cols).toBe(20);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-RESIZE-003: DOM probe is removed even when getBoundingClientRect throws
+// ---------------------------------------------------------------------------
+
+describe('TPSC-RESIZE-003: probe removed from DOM even when getBoundingClientRect throws', () => {
+  it('guarantees removeChild runs even when getBoundingClientRect throws, and still calls resize_pane', async () => {
+    // What this test verifies:
+    //
+    // When getBoundingClientRect throws on the probe element, the try/finally fix
+    // guarantees that viewportEl.removeChild(probe) is called even if the exception
+    // propagates. Without the fix, removeChild is skipped (unreachable after throw).
+    //
+    // jsdom limitation: Svelte's reactive re-render triggered by the subsequent
+    // cols/rows update also removes the probe from the viewport DOM as a side-effect.
+    // This makes the DOM-leak assertion non-discriminant in unit tests — the probe
+    // disappears in both code paths. The try/finally guarantee is therefore validated
+    // by code review for the non-jsdom case (real browser / Tauri WebView).
+    //
+    // What IS discriminant and testable in jsdom:
+    //   - resize_pane is still called (the exception does not abort sendResize).
+    //   - No unhandled errors are thrown.
+    //
+    // The probe-absent assertion is included as a belt-and-suspenders check; it
+    // passes in both paths but would catch any future regression where the probe
+    // is not cleaned up AND Svelte's re-render is also broken.
+
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.style?.height === '1lh') {
+        throw new Error('simulated getBoundingClientRect failure');
+      }
+      // Viewport: 480px tall, 800px wide.
+      return {
+        height: 480,
+        width: 800,
+        top: 0,
+        left: 0,
+        right: 800,
+        bottom: 480,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      } as DOMRect;
+    });
+
+    const invokeSpy = vi.mocked(tauriCore.invoke);
+
+    const { container } = await mountPane();
+
+    // Wait for the debounce (50ms) to fire sendResize.
+    await new Promise((res) => setTimeout(res, 60));
+    flushSync();
+    // Drain additional microtasks to let Svelte complete any reactive updates.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+
+    // DISCRIMINANT ASSERTION: resize_pane was called via the fallback path.
+    // Without a proper try/finally (or try/catch), the exception from
+    // getBoundingClientRect could abort execution before resizePane() is reached
+    // if the outer catch structure is wrong. This confirms the fallback path is taken.
+    const resizeCalls = invokeSpy.mock.calls.filter(([cmd]) => cmd === 'resize_pane');
+    expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
+
+    // BELT-AND-SUSPENDERS: no probe must remain in the component DOM.
+    // In jsdom this passes in both code paths due to Svelte's re-render cleanup;
+    // in production it is guaranteed by try/finally.
+    const probeLeaks = Array.from(container.querySelectorAll('*')).filter(
+      (el) => (el as HTMLElement).style?.height === '1lh',
+    );
+    expect(probeLeaks).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-RESIZE-004: ondimensionschange called with prev values when resizePane fails
+// ---------------------------------------------------------------------------
+
+describe('TPSC-RESIZE-004: ondimensionschange rolled back when resizePane fails', () => {
+  it('emits rollback notification (prevCols, prevRows) after IPC failure', async () => {
+    // Discriminant design:
+    //
+    // sendResize() sets cols=newCols, calls ondimensionschange(newCols, newRows), then
+    // awaits resizePane(). If resizePane rejects:
+    //   BEFORE fix: cols/rows reverted but ondimensionschange NOT called in catch.
+    //   AFTER  fix: ondimensionschange(prevCols, prevRows) IS called in catch.
+    //
+    // The test uses a controlled reject Promise:
+    //   - We record the call-log length at the exact moment of rejection.
+    //   - After rejection, we drain microtasks and check that a new call appeared
+    //     with the rollback values (prevCols, prevRows).
+    //
+    // Note: Svelte 5 re-runs the $effect that watches font props whenever `cols`
+    // changes (because scheduleSendResize reads `cols`, making it a dependency).
+    // This causes an additional ondimensionschange(newCols, newRows) call after the
+    // optimistic update. The test is designed to be robust to this by checking the
+    // calls added AFTER the rejection point, not relying on adjacency.
+
+    const dimensionsCalls: Array<[number, number]> = [];
+    const onDimensionsChange = vi.fn((c: number, r: number) => {
+      dimensionsCalls.push([c, r]);
+    });
+
+    // Controlled reject Promise.
+    let rejectResize!: (err: Error) => void;
+    const resizePromise = new Promise<never>((_res, rej) => {
+      rejectResize = rej;
+    });
+
+    vi.mocked(tauriCore.invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === 'resize_pane') {
+        return resizePromise;
+      }
+      return undefined as never;
+    });
+
+    // Viewport: h=480, w=800; probe: h=20, w=8 → newCols=100, newRows=24.
+    // prevCols = 80 (composable default).
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.style?.height === '1lh') {
+        return {
+          height: 20,
+          width: 8,
+          top: 0,
+          left: 0,
+          right: 8,
+          bottom: 20,
+          x: 0,
+          y: 0,
+          toJSON() {
+            return this;
+          },
+        } as DOMRect;
+      }
+      return {
+        height: 480,
+        width: 800,
+        top: 0,
+        left: 0,
+        right: 800,
+        bottom: 480,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      } as DOMRect;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const instance = mount(TerminalPane, {
+      target: container,
+      props: {
+        paneId: PANE_ID,
+        tabId: 'tab-1',
+        active: true,
+        ondimensionschange: onDimensionsChange,
+      },
+    });
+    instances.push(instance);
+
+    // Drain microtasks for onMount.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+
+    // Wait for the debounce (50ms) to fire and sendResize to suspend.
+    // After this, sendResize has made the optimistic call and is suspended
+    // awaiting resizePromise. Svelte may re-trigger the $effect that watches
+    // cols, causing additional scheduleSendResize calls.
+    await new Promise((res) => setTimeout(res, 60));
+    flushSync();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+
+    // Record the call-log snapshot BEFORE we trigger the rejection.
+    const callsBeforeReject = dimensionsCalls.length;
+
+    // Trigger IPC failure.
+    rejectResize(new Error('simulated IPC failure'));
+
+    // Drain microtasks — catch block runs here.
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    flushSync();
+
+    // DISCRIMINANT ASSERTION:
+    // After the rejection, at least one new call must have been recorded.
+    // Among the calls added after the rejection, (80,24) must appear —
+    // this is the rollback notification from the catch block.
+    //
+    // Without the fix: no new call is added in the catch; any subsequent (80,24)
+    // would require another ResizeObserver cycle (which jsdom does not trigger).
+    // With the fix: ondimensionschange(80,24) is called synchronously in the catch,
+    // so it appears in the microtask drain immediately following rejectResize().
+    const callsAfterReject = dimensionsCalls.slice(callsBeforeReject);
+
+    const hasRollback = callsAfterReject.some(([c, r]) => c === 80 && r === 24);
+    expect(hasRollback, `Expected rollback call (80,24) after IPC failure, but got: ${JSON.stringify(callsAfterReject)}`).toBe(true);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
 // TPSC-INIT-002: screen-update received during snapshot fetch is applied (WP3b)
 // ---------------------------------------------------------------------------
 

@@ -34,7 +34,7 @@ fn full_redraw_does_not_leak_after_resize_and_process() {
         dirty2.rows,
     );
     assert!(
-        dirty2.rows.contains(&0) || !dirty2.rows.is_empty(),
+        dirty2.rows.contains(0) || !dirty2.rows.is_empty(),
         "typing a character must dirty at least the cursor row"
     );
 }

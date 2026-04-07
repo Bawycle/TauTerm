@@ -67,6 +67,9 @@ uuid = { version = "1", features = ["v4"] }
 # Unicode / character width
 unicode-width = "0.2"
 
+# Compact inline string storage for grapheme clusters (≤ 24 bytes stored on the stack)
+compact_str = "0.9"
+
 # Regex engine (DFA-based, no ReDoS risk) for scrollback search
 regex = "1"
 
@@ -94,4 +97,10 @@ fuzz-testing = []
 tempfile = "3"
 # Serialize fd-sensitive tests to prevent /proc/self/fd count noise in parallel nextest runs
 serial_test = "3"
+# Micro-benchmarking framework
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "vt_throughput"
+harness = false
 

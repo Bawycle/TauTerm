@@ -37,8 +37,19 @@ import { setFullscreen } from '$lib/state/fullscreen.svelte';
 import { applyLocaleChange } from '$lib/state/locale.svelte';
 import { applyPreferencesUpdate } from '$lib/preferences/applyUpdate';
 import { pasteToBytes } from '$lib/terminal/paste.js';
-import { sessionState, getActiveTab, collectLeafPanes, addTab, removeTab } from '$lib/state/session.svelte';
-import type { SshConnectionConfig, SearchQuery, SearchMatch, PreferencesPatch } from '$lib/ipc/types';
+import {
+  sessionState,
+  getActiveTab,
+  collectLeafPanes,
+  addTab,
+  removeTab,
+} from '$lib/state/session.svelte';
+import type {
+  SshConnectionConfig,
+  SearchQuery,
+  SearchMatch,
+  PreferencesPatch,
+} from '$lib/ipc/types';
 import type { ViewState } from './useTerminalView.core.svelte';
 
 export function createIoHandlers(

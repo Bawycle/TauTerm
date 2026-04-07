@@ -626,3 +626,83 @@ fn async_resize_001_many_resizes_then_drop_no_deadlock() {
         // The counter value is non-deterministic depending on timing.
     });
 }
+
+// ---------------------------------------------------------------------------
+// TEST-ASYNC-BOUNDED-001 — bounded channel applies back-pressure
+//
+// Verifies that a bounded mpsc channel blocks the sender when full, and
+// unblocks when the receiver consumes a message. Also verifies that send
+// returns Err when the receiver is dropped.
+// ---------------------------------------------------------------------------
+
+/// TEST-ASYNC-BOUNDED-001: A bounded channel (capacity 2) blocks on the third
+/// send until the receiver consumes one message.
+#[test]
+fn bounded_channel_applies_backpressure() {
+    use std::sync::atomic::AtomicBool;
+    use std::thread;
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build runtime");
+
+    rt.block_on(async {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<i32>(2);
+
+        // Send 2 messages from a separate thread — must succeed immediately
+        // because the channel has capacity for them.
+        let tx_clone = tx.clone();
+        let first_two_sent = Arc::new(AtomicBool::new(false));
+        let first_two_sent_clone = first_two_sent.clone();
+
+        let sender_thread = thread::spawn(move || {
+            tx_clone
+                .blocking_send(1)
+                .expect("first send must succeed (capacity available)");
+            tx_clone
+                .blocking_send(2)
+                .expect("second send must succeed (capacity available)");
+            first_two_sent_clone.store(true, Ordering::Release);
+
+            // Third send blocks until the receiver consumes. We use a timeout
+            // thread to unblock the receiver after confirming the block.
+            tx_clone
+                .blocking_send(3)
+                .expect("third send must eventually succeed after receiver consumes")
+        });
+
+        // Give the sender thread time to fill the channel and reach the third
+        // blocking_send (which should be blocked at this point).
+        std::thread::sleep(Duration::from_millis(50));
+
+        assert!(
+            first_two_sent.load(Ordering::Acquire),
+            "first two sends must have completed (capacity=2)"
+        );
+
+        // Consume one message — this unblocks the third blocking_send.
+        let v1 = rx.recv().await.expect("must receive first message");
+        assert_eq!(v1, 1);
+
+        // Wait for the sender thread to finish (third send should now unblock).
+        let result = tokio::task::spawn_blocking(move || sender_thread.join())
+            .await
+            .expect("spawn_blocking must not panic");
+        result.expect("sender thread must not panic");
+
+        // Drain the remaining two messages.
+        let v2 = rx.recv().await.expect("must receive second message");
+        let v3 = rx.recv().await.expect("must receive third message");
+        assert_eq!(v2, 2);
+        assert_eq!(v3, 3);
+
+        // Drop the receiver — subsequent sends must return Err.
+        drop(rx);
+        let send_result = tx.send(4).await;
+        assert!(
+            send_result.is_err(),
+            "send must return Err when receiver is dropped"
+        );
+    });
+}

@@ -18,6 +18,10 @@ use crate::vt::{
 
 use super::VtPerformBridge;
 
+/// Maximum number of entries in the title stack (OSC 22/23).
+/// Matches xterm's default. Excess pushes are silently ignored.
+const TITLE_STACK_MAX: usize = 16;
+
 impl Perform for VtPerformBridge<'_> {
     fn print(&mut self, c: char) {
         let p = &mut self.inner;
@@ -130,8 +134,13 @@ impl Perform for VtPerformBridge<'_> {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
-        let raw: Vec<u8> = params.join(&b';');
-        match parse_osc(&raw) {
+        // Guard: silently ignore oversized OSC sequences to prevent DoS.
+        // total_len accounts for each field plus one byte per separator.
+        let total_len: usize = params.iter().map(|p| p.len() + 1).sum::<usize>();
+        if total_len > 8192 {
+            return;
+        }
+        match parse_osc(params) {
             OscAction::SetTitle(title) => {
                 if self.inner.title != title {
                     self.inner.title = title;
@@ -139,7 +148,10 @@ impl Perform for VtPerformBridge<'_> {
                 }
             }
             OscAction::PushTitle => {
-                self.inner.title_stack.push(self.inner.title.clone());
+                if self.inner.title_stack.len() < TITLE_STACK_MAX {
+                    self.inner.title_stack.push(self.inner.title.clone());
+                }
+                // Excess pushes beyond TITLE_STACK_MAX are silently ignored (DoS prevention).
             }
             OscAction::PopTitle => {
                 if let Some(t) = self.inner.title_stack.pop()

@@ -5,6 +5,7 @@ import {
   cellStyleFromSnapshot,
   cellStyleFromUpdate,
   cellToCssVars,
+  computeCellStyle,
   buildGridFromSnapshot,
   applyUpdates,
 } from './screen.js';
@@ -427,6 +428,7 @@ describe('TUITC-STRIDE-001: applyUpdates stride correctness', () => {
         strikethrough: false,
         underlineColor: undefined,
         hyperlink: undefined,
+        style: '',
       }));
     const update: CellUpdate = {
       row: 1,
@@ -457,6 +459,7 @@ describe('TUITC-STRIDE-001: applyUpdates stride correctness', () => {
         strikethrough: false,
         underlineColor: undefined,
         hyperlink: undefined,
+        style: '',
       }));
     const update: CellUpdate = {
       row: 1,
@@ -468,5 +471,48 @@ describe('TUITC-STRIDE-001: applyUpdates stride correctness', () => {
     applyUpdates(grid, [update], 4); // 4-col stride → index = 1*4+2 = 6
     expect(grid[6].content).toBe('Y');
     expect(grid[5].content).not.toBe('Y'); // index 5 is wrong stride
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P11 — Pre-computed style: computeCellStyle and cellStyleFromSnapshot
+// ---------------------------------------------------------------------------
+
+describe('P11-001: computeCellStyle inverse swaps fg and bg', () => {
+  it('inverse=true → color is original bg, background-color is original fg', () => {
+    const style = computeCellStyle({
+      fg: '#ff0000',
+      bg: '#0000ff',
+      bold: false,
+      italic: false,
+      dim: false,
+      hidden: false,
+      underline: 0,
+      underlineColor: undefined,
+      inverse: true,
+    });
+    expect(style).toContain('color:#0000ff');
+    expect(style).toContain('background-color:#ff0000');
+  });
+});
+
+describe('P11-002: cellStyleFromSnapshot has pre-computed style field', () => {
+  it('bold+italic cell → style contains font-weight:bold and font-style:italic', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell({ bold: true, italic: true }));
+    expect(typeof cell.style).toBe('string');
+    expect(cell.style).toContain('font-weight:bold');
+    expect(cell.style).toContain('font-style:italic');
+  });
+
+  it('plain cell (no attributes) → style is empty string', () => {
+    const cell = cellStyleFromSnapshot(makeSnapshotCell());
+    expect(cell.style).toBe('');
+  });
+
+  it('cell with fg color → style contains color declaration', () => {
+    const cell = cellStyleFromSnapshot(
+      makeSnapshotCell({ fg: { type: 'rgb', r: 255, g: 0, b: 0 } }),
+    );
+    expect(cell.style).toContain('color:rgb(255,0,0)');
   });
 });

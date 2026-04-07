@@ -17,7 +17,12 @@
  *   - TerminalView.svelte: template markup and DOM event binding
  */
 
-import { sessionState, getActiveTab, getActivePanes, collectLeafPanes } from '$lib/state/session.svelte';
+import {
+  sessionState,
+  getActiveTab,
+  getActivePanes,
+  collectLeafPanes,
+} from '$lib/state/session.svelte';
 import { sshStates, hostKeyPrompt, credentialPrompt } from '$lib/state/ssh.svelte';
 import { tabNotifications, terminatedPanes } from '$lib/state/notifications.svelte';
 import { preferences } from '$lib/state/preferences.svelte';
@@ -92,33 +97,81 @@ export function useTerminalView() {
 
   return {
     // State (read-only from the template)
-    get searchOpen() { return s.searchOpen; },
-    set searchOpen(v: boolean) { s.searchOpen = v; },
-    get searchMatches() { return s.searchMatches; },
-    get searchCurrentIdx() { return s.searchCurrentIdx; },
-    get prefsOpen() { return s.prefsOpen; },
-    set prefsOpen(v: boolean) { s.prefsOpen = v; },
-    get activePaneCols() { return s.activePaneCols; },
-    get activePaneRows() { return s.activePaneRows; },
-    get dimsVisible() { return s.dimsVisible; },
-    get connectionManagerOpen() { return s.connectionManagerOpen; },
-    set connectionManagerOpen(v: boolean) { s.connectionManagerOpen = v; },
-    get savedConnections() { return s.savedConnections; },
-    get connectionOpenError() { return s.connectionOpenError; },
-    set connectionOpenError(v: boolean) { s.connectionOpenError = v; },
-    get contextMenuHintVisible() { return s.contextMenuHintVisible; },
-    get pendingClose() { return s.pendingClose; },
-    get closeConfirmCancelBtn() { return s.closeConfirmCancelBtn; },
-    set closeConfirmCancelBtn(v: HTMLButtonElement | undefined) { s.closeConfirmCancelBtn = v; },
-    get pendingWindowClose() { return s.pendingWindowClose; },
-    get windowCloseConfirmCancelBtn() { return s.windowCloseConfirmCancelBtn; },
+    get searchOpen() {
+      return s.searchOpen;
+    },
+    set searchOpen(v: boolean) {
+      s.searchOpen = v;
+    },
+    get searchMatches() {
+      return s.searchMatches;
+    },
+    get searchCurrentIdx() {
+      return s.searchCurrentIdx;
+    },
+    get prefsOpen() {
+      return s.prefsOpen;
+    },
+    set prefsOpen(v: boolean) {
+      s.prefsOpen = v;
+    },
+    get activePaneCols() {
+      return s.activePaneCols;
+    },
+    get activePaneRows() {
+      return s.activePaneRows;
+    },
+    get dimsVisible() {
+      return s.dimsVisible;
+    },
+    get connectionManagerOpen() {
+      return s.connectionManagerOpen;
+    },
+    set connectionManagerOpen(v: boolean) {
+      s.connectionManagerOpen = v;
+    },
+    get savedConnections() {
+      return s.savedConnections;
+    },
+    get connectionOpenError() {
+      return s.connectionOpenError;
+    },
+    set connectionOpenError(v: boolean) {
+      s.connectionOpenError = v;
+    },
+    get contextMenuHintVisible() {
+      return s.contextMenuHintVisible;
+    },
+    get pendingClose() {
+      return s.pendingClose;
+    },
+    get closeConfirmCancelBtn() {
+      return s.closeConfirmCancelBtn;
+    },
+    set closeConfirmCancelBtn(v: HTMLButtonElement | undefined) {
+      s.closeConfirmCancelBtn = v;
+    },
+    get pendingWindowClose() {
+      return s.pendingWindowClose;
+    },
+    get windowCloseConfirmCancelBtn() {
+      return s.windowCloseConfirmCancelBtn;
+    },
     set windowCloseConfirmCancelBtn(v: HTMLButtonElement | undefined) {
       s.windowCloseConfirmCancelBtn = v;
     },
-    get requestedRenameTabId() { return s.requestedRenameTabId; },
-    set requestedRenameTabId(v: string | null) { s.requestedRenameTabId = v; },
-    get activeThemeLineHeight() { return s.activeThemeLineHeight; },
-    get isFullscreen() { return s.isFullscreen; },
+    get requestedRenameTabId() {
+      return s.requestedRenameTabId;
+    },
+    set requestedRenameTabId(v: string | null) {
+      s.requestedRenameTabId = v;
+    },
+    get activeThemeLineHeight() {
+      return s.activeThemeLineHeight;
+    },
+    get isFullscreen() {
+      return s.isFullscreen;
+    },
 
     // Handlers — session
     handleTabClick: session.handleTabClick,

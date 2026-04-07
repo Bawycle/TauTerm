@@ -9,11 +9,12 @@
 //!
 //! Trait implementations by type:
 //! - `CellAttrs`: `Copy + Clone + PartialEq + Eq` — plain data, no heap allocation.
-//! - `Cell`: `Clone + PartialEq` only — owns a `String` (grapheme) and an `Option<Arc<str>>`
+//! - `Cell`: `Clone + PartialEq` only — owns a `CompactString` (grapheme) and an `Option<Arc<str>>`
 //!   (hyperlink), so it is not `Copy`.
 
 use std::sync::Arc;
 
+use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
 /// A single cell in the terminal grid.
@@ -21,7 +22,7 @@ use serde::{Deserialize, Serialize};
 pub struct Cell {
     /// The grapheme cluster displayed in this cell.
     /// Empty string for phantom cells following wide characters.
-    pub grapheme: String,
+    pub grapheme: CompactString,
     /// SGR attributes.
     pub attrs: CellAttrs,
     /// Display width: 1 for normal, 2 for wide (CJK/emoji), 0 for phantom.
@@ -34,7 +35,7 @@ pub struct Cell {
 impl Default for Cell {
     fn default() -> Self {
         Self {
-            grapheme: " ".to_string(),
+            grapheme: CompactString::const_new(" "),
             attrs: CellAttrs::default(),
             width: 1,
             hyperlink: None,
@@ -51,7 +52,7 @@ impl Cell {
     /// Create a phantom cell that follows a wide character.
     pub fn phantom() -> Self {
         Self {
-            grapheme: String::new(),
+            grapheme: CompactString::const_new(""),
             attrs: CellAttrs::default(),
             width: 0,
             hyperlink: None,

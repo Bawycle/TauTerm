@@ -21,11 +21,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import * as tauriEvent from '@tauri-apps/api/event';
 import * as tauriCore from '@tauri-apps/api/core';
-import type {
-  ScreenUpdateEvent,
-  ScrollPositionChangedEvent,
-  CursorState,
-} from '$lib/ipc/types';
+import type { ScreenUpdateEvent, ScrollPositionChangedEvent, CursorState } from '$lib/ipc/types';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
 
 // ---------------------------------------------------------------------------

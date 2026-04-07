@@ -138,9 +138,7 @@ fn r4_values_exactly_at_min_are_unchanged() {
 // -----------------------------------------------------------------------
 
 /// Helper that mirrors the extraction logic in `get_pane_termination_info`.
-fn extract_termination_info(
-    state: &PaneLifecycleState,
-) -> Option<(Option<i32>, Option<String>)> {
+fn extract_termination_info(state: &PaneLifecycleState) -> Option<(Option<i32>, Option<String>)> {
     if let PaneLifecycleState::Terminated { exit_code, .. } = state {
         Some((*exit_code, None))
     } else {

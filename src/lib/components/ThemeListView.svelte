@@ -52,7 +52,7 @@
     const r = parseInt(hex.slice(0, 2), 16);
     const g = parseInt(hex.slice(2, 4), 16);
     const b = parseInt(hex.slice(4, 6), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) > 128;
+    return 0.299 * r + 0.587 * g + 0.114 * b > 128;
   }
 </script>
 
@@ -68,15 +68,26 @@
         {@const swatch = getThemeSwatch(themeName, themes)}
         {@const isLight = isLightTheme(themeName, themes)}
         <div
-          class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive ? 'border-(--color-accent) bg-(--color-accent-subtle)' : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
+          class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive
+            ? 'border-(--color-accent) bg-(--color-accent-subtle)'
+            : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
           role="button"
           tabindex="0"
           aria-label={themeName}
           aria-pressed={isActive}
           onclick={() => onactivate(themeName)}
-          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onactivate(themeName); } }}
-          onmouseenter={() => { hoveredThemeName = themeName; }}
-          onmouseleave={() => { hoveredThemeName = null; }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onactivate(themeName);
+            }
+          }}
+          onmouseenter={() => {
+            hoveredThemeName = themeName;
+          }}
+          onmouseleave={() => {
+            hoveredThemeName = null;
+          }}
         >
           <!-- Active indicator — reserved space always -->
           <div class="w-4 h-4 flex-shrink-0 mr-2 flex items-center justify-center">
@@ -88,7 +99,10 @@
           <!-- Color swatch strip -->
           <div class="flex gap-[2px] mr-3 flex-shrink-0">
             {#each [swatch.bg, swatch.fg, swatch.accent, swatch.cursor, swatch.color1, swatch.color6] as color}
-              <div class="w-4 h-4 rounded-sm border border-(--color-border-subtle)" style="background:{color}"></div>
+              <div
+                class="w-4 h-4 rounded-sm border border-(--color-border-subtle)"
+                style="background:{color}"
+              ></div>
             {/each}
           </div>
 
@@ -101,17 +115,26 @@
           <span class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-2 flex-shrink-0">
             {isLight ? m.theme_light_label() : m.theme_dark_label()}
           </span>
-          <span class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-1 mr-2 flex-shrink-0">
+          <span
+            class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-1 mr-2 flex-shrink-0"
+          >
             · {m.theme_builtin_label()}
           </span>
 
           <!-- Duplicate button — visible when active or hovered -->
-          <div class="flex-shrink-0 {isActive || hoveredThemeName === themeName ? 'opacity-100' : 'opacity-0 pointer-events-none'}">
+          <div
+            class="flex-shrink-0 {isActive || hoveredThemeName === themeName
+              ? 'opacity-100'
+              : 'opacity-0 pointer-events-none'}"
+          >
             <Button
               variant="ghost"
               class="h-7 w-7 p-0"
               aria-label={m.theme_duplicate_to_edit()}
-              onclick={(e) => { e.stopPropagation(); onduplicate(themeName); }}
+              onclick={(e) => {
+                e.stopPropagation();
+                onduplicate(themeName);
+              }}
             >
               <Copy class="w-3.5 h-3.5" />
             </Button>
@@ -143,15 +166,26 @@
           {@const swatch = getThemeSwatch(theme.name, themes)}
           {@const isLight = isLightTheme(theme.name, themes)}
           <div
-            class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive ? 'border-(--color-accent) bg-(--color-accent-subtle)' : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
+            class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive
+              ? 'border-(--color-accent) bg-(--color-accent-subtle)'
+              : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
             role="button"
             tabindex="0"
             aria-label={theme.name}
             aria-pressed={isActive}
             onclick={() => onactivate(theme.name)}
-            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onactivate(theme.name); } }}
-            onmouseenter={() => { hoveredThemeName = theme.name; }}
-            onmouseleave={() => { hoveredThemeName = null; }}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onactivate(theme.name);
+              }
+            }}
+            onmouseenter={() => {
+              hoveredThemeName = theme.name;
+            }}
+            onmouseleave={() => {
+              hoveredThemeName = null;
+            }}
           >
             <!-- Active indicator -->
             <div class="w-4 h-4 flex-shrink-0 mr-2 flex items-center justify-center">
@@ -163,7 +197,10 @@
             <!-- Swatch strip -->
             <div class="flex gap-[2px] mr-3 flex-shrink-0">
               {#each [swatch.bg, swatch.fg, swatch.accent, swatch.cursor, swatch.color1, swatch.color6] as color}
-                <div class="w-4 h-4 rounded-sm border border-(--color-border-subtle)" style="background:{color}"></div>
+                <div
+                  class="w-4 h-4 rounded-sm border border-(--color-border-subtle)"
+                  style="background:{color}"
+                ></div>
               {/each}
             </div>
 
@@ -173,7 +210,9 @@
             </span>
 
             <!-- Light/Dark badge -->
-            <span class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-2 mr-3 flex-shrink-0">
+            <span
+              class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-2 mr-3 flex-shrink-0"
+            >
               {isLight ? m.theme_light_label() : m.theme_dark_label()}
             </span>
 
@@ -184,7 +223,10 @@
                 class="h-7 w-7 p-0"
                 aria-label={m.theme_edit()}
                 disabled={themeBusy}
-                onclick={(e) => { e.stopPropagation(); onedit(theme); }}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  onedit(theme);
+                }}
               >
                 <Pencil class="w-3.5 h-3.5" />
               </Button>
@@ -193,7 +235,10 @@
                 class="h-7 w-7 p-0 text-(--color-error)"
                 aria-label={m.theme_delete()}
                 disabled={themeBusy}
-                onclick={(e) => { e.stopPropagation(); ondelete(theme.name); }}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  ondelete(theme.name);
+                }}
               >
                 <Trash2 class="w-3.5 h-3.5" />
               </Button>

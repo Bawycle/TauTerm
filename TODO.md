@@ -22,6 +22,18 @@
 
 ## Backlog
 
+### Performance — pistes à valider par mesure
+
+Ces deux optimisations ont été explicitement mises hors scope de la campagne de performance initiale. Le benchmark `write_1mb_ascii` établit la baseline actuelle à **~19.6 MiB/s** — à comparer après chaque changement.
+
+- [ ] **P5 — Flat buffer pour `ScreenBuffer`**
+  Remplacer `Vec<Vec<Cell>>` par un unique `Vec<Cell>` de taille `rows × cols` avec accès par `row * cols + col`. Élimine un niveau d'indirection et améliore la cache locality lors des lectures séquentielles (snapshot, partial update). Estimation d'impact : 3–10× sur `write_1mb_ascii`. **Risque** : breaking change sur toutes les APIs qui exposent `&[Cell]` par ligne (`get_row`, `scroll_up`, etc.) — refactor non trivial.
+
+- [ ] **P12 — Rendu canvas pour `TerminalPaneViewport`**
+  Remplacer le rendu DOM cellule-par-cellule (~11 000 `<span>` pour 220×50) par un `<canvas>` dessiné via Canvas 2D API **en TypeScript** (pas Rust/WASM). Le bottleneck est le layout/reflow DOM, pas le calcul — Canvas 2D l'élimine. Rust/WASM n'apporterait rien ici : les appels `fillText`/`fillRect` doivent traverser la frontière WASM→JS de toute façon, annulant tout gain ; un software renderer pixel-par-pixel en Rust serait une réécriture complète sans garantie de gain sur WebKitGTK (WebGL/WebGPU instable). Estimation d'impact : latence de rendu 2–5× inférieure sur grandes grilles. **Risque** : perte de la sélection texte OS et des lecteurs d'écran natifs — nécessite une couche d'accessibilité séparée (ARIA live region ou `<textarea>` invisible). Changement architectural majeur côté frontend.
+
+---
+
 ### Claude Code Agent Teams — multi-pane support
 
 **Condition préalable : [anthropics/claude-code#26572](https://github.com/anthropics/claude-code/issues/26572)**

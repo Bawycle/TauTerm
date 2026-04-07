@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use crate::preferences::schema::Preferences;
 
-use super::schema_convert::{rename_toml_keys, snake_to_camel};
 use super::MAX_CONNECTIONS;
+use super::schema_convert::{rename_toml_keys, snake_to_camel};
 
 /// Load preferences from disk, returning defaults on any parse/IO error.
 ///

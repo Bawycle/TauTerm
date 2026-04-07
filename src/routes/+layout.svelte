@@ -8,10 +8,7 @@
   const { children } = $props();
 
   $effect(() => {
-    applyTheme(
-      preferences.value?.appearance.themeName ?? 'umbra',
-      preferences.value?.themes ?? [],
-    );
+    applyTheme(preferences.value?.appearance.themeName ?? 'umbra', preferences.value?.themes ?? []);
   });
 </script>
 

@@ -5,6 +5,8 @@
 //! Contains `handle_regional_indicator()`, `flush_pending_ri_narrow()`, and
 //! `confirm_ri_narrow()`.
 
+use compact_str::CompactString;
+
 use crate::vt::cell::Cell;
 
 use super::VtProcessor;
@@ -36,7 +38,7 @@ impl VtProcessor {
                     .active_buf_ref()
                     .get(prev_row, prev_col)
                     .and_then(|cell| cell.hyperlink.clone());
-                let mut flag_grapheme = String::new();
+                let mut flag_grapheme = CompactString::const_new("");
                 flag_grapheme.push(prev_ch);
                 flag_grapheme.push(c);
                 // Rewrite the base cell with the full flag grapheme; phantom stays.
@@ -60,7 +62,7 @@ impl VtProcessor {
         let hyperlink = self.current_hyperlink.clone();
         let cols = self.cols;
         if let Some(cell) = self.active_buf_mut().get_mut(write_row, write_col) {
-            cell.grapheme = c.to_string();
+            cell.grapheme = compact_str::format_compact!("{c}");
             cell.attrs = attrs;
             cell.width = 2;
             cell.hyperlink = hyperlink;
@@ -103,7 +105,7 @@ impl VtProcessor {
         let cols = self.cols;
         // Rewrite the RI cell as narrow (width=1).
         if let Some(cell) = self.active_buf_mut().get_mut(row, col) {
-            cell.grapheme = ch.to_string();
+            cell.grapheme = compact_str::format_compact!("{ch}");
             cell.attrs = attrs;
             cell.width = 1;
             cell.hyperlink = hyperlink;

@@ -169,7 +169,7 @@ impl VtProcessor {
         let hyperlink = self.current_hyperlink.clone();
 
         if let Some(cell) = self.active_buf_mut().get_mut(row, col) {
-            cell.grapheme = c.to_string();
+            cell.grapheme = compact_str::format_compact!("{c}");
             cell.attrs = attrs;
             cell.width = width;
             cell.hyperlink = hyperlink;

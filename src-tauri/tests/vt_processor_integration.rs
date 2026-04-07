@@ -227,7 +227,7 @@ fn dirty_region_single_char_marks_row() {
     let mut vt = VtProcessor::new(80, 24, 1_000);
     let dirty = vt.process(b"X");
     assert!(
-        dirty.rows.contains(&0) || dirty.is_full_redraw,
+        dirty.rows.contains(0u16) || dirty.is_full_redraw,
         "Row 0 must be dirty after writing 'X'"
     );
 }
@@ -258,8 +258,8 @@ fn dirty_region_two_rows_written_both_dirty() {
     // Write to row 0, then move to row 1 and write there — all in one process call.
     let dirty = vt.process(b"Row0\r\nRow1");
     // Row 0 and row 1 must both be in the dirty set (or full redraw).
-    let has_row0 = dirty.rows.contains(&0) || dirty.is_full_redraw;
-    let has_row1 = dirty.rows.contains(&1) || dirty.is_full_redraw;
+    let has_row0 = dirty.rows.contains(0u16) || dirty.is_full_redraw;
+    let has_row1 = dirty.rows.contains(1u16) || dirty.is_full_redraw;
     assert!(has_row0, "Row 0 must be dirty after writing 'Row0'");
     assert!(has_row1, "Row 1 must be dirty after writing 'Row1'");
 }
@@ -304,6 +304,85 @@ fn lf_advances_row() {
     vt.process(b"\n");
     let snap = vt.get_snapshot();
     assert_eq!(snap.cursor_row, 1, "LF must advance cursor to row 1");
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Partial snapshot parity — C1 (P3)
+// ---------------------------------------------------------------------------
+
+/// Verifies that accessing dirty rows directly via `active_buf_ref().get_row()`
+/// produces cell data bit-identical to what `get_snapshot()` returns for the same rows.
+///
+/// This is the safety net for C1 (P3): the partial-update path must be
+/// equivalent to the full-snapshot path for every dirty row.
+#[test]
+fn partial_snapshot_parity_with_full_snapshot() {
+    let mut proc = tau_term_lib::vt::VtProcessor::new(80, 24, 1_000);
+
+    // Row 0: colored text (bold red foreground).
+    proc.process(b"\x1b[1;31mHello\x1b[0m");
+    // Row 1: wide char U+4E2D (中, width=2) followed by normal text.
+    proc.process(b"\r\n\xe4\xb8\xad ok");
+    // Row 2: move to row 3 (skip row 2), write inverse video text.
+    proc.process(b"\x1b[4;1H\x1b[7mInverse\x1b[0m");
+
+    // Dirty rows after processing: 0, 1, 3 (row 2 was skipped by CUP).
+    let dirty_rows: Vec<u16> = vec![0, 1, 3];
+
+    // Reference path: full snapshot.
+    let snap = proc.get_snapshot();
+    let cols = snap.cols as usize;
+
+    // New path: direct row access via active_buf_ref().get_row().
+    // For each dirty row, compare cell-by-cell against the snapshot.
+    let buf = proc.active_buf_ref();
+
+    for &row in &dirty_rows {
+        let snap_start = row as usize * cols;
+        let snap_end = snap_start + cols;
+        let snap_row = &snap.cells[snap_start..snap_end];
+
+        let buf_row = buf
+            .get_row(row)
+            .unwrap_or_else(|| panic!("get_row({row}) must return Some for a valid row"));
+
+        assert_eq!(
+            buf_row.len(),
+            snap_row.len(),
+            "row {row}: cell count must match between direct access and snapshot"
+        );
+
+        for (col, (buf_cell, snap_cell)) in buf_row.iter().zip(snap_row.iter()).enumerate() {
+            assert_eq!(
+                buf_cell.grapheme, snap_cell.content,
+                "row {row} col {col}: grapheme mismatch"
+            );
+            assert_eq!(
+                buf_cell.width, snap_cell.width,
+                "row {row} col {col}: width mismatch"
+            );
+            assert_eq!(
+                buf_cell.attrs.bold, snap_cell.bold,
+                "row {row} col {col}: bold mismatch"
+            );
+            assert_eq!(
+                buf_cell.attrs.italic, snap_cell.italic,
+                "row {row} col {col}: italic mismatch"
+            );
+            assert_eq!(
+                buf_cell.attrs.fg, snap_cell.fg,
+                "row {row} col {col}: fg mismatch"
+            );
+            assert_eq!(
+                buf_cell.attrs.bg, snap_cell.bg,
+                "row {row} col {col}: bg mismatch"
+            );
+            assert_eq!(
+                buf_cell.attrs.inverse, snap_cell.inverse,
+                "row {row} col {col}: inverse mismatch"
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

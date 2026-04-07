@@ -13,8 +13,7 @@ use crate::session::{
 };
 
 use super::{
-    ScrollPositionState, SessionRegistry,
-    clamp_pane_dimensions,
+    ScrollPositionState, SessionRegistry, clamp_pane_dimensions,
     layout::{remove_pane_from_tree, replace_leaf_with_split},
     pty_helpers::{get_reader_handle, get_writer_handle},
     shell::resolve_shell_path,

@@ -115,9 +115,7 @@ export type PendingClose = { kind: 'tab'; tabId: string } | { kind: 'pane'; pane
 // Svelte 5 runes are initialised in the component's reactive scope.
 // ---------------------------------------------------------------------------
 
-export function createViewState(
-  doClosePane: (paneId: PaneId) => Promise<void>,
-): ViewState {
+export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>): ViewState {
   // --- Local reactive variables ---
 
   let searchOpen = $state(false);
@@ -294,49 +292,119 @@ export function createViewState(
   // --- State bag (getter/setter object) ---
 
   const bag: ViewState = {
-    get searchOpen() { return searchOpen; },
-    set searchOpen(v) { searchOpen = v; },
-    get searchMatches() { return searchMatches; },
-    set searchMatches(v) { searchMatches = v; },
-    get searchCurrentIdx() { return searchCurrentIdx; },
-    set searchCurrentIdx(v) { searchCurrentIdx = v; },
+    get searchOpen() {
+      return searchOpen;
+    },
+    set searchOpen(v) {
+      searchOpen = v;
+    },
+    get searchMatches() {
+      return searchMatches;
+    },
+    set searchMatches(v) {
+      searchMatches = v;
+    },
+    get searchCurrentIdx() {
+      return searchCurrentIdx;
+    },
+    set searchCurrentIdx(v) {
+      searchCurrentIdx = v;
+    },
 
-    get prefsOpen() { return prefsOpen; },
-    set prefsOpen(v) { prefsOpen = v; },
+    get prefsOpen() {
+      return prefsOpen;
+    },
+    set prefsOpen(v) {
+      prefsOpen = v;
+    },
 
-    get activePaneCols() { return activePaneCols; },
-    set activePaneCols(v) { activePaneCols = v; },
-    get activePaneRows() { return activePaneRows; },
-    set activePaneRows(v) { activePaneRows = v; },
-    get dimsVisible() { return dimsVisible; },
+    get activePaneCols() {
+      return activePaneCols;
+    },
+    set activePaneCols(v) {
+      activePaneCols = v;
+    },
+    get activePaneRows() {
+      return activePaneRows;
+    },
+    set activePaneRows(v) {
+      activePaneRows = v;
+    },
+    get dimsVisible() {
+      return dimsVisible;
+    },
 
-    get connectionManagerOpen() { return connectionManagerOpen; },
-    set connectionManagerOpen(v) { connectionManagerOpen = v; },
-    get savedConnections() { return savedConnections; },
-    set savedConnections(v) { savedConnections = v; },
-    get connectionOpenError() { return connectionOpenError; },
-    set connectionOpenError(v) { connectionOpenError = v; },
+    get connectionManagerOpen() {
+      return connectionManagerOpen;
+    },
+    set connectionManagerOpen(v) {
+      connectionManagerOpen = v;
+    },
+    get savedConnections() {
+      return savedConnections;
+    },
+    set savedConnections(v) {
+      savedConnections = v;
+    },
+    get connectionOpenError() {
+      return connectionOpenError;
+    },
+    set connectionOpenError(v) {
+      connectionOpenError = v;
+    },
 
-    get contextMenuHintVisible() { return contextMenuHintVisible; },
-    set contextMenuHintVisible(v) { contextMenuHintVisible = v; },
-    get contextMenuHintDismissed() { return contextMenuHintDismissed; },
-    set contextMenuHintDismissed(v) { contextMenuHintDismissed = v; },
+    get contextMenuHintVisible() {
+      return contextMenuHintVisible;
+    },
+    set contextMenuHintVisible(v) {
+      contextMenuHintVisible = v;
+    },
+    get contextMenuHintDismissed() {
+      return contextMenuHintDismissed;
+    },
+    set contextMenuHintDismissed(v) {
+      contextMenuHintDismissed = v;
+    },
 
-    get pendingClose() { return pendingClose; },
-    set pendingClose(v) { pendingClose = v; },
-    get closeConfirmCancelBtn() { return closeConfirmCancelBtn; },
-    set closeConfirmCancelBtn(v) { closeConfirmCancelBtn = v; },
+    get pendingClose() {
+      return pendingClose;
+    },
+    set pendingClose(v) {
+      pendingClose = v;
+    },
+    get closeConfirmCancelBtn() {
+      return closeConfirmCancelBtn;
+    },
+    set closeConfirmCancelBtn(v) {
+      closeConfirmCancelBtn = v;
+    },
 
-    get pendingWindowClose() { return pendingWindowClose; },
-    set pendingWindowClose(v) { pendingWindowClose = v; },
-    get windowCloseConfirmCancelBtn() { return windowCloseConfirmCancelBtn; },
-    set windowCloseConfirmCancelBtn(v) { windowCloseConfirmCancelBtn = v; },
+    get pendingWindowClose() {
+      return pendingWindowClose;
+    },
+    set pendingWindowClose(v) {
+      pendingWindowClose = v;
+    },
+    get windowCloseConfirmCancelBtn() {
+      return windowCloseConfirmCancelBtn;
+    },
+    set windowCloseConfirmCancelBtn(v) {
+      windowCloseConfirmCancelBtn = v;
+    },
 
-    get requestedRenameTabId() { return requestedRenameTabId; },
-    set requestedRenameTabId(v) { requestedRenameTabId = v; },
+    get requestedRenameTabId() {
+      return requestedRenameTabId;
+    },
+    set requestedRenameTabId(v) {
+      requestedRenameTabId = v;
+    },
 
-    get activeThemeLineHeight() { return activeThemeLineHeight; },
-    get isFullscreen() { return fullscreenState.value; },
+    get activeThemeLineHeight() {
+      return activeThemeLineHeight;
+    },
+    get isFullscreen() {
+      return fullscreenState.value;
+    },
 
     closeUnlisten,
   };

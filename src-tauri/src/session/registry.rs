@@ -23,13 +23,13 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tauri::AppHandle;
 
+use crate::platform::PtyBackend;
 use crate::preferences::PreferencesStore;
 use crate::session::{
     ids::{PaneId, TabId},
     pane::PaneSession,
     tab::TabState,
 };
-use crate::platform::PtyBackend;
 
 mod layout;
 mod pane_ops;

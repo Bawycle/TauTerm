@@ -18,6 +18,59 @@ use serde::{Deserialize, Serialize};
 use crate::vt::cell::Cell;
 
 // ---------------------------------------------------------------------------
+// DirtyRows — compact bitfield for dirty row tracking
+// ---------------------------------------------------------------------------
+
+/// Bitfield tracking which rows have pending cell changes.
+/// Supports up to 256 rows (4 × u64). Row indices ≥ 256 are silently ignored.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DirtyRows([u64; 4]);
+
+impl DirtyRows {
+    /// Mark row as dirty. Rows ≥ 256 are silently ignored.
+    pub fn set(&mut self, row: u16) {
+        if row < 256 {
+            self.0[row as usize / 64] |= 1u64 << (row % 64);
+        }
+    }
+
+    pub fn contains(&self, row: u16) -> bool {
+        if row >= 256 {
+            return false;
+        }
+        self.0[row as usize / 64] & (1u64 << (row % 64)) != 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(|&w| w == 0)
+    }
+
+    pub fn clear(&mut self) {
+        self.0 = [0; 4];
+    }
+
+    /// Merge another `DirtyRows` into this one (bitwise OR).
+    pub fn merge_from(&mut self, other: &DirtyRows) {
+        for (a, b) in self.0.iter_mut().zip(other.0.iter()) {
+            *a |= b;
+        }
+    }
+
+    /// Iterate over all set row indices in ascending order.
+    pub fn iter(&self) -> impl Iterator<Item = u16> + '_ {
+        self.0.iter().enumerate().flat_map(|(word_idx, &word)| {
+            (0u16..64).filter_map(move |bit| {
+                if word & (1u64 << bit) != 0 {
+                    Some((word_idx as u16) * 64 + bit)
+                } else {
+                    None
+                }
+            })
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Scrollback line
 // ---------------------------------------------------------------------------
 
@@ -120,7 +173,7 @@ pub struct SnapshotCell {
 impl From<&Cell> for SnapshotCell {
     fn from(cell: &Cell) -> Self {
         Self {
-            content: cell.grapheme.clone(),
+            content: cell.grapheme.to_string(),
             width: cell.width,
             bold: cell.attrs.bold,
             dim: cell.attrs.dim,
@@ -141,7 +194,7 @@ impl From<&Cell> for SnapshotCell {
 /// Describes a rectangular region of dirty cells to be sent as a screen update.
 #[derive(Debug, Clone, Default)]
 pub struct DirtyRegion {
-    pub rows: std::collections::HashSet<u16>,
+    pub rows: DirtyRows,
     pub is_full_redraw: bool,
     /// Set when the cursor position or visibility changed without any cell content change.
     /// Ensures that pure cursor-movement sequences (CR, CUP, CUU, etc.) and cursor
@@ -155,7 +208,7 @@ impl DirtyRegion {
     }
 
     pub fn mark_row(&mut self, row: u16) {
-        self.rows.insert(row);
+        self.rows.set(row);
     }
 
     pub fn mark_full_redraw(&mut self) {
@@ -171,7 +224,7 @@ impl DirtyRegion {
         if other.is_full_redraw {
             self.mark_full_redraw();
         } else {
-            self.rows.extend(&other.rows);
+            self.rows.merge_from(&other.rows);
         }
         self.cursor_moved |= other.cursor_moved;
     }
@@ -192,6 +245,12 @@ pub struct ScreenBuffer {
 
 impl ScreenBuffer {
     pub fn new(cols: u16, rows: u16, scrollback_limit: usize) -> Self {
+        // DirtyRows is a [u64; 4] bitfield supporting up to 256 rows.
+        // Enforce this at construction time so dirty-tracking never silently drops rows.
+        debug_assert!(
+            rows <= 256,
+            "ScreenBuffer::new: rows={rows} exceeds DirtyRows capacity (256)"
+        );
         let cells = (0..rows)
             .map(|_| (0..cols).map(|_| Cell::default()).collect())
             .collect();
@@ -280,7 +339,8 @@ impl ScreenBuffer {
 
         for i in 0..count {
             if is_full_screen && !self.cells.is_empty() {
-                let evicted = self.cells[top].clone();
+                let blank = vec![Cell::default(); self.cols as usize];
+                let evicted = std::mem::replace(&mut self.cells[top], blank);
                 if self.scrollback.len() >= self.scrollback_limit {
                     self.scrollback.pop_front();
                 }
@@ -380,6 +440,10 @@ impl ScreenBuffer {
     /// Resize the buffer. Truncates or pads rows and columns.
     /// Does not perform scrollback reflow in v1.
     pub fn resize(&mut self, new_cols: u16, new_rows: u16) {
+        debug_assert!(
+            new_rows <= 256,
+            "ScreenBuffer::resize: new_rows={new_rows} exceeds DirtyRows capacity (256)"
+        );
         let old_rows = self.rows as usize;
         let new_rows_usize = new_rows as usize;
         let new_cols_usize = new_cols as usize;
@@ -496,7 +560,7 @@ mod tests {
         let _ = buf.take_dirty();
         let _ = buf.get_mut(2, 3);
         let dirty = buf.take_dirty();
-        assert!(dirty.rows.contains(&2));
+        assert!(dirty.rows.contains(2));
     }
 
     // --- Erase operations ---
@@ -505,7 +569,7 @@ mod tests {
     fn erase_cells_replaces_with_default() {
         let mut buf = ScreenBuffer::new(10, 5, 100);
         if let Some(cell) = buf.get_mut(0, 3) {
-            cell.grapheme = "X".to_string();
+            cell.grapheme = "X".into();
         }
         buf.erase_cells(0, 0, 10);
         assert_eq!(buf.get(0, 3), Some(&Cell::default()));
@@ -515,7 +579,7 @@ mod tests {
     fn erase_lines_replaces_with_default_rows() {
         let mut buf = ScreenBuffer::new(5, 5, 100);
         if let Some(cell) = buf.get_mut(1, 0) {
-            cell.grapheme = "Y".to_string();
+            cell.grapheme = "Y".into();
         }
         buf.erase_lines(1, 2);
         assert_eq!(buf.get(1, 0), Some(&Cell::default()));
@@ -528,7 +592,7 @@ mod tests {
         let mut buf = ScreenBuffer::new(5, 3, 100);
         // Write something on row 0 so we can identify it in scrollback.
         if let Some(cell) = buf.get_mut(0, 0) {
-            cell.grapheme = "A".to_string();
+            cell.grapheme = "A".into();
         }
         buf.scroll_up(0, 2, 1, true, false);
         assert_eq!(buf.scrollback_len(), 1);
@@ -551,7 +615,7 @@ mod tests {
         let mut buf = ScreenBuffer::new(5, 5, 100);
         // Write a marker on row 2.
         if let Some(cell) = buf.get_mut(2, 0) {
-            cell.grapheme = "X".to_string();
+            cell.grapheme = "X".into();
         }
         // scroll_down with a 1-row region [2, 2] — must not panic.
         buf.scroll_down(2, 2, 1);
@@ -656,5 +720,118 @@ mod tests {
         assert_eq!(snap.cells.len(), 80 * 24);
         assert_eq!(snap.cols, 80);
         assert_eq!(snap.rows, 24);
+    }
+
+    // --- DirtyRows tests ---
+
+    #[test]
+    fn dirty_rows_set_and_contains() {
+        let mut dr = DirtyRows::default();
+        assert!(dr.is_empty());
+        dr.set(0);
+        dr.set(63);
+        dr.set(64);
+        dr.set(127);
+        dr.set(128);
+        dr.set(191);
+        dr.set(192);
+        dr.set(255);
+        assert!(dr.contains(0));
+        assert!(dr.contains(63));
+        assert!(dr.contains(64));
+        assert!(dr.contains(127));
+        assert!(dr.contains(128));
+        assert!(dr.contains(191));
+        assert!(dr.contains(192));
+        assert!(dr.contains(255));
+        assert!(!dr.contains(1));
+        assert!(!dr.is_empty());
+    }
+
+    #[test]
+    fn dirty_rows_out_of_range_silently_ignored() {
+        let mut dr = DirtyRows::default();
+        dr.set(256);
+        dr.set(1000);
+        assert!(dr.is_empty(), "out-of-range rows must not set any bit");
+    }
+
+    #[test]
+    fn dirty_rows_iter_yields_sorted_set_bits() {
+        let mut dr = DirtyRows::default();
+        let expected: Vec<u16> = vec![0, 5, 63, 64, 127];
+        for &row in &expected {
+            dr.set(row);
+        }
+        let collected: Vec<u16> = dr.iter().collect();
+        assert_eq!(collected, expected);
+    }
+
+    #[test]
+    fn dirty_rows_merge_from_combines_bits() {
+        let mut a = DirtyRows::default();
+        let mut b = DirtyRows::default();
+        a.set(0);
+        a.set(128);
+        b.set(63);
+        b.set(191);
+        a.merge_from(&b);
+        assert!(a.contains(0));
+        assert!(a.contains(63));
+        assert!(a.contains(128));
+        assert!(a.contains(191));
+        assert!(!a.contains(1));
+    }
+
+    #[test]
+    fn dirty_rows_clear_resets_all_bits() {
+        let mut dr = DirtyRows::default();
+        dr.set(0);
+        dr.set(255);
+        dr.clear();
+        assert!(dr.is_empty());
+    }
+
+    // --- Scroll eviction tests ---
+
+    #[test]
+    fn scroll_eviction_content_preserved_in_scrollback() {
+        let mut buf = ScreenBuffer::new(5, 3, 10);
+        // Write 'H' into cell (0, 0)
+        if let Some(cell) = buf.get_mut(0, 0) {
+            cell.grapheme = "H".into();
+            cell.width = 1;
+        }
+        // Scroll up by 1 full-screen
+        buf.scroll_up(0, 2, 1, true, false);
+        // The evicted row should be in scrollback
+        assert_eq!(buf.scrollback_len(), 1);
+        let line = buf
+            .get_scrollback_line(0)
+            .expect("scrollback must have 1 line");
+        assert_eq!(
+            line.cells[0].grapheme, "H",
+            "scrollback must preserve evicted row content"
+        );
+    }
+
+    #[test]
+    fn scroll_eviction_bottom_row_is_blank_after_scroll() {
+        let mut buf = ScreenBuffer::new(5, 3, 10);
+        // Write something on every row
+        for row in 0..3u16 {
+            if let Some(cell) = buf.get_mut(row, 0) {
+                cell.grapheme = "X".into();
+            }
+        }
+        buf.scroll_up(0, 2, 1, true, false);
+        // Bottom row (row 2) must now be blank
+        let bottom = buf.get_row(2).expect("row 2 must exist");
+        for cell in bottom {
+            assert_eq!(
+                cell.grapheme, " ",
+                "bottom row must be blank (space) after scroll"
+            );
+        }
     }
 }

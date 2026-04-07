@@ -157,7 +157,9 @@
         <PreferencesSectionNav
           {sections}
           {activeSection}
-          onselect={(section) => { activeSection = section; }}
+          onselect={(section) => {
+            activeSection = section;
+          }}
         />
 
         <!-- Section content -->
@@ -169,21 +171,11 @@
               onshortcutchange={handleShortcutChange}
             />
           {:else if activeSection === 'appearance'}
-            <PreferencesAppearanceSection
-              {preferences}
-              themes={sharedThemes}
-              {onupdate}
-            />
+            <PreferencesAppearanceSection {preferences} themes={sharedThemes} {onupdate} />
           {:else if activeSection === 'terminal'}
-            <PreferencesTerminalSection
-              {preferences}
-              {onupdate}
-            />
+            <PreferencesTerminalSection {preferences} {onupdate} />
           {:else if activeSection === 'themes'}
-            <PreferencesThemesSection
-              {preferences}
-              {onupdate}
-            />
+            <PreferencesThemesSection {preferences} {onupdate} />
           {:else if activeSection === 'connections'}
             <PreferencesConnectionsSection />
           {/if}

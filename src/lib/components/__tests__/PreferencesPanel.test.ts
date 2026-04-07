@@ -218,7 +218,10 @@ describe('UITCP-PREF-FN-005b: scrollback memory estimate uses 5 500 bytes/line',
     const fs = await import('fs');
     const path = await import('path');
     // Formula lives in PreferencesTerminalSection after the refactoring.
-    const filePath = path.resolve(process.cwd(), 'src/lib/components/PreferencesTerminalSection.svelte');
+    const filePath = path.resolve(
+      process.cwd(),
+      'src/lib/components/PreferencesTerminalSection.svelte',
+    );
     const source = fs.readFileSync(filePath, 'utf-8');
     expect(source).toContain('* 5500');
     expect(source).not.toContain('* 200');

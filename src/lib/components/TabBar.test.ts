@@ -118,13 +118,13 @@ describe('TUITC-UX-020 to 024: activity notification types', () => {
   });
 
   it('processExited exit 0 notification', () => {
-    const notif: PaneNotification = { type: 'processExited', exitCode: 0 , signalName: null };
+    const notif: PaneNotification = { type: 'processExited', exitCode: 0, signalName: null };
     expect(notif.type).toBe('processExited');
     expect((notif as { type: 'processExited'; exitCode: number }).exitCode).toBe(0);
   });
 
   it('processExited exit non-zero notification', () => {
-    const notif: PaneNotification = { type: 'processExited', exitCode: 1 , signalName: null };
+    const notif: PaneNotification = { type: 'processExited', exitCode: 1, signalName: null };
     expect((notif as { type: 'processExited'; exitCode: number }).exitCode).toBe(1);
   });
 

@@ -296,7 +296,7 @@ mod tests {
         let mut row = vec![Cell::default(); cols];
         for (i, ch) in text.chars().enumerate() {
             if i < cols {
-                row[i].grapheme = ch.to_string();
+                row[i].grapheme = compact_str::format_compact!("{ch}");
             }
         }
         row
@@ -304,7 +304,7 @@ mod tests {
 
     fn make_cell(g: &str) -> Cell {
         Cell {
-            grapheme: g.to_string(),
+            grapheme: g.into(),
             attrs: CellAttrs::default(),
             width: 1,
             hyperlink: None,

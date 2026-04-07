@@ -106,10 +106,22 @@
     editingTheme = {
       name: '',
       palette: [
-        defaults['term-color-0'], defaults['term-color-1'], defaults['term-color-2'], defaults['term-color-3'],
-        defaults['term-color-4'], defaults['term-color-5'], defaults['term-color-6'], defaults['term-color-7'],
-        defaults['term-color-8'], defaults['term-color-9'], defaults['term-color-10'], defaults['term-color-11'],
-        defaults['term-color-12'], defaults['term-color-13'], defaults['term-color-14'], defaults['term-color-15'],
+        defaults['term-color-0'],
+        defaults['term-color-1'],
+        defaults['term-color-2'],
+        defaults['term-color-3'],
+        defaults['term-color-4'],
+        defaults['term-color-5'],
+        defaults['term-color-6'],
+        defaults['term-color-7'],
+        defaults['term-color-8'],
+        defaults['term-color-9'],
+        defaults['term-color-10'],
+        defaults['term-color-11'],
+        defaults['term-color-12'],
+        defaults['term-color-13'],
+        defaults['term-color-14'],
+        defaults['term-color-15'],
       ] as UserTheme['palette'],
       foreground: defaults['term-fg'],
       background: defaults['term-bg'],
@@ -122,23 +134,30 @@
 
   function handleDuplicateTheme(sourceName: string) {
     const defaults = buildMinimalValidTheme();
-    const userSource = themes.find(t => t.name === sourceName);
+    const userSource = themes.find((t) => t.name === sourceName);
     const builtInTokens = isBuiltInTheme(sourceName) ? getBuiltInThemeTokens(sourceName) : null;
-    const resolveToken = (key: string): string =>
-      builtInTokens?.[key] ?? defaults[key] ?? '';
+    const resolveToken = (key: string): string => builtInTokens?.[key] ?? defaults[key] ?? '';
 
     const basePalette = userSource
-      ? [...userSource.palette] as UserTheme['palette']
-      : [
-          resolveToken('term-color-0'), resolveToken('term-color-1'),
-          resolveToken('term-color-2'), resolveToken('term-color-3'),
-          resolveToken('term-color-4'), resolveToken('term-color-5'),
-          resolveToken('term-color-6'), resolveToken('term-color-7'),
-          resolveToken('term-color-8'), resolveToken('term-color-9'),
-          resolveToken('term-color-10'), resolveToken('term-color-11'),
-          resolveToken('term-color-12'), resolveToken('term-color-13'),
-          resolveToken('term-color-14'), resolveToken('term-color-15'),
-        ] as UserTheme['palette'];
+      ? ([...userSource.palette] as UserTheme['palette'])
+      : ([
+          resolveToken('term-color-0'),
+          resolveToken('term-color-1'),
+          resolveToken('term-color-2'),
+          resolveToken('term-color-3'),
+          resolveToken('term-color-4'),
+          resolveToken('term-color-5'),
+          resolveToken('term-color-6'),
+          resolveToken('term-color-7'),
+          resolveToken('term-color-8'),
+          resolveToken('term-color-9'),
+          resolveToken('term-color-10'),
+          resolveToken('term-color-11'),
+          resolveToken('term-color-12'),
+          resolveToken('term-color-13'),
+          resolveToken('term-color-14'),
+          resolveToken('term-color-15'),
+        ] as UserTheme['palette']);
 
     editingTheme = {
       name: `Copy of ${sourceName}`,
@@ -169,7 +188,9 @@
   }
 </script>
 
-<p class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+<p
+  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+>
   {m.preferences_section_themes()}
 </p>
 
@@ -181,10 +202,12 @@
 
 {#if editingTheme !== null}
   <ThemeEditorDialog
-    editingTheme={editingTheme}
+    {editingTheme}
     {isNewTheme}
     {themeBusy}
-    onupdate={(updated) => { editingTheme = updated; }}
+    onupdate={(updated) => {
+      editingTheme = updated;
+    }}
     onsave={handleSaveTheme}
     oncancel={handleCancelEdit}
     onduplicate={handleDuplicateTheme}

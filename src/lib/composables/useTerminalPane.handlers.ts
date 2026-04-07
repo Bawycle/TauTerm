@@ -10,6 +10,7 @@
  */
 
 import type { CellStyle } from '$lib/terminal/screen.js';
+import { computeCellStyle } from '$lib/terminal/screen.js';
 
 // ---------------------------------------------------------------------------
 // Cell helpers
@@ -32,6 +33,7 @@ export function defaultCell(): CellStyle {
     strikethrough: false,
     underlineColor: undefined,
     hyperlink: undefined,
+    style: '',
   };
 }
 
@@ -102,40 +104,9 @@ export function mouseButtonCode(event: MouseEvent): number {
 /**
  * Compute the inline `style` string for a single terminal cell.
  *
- * Handles SGR attributes: color (fg/bg), weight, italic, dim, hidden, and
- * extended underline styles (SGR 4:1–4:5, F6). Strikethrough is rendered via
- * a CSS class (F9), not via text-decoration, so it is not included here.
+ * Delegates to computeCellStyle from screen.ts (canonical implementation — P11).
+ * Kept as a re-export for callers that already import from this module.
  */
 export function cellStyle(cell: CellStyle): string {
-  const parts: string[] = [];
-  const fg = cell.inverse ? cell.bg : cell.fg;
-  const bg = cell.inverse ? cell.fg : cell.bg;
-  if (fg) parts.push(`color:${fg}`);
-  if (bg) parts.push(`background-color:${bg}`);
-  if (cell.bold) parts.push('font-weight:bold');
-  if (cell.italic) parts.push('font-style:italic');
-  if (cell.dim) parts.push('opacity:var(--term-dim-opacity)');
-  if (cell.hidden) parts.push('color:transparent');
-
-  // Build text-decoration (F6 — extended underline styles SGR 4:1–4:5).
-  // F9: strikethrough is rendered via .terminal-pane__cell--strikethrough CSS class
-  // (::after pseudo-element at 50% height) — not via text-decoration: line-through.
-  const decLines: string[] = [];
-  if (cell.underline > 0) decLines.push('underline');
-  if (decLines.length) parts.push(`text-decoration-line:${decLines.join(' ')}`);
-
-  if (cell.underline > 0) {
-    const underlineStyleMap: Record<number, string> = {
-      2: 'double',
-      3: 'wavy',
-      4: 'dotted',
-      5: 'dashed',
-    };
-    const underlineStyle = underlineStyleMap[cell.underline];
-    if (underlineStyle) parts.push(`text-decoration-style:${underlineStyle}`);
-    const underlineColor = cell.underlineColor ?? 'var(--term-underline-color-default)';
-    parts.push(`text-decoration-color:${underlineColor}`);
-  }
-
-  return parts.join(';');
+  return computeCellStyle(cell);
 }

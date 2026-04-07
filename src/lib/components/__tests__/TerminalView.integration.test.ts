@@ -762,7 +762,11 @@ describe('TV-LTAB-001: closing the last tab closes the window (FS-TAB-008)', () 
 describe('TV-LTAB-002: exit 0 in last pane of last tab closes window (FS-PTY-005 + FS-TAB-008)', () => {
   it('calls window.destroy() when notification-changed processExited(0) removes the last pane', async () => {
     const pane = makePaneState({ id: 'pane-x' });
-    const tab = makeTab({ id: 'tab-x', activePaneId: 'pane-x', layout: { type: 'leaf', paneId: 'pane-x', state: pane } });
+    const tab = makeTab({
+      id: 'tab-x',
+      activePaneId: 'pane-x',
+      layout: { type: 'leaf', paneId: 'pane-x', state: pane },
+    });
 
     // Capture the notification-changed listener so we can fire it manually.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

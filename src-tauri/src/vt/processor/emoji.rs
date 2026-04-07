@@ -164,7 +164,7 @@ impl VtProcessor {
 
         let cols = self.cols;
         if let Some(cell) = self.active_buf_mut().get_mut(pe.row, pe.col) {
-            cell.grapheme = pe.ch.to_string();
+            cell.grapheme = compact_str::format_compact!("{}", pe.ch);
             cell.attrs = pe.attrs;
             cell.width = width;
             cell.hyperlink = pe.hyperlink.clone();

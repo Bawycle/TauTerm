@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use super::{MAX_CONNECTIONS, PreferencesStore, schema_convert::{camel_to_snake, snake_to_camel}};
+use super::{
+    MAX_CONNECTIONS, PreferencesStore,
+    schema_convert::{camel_to_snake, snake_to_camel},
+};
 use crate::preferences::schema::{AppearancePatch, Language, PreferencesPatch, UserTheme};
 
 // -----------------------------------------------------------------------

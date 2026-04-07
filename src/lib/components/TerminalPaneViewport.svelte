@@ -51,27 +51,23 @@
     <div class="terminal-pane__row">
       {#each row as cell, colIdx}
         {#if cell.width !== 0}
+          {@const selected = tp.isSelected(rowIdx, colIdx)}
           <span
             class="terminal-pane__cell"
             class:terminal-pane__cell--wide={cell.width === 2}
             class:terminal-pane__cell--hyperlink={cell.hyperlink != null}
             class:terminal-pane__cell--blink={cell.blink}
             class:terminal-pane__cell--strikethrough={cell.strikethrough}
-            class:terminal-pane__cell--selected={tp.isSelected(rowIdx, colIdx) &&
-              active &&
-              !tp.selectionFlashing}
-            class:terminal-pane__cell--selected-flash={tp.isSelected(rowIdx, colIdx) &&
-              active &&
-              tp.selectionFlashing}
-            class:terminal-pane__cell--selected-inactive={tp.isSelected(rowIdx, colIdx) &&
-              !active}
+            class:terminal-pane__cell--selected={selected && active && !tp.selectionFlashing}
+            class:terminal-pane__cell--selected-flash={selected && active && tp.selectionFlashing}
+            class:terminal-pane__cell--selected-inactive={selected && !active}
             class:terminal-pane__cell--search-active={tp.activeSearchMatchSet.has(
-              `${rowIdx}:${colIdx}`,
+              rowIdx * tp.cols + colIdx,
             )}
             class:terminal-pane__cell--search-match={!tp.activeSearchMatchSet.has(
-              `${rowIdx}:${colIdx}`,
-            ) && tp.searchMatchSet.has(`${rowIdx}:${colIdx}`)}
-            style={tp.cellStyle(cell)}>{cell.content === '' ? '\u00a0' : cell.content}</span
+              rowIdx * tp.cols + colIdx,
+            ) && tp.searchMatchSet.has(rowIdx * tp.cols + colIdx)}
+            style={cell.style}>{cell.content === '' ? '\u00a0' : cell.content}</span
           >
         {/if}
       {/each}

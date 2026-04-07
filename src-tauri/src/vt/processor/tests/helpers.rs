@@ -9,7 +9,7 @@ pub fn make_vt(cols: u16, rows: u16) -> VtProcessor {
 pub fn grapheme_at(vt: &VtProcessor, row: u16, col: u16) -> String {
     vt.active_buf_ref()
         .get(row, col)
-        .map(|c| c.grapheme.clone())
+        .map(|c| c.grapheme.to_string())
         .unwrap_or_default()
 }
 

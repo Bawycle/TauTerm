@@ -215,6 +215,13 @@ impl PtySession for LinuxPtySession {
         let code = i32::try_from(status.exit_code()).unwrap_or(i32::MAX);
         Some(Some(code))
     }
+
+    fn wait_exit_code(&self) -> Option<Option<i32>> {
+        let mut child = self._child.lock().ok()?;
+        let status = child.wait().ok()?;
+        let code = i32::try_from(status.exit_code()).unwrap_or(i32::MAX);
+        Some(Some(code))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -944,7 +951,13 @@ mod tests {
     fn fpl_exit_002_returns_exit_code_zero_after_clean_exit() {
         let backend = LinuxPtyBackend::new();
         let session = backend
-            .open_session(80, 24, "/bin/sh", &["-c", "exit 0"], &[("TERM", "xterm-256color")])
+            .open_session(
+                80,
+                24,
+                "/bin/sh",
+                &["-c", "exit 0"],
+                &[("TERM", "xterm-256color")],
+            )
             .expect("open session");
         let reader = session.reader_handle().expect("must have reader");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -962,7 +975,13 @@ mod tests {
     fn fpl_exit_003_returns_nonzero_exit_code() {
         let backend = LinuxPtyBackend::new();
         let session = backend
-            .open_session(80, 24, "/bin/sh", &["-c", "exit 1"], &[("TERM", "xterm-256color")])
+            .open_session(
+                80,
+                24,
+                "/bin/sh",
+                &["-c", "exit 1"],
+                &[("TERM", "xterm-256color")],
+            )
             .expect("open session");
         let reader = session.reader_handle().expect("must have reader");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);

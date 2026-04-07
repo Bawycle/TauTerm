@@ -323,8 +323,8 @@
         isSSH={isSSHTab(tab)}
         {dropIndicatorIndex}
         {dragTabId}
-        onTabClick={onTabClick}
-        onTabClose={onTabClose}
+        {onTabClick}
+        {onTabClose}
         onStartRename={startRename}
         onConfirmRename={confirmRename}
         onCancelRename={cancelRename}
@@ -377,7 +377,7 @@
         {contextMenuTabId}
         {contextMenuX}
         {contextMenuY}
-        onNewTab={onNewTab}
+        {onNewTab}
         onRename={() => handleContextMenuRename(ctxTab.id, ctxTitle)}
         onCloseTab={() => {
           handleContextMenuClose();

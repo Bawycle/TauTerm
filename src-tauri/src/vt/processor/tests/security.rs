@@ -12,9 +12,11 @@ mod security_tests {
     #[test]
     fn sec_pty_001_csi_21t_title_readback_discarded() {
         let mut vt = VtProcessor::new(80, 24, 10_000);
-        // Set a title that could be weaponised if echoed.
-        vt.process(b"\x1b]0;injected;ls -la\x07");
-        assert_eq!(vt.title, "injected;ls -la");
+        // Set a title. Note: the `vte` parser splits the OSC payload on each ';',
+        // so "injected;ls -la" is delivered as params[1]="injected", params[2]="ls -la".
+        // With the new params-based API, only params[1] is used as the title.
+        vt.process(b"\x1b]0;injected\x07");
+        assert_eq!(vt.title, "injected");
 
         // Send CSI 21t (window title read request) — must be silently ignored.
         let _dirty = vt.process(b"\x1b[21t");
@@ -122,6 +124,87 @@ mod security_tests {
             is_safe,
             "Invalid UTF-8 must produce U+FFFD or empty cell, not raw bytes (SEC-PTY-007). Got: {:?}",
             cell_content
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-PTY-008 — OSC 22 title stack is bounded (DoS prevention)
+    // -----------------------------------------------------------------------
+
+    /// SEC-PTY-008: OSC 22 title stack is bounded — cannot grow indefinitely.
+    /// Prevents DoS via unbounded memory allocation (CVE-2022-24130 pattern).
+    #[test]
+    fn sec_pty_008_title_stack_bounded() {
+        let mut vt = VtProcessor::new(80, 24, 10_000);
+        // Set a known initial title.
+        vt.process(b"\x1b]0;base\x07");
+        // Push 1000 titles — must silently cap at TITLE_STACK_MAX (16).
+        for i in 0..1000u32 {
+            let osc = format!("\x1b]22;title{i}\x07");
+            vt.process(osc.as_bytes());
+        }
+        // Key assertion: no panic, no OOM, process completes.
+        // Observable check: pop more than TITLE_STACK_MAX times — the title must
+        // eventually stop changing (stack exhausted) rather than unwinding 1000 frames.
+        let mut pop_count_with_change = 0u32;
+        let mut prev_title = vt.title.clone();
+        for _ in 0..20 {
+            vt.process(b"\x1b]23;\x07");
+            if vt.title != prev_title {
+                pop_count_with_change += 1;
+                prev_title = vt.title.clone();
+            }
+        }
+        assert!(
+            pop_count_with_change <= 16,
+            "Title stack must be capped at TITLE_STACK_MAX=16; got {pop_count_with_change} restorations after 20 pops"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-PTY-009 — OSC 23 pop on empty stack does not panic
+    // -----------------------------------------------------------------------
+
+    /// SEC-PTY-009: OSC 23 (PopTitle) on empty stack must not panic.
+    #[test]
+    fn sec_pty_009_title_stack_pop_on_empty_no_panic() {
+        let mut vt = VtProcessor::new(80, 24, 10_000);
+        // Pop without any prior push — must not panic.
+        for _ in 0..10 {
+            vt.process(b"\x1b]23;\x07");
+        }
+        // Still functional after empty pops.
+        vt.process(b"A");
+        // No assertions needed — the test passes if it doesn't panic.
+    }
+
+    // -----------------------------------------------------------------------
+    // sec_osc_oversized_ignored — D1 (P1) guard: OSC total_len > 8192
+    // -----------------------------------------------------------------------
+
+    /// D1: OSC sequence whose total field length exceeds 8192 bytes must be
+    /// silently dropped — the terminal title must remain unchanged.
+    #[test]
+    fn sec_osc_oversized_ignored() {
+        let mut vt = VtProcessor::new(80, 24, 10_000);
+        // Set a known initial title.
+        vt.process(b"\x1b]0;initial\x07");
+        assert_eq!(vt.title, "initial");
+
+        // Build an OSC 0 sequence whose payload field alone is > 8192 bytes.
+        // total_len = len("0") + 1 + len(payload) + 1 > 8192
+        // So payload must be >= 8191 bytes.
+        let big_payload: Vec<u8> = b"A".repeat(8200);
+        let mut seq = b"\x1b]0;".to_vec();
+        seq.extend_from_slice(&big_payload);
+        seq.push(b'\x07'); // BEL terminator
+
+        vt.process(&seq);
+
+        // The oversized sequence must be silently ignored — title unchanged.
+        assert_eq!(
+            vt.title, "initial",
+            "Oversized OSC sequence must not change the title (D1 guard)"
         );
     }
 

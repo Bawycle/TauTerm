@@ -13,7 +13,7 @@
 //!
 //! **Task 1 — reader (spawn_blocking)**
 //! Reads raw bytes from the PTY, feeds them to `VtProcessor`, and sends the
-//! resulting `ProcessOutput` through an unbounded channel to Task 2.
+//! resulting `ProcessOutput` through a bounded channel (capacity 256) to Task 2.
 //! When the PTY reaches EOF the task exits naturally, closing the channel.
 //!
 //! **Task 2 — coalescer/emitter (async)**
@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 use tauri::AppHandle;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 
 use crate::events::{
@@ -172,14 +172,17 @@ pub fn spawn_pty_read_task(
     writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
     registry: Arc<SessionRegistry>,
 ) -> PtyTaskHandle {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ProcessOutput>();
+    // Bounded channel: back-pressure to PTY kernel when Task 2 is slow.
+    // INVARIANT: the VtProcessor write-lock is always released before blocking_send,
+    // so no deadlock is possible between Task 1 and the IPC layer.
+    let (tx, rx) = tokio::sync::mpsc::channel::<ProcessOutput>(256);
 
     // ------------------------------------------------------------------
     // Task 1 — blocking reader
     // ------------------------------------------------------------------
     let pane_id_r = pane_id.clone();
     let vt_r = vt.clone();
-    let tx_r: UnboundedSender<ProcessOutput> = tx;
+    let tx_r: Sender<ProcessOutput> = tx;
     // Clone the writer Arc so it can be moved into the spawn_blocking closure.
     // `None` for sessions that do not support writing back (e.g. injectable).
     let writer_r = writer;
@@ -267,7 +270,7 @@ pub fn spawn_pty_read_task(
             }
 
             // Forward to Task 2. If Task 2 has exited (channel closed), stop.
-            if tx_r.send(output).is_err() {
+            if tx_r.blocking_send(output).is_err() {
                 tracing::debug!("PTY emit task closed, stopping reader for pane {pane_id_r}");
                 break;
             }
@@ -339,9 +342,11 @@ pub fn spawn_pty_read_task(
         }
 
         // FS-NOTIF-002: PTY process exited — transition to Terminated and get exit info.
-        // mark_pane_terminated() calls try_wait() on the child to recover the exit
+        // mark_pane_terminated() calls wait() on the child to recover the exit
         // code and sets pane.lifecycle = Terminated before we emit the notification.
-        let (exit_code, signal_name) = registry_e.mark_pane_terminated(&pane_id_e);
+        let (exit_code, signal_name) = tokio::task::block_in_place(|| {
+            registry_e.mark_pane_terminated(&pane_id_e)
+        });
         if let Some((_, tab_state)) = registry_e.get_tab_state_for_pane(&pane_id_e) {
             emit_notification_changed(
                 &app_e,
@@ -491,7 +496,13 @@ pub(crate) fn cell_color_to_dto(c: crate::vt::cell::Color) -> crate::events::typ
 
 /// Build a `ScreenUpdateEvent` from the dirty region returned by `VtProcessor::process()`.
 ///
-/// Takes a snapshot and extracts cells for each dirty row.
+/// - Full redraw (`dirty.is_full_redraw`): calls `get_snapshot()` and sends all cells.
+/// - Partial update: accesses dirty rows directly via `active_buf_ref().get_row()` —
+///   no full snapshot clone. Only the rows listed in `dirty.rows` are included.
+///
+/// INVARIANT: the read-lock on `vt` is released before this function returns.
+/// Callers must not hold the write-lock when calling this function.
+///
 /// `pub(crate)` so `session::ssh_task` can reuse it without duplication.
 pub(crate) fn build_screen_update_event(
     pane_id: &PaneId,
@@ -501,12 +512,13 @@ pub(crate) fn build_screen_update_event(
     use crate::events::types::{CellUpdate, CursorState};
 
     let proc = vt.read();
-    let snapshot = proc.get_snapshot();
-    let cols = snapshot.cols as usize;
 
-    let cells: Vec<CellUpdate> = if dirty.is_full_redraw {
-        // Full redraw: send all cells.
-        snapshot
+    if dirty.is_full_redraw {
+        // Full redraw: snapshot clone is unavoidable — every cell must be sent.
+        let snapshot = proc.get_snapshot();
+        let cols = snapshot.cols as usize;
+
+        let cells: Vec<CellUpdate> = snapshot
             .cells
             .iter()
             .enumerate()
@@ -522,46 +534,67 @@ pub(crate) fn build_screen_update_event(
                     hyperlink: cell.hyperlink.clone(),
                 }
             })
-            .collect()
+            .collect();
+
+        let cursor = CursorState {
+            row: snapshot.cursor_row,
+            col: snapshot.cursor_col,
+            visible: snapshot.cursor_visible,
+            shape: snapshot.cursor_shape,
+            blink: proc.cursor_blink,
+        };
+
+        ScreenUpdateEvent {
+            pane_id: pane_id.clone(),
+            cells,
+            cursor,
+            scrollback_lines: snapshot.scrollback_lines,
+            is_full_redraw: true,
+            cols: snapshot.cols,
+            rows: snapshot.rows,
+            scroll_offset: 0,
+        }
     } else {
-        // Partial update: only dirty rows.
-        let mut updates = Vec::new();
-        for &row in &dirty.rows {
-            let row_start = row as usize * cols;
-            let row_end = (row_start + cols).min(snapshot.cells.len());
-            for (col_offset, cell) in snapshot.cells[row_start..row_end].iter().enumerate() {
-                updates.push(CellUpdate {
-                    row,
-                    col: col_offset as u16,
-                    content: cell.content.clone(),
-                    width: cell.width,
-                    attrs: snapshot_cell_to_attrs_dto(cell, &cell_color_to_dto),
-                    hyperlink: cell.hyperlink.clone(),
-                });
+        // Partial update: access dirty rows directly — no full snapshot clone.
+        let meta = proc.get_screen_meta();
+        let buf = proc.active_buf_ref();
+
+        let dirty_count = dirty.rows.iter().count();
+        let mut cells: Vec<CellUpdate> = Vec::with_capacity(dirty_count * meta.cols as usize);
+
+        for row in dirty.rows.iter() {
+            if let Some(row_cells) = buf.get_row(row) {
+                for (col, cell) in row_cells.iter().enumerate() {
+                    cells.push(CellUpdate {
+                        row,
+                        col: col as u16,
+                        content: cell.grapheme.to_string(),
+                        width: cell.width,
+                        attrs: cell_attrs_to_dto(&cell.attrs),
+                        hyperlink: cell.hyperlink.as_ref().map(|h| h.as_ref().to_owned()),
+                    });
+                }
             }
         }
-        updates
-    };
 
-    let cursor = CursorState {
-        row: snapshot.cursor_row,
-        col: snapshot.cursor_col,
-        visible: snapshot.cursor_visible,
-        shape: snapshot.cursor_shape,
-        blink: proc.cursor_blink,
-    };
+        let cursor = CursorState {
+            row: meta.cursor_row,
+            col: meta.cursor_col,
+            visible: meta.cursor_visible,
+            shape: meta.cursor_shape,
+            blink: meta.cursor_blink,
+        };
 
-    let scrollback_lines = snapshot.scrollback_lines;
-
-    ScreenUpdateEvent {
-        pane_id: pane_id.clone(),
-        cells,
-        cursor,
-        scrollback_lines,
-        is_full_redraw: dirty.is_full_redraw,
-        cols: snapshot.cols,
-        rows: snapshot.rows,
-        scroll_offset: 0,
+        ScreenUpdateEvent {
+            pane_id: pane_id.clone(),
+            cells,
+            cursor,
+            scrollback_lines: meta.scrollback_lines,
+            is_full_redraw: false,
+            cols: meta.cols,
+            rows: meta.rows,
+            scroll_offset: 0,
+        }
     }
 }
 
@@ -1068,5 +1101,25 @@ fn snapshot_cell_to_attrs_dto(
         hidden: cell.hidden,
         strikethrough: cell.strikethrough,
         underline_color: cell.underline_color.map(color_to_dto),
+    }
+}
+
+/// Build a `CellAttrsDto` directly from a `Cell`'s `CellAttrs`, bypassing the
+/// `SnapshotCell` intermediary. Used by the partial-update path in
+/// `build_screen_update_event` to avoid a full snapshot clone.
+fn cell_attrs_to_dto(attrs: &crate::vt::cell::CellAttrs) -> crate::events::types::CellAttrsDto {
+    use crate::events::types::CellAttrsDto;
+    CellAttrsDto {
+        fg: attrs.fg.map(cell_color_to_dto),
+        bg: attrs.bg.map(cell_color_to_dto),
+        bold: attrs.bold,
+        dim: attrs.dim,
+        italic: attrs.italic,
+        underline: attrs.underline,
+        blink: attrs.blink,
+        inverse: attrs.inverse,
+        hidden: attrs.hidden,
+        strikethrough: attrs.strikethrough,
+        underline_color: attrs.underline_color.map(cell_color_to_dto),
     }
 }

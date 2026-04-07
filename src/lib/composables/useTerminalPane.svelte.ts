@@ -116,6 +116,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let scrollbackLines = $state(0);
   let screenGeneration = $state(0);
 
+  // rAF coalescing state for wheel scroll events.
+  let pendingScrollOffset: number | null = null;
+  let scrollRafId: ReturnType<typeof requestAnimationFrame> | null = null;
+
   // -------------------------------------------------------------------------
   // Terminal mode state
   // -------------------------------------------------------------------------
@@ -182,6 +186,11 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let viewportEl = $state<HTMLDivElement | undefined>();
   let scrollbarEl = $state<HTMLDivElement | undefined>();
 
+  // D2-P16: reusable DOM probe for cell dimension measurement — created once,
+  // kept attached to viewportEl for the lifetime of the pane. Avoids the
+  // create/append/measure/removeChild cycle on every sendResize() call.
+  let cellMeasureProbe: HTMLDivElement | null = null;
+
   // -------------------------------------------------------------------------
   // Derived
   // -------------------------------------------------------------------------
@@ -211,7 +220,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   }
 
   const searchMatchSet = $derived.by(() => {
-    const set = new Set<string>();
+    const set = new Set<number>();
     if (props.searchMatches().length === 0) return set;
     const screenStart = scrollbackLines - scrollOffset;
     for (let i = 0; i < props.searchMatches().length; i++) {
@@ -219,14 +228,14 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       const screenRow = match.scrollbackRow - screenStart;
       if (screenRow < 0 || screenRow >= rows) continue;
       for (let c = match.colStart; c < match.colEnd; c++) {
-        set.add(`${screenRow}:${c}`);
+        set.add(screenRow * cols + c);
       }
     }
     return set;
   });
 
   const activeSearchMatchSet = $derived.by(() => {
-    const set = new Set<string>();
+    const set = new Set<number>();
     if (props.searchMatches().length === 0 || props.activeSearchMatchIndex() <= 0) return set;
     const match = props.searchMatches()[props.activeSearchMatchIndex() - 1];
     if (!match) return set;
@@ -234,7 +243,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const screenRow = match.scrollbackRow - screenStart;
     if (screenRow < 0 || screenRow >= rows) return set;
     for (let c = match.colStart; c < match.colEnd; c++) {
-      set.add(`${screenRow}:${c}`);
+      set.add(screenRow * cols + c);
     }
     return set;
   });
@@ -315,6 +324,17 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     scheduleSendResize();
   });
 
+  function ensureCellMeasureProbe(): HTMLDivElement | null {
+    if (!viewportEl) return null;
+    if (!cellMeasureProbe) {
+      cellMeasureProbe = document.createElement('div');
+      cellMeasureProbe.style.cssText =
+        'position:absolute;visibility:hidden;pointer-events:none;height:1lh;width:1ch';
+      viewportEl.appendChild(cellMeasureProbe);
+    }
+    return cellMeasureProbe;
+  }
+
   function scheduleSendResize() {
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     props.ondimensionschange()?.(cols, rows);
@@ -329,22 +349,14 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     // Bug 1a: measure 1lh and 1ch via a DOM probe so dimensions exactly match the
     // CSS units used by the terminal grid cells (height:1lh, width:1ch).
     // Falls back to measureCellDimensions (Canvas 2D) then to a grid-based estimate.
+    // D2-P16: the probe is created once and reused across calls (ensureCellMeasureProbe).
     let cellW: number;
     let cellH: number;
     try {
-      let probeRect: DOMRect | null = null;
-      const probe = document.createElement('div');
-      probe.style.cssText =
-        'position:absolute;visibility:hidden;pointer-events:none;height:1lh;width:1ch;';
-      viewportEl.appendChild(probe);
-      try {
-        probeRect = probe.getBoundingClientRect();
-      } finally {
-        // Guarantee probe removal even if getBoundingClientRect throws.
-        viewportEl.removeChild(probe);
-      }
+      const probe = ensureCellMeasureProbe();
+      const probeRect = probe?.getBoundingClientRect();
 
-      if (probeRect !== null && probeRect.height > 0 && probeRect.width > 0) {
+      if (probeRect && probeRect.height > 0 && probeRect.width > 0) {
         cellH = probeRect.height;
         cellW = probeRect.width;
       } else {
@@ -561,6 +573,12 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     resizeObserver?.disconnect();
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
+    if (scrollRafId !== null) {
+      cancelAnimationFrame(scrollRafId);
+      scrollRafId = null;
+    }
+    cellMeasureProbe?.remove();
+    cellMeasureProbe = null;
   });
 
   // -------------------------------------------------------------------------
@@ -755,19 +773,32 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     await copySelectionToClipboard();
   }
 
-  async function handleWheel(event: WheelEvent) {
+  function handleWheel(event: WheelEvent) {
     event.preventDefault();
     if (!event.shiftKey && mouseReporting !== 'none') {
       const button = event.deltaY < 0 ? 64 : 65;
       const cell = pixelToCell(event);
-      await sendMouseEvent(button, cell.col, cell.row, event, false);
+      sendMouseEvent(button, cell.col, cell.row, event, false);
       return;
     }
-    const newOffset = Math.max(0, scrollOffset + (event.deltaY > 0 ? -3 : 3));
-    try {
-      await scrollPane(props.paneId(), newOffset);
-    } catch {
-      /* non-fatal */
+    const delta = event.deltaY > 0 ? -3 : 3;
+    // Accumulate on pendingScrollOffset (not stale scrollOffset) so rapid
+    // events increment correctly: 3, 6, 9, … instead of all landing on 3.
+    const base = pendingScrollOffset ?? scrollOffset;
+    pendingScrollOffset = Math.max(0, base + delta);
+
+    if (scrollRafId === null) {
+      scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = null;
+        const target = pendingScrollOffset;
+        pendingScrollOffset = null;
+        if (target !== null) {
+          // Speculative update: visual feedback is immediate.
+          // applyScreenUpdate will correct it if the backend clamps.
+          scrollOffset = target;
+          scrollPane(props.paneId(), target).catch(() => {});
+        }
+      });
     }
   }
 

@@ -41,6 +41,68 @@ export interface CellStyle {
    * Undefined when no hyperlink is active on this cell.
    */
   hyperlink: string | undefined;
+  /**
+   * Pre-computed inline style string for this cell (P11).
+   * Computed once at construction time by computeCellStyle(); consumed directly
+   * by the template to avoid per-render function calls.
+   */
+  style: string;
+}
+
+// ---------------------------------------------------------------------------
+// Cell style string computation (P11)
+// ---------------------------------------------------------------------------
+
+const UNDERLINE_STYLE_MAP: Readonly<Record<number, string>> = Object.freeze({
+  2: 'double',
+  3: 'wavy',
+  4: 'dotted',
+  5: 'dashed',
+});
+
+/**
+ * Compute the inline `style` string for a single terminal cell.
+ *
+ * Handles SGR attributes: color (fg/bg), weight, italic, dim, hidden, and
+ * extended underline styles (SGR 4:1–4:5, F6). Strikethrough is rendered via
+ * a CSS class (F9), not via text-decoration, so it is not included here.
+ *
+ * This is the canonical implementation — useTerminalPane.handlers.ts delegates
+ * to this function to avoid duplication.
+ */
+export function computeCellStyle(cell: {
+  fg: string | undefined;
+  bg: string | undefined;
+  bold: boolean;
+  italic: boolean;
+  dim: boolean;
+  hidden: boolean;
+  underline: number;
+  underlineColor: string | undefined;
+  inverse: boolean;
+}): string {
+  const parts: string[] = [];
+  const fg = cell.inverse ? cell.bg : cell.fg;
+  const bg = cell.inverse ? cell.fg : cell.bg;
+  if (fg) parts.push(`color:${fg}`);
+  if (bg) parts.push(`background-color:${bg}`);
+  if (cell.bold) parts.push('font-weight:bold');
+  if (cell.italic) parts.push('font-style:italic');
+  if (cell.dim) parts.push('opacity:var(--term-dim-opacity)');
+  if (cell.hidden) parts.push('color:transparent');
+
+  // Build text-decoration (F6 — extended underline styles SGR 4:1–4:5).
+  // F9: strikethrough is rendered via .terminal-pane__cell--strikethrough CSS class
+  // (::after pseudo-element at 50% height) — not via text-decoration: line-through.
+  if (cell.underline > 0) {
+    parts.push('text-decoration-line:underline');
+    const underlineStyle = UNDERLINE_STYLE_MAP[cell.underline];
+    if (underlineStyle) parts.push(`text-decoration-style:${underlineStyle}`);
+    const underlineColor = cell.underlineColor ?? 'var(--term-underline-color-default)';
+    parts.push(`text-decoration-color:${underlineColor}`);
+  }
+
+  return parts.join(';');
 }
 
 /**
@@ -50,10 +112,13 @@ export interface CellStyle {
  */
 export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
   const promotedFg = cell.fg ? resolveAnsiColor(cell.fg, cell.bold) : undefined;
-  return {
+  const fg = resolveColor(promotedFg);
+  const bg = resolveColor(cell.bg);
+  const underlineColor = resolveColor(cell.underlineColor);
+  const result: CellStyle = {
     content: cell.content,
-    fg: resolveColor(promotedFg),
-    bg: resolveColor(cell.bg),
+    fg,
+    bg,
     width: cell.width,
     bold: cell.bold,
     dim: cell.dim,
@@ -63,9 +128,12 @@ export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
     inverse: cell.inverse,
     hidden: cell.hidden,
     strikethrough: cell.strikethrough,
-    underlineColor: resolveColor(cell.underlineColor),
+    underlineColor,
     hyperlink: cell.hyperlink,
+    style: '',
   };
+  result.style = computeCellStyle(result);
+  return result;
 }
 
 /**
@@ -87,10 +155,13 @@ export function cellStyleFromUpdate(
   const rawFg = attrs.fg;
   const promotedFg =
     rawFg && rawFg.type !== 'default' ? resolveAnsiColor(rawFg as Color, attrs.bold) : rawFg;
-  return {
+  const fg = resolveColorDto(promotedFg);
+  const bg = resolveColorDto(attrs.bg);
+  const underlineColor = resolveColorDto(attrs.underlineColor);
+  const result: CellStyle = {
     content,
-    fg: resolveColorDto(promotedFg),
-    bg: resolveColorDto(attrs.bg),
+    fg,
+    bg,
     width,
     bold: attrs.bold,
     dim: attrs.dim,
@@ -100,9 +171,12 @@ export function cellStyleFromUpdate(
     inverse: attrs.inverse,
     hidden: attrs.hidden,
     strikethrough: attrs.strikethrough,
-    underlineColor: resolveColorDto(attrs.underlineColor),
+    underlineColor,
     hyperlink,
+    style: '',
   };
+  result.style = computeCellStyle(result);
+  return result;
 }
 
 /**
@@ -135,18 +209,7 @@ export function cellToCssVars(cell: CellStyle): Record<string, string> {
 
   // Underline style — only set when underline is active
   if (cell.underline > 0) {
-    // underline=1: single (default, no text-decoration-style needed)
-    // underline=2: double
-    // underline=3: wavy (curly in SGR)
-    // underline=4: dotted
-    // underline=5: dashed
-    const underlineStyleMap: Record<number, string> = {
-      2: 'double',
-      3: 'wavy',
-      4: 'dotted',
-      5: 'dashed',
-    };
-    const underlineStyle = underlineStyleMap[cell.underline];
+    const underlineStyle = UNDERLINE_STYLE_MAP[cell.underline];
     if (underlineStyle) style['text-decoration-style'] = underlineStyle;
 
     // Underline color — resolved or fallback design token
@@ -196,6 +259,7 @@ export function buildGridFromSnapshot(
     strikethrough: false,
     underlineColor: undefined,
     hyperlink: undefined,
+    style: '',
   }));
 
   for (let i = 0; i < cells.length && i < rows * cols; i++) {

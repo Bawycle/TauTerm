@@ -183,3 +183,70 @@ fn sgr_multi_attributes_set_independently() {
     assert!(!attrs.italic);
     assert_eq!(attrs.underline, 0);
 }
+
+// ---------------------------------------------------------------------------
+// CompactString storage — verify Cell.grapheme uses CompactString correctly
+// ---------------------------------------------------------------------------
+
+#[test]
+fn compact_str_emoji_stored_correctly() {
+    // U+1F600 😀 — 4-byte UTF-8, but well within CompactString's inline capacity.
+    let mut vt = make_vt(80, 24);
+    vt.process("😀".as_bytes());
+    let snap = vt.get_snapshot();
+    // Row 0, col 0 = index 0 in the flat row-major cells array.
+    assert_eq!(snap.cells[0].content, "😀");
+}
+
+#[test]
+fn compact_str_space_default() {
+    // A freshly created VtProcessor must have every cell default-initialised to " ".
+    let vt = make_vt(80, 24);
+    let snap = vt.get_snapshot();
+    assert_eq!(snap.cells[0].content, " ");
+}
+
+// ---------------------------------------------------------------------------
+// OSC 8 hyperlink — D1 (P1) integration: verify params-based parsing
+// FS-VT-070, FS-VT-071
+// ---------------------------------------------------------------------------
+
+#[test]
+fn osc8_hyperlink_parsed_from_params() {
+    // Send OSC 8 ; id=foo ; https://example.com BEL, then write a character.
+    // The written character must carry the hyperlink URI.
+    let mut vt = make_vt(80, 24);
+    // ESC ] 8 ; id=foo ; https://example.com BEL
+    vt.process(b"\x1b]8;id=foo;https://example.com\x07");
+    // Write 'A' — it must inherit the current hyperlink.
+    vt.process(b"A");
+    let cell = vt
+        .active_buf_ref()
+        .get(0, 0)
+        .expect("cell (0,0) must exist");
+    assert_eq!(
+        cell.hyperlink.as_deref(),
+        Some("https://example.com"),
+        "Cell written after OSC 8 must carry the hyperlink URI"
+    );
+}
+
+#[test]
+fn compact_str_skin_tone_modifier_stored_in_base_cell() {
+    // U+1F44D (👍) followed by U+1F3FB (light skin-tone modifier).
+    // The skin-tone modifier (R7 / FS-VT-018) is treated as a combining mark:
+    // it is appended via `push()` to the preceding cell's grapheme — verifying
+    // that CompactString correctly handles `push()` after a 4-byte base char.
+    // Total: 8 bytes UTF-8 → exercises CompactString's multi-byte accumulation.
+    let input = "\u{1F44D}\u{1F3FB}";
+    let mut vt = make_vt(80, 24);
+    vt.process(input.as_bytes());
+    let snap = vt.get_snapshot();
+    let cell0 = &snap.cells[0].content;
+    // Cell 0 must contain both the base and the skin-tone modifier.
+    assert_eq!(
+        cell0.as_str(),
+        input,
+        "CompactString must preserve base + skin-tone modifier without corruption"
+    );
+}

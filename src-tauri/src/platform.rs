@@ -102,6 +102,24 @@ pub trait PtySession: Send + Sync {
         None
     }
 
+    /// Blocking wait for the child process to exit and obtain its exit code.
+    ///
+    /// Unlike `try_wait_exit_code`, this call blocks until the child has fully
+    /// exited (zombie reaped). It must only be called after the PTY EOF has been
+    /// observed, which guarantees the process is already dead — so the blocking
+    /// wait returns in microseconds on Linux.
+    ///
+    /// Returns `Some(exit_code)` where `exit_code` is:
+    ///   - `Some(0)` for a clean exit
+    ///   - `Some(n)` for a non-zero exit
+    ///   - `None` if the exit code could not be determined (signal kill, etc.)
+    ///
+    /// Returns `None` if this session type does not support it (SSH sessions, stubs).
+    /// Default: delegates to `try_wait_exit_code` (best-effort fallback).
+    fn wait_exit_code(&self) -> Option<Option<i32>> {
+        self.try_wait_exit_code()
+    }
+
     /// Get a shared reader handle for the PTY read task.
     ///
     /// Platform implementations that support a read task return `Some(...)`.

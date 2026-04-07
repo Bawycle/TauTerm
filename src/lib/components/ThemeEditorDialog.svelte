@@ -34,7 +34,8 @@
     onduplicate: (sourceName: string) => void;
   }
 
-  let { editingTheme, isNewTheme, themeBusy, onupdate, onsave, oncancel, onduplicate }: Props = $props();
+  let { editingTheme, isNewTheme, themeBusy, onupdate, onsave, oncancel, onduplicate }: Props =
+    $props();
 
   // ---------------------------------------------------------------------------
   // Contrast advisory
@@ -94,7 +95,11 @@
     <!-- Read-only color swatches display -->
     <div class="flex gap-1 mb-4">
       {#each editingTheme.palette as color}
-        <div class="w-5 h-5 rounded-sm border border-(--color-border)" style="background:{color}" title={color}></div>
+        <div
+          class="w-5 h-5 rounded-sm border border-(--color-border)"
+          style="background:{color}"
+          title={color}
+        ></div>
       {/each}
     </div>
     <div class="flex gap-2">
@@ -180,17 +185,11 @@
       >
     </div>
 
-    <ThemePaletteEditor
-      palette={editingTheme.palette}
-      onpalettechange={handlePaletteColorChange}
-    />
+    <ThemePaletteEditor palette={editingTheme.palette} onpalettechange={handlePaletteColorChange} />
 
     <!-- Contrast advisory (UXD §7.20.4) -->
     {#if contrastBelowAA}
-      <ThemeContrastAdvisory
-        contrastRatio={editingContrastRatio}
-        threshold={WCAG_AA_THRESHOLD}
-      />
+      <ThemeContrastAdvisory contrastRatio={editingContrastRatio} threshold={WCAG_AA_THRESHOLD} />
     {/if}
 
     <!-- Real-time preview (UXD §7.20.5) -->

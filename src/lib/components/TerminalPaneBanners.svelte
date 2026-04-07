@@ -53,10 +53,7 @@
 
 <!-- Deprecated SSH algorithm banner — displaces terminal content downward (UXD §7.21) -->
 {#if deprecatedAlgorithm !== null}
-  <SshDeprecatedAlgorithmBanner
-    algorithm={deprecatedAlgorithm}
-    ondismiss={onDismissAlgorithm}
-  />
+  <SshDeprecatedAlgorithmBanner algorithm={deprecatedAlgorithm} ondismiss={onDismissAlgorithm} />
 {/if}
 
 <!-- ProcessTerminatedPane banner — shown when PTY process exits (FS-PTY-005/006) -->

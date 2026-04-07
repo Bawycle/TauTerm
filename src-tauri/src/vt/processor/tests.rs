@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
-mod helpers;
-mod security;
 mod basic;
-mod modes;
+mod cursor_dirty;
 mod editing;
 mod features;
-mod cursor_dirty;
+mod helpers;
+mod modes;
 mod resize_full_redraw;
+mod security;

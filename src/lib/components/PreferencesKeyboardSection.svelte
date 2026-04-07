@@ -26,7 +26,9 @@
   let { shortcuts, shortcutActions, onshortcutchange }: Props = $props();
 </script>
 
-<p class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4">
+<p
+  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+>
   {m.preferences_section_keyboard()}
 </p>
 <div class="space-y-1">

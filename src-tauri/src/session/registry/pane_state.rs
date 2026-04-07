@@ -104,25 +104,31 @@ impl SessionRegistry {
     /// Transition a pane to `Terminated` state and return its `(exit_code, signal_name)`.
     ///
     /// Called by the PTY emit task after EOF: queries the child process exit status
-    /// via `PtySession::try_wait_exit_code()`, sets `pane.lifecycle = Terminated`,
+    /// via `PtySession::wait_exit_code()`, sets `pane.lifecycle = Terminated`,
     /// and returns the exit info for the `ProcessExited` notification.
     ///
+    /// This method may block briefly (microseconds) while waiting for the zombie
+    /// to be reaped. It must only be called after PTY EOF has been observed.
+    ///
     /// Returns `(None, None)` if the pane is not found.
-    pub fn mark_pane_terminated(
-        &self,
-        pane_id: &PaneId,
-    ) -> (Option<i32>, Option<String>) {
+    pub fn mark_pane_terminated(&self, pane_id: &PaneId) -> (Option<i32>, Option<String>) {
         let mut inner = self.inner.write();
-        let Some(pane) = inner.tabs.values_mut().find_map(|e| e.panes.get_mut(pane_id)) else {
+        let Some(pane) = inner
+            .tabs
+            .values_mut()
+            .find_map(|e| e.panes.get_mut(pane_id))
+        else {
             return (None, None);
         };
         let exit_code = pane
             .pty_session
             .as_ref()
-            .and_then(|s| s.try_wait_exit_code())
+            .and_then(|s| s.wait_exit_code())
             .flatten();
-        pane.lifecycle =
-            crate::session::lifecycle::PaneLifecycleState::Terminated { exit_code, error: None };
+        pane.lifecycle = crate::session::lifecycle::PaneLifecycleState::Terminated {
+            exit_code,
+            error: None,
+        };
         // signal_name detection deferred (requires extending PaneLifecycleState)
         (exit_code, None)
     }

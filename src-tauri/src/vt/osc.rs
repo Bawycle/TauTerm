@@ -31,30 +31,32 @@ pub enum OscAction {
     Ignore,
 }
 
-/// Parse an OSC command byte sequence into an `OscAction`.
-/// `params` is the raw content of the OSC sequence (everything between ESC ] and ST/BEL).
-pub fn parse_osc(params: &[u8]) -> OscAction {
-    // OSC format: Ps ; Pt (numeric command ; text payload).
-    let content = match std::str::from_utf8(params) {
-        Ok(s) => s,
-        Err(_) => return OscAction::Ignore,
-    };
-
-    let (cmd_str, rest) = match content.find(';') {
-        Some(pos) => (&content[..pos], &content[pos + 1..]),
-        None => (content, ""),
-    };
-
-    let cmd: u32 = match cmd_str.parse() {
-        Ok(n) => n,
-        Err(_) => return OscAction::Ignore,
+/// Parse an OSC command from a slice of parameter segments into an `OscAction`.
+///
+/// `params` is the slice provided directly by the `vte` parser: each element is
+/// one semicolon-delimited field of the OSC sequence.
+/// - `params[0]` — numeric command code (ASCII digits, e.g. `b"0"`, `b"8"`, `b"52"`)
+/// - `params[1]` — first payload field (title text, OSC-8 key=value params, clipboard target…)
+/// - `params[2]` — second payload field (OSC-8 URI, clipboard base64 data)
+pub fn parse_osc(params: &[&[u8]]) -> OscAction {
+    // params[0] must exist and be valid UTF-8 ASCII digits.
+    let cmd: u32 = match params.first() {
+        Some(code) => match std::str::from_utf8(code).ok().and_then(|s| s.parse().ok()) {
+            Some(n) => n,
+            None => return OscAction::Ignore,
+        },
+        None => return OscAction::Ignore,
     };
 
     match cmd {
         // OSC 0 / 1 / 2 — window/icon title.
         0..=2 => {
+            let raw_title = params
+                .get(1)
+                .and_then(|p| std::str::from_utf8(p).ok())
+                .unwrap_or("");
             // Strip C0/C1 control characters and truncate to 256 chars (§8.1).
-            let title: String = rest
+            let title: String = raw_title
                 .chars()
                 .filter(|&c| !c.is_control() || c == '\t')
                 .take(256)
@@ -65,14 +67,22 @@ pub fn parse_osc(params: &[u8]) -> OscAction {
         22 => OscAction::PushTitle,
         // OSC 23 — pop title.
         23 => OscAction::PopTitle,
-        // OSC 8 — hyperlink: ESC ] 8 ; params ; uri ST
-        // Format: `8 ; id=<id> ; <uri>` or `8 ; ; ` (end hyperlink).
+        // OSC 8 — hyperlink: ESC ] 8 ; id=<id> ; <uri> ST
+        // params[1] = key=value pairs (e.g. "id=foo"), params[2] = URI.
         8 => {
-            // Split into `id_params` and `uri`.
-            let (id_params, uri_str) = match rest.find(';') {
-                Some(pos) => (&rest[..pos], &rest[pos + 1..]),
-                None => return OscAction::Ignore,
-            };
+            let id_params = params
+                .get(1)
+                .and_then(|p| std::str::from_utf8(p).ok())
+                .unwrap_or("");
+            let uri_str = params
+                .get(2)
+                .and_then(|p| std::str::from_utf8(p).ok())
+                .unwrap_or("");
+            // params[1] must exist for a valid OSC 8 sequence; params[2] may be absent
+            // only when the sequence has no URI field — treat as end-hyperlink.
+            if params.len() < 2 {
+                return OscAction::Ignore;
+            }
             let id = id_params
                 .split(';')
                 .filter_map(|p| p.strip_prefix("id="))
@@ -88,14 +98,17 @@ pub fn parse_osc(params: &[u8]) -> OscAction {
             }
         }
         // OSC 52 — clipboard.
+        // params[1] = target (e.g. "c"), params[2] = base64-encoded data.
         52 => {
-            // Format: `52 ; <target> ; <base64-encoded data>`
+            let target = params
+                .get(1)
+                .and_then(|p| std::str::from_utf8(p).ok())
+                .unwrap_or("");
+            let data_b64 = params
+                .get(2)
+                .and_then(|p| std::str::from_utf8(p).ok())
+                .unwrap_or("");
             // Read is permanently rejected (§8.2).
-            let (target, data_b64) = match rest.find(';') {
-                Some(pos) => (&rest[..pos], &rest[pos + 1..]),
-                None => return OscAction::Ignore,
-            };
-            // "?" means clipboard read — permanently rejected.
             if data_b64 == "?" {
                 return OscAction::Ignore;
             }
@@ -129,7 +142,7 @@ mod tests {
     #[test]
     fn osc_plain_title_is_returned() {
         // TEST-VT-012 step 1-2
-        let action = parse_osc(b"0;My Title");
+        let action = parse_osc(&[b"0", b"My Title"]);
         match action {
             OscAction::SetTitle(t) => assert_eq!(t, "My Title"),
             _ => panic!("expected SetTitle"),
@@ -138,8 +151,8 @@ mod tests {
 
     #[test]
     fn osc1_and_osc2_also_set_title() {
-        for cmd in [b"1;title1" as &[u8], b"2;title2"] {
-            match parse_osc(cmd) {
+        for (cmd, title) in [(b"1" as &[u8], b"title1" as &[u8]), (b"2", b"title2")] {
+            match parse_osc(&[cmd, title]) {
                 OscAction::SetTitle(_) => {}
                 _ => panic!("OSC 1 and 2 must also produce SetTitle"),
             }
@@ -152,7 +165,7 @@ mod tests {
 
     #[test]
     fn osc8_hyperlink_with_id_parses_correctly() {
-        let action = parse_osc(b"8;id=link1;https://example.com");
+        let action = parse_osc(&[b"8", b"id=link1", b"https://example.com"]);
         match action {
             OscAction::SetHyperlink { uri, id } => {
                 assert_eq!(uri, Some("https://example.com".to_string()));
@@ -164,7 +177,8 @@ mod tests {
 
     #[test]
     fn osc8_empty_uri_ends_hyperlink() {
-        let action = parse_osc(b"8;;");
+        // OSC 8 ;; — params[1]="" (no id), params[2]="" (no URI) = end hyperlink.
+        let action = parse_osc(&[b"8", b"", b""]);
         match action {
             OscAction::SetHyperlink { uri, .. } => {
                 assert_eq!(uri, None, "empty URI means end-of-hyperlink");
@@ -175,7 +189,7 @@ mod tests {
 
     #[test]
     fn osc8_no_id_param_produces_none_id() {
-        let action = parse_osc(b"8;;https://example.com");
+        let action = parse_osc(&[b"8", b"", b"https://example.com"]);
         match action {
             OscAction::SetHyperlink { uri, id } => {
                 assert_eq!(uri, Some("https://example.com".to_string()));
@@ -191,12 +205,12 @@ mod tests {
 
     #[test]
     fn osc22_produces_push_title() {
-        assert!(matches!(parse_osc(b"22;"), OscAction::PushTitle));
+        assert!(matches!(parse_osc(&[b"22"]), OscAction::PushTitle));
     }
 
     #[test]
     fn osc23_produces_pop_title() {
-        assert!(matches!(parse_osc(b"23;"), OscAction::PopTitle));
+        assert!(matches!(parse_osc(&[b"23"]), OscAction::PopTitle));
     }
 
     // -----------------------------------------------------------------------
@@ -205,17 +219,20 @@ mod tests {
 
     #[test]
     fn unknown_osc_command_is_ignored() {
-        assert!(matches!(parse_osc(b"999;some-data"), OscAction::Ignore));
+        assert!(matches!(
+            parse_osc(&[b"999", b"some-data"]),
+            OscAction::Ignore
+        ));
     }
 
     #[test]
     fn non_numeric_osc_command_is_ignored() {
-        assert!(matches!(parse_osc(b"abc;data"), OscAction::Ignore));
+        assert!(matches!(parse_osc(&[b"abc", b"data"]), OscAction::Ignore));
     }
 
     #[test]
     fn empty_osc_payload_is_ignored() {
-        assert!(matches!(parse_osc(b""), OscAction::Ignore));
+        assert!(matches!(parse_osc(&[]), OscAction::Ignore));
     }
 }
 
@@ -231,7 +248,7 @@ mod security_tests {
     #[test]
     fn sec_osc_001_osc52_read_query_returns_ignore() {
         // Direct parse_osc call with canonical read payload.
-        let action = parse_osc(b"52;c;?");
+        let action = parse_osc(&[b"52", b"c", b"?"]);
         assert!(
             matches!(action, OscAction::Ignore),
             "OSC 52 read query must be permanently ignored (SEC-OSC-001)"
@@ -260,7 +277,7 @@ mod security_tests {
     #[test]
     fn sec_pty_006_osc_title_strips_control_chars() {
         // Payload: \x01\x0b\x1b[31mInjection (C0/C1 + partial CSI)
-        let action = parse_osc(b"0;\x01\x0b\x1b[31mInjection");
+        let action = parse_osc(&[b"0", b"\x01\x0b\x1b[31mInjection"]);
         match action {
             OscAction::SetTitle(title) => {
                 assert!(
@@ -288,12 +305,8 @@ mod security_tests {
     /// SEC-PTY-006: Title is truncated to 256 characters maximum.
     #[test]
     fn sec_pty_006_osc_title_truncated_to_256_chars() {
-        let payload = {
-            let mut v = b"0;".to_vec();
-            v.extend(b"A".repeat(300));
-            v
-        };
-        let action = parse_osc(&payload);
+        let long_title = b"A".repeat(300);
+        let action = parse_osc(&[b"0", &long_title]);
         match action {
             OscAction::SetTitle(title) => {
                 assert!(
@@ -309,7 +322,7 @@ mod security_tests {
     /// SEC-PTY-006: Tab character (\t) is permitted in title (explicit exception).
     #[test]
     fn sec_pty_006_tab_character_preserved_in_title() {
-        let action = parse_osc(b"0;hello\tworld");
+        let action = parse_osc(&[b"0", b"hello\tworld"]);
         match action {
             OscAction::SetTitle(title) => {
                 assert!(title.contains('\t'), "Tab should be preserved in title");
@@ -330,7 +343,7 @@ mod security_tests {
     #[test]
     fn sec_osc_002_osc52_write_sequence_parsed_as_clipboard_write() {
         // Base64 encode "hello" = "aGVsbG8="
-        let action = parse_osc(b"52;c;aGVsbG8=");
+        let action = parse_osc(&[b"52", b"c", b"aGVsbG8="]);
         assert!(
             matches!(action, OscAction::ClipboardWrite(_)),
             "Valid OSC 52 write must produce ClipboardWrite action for policy check"
@@ -341,7 +354,7 @@ mod security_tests {
     #[test]
     fn sec_osc_002_osc52_non_clipboard_target_ignored() {
         // Target "p" (primary selection) — not supported for write.
-        let action = parse_osc(b"52;p;aGVsbG8=");
+        let action = parse_osc(&[b"52", b"p", b"aGVsbG8="]);
         assert!(
             matches!(action, OscAction::Ignore),
             "OSC 52 write to non-clipboard target must be ignored"
@@ -361,10 +374,8 @@ mod security_tests {
         // 1 MB of valid base64 'A' characters (not a valid base64 multiple of 4
         // for this size, so base64_decode returns None → Ignore).
         let large_b64 = b"A".repeat(1_000_000);
-        let mut payload = b"52;c;".to_vec();
-        payload.extend_from_slice(&large_b64);
         // Must not panic — result is Ignore (invalid base64 length) or ClipboardWrite.
-        let action = parse_osc(&payload);
+        let action = parse_osc(&[b"52", b"c", &large_b64]);
         // Either outcome is acceptable; what matters is no panic / no OOM.
         match action {
             OscAction::Ignore | OscAction::ClipboardWrite(_) => {}
@@ -380,7 +391,7 @@ mod security_tests {
     #[test]
     fn sec_pty_002_osc_color_query_returns_ignore() {
         // OSC 10 ; ? ST — dynamic color query
-        let action = parse_osc(b"10;?");
+        let action = parse_osc(&[b"10", b"?"]);
         assert!(
             matches!(action, OscAction::Ignore),
             "OSC 10 color query must be ignored (SEC-PTY-002)"
@@ -390,7 +401,7 @@ mod security_tests {
     /// SEC-PTY-002: Unknown OSC commands return Ignore.
     #[test]
     fn sec_pty_002_unknown_osc_returns_ignore() {
-        let action = parse_osc(b"9999;some_payload");
+        let action = parse_osc(&[b"9999", b"some_payload"]);
         assert!(
             matches!(action, OscAction::Ignore),
             "Unknown OSC command must be ignored"
@@ -406,10 +417,9 @@ mod security_tests {
     /// verifies parse_osc itself does not panic when given a large payload.
     #[test]
     fn sec_pty_003_large_osc_title_payload_no_panic() {
-        let mut payload = b"0;".to_vec();
-        payload.extend(b"A".repeat(10_000));
+        let large_title = b"A".repeat(10_000);
         // Must not panic; title should be truncated to 256.
-        let action = parse_osc(&payload);
+        let action = parse_osc(&[b"0", &large_title]);
         match action {
             OscAction::SetTitle(title) => {
                 assert!(

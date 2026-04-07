@@ -30,9 +30,9 @@ mod dispatch;
 mod emoji;
 mod regional_indicator;
 mod screen;
-mod write;
 #[cfg(test)]
 mod tests;
+mod write;
 
 /// Buffered base codepoint waiting for a potential variation selector (R6 / FS-VT-017).
 ///
@@ -166,6 +166,22 @@ pub(super) struct CursorPos {
     decawm: bool,
     /// DECOM (origin mode) state at save time.
     decom: bool,
+}
+
+/// Lightweight screen metadata snapshot — no cell data cloned.
+///
+/// Returned by `VtProcessor::get_screen_meta()` and used by the partial-update
+/// path in `build_screen_update_event` to access cursor state and dimensions
+/// without the cost of a full `get_snapshot()` call.
+pub struct ScreenMeta {
+    pub cols: u16,
+    pub rows: u16,
+    pub cursor_row: u16,
+    pub cursor_col: u16,
+    pub cursor_visible: bool,
+    pub cursor_shape: u8,
+    pub cursor_blink: bool,
+    pub scrollback_lines: usize,
 }
 
 impl VtProcessor {
@@ -352,6 +368,25 @@ impl VtProcessor {
         std::mem::take(&mut self.pending_responses)
     }
 
+    /// Get lightweight screen metadata without cloning any cell data.
+    ///
+    /// Used by the partial-update path in `build_screen_update_event` to obtain
+    /// cursor and dimension information without paying the cost of a full snapshot.
+    pub fn get_screen_meta(&self) -> ScreenMeta {
+        let buf = self.active_buf_ref();
+        let cursor = self.active_cursor();
+        ScreenMeta {
+            cols: buf.cols,
+            rows: buf.rows,
+            cursor_row: cursor.row,
+            cursor_col: cursor.col,
+            cursor_visible: self.modes.cursor_visible,
+            cursor_shape: self.cursor_shape,
+            cursor_blink: self.cursor_blink,
+            scrollback_lines: buf.scrollback_len(),
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
@@ -362,7 +397,7 @@ impl VtProcessor {
         std::mem::take(&mut self.pending_dirty)
     }
 
-    pub(super) fn active_buf_ref(&self) -> &ScreenBuffer {
+    pub fn active_buf_ref(&self) -> &ScreenBuffer {
         if self.alt_active {
             &self.alternate
         } else {

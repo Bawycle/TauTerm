@@ -125,8 +125,7 @@ describe('TP-MIN-007: TerminalPane component keys present in both catalogues', (
     'terminal_pane_aria_label',
     'terminal_pane_n_aria_label',
     'terminal_output_aria_label',
-    'pane_split_horizontal',
-    'pane_split_vertical',
+
     'pane_close',
     'pane_navigate_up',
     'pane_navigate_down',

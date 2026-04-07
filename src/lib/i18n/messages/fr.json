@@ -7,8 +7,6 @@
   "tab_close": "Fermer l'onglet",
   "tab_untitled": "Terminal",
 
-  "pane_split_horizontal": "Diviser horizontalement",
-  "pane_split_vertical": "Diviser verticalement",
   "pane_close": "Fermer le panneau",
 
   "status_bar_ready": "Prêt",
@@ -94,8 +92,8 @@
   "action_new_tab": "Nouvel onglet",
   "action_close_tab": "Fermer l'onglet",
   "action_close_other_tabs": "Fermer les autres onglets",
-  "action_split_horizontal": "Diviser haut / bas",
-  "action_split_vertical": "Diviser gauche / droite",
+  "action_split_horizontal": "Diviser gauche / droite",
+  "action_split_vertical": "Diviser haut / bas",
   "action_open_in_new_tab": "Ouvrir dans un nouvel onglet",
   "action_open_in_pane": "Ouvrir dans un panneau",
   "action_import_known_hosts": "Importer depuis ~/.ssh/known_hosts",

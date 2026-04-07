@@ -471,6 +471,19 @@ pub(crate) fn build_mode_state_event(
 // build_screen_update_event
 // ---------------------------------------------------------------------------
 
+/// Convert a `vt::cell::Color` to the IPC `ColorDto`.
+///
+/// Extracted as a free function so `build_scrolled_viewport_event` can reuse
+/// it without duplicating the match expression.
+pub(crate) fn cell_color_to_dto(c: crate::vt::cell::Color) -> crate::events::types::ColorDto {
+    use crate::events::types::ColorDto;
+    match c {
+        crate::vt::cell::Color::Ansi { index } => ColorDto::Ansi { index },
+        crate::vt::cell::Color::Ansi256 { index } => ColorDto::Ansi256 { index },
+        crate::vt::cell::Color::Rgb { r, g, b } => ColorDto::Rgb { r, g, b },
+    }
+}
+
 /// Build a `ScreenUpdateEvent` from the dirty region returned by `VtProcessor::process()`.
 ///
 /// Takes a snapshot and extracts cells for each dirty row.
@@ -480,21 +493,11 @@ pub(crate) fn build_screen_update_event(
     vt: &Arc<RwLock<VtProcessor>>,
     dirty: &DirtyRegion,
 ) -> ScreenUpdateEvent {
-    use crate::events::types::{CellUpdate, ColorDto, CursorState};
-    use crate::vt::cell::Color;
+    use crate::events::types::{CellUpdate, CursorState};
 
     let proc = vt.read();
     let snapshot = proc.get_snapshot();
     let cols = snapshot.cols as usize;
-
-    // Convert a `vt::cell::Color` to the IPC `ColorDto`.
-    let color_to_dto = |c: Color| -> ColorDto {
-        match c {
-            Color::Ansi { index } => ColorDto::Ansi { index },
-            Color::Ansi256 { index } => ColorDto::Ansi256 { index },
-            Color::Rgb { r, g, b } => ColorDto::Rgb { r, g, b },
-        }
-    };
 
     let cells: Vec<CellUpdate> = if dirty.is_full_redraw {
         // Full redraw: send all cells.
@@ -510,7 +513,7 @@ pub(crate) fn build_screen_update_event(
                     col,
                     content: cell.content.clone(),
                     width: cell.width,
-                    attrs: snapshot_cell_to_attrs_dto(cell, &color_to_dto),
+                    attrs: snapshot_cell_to_attrs_dto(cell, &cell_color_to_dto),
                     hyperlink: cell.hyperlink.clone(),
                 }
             })
@@ -527,7 +530,7 @@ pub(crate) fn build_screen_update_event(
                     col: col_offset as u16,
                     content: cell.content.clone(),
                     width: cell.width,
-                    attrs: snapshot_cell_to_attrs_dto(cell, &color_to_dto),
+                    attrs: snapshot_cell_to_attrs_dto(cell, &cell_color_to_dto),
                     hyperlink: cell.hyperlink.clone(),
                 });
             }
@@ -553,6 +556,159 @@ pub(crate) fn build_screen_update_event(
         is_full_redraw: dirty.is_full_redraw,
         cols: snapshot.cols,
         rows: snapshot.rows,
+        scroll_offset: 0,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// build_scrolled_viewport_event
+// ---------------------------------------------------------------------------
+
+/// Build a `ScreenUpdateEvent` that represents a scrolled viewport compositing
+/// scrollback lines and live screen rows.
+///
+/// ## Composite viewport math
+///
+/// Let `k = scroll_offset`, `N = scrollback_len()`, `R = rows`.
+/// For viewport row `i`:
+///   - `content_pos = N as i64 - k + i as i64`
+///   - `content_pos < N as i64`  → scrollback line at index `content_pos`
+///   - `content_pos >= N as i64` → live screen row `(content_pos - N as i64) as usize`
+///
+/// `k` is clamped to `[0, N]` so `content_pos >= 0` always holds.
+///
+/// Always sets `is_full_redraw: true` and `scroll_offset: k`.
+/// Cursor is hidden (`visible: false`) whenever `k > 0`.
+pub(crate) fn build_scrolled_viewport_event(
+    pane_id: &PaneId,
+    vt: &Arc<RwLock<VtProcessor>>,
+    scroll_offset: i64,
+) -> ScreenUpdateEvent {
+    use crate::events::types::{CellAttrsDto, CellUpdate, CursorState};
+    use crate::vt::screen_buffer::SnapshotCell;
+
+    let proc = vt.read();
+    let snapshot = proc.get_snapshot();
+    let cols = snapshot.cols as usize;
+    let rows = snapshot.rows as usize;
+    let n = proc.scrollback_len();
+
+    // Clamp k: alt screen has no scrollback, always 0.
+    let k = if proc.is_alt_screen_active() {
+        0
+    } else {
+        scroll_offset.clamp(0, n as i64)
+    };
+
+    // Build a blank default attrs value for padding cells.
+    let blank_attrs = CellAttrsDto {
+        fg: None,
+        bg: None,
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: 0,
+        blink: false,
+        inverse: false,
+        hidden: false,
+        strikethrough: false,
+        underline_color: None,
+    };
+
+    let mut cells: Vec<CellUpdate> = Vec::with_capacity(rows * cols);
+
+    for i in 0..rows {
+        let content_pos = n as i64 - k + i as i64;
+        if content_pos < n as i64 {
+            // Source: scrollback line at index `content_pos`.
+            let sb_idx = content_pos as usize;
+            let line_cells: Vec<CellUpdate> = if let Some(sb_line) = proc.get_scrollback_line(sb_idx) {
+                (0..cols)
+                    .map(|col_idx| {
+                        if col_idx < sb_line.cells.len() {
+                            let snap_cell = SnapshotCell::from(&sb_line.cells[col_idx]);
+                            CellUpdate {
+                                row: i as u16,
+                                col: col_idx as u16,
+                                content: snap_cell.content.clone(),
+                                width: snap_cell.width,
+                                attrs: snapshot_cell_to_attrs_dto(&snap_cell, &cell_color_to_dto),
+                                hyperlink: snap_cell.hyperlink.clone(),
+                            }
+                        } else {
+                            CellUpdate {
+                                row: i as u16,
+                                col: col_idx as u16,
+                                content: String::from(" "),
+                                width: 1,
+                                attrs: blank_attrs.clone(),
+                                hyperlink: None,
+                            }
+                        }
+                    })
+                    .collect()
+            } else {
+                // Scrollback line not found — pad entire row.
+                (0..cols)
+                    .map(|col_idx| CellUpdate {
+                        row: i as u16,
+                        col: col_idx as u16,
+                        content: String::from(" "),
+                        width: 1,
+                        attrs: blank_attrs.clone(),
+                        hyperlink: None,
+                    })
+                    .collect()
+            };
+            cells.extend(line_cells);
+        } else {
+            // Source: live screen row.
+            let live_row = (content_pos - n as i64) as usize;
+            let row_start = live_row * cols;
+            let row_end = (row_start + cols).min(snapshot.cells.len());
+            for (col_offset, cell) in snapshot.cells[row_start..row_end].iter().enumerate() {
+                cells.push(CellUpdate {
+                    row: i as u16,
+                    col: col_offset as u16,
+                    content: cell.content.clone(),
+                    width: cell.width,
+                    attrs: snapshot_cell_to_attrs_dto(cell, &cell_color_to_dto),
+                    hyperlink: cell.hyperlink.clone(),
+                });
+            }
+            // Pad if row_end was clamped (shouldn't normally happen but guards underflow).
+            let produced = row_end.saturating_sub(row_start);
+            for col_offset in produced..cols {
+                cells.push(CellUpdate {
+                    row: i as u16,
+                    col: col_offset as u16,
+                    content: String::from(" "),
+                    width: 1,
+                    attrs: blank_attrs.clone(),
+                    hyperlink: None,
+                });
+            }
+        }
+    }
+
+    let cursor = CursorState {
+        row: snapshot.cursor_row,
+        col: snapshot.cursor_col,
+        // Hide cursor whenever we are scrolled away from the live view.
+        visible: k == 0 && snapshot.cursor_visible,
+        shape: snapshot.cursor_shape,
+        blink: proc.cursor_blink,
+    };
+
+    ScreenUpdateEvent {
+        pane_id: pane_id.clone(),
+        cells,
+        cursor,
+        scrollback_lines: n,
+        is_full_redraw: true,
+        cols: snapshot.cols,
+        rows: snapshot.rows,
+        scroll_offset: k,
     }
 }
 
@@ -643,6 +799,7 @@ mod tests {
             is_full_redraw: false,
             cols: 80,
             rows: 24,
+            scroll_offset: 0,
         };
 
         let json = serde_json::to_string(&event).expect("serialization failed");
@@ -684,6 +841,7 @@ mod tests {
             is_full_redraw: true,
             cols: 220,
             rows: 50,
+            scroll_offset: 0,
         };
 
         let json = serde_json::to_string(&event).expect("serialization failed");
@@ -693,6 +851,188 @@ mod tests {
         assert_eq!(decoded.cols, 220);
         assert_eq!(decoded.rows, 50);
         assert!(decoded.is_full_redraw);
+    }
+
+    // -----------------------------------------------------------------------
+    // Scrolled viewport tests (TEST-SB-VIEWPORT-*)
+    // -----------------------------------------------------------------------
+
+    fn make_vt_with_scrollback(cols: u16, rows: u16, scrollback: usize) -> Arc<RwLock<VtProcessor>> {
+        Arc::new(RwLock::new(VtProcessor::new(cols, rows, scrollback)))
+    }
+
+    /// Push lines into the VT. Each call writes `line\r\n` so the terminal
+    /// scrolls the oldest line into the scrollback buffer once rows are full.
+    fn push_lines(vt: &mut VtProcessor, lines: &[&str]) {
+        for line in lines {
+            vt.process(line.as_bytes());
+            vt.process(b"\r\n");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SB-VIEWPORT-001
+    // -----------------------------------------------------------------------
+
+    /// Composite viewport with k < rows: rows 0..(k) come from scrollback,
+    /// rows k..rows come from the live screen.
+    #[test]
+    fn viewport_k_less_than_rows_composites_sb_and_live() {
+        use super::build_scrolled_viewport_event;
+
+        // 3-row terminal: pushing 4 lines puts LINE1 into scrollback.
+        let vt = make_vt_with_scrollback(10, 3, 100);
+        {
+            let mut proc = vt.write();
+            push_lines(&mut proc, &["LINE1", "LINE2", "LINE3", "LINE4"]);
+        }
+
+        let pane_id = PaneId(String::from("sb-viewport-001"));
+        // k=2: rows 0-1 from scrollback, row 2 from live screen.
+        let event = build_scrolled_viewport_event(&pane_id, &vt, 2);
+
+        assert!(event.is_full_redraw, "must be full redraw");
+        assert_eq!(event.scroll_offset, 2);
+        assert_eq!(event.rows, 3);
+
+        // Row 0 should be the scrollback line whose content starts with 'L' (LINE1).
+        let row0_content: String = event.cells.iter()
+            .filter(|c| c.row == 0)
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .concat();
+        assert!(
+            row0_content.trim_end().starts_with('L'),
+            "row 0 should come from scrollback, got: {row0_content:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SB-VIEWPORT-002
+    // -----------------------------------------------------------------------
+
+    /// Composite viewport with k == rows: all rows come from scrollback.
+    #[test]
+    fn viewport_k_equals_rows_all_from_scrollback() {
+        use super::build_scrolled_viewport_event;
+
+        // 3-row terminal, push 6 lines → 3 in scrollback.
+        let vt = make_vt_with_scrollback(10, 3, 100);
+        {
+            let mut proc = vt.write();
+            push_lines(&mut proc, &["SB1", "SB2", "SB3", "SB4", "SB5", "SB6"]);
+        }
+
+        let pane_id = PaneId(String::from("sb-viewport-002"));
+        let n = vt.read().scrollback_len();
+        assert!(n >= 3, "need at least 3 scrollback lines, got {n}");
+
+        // k == rows: all 3 viewport rows map to scrollback lines.
+        let event = build_scrolled_viewport_event(&pane_id, &vt, 3);
+
+        assert!(event.is_full_redraw);
+        assert_eq!(event.scroll_offset, 3);
+
+        // Every row should have content sourced from scrollback (non-blank).
+        for row in 0..3u16 {
+            let row_content: String = event.cells.iter()
+                .filter(|c| c.row == row)
+                .map(|c| c.content.as_str())
+                .collect::<Vec<_>>()
+                .concat();
+            assert!(
+                !row_content.trim().is_empty(),
+                "row {row} should have scrollback content, got: {row_content:?}"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SB-VIEWPORT-003
+    // -----------------------------------------------------------------------
+
+    /// k=0 produces a live-view event with cursor state intact.
+    #[test]
+    fn viewport_k_zero_produces_live_view_event() {
+        use super::build_scrolled_viewport_event;
+
+        let vt = make_vt_with_scrollback(10, 3, 100);
+        {
+            let mut proc = vt.write();
+            push_lines(&mut proc, &["LINE1", "LINE2", "LINE3", "LINE4"]);
+        }
+
+        let pane_id = PaneId(String::from("sb-viewport-003"));
+        let event = build_scrolled_viewport_event(&pane_id, &vt, 0);
+
+        assert_eq!(event.scroll_offset, 0, "k=0 must produce scroll_offset=0");
+        // Cursor visibility: k==0 so cursor.visible mirrors the live VT state.
+        let snap = vt.read();
+        let live_visible = snap.get_snapshot().cursor_visible;
+        drop(snap);
+        assert_eq!(
+            event.cursor.visible, live_visible,
+            "cursor.visible must match live VT when k=0"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SB-VIEWPORT-004
+    // -----------------------------------------------------------------------
+
+    /// Cursor is hidden whenever k > 0.
+    #[test]
+    fn viewport_cursor_hidden_when_k_gt_zero() {
+        use super::build_scrolled_viewport_event;
+
+        let vt = make_vt_with_scrollback(10, 3, 100);
+        {
+            let mut proc = vt.write();
+            push_lines(&mut proc, &["LINE1", "LINE2", "LINE3", "LINE4"]);
+        }
+
+        let pane_id = PaneId(String::from("sb-viewport-004"));
+        let event = build_scrolled_viewport_event(&pane_id, &vt, 1);
+
+        assert!(
+            !event.cursor.visible,
+            "cursor must be hidden when scroll_offset > 0"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SB-VIEWPORT-005
+    // -----------------------------------------------------------------------
+
+    /// `scroll_offset` survives a JSON serde round-trip with camelCase key.
+    #[test]
+    fn screen_update_event_scroll_offset_serde_roundtrip() {
+        let event = ScreenUpdateEvent {
+            pane_id: PaneId(String::from("sb-viewport-005")),
+            cells: vec![],
+            cursor: crate::events::types::CursorState {
+                row: 0,
+                col: 0,
+                visible: false,
+                shape: 0,
+                blink: false,
+            },
+            scrollback_lines: 10,
+            is_full_redraw: true,
+            cols: 80,
+            rows: 24,
+            scroll_offset: 42,
+        };
+
+        let json = serde_json::to_string(&event).expect("serialization failed");
+        let decoded: ScreenUpdateEvent =
+            serde_json::from_str(&json).expect("deserialization failed");
+
+        assert_eq!(decoded.scroll_offset, 42);
+        assert!(
+            json.contains("\"scrollOffset\":42"),
+            "expected \"scrollOffset\":42 in {json}"
+        );
     }
 }
 

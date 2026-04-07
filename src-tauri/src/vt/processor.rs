@@ -361,6 +361,16 @@ impl VtProcessor {
         )
     }
 
+    /// Returns `true` when the alternate screen is active.
+    pub fn is_alt_screen_active(&self) -> bool {
+        self.alt_active
+    }
+
+    /// Returns the number of lines currently stored in the scrollback buffer.
+    pub fn scrollback_len(&self) -> usize {
+        self.normal.scrollback_len()
+    }
+
     /// Get a scrollback line by 0-based index (oldest first).
     ///
     /// Returns a `ScrollbackLineRef` that includes both the cell content and the

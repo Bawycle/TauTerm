@@ -10,8 +10,11 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
-use crate::events::{ScrollPositionChangedEvent, emit_scroll_position_changed};
+use crate::events::{
+    ScrollPositionChangedEvent, emit_screen_update, emit_scroll_position_changed,
+};
 use crate::session::{SessionRegistry, ids::PaneId, registry::ScrollPositionState};
+use crate::session::pty_task::build_scrolled_viewport_event;
 use crate::vt::{SearchMatch, SearchQuery, screen_buffer::ScreenSnapshot};
 
 /// Maximum payload size for a single `send_input` call (64 KiB).
@@ -54,11 +57,18 @@ pub async fn send_input(
         emit_scroll_position_changed(
             &app,
             ScrollPositionChangedEvent {
-                pane_id,
+                pane_id: pane_id.clone(),
                 offset: 0,
                 scrollback_lines,
             },
         );
+
+        // Also emit a full-redraw live view so the frontend snaps back to the
+        // live screen without waiting for the next PTY event.
+        if let Ok(vt) = registry.get_pane_vt(&pane_id) {
+            let event = build_scrolled_viewport_event(&pane_id, &vt, 0);
+            emit_screen_update(&app, event);
+        }
     }
 
     Ok(())
@@ -66,23 +76,56 @@ pub async fn send_input(
 
 #[tauri::command]
 pub async fn scroll_pane(
+    app: AppHandle,
     pane_id: PaneId,
     offset: i64,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<ScrollPositionState, TauTermError> {
-    registry
-        .scroll_pane(pane_id, offset)
-        .map_err(TauTermError::from)
+    let state = registry
+        .scroll_pane(pane_id.clone(), offset)
+        .map_err(TauTermError::from)?;
+
+    emit_scroll_position_changed(
+        &app,
+        ScrollPositionChangedEvent {
+            pane_id: pane_id.clone(),
+            offset: state.offset,
+            scrollback_lines: state.scrollback_lines,
+        },
+    );
+
+    if let Ok(vt) = registry.get_pane_vt(&pane_id) {
+        let event = build_scrolled_viewport_event(&pane_id, &vt, state.offset);
+        emit_screen_update(&app, event);
+    }
+
+    Ok(state)
 }
 
 #[tauri::command]
 pub async fn scroll_to_bottom(
+    app: AppHandle,
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<(), TauTermError> {
-    let _ = registry
-        .scroll_pane(pane_id, 0)
+    let state = registry
+        .scroll_pane(pane_id.clone(), 0)
         .map_err(TauTermError::from)?;
+
+    emit_scroll_position_changed(
+        &app,
+        ScrollPositionChangedEvent {
+            pane_id: pane_id.clone(),
+            offset: 0,
+            scrollback_lines: state.scrollback_lines,
+        },
+    );
+
+    if let Ok(vt) = registry.get_pane_vt(&pane_id) {
+        let event = build_scrolled_viewport_event(&pane_id, &vt, 0);
+        emit_screen_update(&app, event);
+    }
+
     Ok(())
 }
 

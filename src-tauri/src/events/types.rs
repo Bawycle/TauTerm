@@ -103,6 +103,8 @@ pub struct ScreenUpdateEvent {
     /// stride mismatch from the optimistic cols/rows update in sendResize().
     pub cols: u16,
     pub rows: u16,
+    /// 0 for live PTY events. Equals `pane.scroll_offset` for scroll-triggered viewport redraws.
+    pub scroll_offset: i64,
 }
 
 /// A single updated cell in the screen buffer.

@@ -123,19 +123,21 @@ describe('IPC types — structural smoke tests', () => {
     expect(typeof attrs.underline).toBe('number');
   });
 
-  it('ScreenUpdateEvent has cells, cursor, scrollbackLines, isFullRedraw, cols, and rows', () => {
+  it('ScreenUpdateEvent has cells, cursor, scrollbackLines, isFullRedraw, scrollOffset, cols, and rows', () => {
     const event: ScreenUpdateEvent = {
       paneId: 'p1',
       cells: [],
       cursor: { row: 0, col: 0, visible: true, shape: 1, blink: false },
       scrollbackLines: 42,
       isFullRedraw: false,
+      scrollOffset: 0,
       cols: 80,
       rows: 24,
     };
     expect(event.cursor.row).toBe(0);
     expect(event.scrollbackLines).toBe(42);
     expect(event.isFullRedraw).toBe(false);
+    expect(event.scrollOffset).toBe(0);
     expect(event.cols).toBe(80);
     expect(event.rows).toBe(24);
   });
@@ -332,5 +334,45 @@ describe('TEST-SPRINT-004: BellType IPC type uses lowercase camelCase values', (
     const values: import('$lib/ipc/types').BellType[] = ['none', 'visual', 'audio', 'both'];
     const unique = new Set(values);
     expect(unique.size).toBe(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEST-SB-IPC-001 — scrollOffset field on ScreenUpdateEvent
+//
+// Validates that ScreenUpdateEvent.scrollOffset is part of the type contract
+// and round-trips the value correctly. This guards against accidental removal
+// of the field when the Rust backend adds scroll_offset: i64.
+// ---------------------------------------------------------------------------
+
+describe('TEST-SB-IPC-001: ScreenUpdateEvent.scrollOffset field is part of the type contract', () => {
+  it('ScreenUpdateEvent with scrollOffset: 0 holds the value', () => {
+    // TEST-SB-IPC-001
+    const event: ScreenUpdateEvent = {
+      paneId: 'p1',
+      cells: [],
+      cursor: { row: 0, col: 0, visible: true, shape: 0, blink: false },
+      scrollbackLines: 0,
+      isFullRedraw: false,
+      scrollOffset: 0,
+      cols: 80,
+      rows: 24,
+    };
+    expect(event.scrollOffset).toBe(0);
+  });
+
+  it('ScreenUpdateEvent with scrollOffset > 0 holds the value (scroll-triggered viewport)', () => {
+    // TEST-SB-IPC-001: non-zero scrollOffset for scroll-triggered viewport events.
+    const event: ScreenUpdateEvent = {
+      paneId: 'p1',
+      cells: [],
+      cursor: { row: 0, col: 0, visible: false, shape: 0, blink: false },
+      scrollbackLines: 100,
+      isFullRedraw: true,
+      scrollOffset: 42,
+      cols: 80,
+      rows: 24,
+    };
+    expect(event.scrollOffset).toBe(42);
   });
 });

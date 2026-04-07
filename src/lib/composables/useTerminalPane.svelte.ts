@@ -404,8 +404,20 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   function applyScreenUpdate(update: ScreenUpdateEvent): void {
     const expectedGridSize = update.rows * update.cols;
 
-    // WP3a: reset scroll offset on full repaint (alternate screen entry/exit, resize).
-    if (update.isFullRedraw) scrollOffset = 0;
+    // FS-SB-009: live PTY event while locally scrolled → freeze viewport, only update scrollback count.
+    // A live PTY event has scrollOffset === 0 and is NOT a full-redraw triggered by scroll_pane.
+    const isLivePtyEvent = update.scrollOffset === 0 && !update.isFullRedraw;
+    if (isLivePtyEvent && scrollOffset > 0) {
+      if (typeof update.scrollbackLines === 'number') {
+        scrollbackLines = update.scrollbackLines;
+      }
+      return; // gridRows unchanged, screenGeneration not incremented
+    }
+
+    // Sync local scroll state from the event payload.
+    // For live PTY events while not scrolled: update.scrollOffset === 0 → correct.
+    // For scroll-triggered viewports: update.scrollOffset === k → sets local state.
+    scrollOffset = update.scrollOffset;
 
     // Ensure the flat grid matches the event dimensions before applying updates.
     // A terminal resize changes rows×cols, making the old grid too small: cells

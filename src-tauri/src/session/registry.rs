@@ -546,14 +546,15 @@ impl SessionRegistry {
         Ok(did_reset_scroll)
     }
 
-    /// Scroll the pane's scrollback by `delta` lines (negative = scroll up, positive = scroll down).
+    /// Set the pane's scrollback viewport to `new_offset` lines from the bottom.
     ///
-    /// The resulting offset is clamped to `[0, scrollback_lines]` where 0 is the live view
-    /// and `scrollback_lines` is the furthest scrolled-up position.
+    /// `new_offset` is an absolute offset: 0 = live view, increasing values = scrolled
+    /// further up into the scrollback buffer. The value is clamped to `[0, scrollback_len]`.
+    /// On the alternate screen (which has no scrollback) the offset is always forced to 0.
     pub fn scroll_pane(
         &self,
         pane_id: PaneId,
-        delta: i64,
+        new_offset: i64,
     ) -> Result<ScrollPositionState, SessionError> {
         let mut inner = self.inner.write();
         let tab = inner
@@ -566,19 +567,14 @@ impl SessionRegistry {
             .get_mut(&pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
 
-        let scrollback_lines = {
-            let vt = pane.vt.read();
-            vt.get_snapshot().scrollback_lines
-        };
-
-        // Positive delta = scroll down (towards live), negative = scroll up (into scrollback).
-        // Stored offset: 0 = live view, increasing values = scrolled further up.
-        let new_offset = (pane.scroll_offset - delta).clamp(0, scrollback_lines as i64);
-        pane.scroll_offset = new_offset;
+        let is_alt = pane.vt.read().is_alt_screen_active();
+        let n = pane.vt.read().scrollback_len();
+        let clamped = if is_alt { 0 } else { new_offset.clamp(0, n as i64) };
+        pane.scroll_offset = clamped;
 
         Ok(ScrollPositionState {
-            offset: new_offset,
-            scrollback_lines,
+            offset: clamped,
+            scrollback_lines: n,
         })
     }
 

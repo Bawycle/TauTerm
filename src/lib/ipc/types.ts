@@ -172,6 +172,13 @@ export interface ScreenUpdateEvent {
    * Mirrors Rust ScreenUpdateEvent.is_full_redraw.
    */
   isFullRedraw: boolean;
+  /**
+   * Scroll offset active when this event was produced.
+   * 0 = live PTY event; > 0 = scroll-triggered viewport from scrollback.
+   * The frontend uses this to decide whether to apply cell updates or freeze
+   * the viewport (FS-SB-009).
+   */
+  scrollOffset: number;
   /** Terminal grid width when this event was produced — authoritative stride for applyUpdates. */
   cols: number;
   /** Terminal grid height when this event was produced. */

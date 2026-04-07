@@ -367,3 +367,69 @@ describe('TUITC-FN-030-d: applyUpdates propagates width=2 to grid', () => {
     expect(grid[0].content).toBe('你');
   });
 });
+
+// ---------------------------------------------------------------------------
+// TUITC-STRIDE-001: applyUpdates stride correctness
+// ---------------------------------------------------------------------------
+describe('TUITC-STRIDE-001: applyUpdates stride correctness', () => {
+  it('places cell at correct index for given stride', () => {
+    const grid = Array(9)
+      .fill(null)
+      .map(() => ({
+        content: ' ',
+        fg: undefined,
+        bg: undefined,
+        width: 1,
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: 0,
+        blink: false,
+        inverse: false,
+        hidden: false,
+        strikethrough: false,
+        underlineColor: undefined,
+        hyperlink: undefined,
+      }));
+    const update: CellUpdate = {
+      row: 1,
+      col: 2,
+      content: 'X',
+      width: 1,
+      attrs: makeAttrs(),
+    };
+    applyUpdates(grid, [update], 3); // 3-col stride → index = 1*3+2 = 5
+    expect(grid[5].content).toBe('X');
+  });
+
+  it('places at different index with different stride', () => {
+    const grid = Array(12)
+      .fill(null)
+      .map(() => ({
+        content: ' ',
+        fg: undefined,
+        bg: undefined,
+        width: 1,
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: 0,
+        blink: false,
+        inverse: false,
+        hidden: false,
+        strikethrough: false,
+        underlineColor: undefined,
+        hyperlink: undefined,
+      }));
+    const update: CellUpdate = {
+      row: 1,
+      col: 2,
+      content: 'Y',
+      width: 1,
+      attrs: makeAttrs(),
+    };
+    applyUpdates(grid, [update], 4); // 4-col stride → index = 1*4+2 = 6
+    expect(grid[6].content).toBe('Y');
+    expect(grid[5].content).not.toBe('Y'); // index 5 is wrong stride
+  });
+});

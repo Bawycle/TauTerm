@@ -177,6 +177,8 @@ function makeScreenUpdate(char: string, row = 0, col = 0): ScreenUpdateEvent {
     cursor,
     scrollbackLines: 0,
     isFullRedraw: false,
+    cols: 80,
+    rows: 24,
   };
 }
 
@@ -277,6 +279,8 @@ describe('CURSOR-BLOCK-004: data-char reflects character at cursor position', ()
       cursor,
       scrollbackLines: 0,
       isFullRedraw: false,
+      cols: 80,
+      rows: 24,
     });
     flushSync();
 

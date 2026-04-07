@@ -98,6 +98,11 @@ pub struct ScreenUpdateEvent {
     /// resize, or ED2). The frontend uses this to reset scroll offset and
     /// rebuild `gridRows` fully rather than applying a partial diff.
     pub is_full_redraw: bool,
+    /// Terminal grid dimensions when this event was produced.
+    /// Used by the frontend as the authoritative stride for applyUpdates — eliminates
+    /// stride mismatch from the optimistic cols/rows update in sendResize().
+    pub cols: u16,
+    pub rows: u16,
 }
 
 /// A single updated cell in the screen buffer.

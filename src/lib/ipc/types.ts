@@ -157,6 +157,8 @@ export interface SshStateChangedEvent {
  *   cursor: CursorState    → cursor
  *   scrollback_lines: usize → scrollbackLines
  *   is_full_redraw: bool   → isFullRedraw
+ *   cols: u16              → cols
+ *   rows: u16              → rows
  */
 export interface ScreenUpdateEvent {
   paneId: PaneId;
@@ -170,6 +172,10 @@ export interface ScreenUpdateEvent {
    * Mirrors Rust ScreenUpdateEvent.is_full_redraw.
    */
   isFullRedraw: boolean;
+  /** Terminal grid width when this event was produced — authoritative stride for applyUpdates. */
+  cols: number;
+  /** Terminal grid height when this event was produced. */
+  rows: number;
 }
 
 /**

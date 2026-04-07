@@ -55,12 +55,14 @@ impl Perform for VtPerformBridge<'_> {
             0x08 => {
                 if col > 0 {
                     p.active_cursor_mut().col = col - 1;
+                    p.pending_dirty.mark_cursor_moved();
                 }
             }
             // HT (0x09) — advance to next tab stop (every 8 columns).
             0x09 => {
                 let next_tab = ((col / 8) + 1) * 8;
                 p.active_cursor_mut().col = next_tab.min(p.cols.saturating_sub(1));
+                p.pending_dirty.mark_cursor_moved();
             }
             // LF / VT / FF (0x0A / 0x0B / 0x0C)
             0x0A..=0x0C => {
@@ -89,6 +91,7 @@ impl Perform for VtPerformBridge<'_> {
                         p.active_cursor_mut().row = (row + 1).min(p.rows.saturating_sub(1));
                     }
                 }
+                p.pending_dirty.mark_cursor_moved();
             }
             // CR (0x0D)
             0x0D => {
@@ -100,6 +103,7 @@ impl Perform for VtPerformBridge<'_> {
                 p.flush_pending_ri_narrow();
                 p.wrap_pending = false;
                 p.active_cursor_mut().col = 0;
+                p.pending_dirty.mark_cursor_moved();
             }
             // SI (0x0F) — switch to G0
             0x0F => {
@@ -213,26 +217,34 @@ impl Perform for VtPerformBridge<'_> {
                 let (top, _) = p.modes.scroll_region;
                 let top_clamp = if p.modes.decom { top } else { 0 };
                 p.active_cursor_mut().row = p.cursor_row().saturating_sub(n).max(top_clamp);
+                p.pending_dirty.mark_cursor_moved();
             }
             // CUD — cursor down
             ([], 'B') => {
                 p.wrap_pending = false;
                 let n = param0.max(1);
                 let (_, bottom) = p.modes.scroll_region;
-                let bottom_clamp = if p.modes.decom { bottom } else { p.rows.saturating_sub(1) };
+                let bottom_clamp = if p.modes.decom {
+                    bottom
+                } else {
+                    p.rows.saturating_sub(1)
+                };
                 p.active_cursor_mut().row = (p.cursor_row() + n).min(bottom_clamp);
+                p.pending_dirty.mark_cursor_moved();
             }
             // CUF — cursor forward
             ([], 'C') => {
                 p.wrap_pending = false;
                 let n = param0.max(1);
                 p.active_cursor_mut().col = (p.cursor_col() + n).min(p.cols.saturating_sub(1));
+                p.pending_dirty.mark_cursor_moved();
             }
             // CUB — cursor back
             ([], 'D') => {
                 p.wrap_pending = false;
                 let n = param0.max(1);
                 p.active_cursor_mut().col = p.cursor_col().saturating_sub(n);
+                p.pending_dirty.mark_cursor_moved();
             }
             // CUP / HVP — cursor position
             ([], 'H') | ([], 'f') => {
@@ -253,6 +265,7 @@ impl Perform for VtPerformBridge<'_> {
                 };
                 p.active_cursor_mut().row = row;
                 p.active_cursor_mut().col = col;
+                p.pending_dirty.mark_cursor_moved();
             }
             // ED — erase in display
             ([], 'J') => {
@@ -308,6 +321,7 @@ impl Perform for VtPerformBridge<'_> {
                 // Move cursor to home position.
                 p.active_cursor_mut().row = 0;
                 p.active_cursor_mut().col = 0;
+                p.pending_dirty.mark_cursor_moved();
             }
             // DECSET — DEC private mode set
             ([b'?'], 'h') => {
@@ -318,6 +332,7 @@ impl Perform for VtPerformBridge<'_> {
                     let prev_mouse_encoding = p.modes.mouse_encoding;
                     let prev_focus_events = p.modes.focus_events;
                     let prev_bracketed_paste = p.modes.bracketed_paste;
+                    let prev_cursor_visible = p.modes.cursor_visible;
                     match mode {
                         1 => p.modes.decckm = true,
                         6 => p.modes.decom = true,
@@ -345,6 +360,9 @@ impl Perform for VtPerformBridge<'_> {
                     {
                         p.mode_changed = true;
                     }
+                    if p.modes.cursor_visible != prev_cursor_visible {
+                        p.pending_dirty.mark_cursor_moved();
+                    }
                 }
             }
             // DECRST — DEC private mode reset
@@ -356,6 +374,7 @@ impl Perform for VtPerformBridge<'_> {
                     let prev_mouse_encoding = p.modes.mouse_encoding;
                     let prev_focus_events = p.modes.focus_events;
                     let prev_bracketed_paste = p.modes.bracketed_paste;
+                    let prev_cursor_visible = p.modes.cursor_visible;
                     match mode {
                         1 => p.modes.decckm = false,
                         6 => p.modes.decom = false,
@@ -385,6 +404,9 @@ impl Perform for VtPerformBridge<'_> {
                         || p.modes.bracketed_paste != prev_bracketed_paste
                     {
                         p.mode_changed = true;
+                    }
+                    if p.modes.cursor_visible != prev_cursor_visible {
+                        p.pending_dirty.mark_cursor_moved();
                     }
                 }
             }
@@ -416,6 +438,7 @@ impl Perform for VtPerformBridge<'_> {
                     p.modes.decom = pos.decom;
                     *p.active_cursor_mut() = pos;
                     p.wrap_pending = false;
+                    p.pending_dirty.mark_cursor_moved();
                 }
             }
             // ICH — CSI Ps @ — Insert Character (ECMA-48 §8.3.64).
@@ -484,6 +507,7 @@ impl Perform for VtPerformBridge<'_> {
                     .saturating_sub(1)
                     .min(p.cols.saturating_sub(1));
                 p.active_cursor_mut().col = col;
+                p.pending_dirty.mark_cursor_moved();
             }
             // HPA — Horizontal Position Absolute (ECMA-48 §8.3.57).
             // Identical to CHA; uses backtick final byte.
@@ -494,6 +518,7 @@ impl Perform for VtPerformBridge<'_> {
                     .saturating_sub(1)
                     .min(p.cols.saturating_sub(1));
                 p.active_cursor_mut().col = col;
+                p.pending_dirty.mark_cursor_moved();
             }
             // VPA — Vertical Position Absolute (ECMA-48 §8.3.158).
             // Moves cursor to row Pn (1-based). Default Pn = 1.
@@ -504,6 +529,7 @@ impl Perform for VtPerformBridge<'_> {
                     .saturating_sub(1)
                     .min(p.rows.saturating_sub(1));
                 p.active_cursor_mut().row = row;
+                p.pending_dirty.mark_cursor_moved();
             }
             // ECH — Erase Character (ECMA-48 §8.3.38).
             // Erases Ps characters starting at cursor position without moving the cursor.
@@ -523,9 +549,14 @@ impl Perform for VtPerformBridge<'_> {
                 p.wrap_pending = false;
                 let n = param0.max(1);
                 let (_, bottom) = p.modes.scroll_region;
-                let bottom_clamp = if p.modes.decom { bottom } else { p.rows.saturating_sub(1) };
+                let bottom_clamp = if p.modes.decom {
+                    bottom
+                } else {
+                    p.rows.saturating_sub(1)
+                };
                 p.active_cursor_mut().row = (p.cursor_row() + n).min(bottom_clamp);
                 p.active_cursor_mut().col = 0;
+                p.pending_dirty.mark_cursor_moved();
             }
             // CPL — Cursor Previous Line (ECMA-48 §8.3.13).
             // Moves cursor up Ps lines to column 0. Clamps at screen top (or scroll
@@ -537,6 +568,7 @@ impl Perform for VtPerformBridge<'_> {
                 let top_clamp = if p.modes.decom { top } else { 0 };
                 p.active_cursor_mut().row = p.cursor_row().saturating_sub(n).max(top_clamp);
                 p.active_cursor_mut().col = 0;
+                p.pending_dirty.mark_cursor_moved();
             }
             // HPR — Horizontal Position Relative (ECMA-48 §8.3.59).
             // Moves cursor right Ps columns. Equivalent to CUF.
@@ -544,6 +576,7 @@ impl Perform for VtPerformBridge<'_> {
                 p.wrap_pending = false;
                 let n = param0.max(1);
                 p.active_cursor_mut().col = (p.cursor_col() + n).min(p.cols.saturating_sub(1));
+                p.pending_dirty.mark_cursor_moved();
             }
             // VPR — Vertical Position Relative (ECMA-48 §8.3.160).
             // Moves cursor down Ps rows. Clamps at screen bottom (or scroll region bottom
@@ -552,8 +585,13 @@ impl Perform for VtPerformBridge<'_> {
                 p.wrap_pending = false;
                 let n = param0.max(1);
                 let (_, bottom) = p.modes.scroll_region;
-                let bottom_clamp = if p.modes.decom { bottom } else { p.rows.saturating_sub(1) };
+                let bottom_clamp = if p.modes.decom {
+                    bottom
+                } else {
+                    p.rows.saturating_sub(1)
+                };
                 p.active_cursor_mut().row = (p.cursor_row() + n).min(bottom_clamp);
+                p.pending_dirty.mark_cursor_moved();
             }
             // DECSCUSR — set cursor shape (FS-VT-030).
             // Values: 0/1 = blinking block, 2 = steady block, 3 = blinking underline,
@@ -623,6 +661,7 @@ impl Perform for VtPerformBridge<'_> {
                     p.modes.decom = pos.decom;
                     *p.active_cursor_mut() = pos;
                     p.wrap_pending = false;
+                    p.pending_dirty.mark_cursor_moved();
                 }
             }
             // RI — Reverse Index (ESC M).
@@ -636,6 +675,7 @@ impl Perform for VtPerformBridge<'_> {
                 } else {
                     p.active_cursor_mut().row = row.saturating_sub(1);
                 }
+                p.pending_dirty.mark_cursor_moved();
             }
             // DECKPAM — application keypad mode (ESC =)
             ([], b'=') => {

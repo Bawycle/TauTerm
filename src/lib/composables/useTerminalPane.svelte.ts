@@ -380,22 +380,14 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const pixelWidth = Math.max(1, Math.floor(rect.width));
     const pixelHeight = Math.max(1, Math.floor(rect.height));
 
-    // Bug 3b: update cols/rows optimistically BEFORE the await so that any
-    // screen-update event emitted by the backend during resizePane() uses the
-    // correct new stride. Rollback on IPC failure to keep UI state consistent.
-    const prevCols = cols;
-    const prevRows = rows;
-    cols = newCols;
-    rows = newRows;
-    props.ondimensionschange()?.(newCols, newRows);
+    // cols/rows are now updated from ScreenUpdateEvent.cols/rows in applyScreenUpdate —
+    // the event is the authoritative source of truth, eliminating stride mismatch.
     try {
       await resizePane(props.paneId(), newCols, newRows, pixelWidth, pixelHeight);
     } catch {
-      // Rollback on IPC failure to keep UI state consistent with backend.
-      cols = prevCols;
-      rows = prevRows;
-      // Notify parent of the reverted dimensions so it doesn't display stale values.
-      props.ondimensionschange()?.(prevCols, prevRows);
+      // IPC failure — no cols/rows state to roll back (they update via screen-update events).
+      // Log only the generic label, never the path (security constraint).
+      console.error('resize_pane IPC failed');
     }
   }
 
@@ -407,27 +399,39 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
   // WP3c: Apply a screen update to the flat grid and update gridRows differentially.
   // Full rebuild on full_redraw or dimension mismatch; row-level rebuild otherwise.
+  // The event's cols/rows are authoritative — they reflect the grid dimensions at
+  // the time the backend produced this event, eliminating stride mismatch races.
   function applyScreenUpdate(update: ScreenUpdateEvent): void {
     // WP3a: reset scroll offset on full repaint (alternate screen entry/exit, resize).
     if (update.isFullRedraw) scrollOffset = 0;
 
-    applyUpdates(grid, update.cells, cols);
+    applyUpdates(grid, update.cells, update.cols);
     cursor = update.cursor;
     if (typeof update.scrollbackLines === 'number') {
       scrollbackLines = update.scrollbackLines;
     }
 
-    if (update.isFullRedraw || gridRows.length !== rows) {
+    if (update.isFullRedraw || gridRows.length !== update.rows) {
       // Full rebuild: dimension change or explicit full repaint.
-      gridRows = buildFullGridRows(rows, cols);
+      gridRows = buildFullGridRows(update.rows, update.cols);
     } else {
       // Differential: rebuild only rows that have changed cells.
       const dirtyRows = new Set(update.cells.map((c) => c.row));
       for (const r of dirtyRows) {
-        if (r >= 0 && r < rows) {
-          gridRows[r] = Array.from({ length: cols }, (_, c) => grid[r * cols + c] ?? defaultCell());
+        if (r >= 0 && r < update.rows) {
+          gridRows[r] = Array.from(
+            { length: update.cols },
+            (_, c) => grid[r * update.cols + c] ?? defaultCell(),
+          );
         }
       }
+    }
+
+    // Sync local cols/rows from the event — canonical source of truth.
+    if (cols !== update.cols || rows !== update.rows) {
+      cols = update.cols;
+      rows = update.rows;
+      props.ondimensionschange()?.(update.cols, update.rows);
     }
 
     screenGeneration++;

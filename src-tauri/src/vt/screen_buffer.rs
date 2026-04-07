@@ -143,11 +143,15 @@ impl From<&Cell> for SnapshotCell {
 pub struct DirtyRegion {
     pub rows: std::collections::HashSet<u16>,
     pub is_full_redraw: bool,
+    /// Set when the cursor position or visibility changed without any cell content change.
+    /// Ensures that pure cursor-movement sequences (CR, CUP, CUU, etc.) and cursor
+    /// visibility toggles (`?25h`/`?25l`) still trigger a `screen-update` event.
+    pub cursor_moved: bool,
 }
 
 impl DirtyRegion {
     pub fn is_empty(&self) -> bool {
-        !self.is_full_redraw && self.rows.is_empty()
+        !self.is_full_redraw && self.rows.is_empty() && !self.cursor_moved
     }
 
     pub fn mark_row(&mut self, row: u16) {
@@ -159,12 +163,17 @@ impl DirtyRegion {
         self.rows.clear();
     }
 
+    pub fn mark_cursor_moved(&mut self) {
+        self.cursor_moved = true;
+    }
+
     pub fn merge(&mut self, other: &DirtyRegion) {
         if other.is_full_redraw {
             self.mark_full_redraw();
         } else {
             self.rows.extend(&other.rows);
         }
+        self.cursor_moved |= other.cursor_moved;
     }
 }
 
@@ -595,6 +604,29 @@ mod tests {
     }
 
     // --- DirtyRegion helpers ---
+
+    #[test]
+    fn cursor_moved_makes_non_empty() {
+        let mut d = DirtyRegion::default();
+        d.mark_cursor_moved();
+        assert!(
+            !d.is_empty(),
+            "cursor_moved must make DirtyRegion non-empty"
+        );
+    }
+
+    #[test]
+    fn merge_propagates_cursor_moved() {
+        let mut a = DirtyRegion::default();
+        let mut b = DirtyRegion::default();
+        b.mark_cursor_moved();
+        a.merge(&b);
+        assert!(
+            a.cursor_moved,
+            "merge must propagate cursor_moved from source"
+        );
+        assert!(!a.is_empty());
+    }
 
     #[test]
     fn dirty_region_mark_full_redraw_overrides_rows() {

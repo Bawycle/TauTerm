@@ -206,7 +206,16 @@ function makeScreenUpdate(
   overrides: Partial<ScreenUpdateEvent> = {},
 ): ScreenUpdateEvent {
   const cursor: CursorState = { row: 0, col: 0, visible: true, shape: 0, blink: true };
-  return { paneId, cells: [], cursor, scrollbackLines: 0, isFullRedraw: false, ...overrides };
+  return {
+    paneId,
+    cells: [],
+    cursor,
+    scrollbackLines: 0,
+    isFullRedraw: false,
+    cols: 80,
+    rows: 24,
+    ...overrides,
+  };
 }
 
 function makeModeEvent(
@@ -729,109 +738,31 @@ describe('TPSC-RESIZE-001: DOM probe used for row calculation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// TPSC-RESIZE-002: Race condition — cols/rows updated before await resizePane
+// TPSC-STRIDE-001/002: ScreenUpdateEvent stride — event cols/rows are authoritative
 // ---------------------------------------------------------------------------
 
-describe('TPSC-RESIZE-002: Race condition — cols/rows updated before await resizePane', () => {
-  it('cols updated optimistically so resize_pane sees new value immediately after resolution', async () => {
-    // This test verifies the optimistic-update contract introduced by Bug 3b fix.
-    //
-    // Race scenario:
-    //   1. sendResize() computes newCols=20 from the viewport.
-    //   2. resizePane(paneId, 20, ...) is called and suspended (awaiting).
-    //   3. Backend emits screen-update with isFullRedraw:true (stride should be 20).
-    //   4. Without the fix: cols is still 10 at step 3 → applyScreenUpdate uses
-    //      stride=10 → cell at col=19 mapped to wrong index → corrupted grid.
-    //   5. With the fix: cols=20 is set before the await → correct stride.
-    //
-    // The corrupted-grid effect is silent (no throw) and not observable via DOM
-    // in jsdom. We therefore assert two observable properties of the fix:
-    //   A. The component does not throw or crash during the race (no regression).
-    //   B. After resolution, resize_pane was indeed called with the new cols=20
-    //      (confirms the optimistic update reached the IPC command).
-    //
-    // Full correctness of the stride value during the race is validated by
-    // E2E tests where the rendered terminal output can be inspected visually.
-
-    let resolveResize!: () => void;
-    const resizePromise = new Promise<void>((res) => {
-      resolveResize = res;
-    });
-
-    vi.mocked(tauriCore.invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === 'get_pane_screen_snapshot') {
-        return {
-          cols: 10,
-          rows: 5,
-          cells: [],
-          cursorRow: 0,
-          cursorCol: 0,
-          cursorVisible: true,
-          cursorShape: 0,
-          scrollbackLines: 0,
-          scrollOffset: 0,
-        } as never;
-      }
-      if (cmd === 'resize_pane') {
-        return resizePromise as never;
-      }
-      return undefined as never;
-    });
-
-    // Probe: height=20, width=10 → viewport: height=100, width=200
-    // → newCols = floor(200/10) = 20, newRows = floor(100/20) = 5.
-    // (OffscreenCanvas is NOT stubbed here so measureCellDimensions throws →
-    //  fallback to probe, which is exactly the post-fix path.)
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.style?.height === '1lh') {
-        return {
-          height: 20,
-          width: 10,
-          top: 0,
-          left: 0,
-          right: 10,
-          bottom: 20,
-          x: 0,
-          y: 0,
-          toJSON() {
-            return this;
-          },
-        } as DOMRect;
-      }
-      return {
-        height: 100,
-        width: 200,
-        top: 0,
-        left: 0,
-        right: 200,
-        bottom: 100,
-        x: 0,
-        y: 0,
-        toJSON() {
-          return this;
-        },
-      } as DOMRect;
-    });
-
-    const invokeSpy = vi.mocked(tauriCore.invoke);
+describe('TPSC-STRIDE-001: applyScreenUpdate uses event.cols for grid indexing', () => {
+  it('screen-update with non-default cols triggers isFullRedraw rebuild without throwing', async () => {
+    // Fire a screen-update with cols=10 (non-default) and isFullRedraw: true.
+    // The composable must use event.cols=10 as the grid stride — not its local
+    // state (default 80). If it used the local 80, applyUpdates would place col=9
+    // at index 9 instead of 9, which is incidentally the same, but rebuilding
+    // the grid would produce 10*rows cells rather than 80*rows cells.
+    // The observable assertion is that the component does not throw and remains functional.
     const { container } = await mountPane();
 
-    // Wait for the debounce to fire and resizePane to enter its suspended await.
-    await new Promise((res) => setTimeout(res, 60));
-
-    // Assertion A: screen-update with col=19 (only valid with cols=20) must not throw.
     expect(() => {
       fireEvent<ScreenUpdateEvent>(
         'screen-update',
         makeScreenUpdate(PANE_ID, {
+          cols: 10,
+          rows: 3,
           isFullRedraw: true,
           cells: [
             {
               row: 0,
-              col: 19,
-              content: 'Z',
+              col: 9,
+              content: 'X',
               width: 1,
               attrs: {
                 bold: false,
@@ -850,22 +781,49 @@ describe('TPSC-RESIZE-002: Race condition — cols/rows updated before await res
       flushSync();
     }).not.toThrow();
 
-    // Resolve resizePane and drain.
-    resolveResize();
-    await new Promise((res) => setTimeout(res, 10));
+    expect(container.querySelector('.terminal-pane')).not.toBeNull();
+  });
+});
+
+describe('TPSC-STRIDE-002: cols/rows local state tracks event values', () => {
+  it('ondimensionschange is called with event cols/rows when they differ from local state', async () => {
+    const dimensionsCalls: Array<[number, number]> = [];
+    const onDimensionsChange = vi.fn((c: number, r: number) => {
+      dimensionsCalls.push([c, r]);
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const instance = mount(TerminalPane, {
+      target: container,
+      props: {
+        paneId: PANE_ID,
+        tabId: 'tab-1',
+        active: true,
+        ondimensionschange: onDimensionsChange,
+      },
+    });
+    instances.push(instance);
+
+    for (let i = 0; i < 20; i++) await Promise.resolve();
     flushSync();
 
-    // Component must still be in DOM and functional.
-    expect(container.querySelector('.terminal-pane')).not.toBeNull();
+    const callsBefore = dimensionsCalls.length;
 
-    // Assertion B: resize_pane was called with cols=20 (optimistic update reached IPC).
-    const resizeCalls = invokeSpy.mock.calls.filter(([cmd]) => cmd === 'resize_pane');
-    expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
-    const lastResizeArgs = resizeCalls[resizeCalls.length - 1][1] as {
-      cols: number;
-      rows: number;
-    };
-    expect(lastResizeArgs.cols).toBe(20);
+    // Fire screen-update with cols=10, rows=3 — different from the local state (80×24).
+    // applyScreenUpdate must sync local state and call ondimensionschange(10, 3).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, { cols: 10, rows: 3, isFullRedraw: true }),
+    );
+    flushSync();
+
+    const callsAfter = dimensionsCalls.slice(callsBefore);
+    const hasDimension = callsAfter.some(([c, r]) => c === 10 && r === 3);
+    expect(
+      hasDimension,
+      `Expected ondimensionschange(10, 3) after stride event, got: ${JSON.stringify(callsAfter)}`,
+    ).toBe(true);
   });
 });
 
@@ -946,33 +904,15 @@ describe('TPSC-RESIZE-003: probe removed from DOM even when getBoundingClientRec
 });
 
 // ---------------------------------------------------------------------------
-// TPSC-RESIZE-004: ondimensionschange called with prev values when resizePane fails
+// TPSC-RESIZE-004: resize_pane IPC failure does not crash the component
 // ---------------------------------------------------------------------------
 
-describe('TPSC-RESIZE-004: ondimensionschange rolled back when resizePane fails', () => {
-  it('emits rollback notification (prevCols, prevRows) after IPC failure', async () => {
-    // Discriminant design:
-    //
-    // sendResize() sets cols=newCols, calls ondimensionschange(newCols, newRows), then
-    // awaits resizePane(). If resizePane rejects:
-    //   BEFORE fix: cols/rows reverted but ondimensionschange NOT called in catch.
-    //   AFTER  fix: ondimensionschange(prevCols, prevRows) IS called in catch.
-    //
-    // The test uses a controlled reject Promise:
-    //   - We record the call-log length at the exact moment of rejection.
-    //   - After rejection, we drain microtasks and check that a new call appeared
-    //     with the rollback values (prevCols, prevRows).
-    //
-    // Note: Svelte 5 re-runs the $effect that watches font props whenever `cols`
-    // changes (because scheduleSendResize reads `cols`, making it a dependency).
-    // This causes an additional ondimensionschange(newCols, newRows) call after the
-    // optimistic update. The test is designed to be robust to this by checking the
-    // calls added AFTER the rejection point, not relying on adjacency.
-
-    const dimensionsCalls: Array<[number, number]> = [];
-    const onDimensionsChange = vi.fn((c: number, r: number) => {
-      dimensionsCalls.push([c, r]);
-    });
+describe('TPSC-RESIZE-004: resize_pane IPC failure is handled gracefully', () => {
+  it('component stays functional after resizePane IPC failure', async () => {
+    // cols/rows are no longer rolled back on IPC failure — they update solely via
+    // screen-update events. This test verifies that an IPC failure in sendResize
+    // does not crash the component and that subsequent screen-update events still
+    // apply correctly (no stale or broken state).
 
     // Controlled reject Promise.
     let rejectResize!: (err: Error) => void;
@@ -987,8 +927,6 @@ describe('TPSC-RESIZE-004: ondimensionschange rolled back when resizePane fails'
       return undefined as never;
     });
 
-    // Viewport: h=480, w=800; probe: h=20, w=8 → newCols=100, newRows=24.
-    // prevCols = 80 (composable default).
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
       this: HTMLElement,
     ) {
@@ -1022,35 +960,13 @@ describe('TPSC-RESIZE-004: ondimensionschange rolled back when resizePane fails'
       } as DOMRect;
     });
 
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-
-    const instance = mount(TerminalPane, {
-      target: container,
-      props: {
-        paneId: PANE_ID,
-        tabId: 'tab-1',
-        active: true,
-        ondimensionschange: onDimensionsChange,
-      },
-    });
-    instances.push(instance);
-
-    // Drain microtasks for onMount.
-    for (let i = 0; i < 20; i++) await Promise.resolve();
-    flushSync();
+    const { container } = await mountPane();
 
     // Wait for the debounce (50ms) to fire and sendResize to suspend.
-    // After this, sendResize has made the optimistic call and is suspended
-    // awaiting resizePromise. Svelte may re-trigger the $effect that watches
-    // cols, causing additional scheduleSendResize calls.
     await new Promise((res) => setTimeout(res, 60));
     flushSync();
     for (let i = 0; i < 20; i++) await Promise.resolve();
     flushSync();
-
-    // Record the call-log snapshot BEFORE we trigger the rejection.
-    const callsBeforeReject = dimensionsCalls.length;
 
     // Trigger IPC failure.
     rejectResize(new Error('simulated IPC failure'));
@@ -1059,22 +975,22 @@ describe('TPSC-RESIZE-004: ondimensionschange rolled back when resizePane fails'
     for (let i = 0; i < 30; i++) await Promise.resolve();
     flushSync();
 
-    // DISCRIMINANT ASSERTION:
-    // After the rejection, at least one new call must have been recorded.
-    // Among the calls added after the rejection, (80,24) must appear —
-    // this is the rollback notification from the catch block.
-    //
-    // Without the fix: no new call is added in the catch; any subsequent (80,24)
-    // would require another ResizeObserver cycle (which jsdom does not trigger).
-    // With the fix: ondimensionschange(80,24) is called synchronously in the catch,
-    // so it appears in the microtask drain immediately following rejectResize().
-    const callsAfterReject = dimensionsCalls.slice(callsBeforeReject);
+    // DISCRIMINANT ASSERTION: the component must still be functional after the failure.
+    // cols/rows are not rolled back here — they will be updated by the next screen-update event.
+    expect(container.querySelector('.terminal-pane')).not.toBeNull();
 
-    const hasRollback = callsAfterReject.some(([c, r]) => c === 80 && r === 24);
-    expect(hasRollback, `Expected rollback call (80,24) after IPC failure, but got: ${JSON.stringify(callsAfterReject)}`).toBe(true);
+    // A subsequent screen-update must still be handled correctly.
+    expect(() => {
+      fireEvent<ScreenUpdateEvent>(
+        'screen-update',
+        makeScreenUpdate(PANE_ID, { cols: 100, rows: 24, isFullRedraw: true }),
+      );
+      flushSync();
+    }).not.toThrow();
+
+    expect(container.querySelector('.terminal-pane')).not.toBeNull();
   });
 });
-
 
 // ---------------------------------------------------------------------------
 // TPSC-INIT-002: screen-update received during snapshot fetch is applied (WP3b)
@@ -1113,7 +1029,24 @@ describe('TPSC-INIT-002: screen-update received during snapshot fetch is applied
     fireEvent<ScreenUpdateEvent>(
       'screen-update',
       makeScreenUpdate(PANE_ID, {
-        cells: [{ row: 0, col: 0, content: 'B', width: 1, attrs: { bold: false, dim: false, italic: false, underline: 0, blink: false, inverse: false, hidden: false, strikethrough: false } }],
+        cells: [
+          {
+            row: 0,
+            col: 0,
+            content: 'B',
+            width: 1,
+            attrs: {
+              bold: false,
+              dim: false,
+              italic: false,
+              underline: 0,
+              blink: false,
+              inverse: false,
+              hidden: false,
+              strikethrough: false,
+            },
+          },
+        ],
         isFullRedraw: false,
       }),
     );

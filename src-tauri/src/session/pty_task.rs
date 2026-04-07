@@ -246,7 +246,9 @@ pub fn spawn_pty_read_task(
             // The write-lock on `vt` is no longer held here, so there is no
             // risk of deadlocking when the shell sends back a reply that would
             // trigger a new `vt.write()` acquisition in this same task.
-            if !responses.is_empty() && let Some(ref w) = writer_r {
+            if !responses.is_empty()
+                && let Some(ref w) = writer_r
+            {
                 match w.lock() {
                     Ok(mut writer) => {
                         for resp in &responses {
@@ -549,6 +551,148 @@ pub(crate) fn build_screen_update_event(
         cursor,
         scrollback_lines,
         is_full_redraw: dirty.is_full_redraw,
+        cols: snapshot.cols,
+        rows: snapshot.rows,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use parking_lot::RwLock;
+
+    use super::build_screen_update_event;
+    use crate::events::types::{CursorState, ScreenUpdateEvent};
+    use crate::session::ids::PaneId;
+    use crate::vt::{DirtyRegion, VtProcessor};
+
+    fn make_vt(cols: u16, rows: u16) -> Arc<RwLock<VtProcessor>> {
+        Arc::new(RwLock::new(VtProcessor::new(cols, rows, 1_000)))
+    }
+
+    fn full_redraw_dirty() -> DirtyRegion {
+        DirtyRegion {
+            rows: Default::default(),
+            is_full_redraw: true,
+            cursor_moved: false,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // build_screen_update_event_includes_snapshot_dims
+    // -----------------------------------------------------------------------
+
+    /// Verifies that `build_screen_update_event` populates `cols` and `rows`
+    /// from the current `ScreenSnapshot` dimensions.
+    #[test]
+    fn build_screen_update_event_includes_snapshot_dims() {
+        let vt = make_vt(100, 30);
+        let pane_id = PaneId(String::from("test-pane-1"));
+        let dirty = full_redraw_dirty();
+
+        let event = build_screen_update_event(&pane_id, &vt, &dirty);
+
+        assert_eq!(event.cols, 100);
+        assert_eq!(event.rows, 30);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_screen_update_event_after_resize_reflects_new_dims
+    // -----------------------------------------------------------------------
+
+    /// Verifies that after a `VtProcessor::resize`, the next
+    /// `build_screen_update_event` reports the updated dimensions.
+    #[test]
+    fn build_screen_update_event_after_resize_reflects_new_dims() {
+        let vt = make_vt(80, 24);
+        vt.write().resize(120, 40);
+
+        let pane_id = PaneId(String::from("test-pane-2"));
+        let dirty = full_redraw_dirty();
+
+        let event = build_screen_update_event(&pane_id, &vt, &dirty);
+
+        assert_eq!(event.cols, 120);
+        assert_eq!(event.rows, 40);
+    }
+
+    // -----------------------------------------------------------------------
+    // screen_update_event_serde_roundtrip
+    // -----------------------------------------------------------------------
+
+    /// Verifies that `cols` and `rows` survive a JSON serialization/deserialization
+    /// round-trip (guards against accidental `#[serde(skip)]` or rename regressions).
+    #[test]
+    fn screen_update_event_serde_roundtrip() {
+        let event = ScreenUpdateEvent {
+            pane_id: PaneId(String::from("test-pane-3")),
+            cells: vec![],
+            cursor: CursorState {
+                row: 0,
+                col: 0,
+                visible: true,
+                shape: 0,
+                blink: false,
+            },
+            scrollback_lines: 0,
+            is_full_redraw: false,
+            cols: 80,
+            rows: 24,
+        };
+
+        let json = serde_json::to_string(&event).expect("serialization failed");
+        let decoded: ScreenUpdateEvent =
+            serde_json::from_str(&json).expect("deserialization failed");
+
+        assert_eq!(decoded.cols, 80);
+        assert_eq!(decoded.rows, 24);
+
+        // Confirm camelCase keys are present in the raw JSON.
+        assert!(
+            json.contains("\"cols\":80"),
+            "expected \"cols\":80 in {json}"
+        );
+        assert!(
+            json.contains("\"rows\":24"),
+            "expected \"rows\":24 in {json}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // screen_update_event_serde_roundtrip_non_square
+    // -----------------------------------------------------------------------
+
+    /// Verifies round-trip with non-standard dimensions (wide terminal).
+    #[test]
+    fn screen_update_event_serde_roundtrip_non_square() {
+        let event = ScreenUpdateEvent {
+            pane_id: PaneId(String::from("test-pane-4")),
+            cells: vec![],
+            cursor: CursorState {
+                row: 0,
+                col: 0,
+                visible: true,
+                shape: 0,
+                blink: false,
+            },
+            scrollback_lines: 0,
+            is_full_redraw: true,
+            cols: 220,
+            rows: 50,
+        };
+
+        let json = serde_json::to_string(&event).expect("serialization failed");
+        let decoded: ScreenUpdateEvent =
+            serde_json::from_str(&json).expect("deserialization failed");
+
+        assert_eq!(decoded.cols, 220);
+        assert_eq!(decoded.rows, 50);
+        assert!(decoded.is_full_redraw);
     }
 }
 

@@ -34,6 +34,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import * as tauriCore from '@tauri-apps/api/core';
 import * as tauriEvent from '@tauri-apps/api/event';
+import { mockAppWindow, resetMockWindow } from '../../../__mocks__/tauri-window';
 import TerminalViewWithProvider from './TerminalViewWithProvider.svelte';
 import type { TabState, PaneState } from '$lib/ipc/types';
 
@@ -139,6 +140,7 @@ afterEach(() => {
   instances.length = 0;
   document.body.innerHTML = '';
   vi.restoreAllMocks();
+  resetMockWindow();
 });
 
 // ---------------------------------------------------------------------------
@@ -207,6 +209,8 @@ describe('TV-CLOSE-001: tab close confirmation dialog', () => {
       if (cmd === 'get_preferences') return basePrefs;
       if (cmd === 'get_connections') return [];
       if (cmd === 'close_tab') return undefined;
+      // FS-PTY-008: simulate a non-shell foreground process active in the pane
+      if (cmd === 'has_foreground_process') return true;
       return undefined;
     });
 
@@ -596,6 +600,158 @@ describe('TV-RISK-003: get_preferences failure falls back to default preferences
     // No "undefined" text content should be rendered anywhere.
     const allText = container.textContent ?? '';
     expect(allText).not.toContain('undefined');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TV-WCLOSE: Window-manager close button behaviour (FS-PTY-008, FS-TAB-008)
+//
+// These tests exercise the onCloseRequested handler registered in useTerminalView
+// via the tauri-window mock. The mock faithfully mirrors Tauri 2's onCloseRequested
+// contract: simulateCloseRequest() runs handlers, then calls destroy() automatically
+// if no handler called event.preventDefault(). Production code uses destroy() for
+// all programmatic closes (including last-tab and dialog-confirm) — never close().
+// ---------------------------------------------------------------------------
+
+describe('TV-WCLOSE-001: WM close with idle shell closes window without dialog', () => {
+  it('closes the window directly when no pane has a foreground process', async () => {
+    const existingTab = makeTab();
+    vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_session_state') return { tabs: [existingTab], activeTabId: existingTab.id };
+      if (cmd === 'get_preferences') return basePrefs;
+      if (cmd === 'get_connections') return [];
+      // FS-PTY-008: idle shell — no foreground process
+      if (cmd === 'has_foreground_process') return false;
+      return undefined;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    instances.push(mount(TerminalViewWithProvider, { target: container, props: {} }));
+    await settle();
+
+    await mockAppWindow.simulateCloseRequest();
+    await settle();
+
+    expect(mockAppWindow.closed).toBe(true);
+    // No window-close dialog should be in the DOM
+    const dialog = Array.from(document.body.querySelectorAll('*')).find((el) =>
+      el.textContent?.includes('Close window?'),
+    );
+    expect(dialog).toBeUndefined();
+  });
+});
+
+describe('TV-WCLOSE-002: WM close with active process shows confirmation dialog', () => {
+  it('shows the window-close dialog instead of closing when a process is running', async () => {
+    const existingTab = makeTab();
+    vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_session_state') return { tabs: [existingTab], activeTabId: existingTab.id };
+      if (cmd === 'get_preferences') return basePrefs;
+      if (cmd === 'get_connections') return [];
+      // FS-PTY-008: non-shell foreground process active
+      if (cmd === 'has_foreground_process') return true;
+      return undefined;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    instances.push(mount(TerminalViewWithProvider, { target: container, props: {} }));
+    await settle();
+
+    await mockAppWindow.simulateCloseRequest();
+    await settle();
+
+    expect(mockAppWindow.closed).toBe(false);
+    const dialog = Array.from(document.body.querySelectorAll('*')).find((el) =>
+      el.textContent?.includes('Close window?'),
+    );
+    expect(dialog).not.toBeUndefined();
+  });
+});
+
+describe('TV-WCLOSE-003: confirming window-close dialog closes the window', () => {
+  it('closes the window when the user clicks Confirm in the window-close dialog', async () => {
+    const existingTab = makeTab();
+    vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_session_state') return { tabs: [existingTab], activeTabId: existingTab.id };
+      if (cmd === 'get_preferences') return basePrefs;
+      if (cmd === 'get_connections') return [];
+      if (cmd === 'has_foreground_process') return true;
+      return undefined;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    instances.push(mount(TerminalViewWithProvider, { target: container, props: {} }));
+    await settle();
+
+    // Trigger WM close → dialog appears
+    await mockAppWindow.simulateCloseRequest();
+    await settle();
+
+    // Click the confirm button ("Close anyway")
+    const confirmBtn = Array.from(document.body.querySelectorAll('button')).find(
+      (btn) => btn.textContent?.trim() === 'Close anyway',
+    );
+    expect(confirmBtn).not.toBeUndefined();
+    confirmBtn!.click();
+    await settle();
+
+    expect(mockAppWindow.closed).toBe(true);
+  });
+});
+
+describe('TV-WCLOSE-004: idle shell — destroy() called exactly once, no re-entry', () => {
+  it('destroy() is called exactly once via Tauri wrapper; no programmatic close needed', async () => {
+    const existingTab = makeTab();
+    vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_session_state') return { tabs: [existingTab], activeTabId: existingTab.id };
+      if (cmd === 'get_preferences') return basePrefs;
+      if (cmd === 'get_connections') return [];
+      if (cmd === 'has_foreground_process') return false;
+      return undefined;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    instances.push(mount(TerminalViewWithProvider, { target: container, props: {} }));
+    await settle();
+
+    await mockAppWindow.simulateCloseRequest();
+    await settle();
+
+    // The handler did NOT call event.preventDefault() (no active processes),
+    // so simulateCloseRequest()'s wrapper called destroy() exactly once.
+    // No programmatic destroy() was called by production code directly.
+    expect(mockAppWindow.destroyCallCount).toBe(1);
+    expect(mockAppWindow.closed).toBe(true);
+  });
+});
+
+describe('TV-LTAB-001: closing the last tab closes the window (FS-TAB-008)', () => {
+  it('calls window.destroy() when the last tab is closed with an idle shell', async () => {
+    const existingTab = makeTab();
+    vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_session_state') return { tabs: [existingTab], activeTabId: existingTab.id };
+      if (cmd === 'get_preferences') return basePrefs;
+      if (cmd === 'get_connections') return [];
+      if (cmd === 'has_foreground_process') return false;
+      if (cmd === 'close_tab') return undefined;
+      return undefined;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    instances.push(mount(TerminalViewWithProvider, { target: container, props: {} }));
+    await settle();
+
+    const closeBtn = container.querySelector<HTMLButtonElement>('.tab-bar__close');
+    expect(closeBtn).not.toBeNull();
+    closeBtn!.click();
+    await settle();
+
+    expect(mockAppWindow.closed).toBe(true);
   });
 });
 

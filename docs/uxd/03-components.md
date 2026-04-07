@@ -679,7 +679,7 @@ Used for confirmations (FS-PTY-008), SSH host key verification (FS-SSH-011), and
 
 #### 7.9.3 Destructive Confirmation Dialog
 
-For closing tabs/panes with running processes (FS-PTY-008):
+For closing tabs/panes with a non-shell foreground process active (FS-PTY-008). This dialog is not shown when only an idle shell is at the prompt — the condition is defined in FS-PTY-008.
 - **Heading:** "Close tab?" or "Close pane?"
 - **Body:** "{N} process(es) still running. Closing will terminate them."
 - **Primary action:** "Close" — destructive button variant (§7.14).
@@ -877,7 +877,9 @@ TauTerm's application shortcuts are intercepted within the WebView — they are 
 
 ### 7.18 Process Terminated Pane (FS-PTY-005, FS-PTY-006)
 
-When a shell process exits, the pane transitions to a terminated state:
+This banner appears only when the shell exits with a non-zero code or is terminated by a signal. For a clean exit (code 0), the pane closes immediately and this banner is never shown (FS-PTY-005).
+
+When the pane transitions to the terminated state:
 
 - The terminal content remains visible (scrollback preserved).
 - A horizontal banner appears at the bottom of the pane.
@@ -888,8 +890,8 @@ When a shell process exits, the pane transitions to a terminated state:
 - **Layout:** Flex row. Left: exit status text. Right: "Restart" (primary button) and "Close" (ghost button).
 
 **Exit status text:**
-- Exit 0: Lucide `CheckCircle` (`--color-success`, 16px) + "Process exited" in `--color-text-primary`.
-- Non-zero: Lucide `XCircle` (`--color-error`, 16px) + "Process exited with code {N}" in `--color-text-primary`. Technical details (signal name if applicable) in `--color-text-secondary` below.
+- Non-zero exit: Lucide `XCircle` (`--color-error`, 16px) + "Process exited with code {N}" in `--color-text-primary`. Technical details (signal name if applicable) in `--color-text-secondary` below.
+- Signal termination: same visual treatment; signal name shown in technical details if available.
 
 ### 7.19 SSH Reconnection Separator (FS-SSH-042)
 

@@ -10,11 +10,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
-use crate::events::{
-    ScrollPositionChangedEvent, emit_screen_update, emit_scroll_position_changed,
-};
-use crate::session::{SessionRegistry, ids::PaneId, registry::ScrollPositionState};
+use crate::events::{ScrollPositionChangedEvent, emit_screen_update, emit_scroll_position_changed};
 use crate::session::pty_task::build_scrolled_viewport_event;
+use crate::session::{SessionRegistry, ids::PaneId, registry::ScrollPositionState};
 use crate::vt::{SearchMatch, SearchQuery, screen_buffer::ScreenSnapshot};
 
 /// Maximum payload size for a single `send_input` call (64 KiB).

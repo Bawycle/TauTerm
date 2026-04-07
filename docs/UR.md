@@ -69,13 +69,16 @@ Inside the terminal area itself, keyboard input is necessarily the primary modal
 - Each tab hosts an independent PTY session.
 - Tabs can be created, closed, and reordered.
 - Tabs display a configurable title (process name or user-defined label).
-- When a tab that is not currently active produces output or a process terminates within it, the user receives a visual indication on that tab (activity notification), without switching away from the current tab.
+- When a tab that is not currently active produces output, or when a process within it terminates abnormally (non-zero exit code or signal), the user receives a visual indication on that tab (activity notification), without switching away from the current tab.
 
 ### 4.2 Multi-screen (panes)
 
 - Within a tab, the user can split the view into multiple panes (horizontal and/or vertical splits).
 - Each pane hosts an independent PTY session.
 - Panes can be resized, closed, and navigated between via keyboard or mouse.
+- When a process inside a pane terminates successfully (exit code 0), the pane closes automatically — the user expects no residual UI clutter from a clean exit.
+- When a process inside a pane terminates abnormally (non-zero exit code or killed by a signal), the pane remains visible so the user can read any remaining output and decide what to do next. The user needs a clear indication that the process has ended abnormally, and must be able to restart the process or close the pane from that state.
+- The user needs to be protected from accidentally closing a pane or a tab while a non-shell foreground process is running in it — an accidental close must not silently discard work in progress.
 
 ---
 

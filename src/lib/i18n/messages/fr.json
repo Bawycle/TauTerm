@@ -192,6 +192,9 @@
   "close_confirm_body": "Un processus est en cours d'exécution dans ce terminal. Le fermer mettra fin au processus.",
   "close_confirm_action": "Fermer quand même",
 
+  "window_close_confirm_title": "Fermer la fenêtre ?",
+  "window_close_confirm_body": "{count} panneau(x) avec des processus actifs seront terminés.",
+
   "pane_navigate_up": "Naviguer vers le panneau au-dessus",
   "pane_navigate_down": "Naviguer vers le panneau en-dessous",
   "pane_navigate_left": "Naviguer vers le panneau à gauche",

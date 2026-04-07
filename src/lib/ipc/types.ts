@@ -85,14 +85,17 @@ export type SshLifecycleState =
  * Pane notification state.
  *
  * Mirrors Rust PaneNotificationDto: #[serde(tag = "type", rename_all = "camelCase")]
- * - Bell          → { type: 'bell' }
+ * - Bell            → { type: 'bell' }
  * - BackgroundOutput → { type: 'backgroundOutput' }
- * - ProcessExited → { type: 'processExited', exitCode: number }
+ * - ProcessExited   → { type: 'processExited'; exitCode: number | null; signalName: string | null }
+ *   - exitCode null  → process killed by signal (WIFSIGNALED)
+ *   - signalName non-null → e.g. "SIGKILL", "SIGHUP"
+ *   - signalName null → normal exit (exit code is authoritative)
  */
 export type PaneNotification =
   | { type: 'bell' }
   | { type: 'backgroundOutput' }
-  | { type: 'processExited'; exitCode: number };
+  | { type: 'processExited'; exitCode: number | null; signalName: string | null };
 
 /**
  * Delta event payload emitted by `session-state-changed` (ARCHITECTURE §4.5.2).

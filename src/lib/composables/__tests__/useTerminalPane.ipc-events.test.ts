@@ -537,7 +537,7 @@ describe('TPSC-NOTIF-002: notification-changed processExited fires without error
       fireEvent<NotificationChangedEvent>('notification-changed', {
         tabId: TAB_ID,
         paneId: PANE_ID,
-        notification: { type: 'processExited', exitCode: 0 },
+        notification: { type: 'processExited', exitCode: 0 , signalName: null },
       });
       flushSync();
     }).not.toThrow();

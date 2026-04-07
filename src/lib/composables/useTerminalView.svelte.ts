@@ -47,6 +47,7 @@ import {
   searchPane,
   markContextMenuUsed,
   toggleFullscreen as ipcToggleFullscreen,
+  hasForegroundProcess,
 } from '$lib/ipc/commands';
 import {
   onSessionStateChanged,
@@ -87,7 +88,6 @@ import {
   terminatedPanes,
   applyNotificationChanged,
   clearTabNotification,
-  isPaneProcessActive,
 } from '$lib/state/notifications.svelte';
 import { preferences, setPreferences, setPreferencesFallback } from '$lib/state/preferences.svelte';
 import { fullscreenState, setFullscreen } from '$lib/state/fullscreen.svelte';
@@ -154,6 +154,15 @@ export function useTerminalView() {
   type PendingClose = { kind: 'tab'; tabId: string } | { kind: 'pane'; paneId: PaneId };
   let pendingClose = $state<PendingClose | null>(null);
   let closeConfirmCancelBtn = $state<HTMLButtonElement | undefined>(undefined);
+
+  // FS-PTY-008: window close confirmation dialog state (WM close button).
+  let pendingWindowClose = $state<{ paneCount: number } | null>(null);
+  let windowCloseConfirmCancelBtn = $state<HTMLButtonElement | undefined>(undefined);
+
+  // Unlisten-before-close: we remove this listener before calling appWindow.close()
+  // so that the CloseRequested event is not intercepted a second time.
+  // This is stored outside unlistens[] to allow targeted removal.
+  let closeUnlisten: (() => void) | null = null;
 
   // FS-KBD-003: F2 rename — ID to trigger rename on TabBar, cleared after TabBar acts.
   let requestedRenameTabId = $state<string | null>(null);
@@ -234,13 +243,38 @@ export function useTerminalView() {
       // Non-fatal
     }
 
-    // Sync initial fullscreen state from the window
+    // Sync initial fullscreen state and register WM close handler.
     try {
-      const win = getCurrentWindow();
-      const isFs = await win.isFullscreen();
+      const appWindow = getCurrentWindow();
+
+      const isFs = await appWindow.isFullscreen();
       setFullscreen(isFs);
+
+      // FS-PTY-008: intercept WM close button to check for active non-shell processes.
+      //
+      // Tauri 2 pattern: onCloseRequested wrapper calls this.destroy() automatically
+      // if the handler does NOT call event.preventDefault(). So:
+      //   - No active processes → don't prevent → wrapper calls destroy() → window closes.
+      //   - Active processes → prevent → show dialog → user confirms → destroy() manually.
+      //
+      // Never use close() for programmatic closes: close() re-emits CloseRequested,
+      // and if no listener calls destroy() in response, the window stays open.
+      closeUnlisten = await appWindow.onCloseRequested(async (event) => {
+        const allPanes = sessionState.tabs.flatMap((tab) => collectLeafPanes(tab.layout));
+        // .catch(() => false): IPC error → treat as no foreground process (fail-open, allows close)
+        const activeFlags = await Promise.all(
+          allPanes.map((p) => hasForegroundProcess(p.paneId).catch(() => false)),
+        );
+        const activeCount = activeFlags.filter(Boolean).length;
+
+        if (activeCount > 0) {
+          event.preventDefault();
+          pendingWindowClose = { paneCount: activeCount };
+        }
+        // activeCount === 0: don't prevent → Tauri wrapper calls destroy() automatically.
+      });
     } catch {
-      /* non-fatal */
+      /* non-fatal — Tauri window APIs unavailable in test/non-Tauri environments */
     }
 
     unlistens.push(await onSessionStateChanged(applySessionDelta));
@@ -252,8 +286,11 @@ export function useTerminalView() {
       }),
     );
     unlistens.push(
-      await onNotificationChanged((ev) => {
-        applyNotificationChanged(ev);
+      await onNotificationChanged(async (ev) => {
+        const action = applyNotificationChanged(ev);
+        if (action?.type === 'autoClose') {
+          await doClosePane(action.paneId);
+        }
       }),
     );
     unlistens.push(
@@ -270,18 +307,11 @@ export function useTerminalView() {
   });
 
   onDestroy(() => {
+    closeUnlisten?.();
+    closeUnlisten = null;
     for (const unlisten of unlistens) unlisten();
     unlistens = [];
   });
-
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
-
-  function isTabProcessActive(tab: TabState): boolean {
-    const panes = collectLeafPanes(tab.layout);
-    return panes.some((p) => isPaneProcessActive(p.paneId));
-  }
 
   // -------------------------------------------------------------------------
   // Tab management
@@ -299,7 +329,14 @@ export function useTerminalView() {
 
   async function handleTabClose(tabId: string) {
     const tab = sessionState.tabs.find((t) => t.id === tabId);
-    if (tab && isTabProcessActive(tab)) {
+    if (!tab) return;
+    // FS-PTY-008: check all panes in the tab for non-shell foreground processes.
+    const panes = collectLeafPanes(tab.layout);
+    // .catch(() => false): IPC error → treat as no foreground process (fail-open, allows close)
+    const checks = await Promise.all(
+      panes.map((p) => hasForegroundProcess(p.paneId).catch(() => false)),
+    );
+    if (checks.some(Boolean)) {
       pendingClose = { kind: 'tab', tabId };
       return;
     }
@@ -311,7 +348,10 @@ export function useTerminalView() {
       await closeTab(tabId);
       removeTab(tabId);
       if (sessionState.tabs.length === 0) {
-        await getCurrentWindow().close();
+        // destroy() forces the window closed without firing CloseRequested.
+        // Using close() here would re-emit CloseRequested; if no JS listener
+        // calls destroy() in response, the window would stay open.
+        await getCurrentWindow().destroy();
       }
     } catch {
       // Non-fatal
@@ -347,12 +387,25 @@ export function useTerminalView() {
     pendingClose = null;
   }
 
+  async function handleWindowCloseConfirm() {
+    pendingWindowClose = null;
+    // destroy() forces close without re-emitting CloseRequested.
+    await getCurrentWindow().destroy();
+  }
+
+  function handleWindowCloseCancel() {
+    pendingWindowClose = null;
+  }
+
   // -------------------------------------------------------------------------
   // Pane actions
   // -------------------------------------------------------------------------
 
   async function handlePaneClose(paneId: PaneId) {
-    if (isPaneProcessActive(paneId)) {
+    // FS-PTY-008: only show dialog when a non-shell foreground process is active.
+    // .catch(() => false): IPC error → treat as no foreground process (fail-open, allows close)
+    const hasForeground = await hasForegroundProcess(paneId).catch(() => false);
+    if (hasForeground) {
       pendingClose = { kind: 'pane', paneId };
       return;
     }
@@ -361,9 +414,15 @@ export function useTerminalView() {
 
   async function doClosePane(paneId: PaneId) {
     try {
+      // Resolve the owner tab before the IPC call — after closePane returns null,
+      // the pane is gone from the registry and we can no longer look it up.
+      // Using the active tab would be wrong when auto-closing a background pane.
+      const ownerTab = sessionState.tabs.find((t) =>
+        collectLeafPanes(t.layout).some((p) => p.paneId === paneId),
+      );
       const updatedTab: TabState | null = await closePane(paneId);
       if (updatedTab === null) {
-        removeTab(sessionState.activeTabId);
+        if (ownerTab) removeTab(ownerTab.id);
       } else {
         updateTab(updatedTab);
       }
@@ -822,6 +881,15 @@ export function useTerminalView() {
     set closeConfirmCancelBtn(v: HTMLButtonElement | undefined) {
       closeConfirmCancelBtn = v;
     },
+    get pendingWindowClose() {
+      return pendingWindowClose;
+    },
+    get windowCloseConfirmCancelBtn() {
+      return windowCloseConfirmCancelBtn;
+    },
+    set windowCloseConfirmCancelBtn(v: HTMLButtonElement | undefined) {
+      windowCloseConfirmCancelBtn = v;
+    },
     get requestedRenameTabId() {
       return requestedRenameTabId;
     },
@@ -842,6 +910,8 @@ export function useTerminalView() {
     handleNewTab,
     handleCloseConfirm,
     handleCloseCancel,
+    handleWindowCloseConfirm,
+    handleWindowCloseCancel,
     handlePaneClose,
     handleSplitPane,
     handleNavigatePane,

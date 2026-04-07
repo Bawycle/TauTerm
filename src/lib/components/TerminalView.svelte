@@ -322,6 +322,37 @@
     {/snippet}
   </Dialog>
 
+  <!-- FS-PTY-008: Window close confirmation dialog (WM close button) -->
+  <Dialog
+    open={tv.pendingWindowClose !== null}
+    title={m.window_close_confirm_title()}
+    size="small"
+    onclose={tv.handleWindowCloseCancel}
+    onopenautoFocus={(e) => {
+      e.preventDefault();
+      tv.windowCloseConfirmCancelBtn?.focus();
+    }}
+  >
+    {#snippet children()}
+      <p class="text-[14px] text-(--color-text-secondary) leading-relaxed">
+        {m.window_close_confirm_body({ count: tv.pendingWindowClose?.paneCount ?? 0 })}
+      </p>
+    {/snippet}
+    {#snippet footer()}
+      <Button
+        variant="ghost"
+        bind:buttonRef={tv.windowCloseConfirmCancelBtn}
+        onclick={tv.handleWindowCloseCancel}
+        data-testid="window-close-confirm-cancel">{m.action_cancel()}</Button
+      >
+      <Button
+        variant="destructive"
+        onclick={tv.handleWindowCloseConfirm}
+        data-testid="window-close-confirm-action">{m.close_confirm_action()}</Button
+      >
+    {/snippet}
+  </Dialog>
+
   <!-- SSH connections slide-in panel -->
   {#if tv.connectionManagerOpen}
     <ConnectionManager

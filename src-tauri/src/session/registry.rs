@@ -20,6 +20,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use libc;
 use parking_lot::RwLock;
 use tauri::AppHandle;
 
@@ -569,7 +570,11 @@ impl SessionRegistry {
 
         let is_alt = pane.vt.read().is_alt_screen_active();
         let n = pane.vt.read().scrollback_len();
-        let clamped = if is_alt { 0 } else { new_offset.clamp(0, n as i64) };
+        let clamped = if is_alt {
+            0
+        } else {
+            new_offset.clamp(0, n as i64)
+        };
         pane.scroll_offset = clamped;
 
         Ok(ScrollPositionState {
@@ -749,12 +754,20 @@ impl SessionRegistry {
             .map(|(tab_id, e)| (tab_id.clone(), e.state.clone()))
     }
 
-    /// Returns the exit code of a pane if its lifecycle is already `Terminated`.
+    /// Returns `(exit_code, signal_name)` for a pane that is in `Terminated` state.
+    ///
+    /// `exit_code` is `None` when the process was killed by a signal.
+    /// `signal_name` is `None` when termination was a clean or error exit — the
+    /// `PaneLifecycleState::Terminated::error` field carries a human-readable
+    /// description, not a parseable signal name, so it is not forwarded here.
     ///
     /// Returns `None` if the pane is not found or is not yet in `Terminated` state.
-    /// The PTY read task calls this after EOF to include the real exit code in the
-    /// `ProcessExited` notification (FS-NOTIF-002).
-    pub fn get_pane_exit_code(&self, pane_id: &PaneId) -> Option<i32> {
+    /// The PTY read task calls this after EOF to build the `ProcessExited` notification
+    /// (FS-NOTIF-002, FS-PTY-005).
+    pub fn get_pane_termination_info(
+        &self,
+        pane_id: &PaneId,
+    ) -> Option<(Option<i32>, Option<String>)> {
         let inner = self.inner.read();
         inner
             .tabs
@@ -765,11 +778,60 @@ impl SessionRegistry {
                     exit_code, ..
                 } = &pane.lifecycle
                 {
-                    *exit_code
+                    // `exit_code` is `None` when the child was killed by a signal.
+                    // We cannot recover the signal name from `PaneLifecycleState`
+                    // without extending it — signal_name is left None for now.
+                    Some((*exit_code, None))
                 } else {
                     None
                 }
             })
+    }
+
+    /// Returns whether a non-shell foreground process is active on a pane's PTY.
+    ///
+    /// Logic (FS-PTY-008):
+    /// - Returns `Ok(false)` if the pane is not found, not in `Running` state,
+    ///   or has no local PTY session (SSH pane).
+    /// - Calls `tcgetpgrp(master_fd)` to obtain the foreground PGID.
+    /// - Returns `Ok(true)` if the foreground PGID differs from the shell's PID.
+    ///
+    /// The `tcgetpgrp` call is confined to `PtySession::foreground_pgid()` in the
+    /// platform layer (`platform/pty_linux.rs`) — no `unsafe` in this method.
+    pub fn has_foreground_process(
+        &self,
+        pane_id: &PaneId,
+    ) -> Result<bool, crate::error::SessionError> {
+        let inner = self.inner.read();
+        let pane = inner.tabs.values().find_map(|e| e.panes.get(pane_id));
+
+        let pane = match pane {
+            Some(p) => p,
+            None => return Ok(false),
+        };
+
+        // Only meaningful for running local PTY panes.
+        if !pane.lifecycle.is_active() {
+            return Ok(false);
+        }
+
+        let pty = match &pane.pty_session {
+            Some(s) => s,
+            None => return Ok(false), // SSH pane or not yet spawned
+        };
+
+        let shell_pid = match pty.shell_pid() {
+            Some(pid) => pid,
+            None => return Ok(false), // session type does not track shell PID
+        };
+
+        let fg_pgid = pty
+            .foreground_pgid()
+            .map_err(|e| crate::error::SessionError::PtyIo(e.to_string()))?;
+
+        // A non-shell foreground process exists when the foreground PGID differs
+        // from the shell's PID (the shell is its own process group leader).
+        Ok(fg_pgid != shell_pid as libc::pid_t)
     }
 
     /// Returns `true` if the pane identified by `pane_id` is a local PTY session
@@ -1097,5 +1159,86 @@ mod tests {
             (MIN_COLS, MIN_ROWS),
             "values exactly at minimum must not be modified"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // FS-PTY-005 — get_pane_termination_info logic
+    //
+    // The method is tested at the `PaneLifecycleState` extraction level.
+    // Constructing a full `SessionRegistry` requires `AppHandle`, which is not
+    // available in unit tests. The mapping from `Terminated` to `(exit_code,
+    // signal_name)` is tested here by directly inspecting the state variant.
+    // -----------------------------------------------------------------------
+
+    /// Helper that mirrors the extraction logic in `get_pane_termination_info`.
+    fn extract_termination_info(
+        state: &PaneLifecycleState,
+    ) -> Option<(Option<i32>, Option<String>)> {
+        if let PaneLifecycleState::Terminated { exit_code, .. } = state {
+            Some((*exit_code, None))
+        } else {
+            None
+        }
+    }
+
+    #[test]
+    fn termination_info_exit0_returns_some_zero_none() {
+        let state = PaneLifecycleState::Terminated {
+            exit_code: Some(0),
+            error: None,
+        };
+        let info = extract_termination_info(&state);
+        assert_eq!(
+            info,
+            Some((Some(0), None)),
+            "exit code 0 must produce (Some(0), None)"
+        );
+    }
+
+    #[test]
+    fn termination_info_nonzero_exit_returns_some_code_none() {
+        let state = PaneLifecycleState::Terminated {
+            exit_code: Some(1),
+            error: None,
+        };
+        let info = extract_termination_info(&state);
+        assert_eq!(
+            info,
+            Some((Some(1), None)),
+            "non-zero exit must produce (Some(1), None)"
+        );
+    }
+
+    #[test]
+    fn termination_info_signal_kill_returns_none_exit_none_signal() {
+        // `exit_code` is None when killed by signal (WIFSIGNALED).
+        // `signal_name` is None because `PaneLifecycleState` does not carry
+        // a parseable signal name — only a human-readable `error` string.
+        let state = PaneLifecycleState::Terminated {
+            exit_code: None,
+            error: Some("killed by signal 9".to_string()),
+        };
+        let info = extract_termination_info(&state);
+        assert_eq!(
+            info,
+            Some((None, None)),
+            "signal kill must produce (None, None) — signal_name requires future extension"
+        );
+    }
+
+    #[test]
+    fn termination_info_non_terminated_state_returns_none() {
+        for state in [
+            PaneLifecycleState::Running,
+            PaneLifecycleState::Spawning,
+            PaneLifecycleState::Closing,
+            PaneLifecycleState::Closed,
+        ] {
+            let info = extract_termination_info(&state);
+            assert!(
+                info.is_none(),
+                "non-Terminated state {state:?} must return None"
+            );
+        }
     }
 }

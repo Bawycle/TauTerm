@@ -225,5 +225,15 @@ export function toggleFullscreen(): Promise<FullscreenState> {
   return invoke<FullscreenState>('toggle_fullscreen');
 }
 
+/**
+ * Returns true if a non-shell foreground process is active in the given pane.
+ * Returns false when the pane is idle (shell at prompt), terminated, or not Running.
+ * Used by FS-PTY-008 close confirmation logic.
+ * @command has_foreground_process
+ */
+export function hasForegroundProcess(paneId: PaneId): Promise<boolean> {
+  return invoke<boolean>('has_foreground_process', { paneId });
+}
+
 // Re-export CreateTabConfig so callers can use it from this module
 export type { CreateTabConfig, PaneState };

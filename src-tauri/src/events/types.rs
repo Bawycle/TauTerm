@@ -349,5 +349,106 @@ pub struct NotificationChangedEvent {
 pub enum PaneNotificationDto {
     Bell,
     BackgroundOutput,
-    ProcessExited { exit_code: i32 },
+    /// Process exited — clean (exit_code = Some(0)), error (exit_code = Some(n)), or
+    /// killed by signal (exit_code = None, signal_name = Some("SIGKILL"), etc.).
+    ProcessExited {
+        /// `None` if the process was killed by a signal (WIFSIGNALED).
+        #[serde(rename = "exitCode")]
+        exit_code: Option<i32>,
+        /// Signal name (e.g. `"SIGKILL"`, `"SIGHUP"`) when killed by a signal.
+        /// `None` for normal exits.
+        #[serde(rename = "signalName")]
+        signal_name: Option<String>,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// FS-PTY-005: ProcessExited with exit code 0 serialises correctly.
+    /// JSON must contain `"exitCode":0` and `"signalName":null`.
+    #[test]
+    fn process_exited_exit0_serializes_correctly() {
+        let dto = PaneNotificationDto::ProcessExited {
+            exit_code: Some(0),
+            signal_name: None,
+        };
+        let json = serde_json::to_string(&dto).expect("serialize failed");
+        assert!(
+            json.contains("\"exitCode\":0"),
+            "exitCode must be 0; got: {json}"
+        );
+        assert!(
+            json.contains("\"signalName\":null"),
+            "signalName must be null; got: {json}"
+        );
+        assert!(
+            json.contains("\"type\":\"processExited\""),
+            "type discriminant must be processExited; got: {json}"
+        );
+    }
+
+    /// FS-PTY-005: ProcessExited with non-zero exit code serialises correctly.
+    #[test]
+    fn process_exited_nonzero_serializes_correctly() {
+        let dto = PaneNotificationDto::ProcessExited {
+            exit_code: Some(1),
+            signal_name: None,
+        };
+        let json = serde_json::to_string(&dto).expect("serialize failed");
+        assert!(
+            json.contains("\"exitCode\":1"),
+            "exitCode must be 1; got: {json}"
+        );
+        assert!(
+            json.contains("\"signalName\":null"),
+            "signalName must be null; got: {json}"
+        );
+    }
+
+    /// FS-PTY-005: ProcessExited when killed by signal — exit_code is None,
+    /// signal_name carries the signal name.
+    #[test]
+    fn process_exited_signal_serializes_correctly() {
+        let dto = PaneNotificationDto::ProcessExited {
+            exit_code: None,
+            signal_name: Some("SIGKILL".to_string()),
+        };
+        let json = serde_json::to_string(&dto).expect("serialize failed");
+        assert!(
+            json.contains("\"exitCode\":null"),
+            "exitCode must be null; got: {json}"
+        );
+        assert!(
+            json.contains("\"signalName\":\"SIGKILL\""),
+            "signalName must be SIGKILL; got: {json}"
+        );
+    }
+
+    /// Round-trip: serialise then deserialise back to the same value.
+    #[test]
+    fn process_exited_round_trips() {
+        let dto = PaneNotificationDto::ProcessExited {
+            exit_code: Some(42),
+            signal_name: None,
+        };
+        let json = serde_json::to_string(&dto).expect("serialize failed");
+        let restored: PaneNotificationDto =
+            serde_json::from_str(&json).expect("deserialize failed");
+        if let PaneNotificationDto::ProcessExited {
+            exit_code,
+            signal_name,
+        } = restored
+        {
+            assert_eq!(exit_code, Some(42));
+            assert_eq!(signal_name, None);
+        } else {
+            panic!("expected ProcessExited variant; got: {json}");
+        }
+    }
 }

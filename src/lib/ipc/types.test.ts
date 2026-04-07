@@ -104,8 +104,19 @@ describe('IPC types — structural smoke tests', () => {
   });
 
   it('PaneNotification processExited type can carry exitCode', () => {
-    const notif: PaneNotification = { type: 'processExited', exitCode: 0 };
+    const notif: PaneNotification = { type: 'processExited', exitCode: 0, signalName: null };
     expect(notif.exitCode).toBe(0);
+    expect(notif.signalName).toBeNull();
+  });
+
+  it('PaneNotification processExited type carries null exitCode when killed by signal', () => {
+    const notif: PaneNotification = {
+      type: 'processExited',
+      exitCode: null,
+      signalName: 'SIGKILL',
+    };
+    expect(notif.exitCode).toBeNull();
+    expect(notif.signalName).toBe('SIGKILL');
   });
 
   it('CellAttrsDto has all required fields', () => {

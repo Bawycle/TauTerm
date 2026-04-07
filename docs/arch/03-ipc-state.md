@@ -150,7 +150,7 @@ interface SessionStateChanged {
 
 **`session-state-changed` is not emitted for `split_pane` or `close_pane`:** those commands return the updated `TabState` (or `null`) directly in their response. The command response is the authoritative new state; no event is emitted. This avoids a race between the command response and a redundant event.
 
-`session-state-changed` is emitted only for changes that originate asynchronously or from outside a direct user command: OSC-driven process title change, pane process exit (SIGCHLD leading to `Terminated` state), and `set_active_pane` confirmation.
+`session-state-changed` is emitted only for changes that originate asynchronously or from outside a direct user command: OSC-driven process title change, pane process exit (SIGCHLD leading to a `Terminated` state — `ptyState` field updated), `hasForegroundProcess` transitions (foreground process group change detected), and `set_active_pane` confirmation.
 
 #### 4.5.3 `close_pane` return value and last-pane behavior
 
@@ -216,19 +216,57 @@ The types from UXD §15 (`SshLifecycleState`, `ScreenUpdateEvent`, `CellUpdate`,
               SIGCHLD   │       │  close_pane() / close_tab()
               (exit)    │       │
                         ▼       ▼
-              ┌──────────────┐  ┌──────────────┐
-              │  Terminated  │  │   Closing    │  — SIGHUP sent to process group
-              │  (exit code) │  └──────┬───────┘
-              └──────┬───────┘         │ process exited
-                     │                 ▼
-              user: restart     ┌──────────────┐
-              or close          │    Closed    │
-                                └──────────────┘
+              ┌────────────────────┐  ┌──────────────┐
+              │  Terminated        │  │   Closing    │  — SIGHUP sent to process group
+              │                    │  └──────┬───────┘
+              │  exit 0 ─────────────────────┤ (auto-close, no user action)
+              │  exit ≠ 0 / signal │         │ process exited
+              │  (banner shown)    │         ▼
+              └──────────┬─────────┘  ┌──────────────┐
+                         │            │    Closed    │
+              user: restart or close  └──────────────┘
+                         │
+                         ▼
+               restart → Spawning
+               close  → Closed
 ```
 
-**Terminated state:** The pane remains visible with the exit code displayed. The user can choose to restart (→ Spawning) or close (→ Closed). Closing the pane from Terminated does not require confirmation (FS-PTY-005, FS-PTY-006).
+**Terminated state — exit code 0:** When the child process exits with code 0 (clean exit), the backend emits `session-state-changed` with `changeType: 'pane-metadata-changed'` and `ptyState: 'terminated-clean'`. The frontend auto-closes the pane immediately — no banner is shown, no user confirmation is required (FS-PTY-005). This is equivalent to a user-initiated `close_pane` and follows the same last-pane/last-tab logic (§4.5.3).
 
-**Running → Closing:** Triggered by user close action. If a foreground process is running, the frontend shows a confirmation dialog before invoking `close_pane`. The backend receives `close_pane` only after user confirmation; no process check occurs inside the backend command handler.
+**Terminated state — exit code ≠ 0 or signal:** When the child process exits with a non-zero code or is terminated by a signal, the backend emits `session-state-changed` with `changeType: 'pane-metadata-changed'` and `ptyState: 'terminated-error'` (carrying the exit code or signal number). The pane remains open. The frontend renders a banner with Restart and Close actions (FS-PTY-005, FS-PTY-006). No confirmation is required to close from this state.
+
+**`PtyLifecycleState` in `PaneState`:** `PaneState` carries a `ptyState` field typed as:
+
+```typescript
+type PtyLifecycleState =
+  | { status: 'running'; hasForegroundProcess: boolean }
+  | { status: 'terminated-clean' }
+  | { status: 'terminated-error'; exitCode: number | null; signal: string | null }
+  | { status: 'closed' };
+```
+
+Rust equivalent:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "kebab-case")]
+pub enum PtyLifecycleState {
+    Running { has_foreground_process: bool },
+    TerminatedClean,
+    TerminatedError { exit_code: Option<i32>, signal: Option<String> },
+    Closed,
+}
+```
+
+**Foreground process detection:** The backend detects whether the PTY foreground process group differs from the shell's process group using `tcgetpgrp(master_fd)` (Linux: `ioctl(TIOCGPGRP)`) compared against the shell's `pgid` saved at spawn time. This check is performed:
+- Eagerly, whenever `session-state-changed` is emitted for `pane-metadata-changed` changes (title OSC, process exit, etc.) — the current value is recomputed and included in the `PaneState` payload. The frontend's replica is always up to date.
+- On demand, when the backend builds the `PaneState` snapshot in response to `get_session_state` (initial mount).
+
+The `hasForegroundProcess` flag is the single source of truth for whether a confirmation dialog is required. The backend is responsible for computing it; the frontend only reads it.
+
+**Running → Closing:** Triggered by user close action. Before invoking `close_pane`, the frontend reads `PaneState.ptyState.hasForegroundProcess`. If `true`, it shows a confirmation dialog (FS-PTY-008). The backend receives `close_pane` only after user confirmation (or when `hasForegroundProcess` is `false`); no redundant process check occurs inside the command handler.
+
+**Window close event:** When the user attempts to close the application window, the frontend intercepts Tauri's `CloseRequested` window event before it propagates. It aggregates `hasForegroundProcess` across all panes in all tabs. If any pane has an active foreground process, it shows a single confirmation dialog indicating the count of affected tabs/panes (FS-PTY-008). On confirmation (or when no active processes exist), it calls `close_pane` for each pane sequentially (or invokes the window close API directly if no panes require explicit teardown).
 
 **Last-pane close:** When the last pane in a tab is closed via `close_pane`, the tab is removed atomically by the backend. A single `session-state-changed` event with `changeType: 'tab-closed'` is emitted. If this was the last tab, the frontend detects the empty tab list and closes the window (FS-TAB-008). See §4.5.3 for the full return-value contract.
 

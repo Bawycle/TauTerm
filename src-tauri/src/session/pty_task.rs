@@ -338,15 +338,20 @@ pub fn spawn_pty_read_task(
             }
         }
 
-        // FS-NOTIF-002: PTY process exited — emit notification with exit code.
-        let exit_code = registry_e.get_pane_exit_code(&pane_id_e).unwrap_or(-1);
+        // FS-NOTIF-002: PTY process exited — emit notification with exit code / signal.
+        let (exit_code, signal_name) = registry_e
+            .get_pane_termination_info(&pane_id_e)
+            .unwrap_or((None, None));
         if let Some((_, tab_state)) = registry_e.get_tab_state_for_pane(&pane_id_e) {
             emit_notification_changed(
                 &app_e,
                 NotificationChangedEvent {
                     tab_id: tab_state.id,
                     pane_id: pane_id_e.clone(),
-                    notification: Some(PaneNotificationDto::ProcessExited { exit_code }),
+                    notification: Some(PaneNotificationDto::ProcessExited {
+                        exit_code,
+                        signal_name,
+                    }),
                 },
             );
         }
@@ -622,7 +627,9 @@ pub(crate) fn build_scrolled_viewport_event(
         if content_pos < n as i64 {
             // Source: scrollback line at index `content_pos`.
             let sb_idx = content_pos as usize;
-            let line_cells: Vec<CellUpdate> = if let Some(sb_line) = proc.get_scrollback_line(sb_idx) {
+            let line_cells: Vec<CellUpdate> = if let Some(sb_line) =
+                proc.get_scrollback_line(sb_idx)
+            {
                 (0..cols)
                     .map(|col_idx| {
                         if col_idx < sb_line.cells.len() {
@@ -857,7 +864,11 @@ mod tests {
     // Scrolled viewport tests (TEST-SB-VIEWPORT-*)
     // -----------------------------------------------------------------------
 
-    fn make_vt_with_scrollback(cols: u16, rows: u16, scrollback: usize) -> Arc<RwLock<VtProcessor>> {
+    fn make_vt_with_scrollback(
+        cols: u16,
+        rows: u16,
+        scrollback: usize,
+    ) -> Arc<RwLock<VtProcessor>> {
         Arc::new(RwLock::new(VtProcessor::new(cols, rows, scrollback)))
     }
 
@@ -896,7 +907,9 @@ mod tests {
         assert_eq!(event.rows, 3);
 
         // Row 0 should be the scrollback line whose content starts with 'L' (LINE1).
-        let row0_content: String = event.cells.iter()
+        let row0_content: String = event
+            .cells
+            .iter()
             .filter(|c| c.row == 0)
             .map(|c| c.content.as_str())
             .collect::<Vec<_>>()
@@ -935,7 +948,9 @@ mod tests {
 
         // Every row should have content sourced from scrollback (non-blank).
         for row in 0..3u16 {
-            let row_content: String = event.cells.iter()
+            let row_content: String = event
+                .cells
+                .iter()
                 .filter(|c| c.row == row)
                 .map(|c| c.content.as_str())
                 .collect::<Vec<_>>()

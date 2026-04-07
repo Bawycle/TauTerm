@@ -322,7 +322,10 @@ fn ipc_notification_changed_process_exited_serializes() {
     let event = NotificationChangedEvent {
         tab_id: make_tab_id(),
         pane_id: make_pane_id(),
-        notification: Some(PaneNotificationDto::ProcessExited { exit_code: 0 }),
+        notification: Some(PaneNotificationDto::ProcessExited {
+            exit_code: Some(0),
+            signal_name: None,
+        }),
     };
     let json = serde_json::to_string(&event).expect("serialize ProcessExited");
     assert!(

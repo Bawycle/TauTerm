@@ -5786,6 +5786,7 @@ dependencies = [
  "base64 0.22.1",
  "dashmap",
  "dirs",
+ "libc",
  "notify-rust",
  "parking_lot",
  "portable-pty",

@@ -71,6 +71,24 @@ pub trait PtySession: Send + Sync {
     /// Close the PTY, delivering SIGHUP to the foreground process group.
     fn close(self: Box<Self>);
 
+    /// Return the process group ID of the current foreground process on this PTY master.
+    ///
+    /// Uses `tcgetpgrp(master_fd)` (Linux: TIOCGPGRP).
+    /// Returns `Err` if the syscall fails or this session type does not support it.
+    /// The default returns `Err` (SSH sessions and stub backends have no master fd).
+    fn foreground_pgid(&self) -> Result<libc::pid_t, PtyError> {
+        Err(PtyError::Io(std::io::Error::other(
+            "foreground_pgid not supported on this session type",
+        )))
+    }
+
+    /// Return the PID of the shell process spawned for this session.
+    ///
+    /// `None` if this session type does not track a shell PID (SSH sessions, stubs).
+    fn shell_pid(&self) -> Option<u32> {
+        None
+    }
+
     /// Get a shared reader handle for the PTY read task.
     ///
     /// Platform implementations that support a read task return `Some(...)`.

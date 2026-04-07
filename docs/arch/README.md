@@ -49,6 +49,9 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | `NotificationChangedEvent` | [03-ipc-state.md](03-ipc-state.md) §4.5.4 |
 | Rust ↔ TypeScript type definitions | [03-ipc-state.md](03-ipc-state.md) §4.6 |
 | PTY session lifecycle state machine | [03-ipc-state.md](03-ipc-state.md) §5.1 |
+| `PtyLifecycleState` type (running/terminated-clean/terminated-error/closed) | [03-ipc-state.md](03-ipc-state.md) §5.1 |
+| Foreground process detection (`tcgetpgrp`, `hasForegroundProcess`) | [03-ipc-state.md](03-ipc-state.md) §5.1 |
+| Window close confirmation flow (CloseRequested aggregation) | [03-ipc-state.md](03-ipc-state.md) §5.1 |
 | SSH session lifecycle state machine | [03-ipc-state.md](03-ipc-state.md) §5.2 |
 | VT terminal mode state (DECCKM, mouse modes, etc.) | [03-ipc-state.md](03-ipc-state.md) §5.3 |
 | Tokio runtime, C1 codes, DCS dispatch | [04-runtime-platform.md](04-runtime-platform.md) §6.1 |

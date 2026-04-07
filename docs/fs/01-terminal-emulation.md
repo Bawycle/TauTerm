@@ -229,10 +229,10 @@
 | FS-PTY-002 | The child process MUST be spawned with the slave PTY as its controlling terminal. | Must |
 | FS-PTY-003 | PTY I/O MUST NOT block the async runtime. | Must |
 | FS-PTY-004 | File descriptors MUST be properly managed: each process retains only the file descriptors necessary for its role; no descriptors are leaked across the fork boundary. | Must |
-| FS-PTY-005 | Shell process exit MUST be detected (via SIGCHLD/waitpid). The pane MUST transition to a "terminated" state displaying the exit status. The pane MUST NOT auto-close. | Must |
-| FS-PTY-006 | A terminated pane MUST offer the user two actions: close the pane, or restart the shell. | Must |
+| FS-PTY-005 | Shell process exit MUST be detected (via SIGCHLD/waitpid). If the exit code is non-zero or the process was terminated by a signal, the pane MUST transition to a "terminated" state displaying the exit status; the pane MUST NOT auto-close. If the exit code is 0 (clean exit), the pane MUST auto-close immediately. | Must |
+| FS-PTY-006 | A pane that has transitioned to the "terminated" state (non-zero exit or signal termination, per FS-PTY-005) MUST offer the user two actions: close the pane, or restart the shell. This requirement does not apply to exit code 0, which triggers auto-close (FS-PTY-005). | Must |
 | FS-PTY-007 | Closing a tab or pane MUST close the master fd, sending SIGHUP to the child process group. | Must |
-| FS-PTY-008 | If a foreground process is running when the user attempts to close a tab, a pane, or the application window, a confirmation dialog MUST be displayed. When closing the window, the dialog MUST indicate how many tabs/panes have active processes. | Must |
+| FS-PTY-008 | If a non-shell foreground process is running (i.e., the foreground process group of the PTY is not the shell itself) when the user attempts to close a tab, a pane, or the application window, a confirmation dialog MUST be displayed. A pane with only an idle shell at the prompt MUST NOT trigger a confirmation dialog. When closing the window, the dialog MUST indicate how many tabs/panes have active non-shell processes. | Must |
 | FS-PTY-009 | Pane resize MUST trigger `ioctl(TIOCSWINSZ)` and deliver SIGWINCH to the foreground process group. The resize MUST include pixel dimensions (xpixel, ypixel). | Must |
 | FS-PTY-010 | Resize events SHOULD be debounced (≤ 100ms, typically 50ms). The final size MUST always be sent. | Should |
 | FS-PTY-011 | The following environment variables MUST be set in the child process: `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` (UTF-8 locale — inherited or fallback), `LINES`, `COLUMNS`, `SHELL`, `HOME`, `USER`, `LOGNAME`, `PATH`, `TERM_PROGRAM=TauTerm`, `TERM_PROGRAM_VERSION=<version>`. | Must |
@@ -242,9 +242,9 @@
 
 **Acceptance criteria:**
 - FS-PTY-001: Two panes run independent shell sessions; input in one does not affect the other.
-- FS-PTY-005: Running `exit` in a shell displays the exit status (0) in the pane; the pane remains visible.
-- FS-PTY-006: A terminated pane shows "Close" and "Restart" actions.
-- FS-PTY-008: Running `sleep 3600` then pressing the close-tab shortcut shows a confirmation dialog.
+- FS-PTY-005: Running `exit 1` in a shell displays the exit status (1) in the pane; the pane remains visible with Close/Restart actions. Running `exit` (code 0) causes the pane to close immediately.
+- FS-PTY-006: A pane terminated with a non-zero exit code shows "Close" and "Restart" actions.
+- FS-PTY-008: Running `sleep 3600` then pressing the close-tab shortcut shows a confirmation dialog. Pressing the close-tab shortcut on a pane with only an idle shell prompt does NOT show a confirmation dialog.
 - FS-PTY-009: Resizing a pane while vim is open causes vim to redraw at the new size.
 - FS-PTY-011: `echo $TERM_PROGRAM` outputs `TauTerm`.
 - FS-PTY-013: The initial tab sources `~/.bash_profile` (login shell); a second tab does not.

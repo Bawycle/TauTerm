@@ -153,6 +153,7 @@ pub fn run() {
             commands::session_cmds::close_pane,
             commands::session_cmds::set_active_tab,
             commands::session_cmds::set_active_pane,
+            commands::session_cmds::has_foreground_process,
             // Input / screen commands
             commands::input_cmds::send_input,
             commands::input_cmds::scroll_pane,

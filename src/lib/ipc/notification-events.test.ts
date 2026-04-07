@@ -43,7 +43,7 @@ describe('NOTIF-001: backgroundOutput notification type', () => {
 
 describe('NOTIF-002: processExited notification type', () => {
   it('processExited notification carries exitCode', () => {
-    const event = makeNotificationEvent('tab-1', 'pane-1', { type: 'processExited', exitCode: 0 });
+    const event = makeNotificationEvent('tab-1', 'pane-1', { type: 'processExited', exitCode: 0 , signalName: null });
     expect(event.notification?.type).toBe('processExited');
     if (event.notification?.type === 'processExited') {
       expect(typeof event.notification.exitCode).toBe('number');
@@ -51,7 +51,7 @@ describe('NOTIF-002: processExited notification type', () => {
   });
 
   it('processExited and backgroundOutput are distinct types', () => {
-    const exit = makeNotificationEvent('tab-1', 'pane-1', { type: 'processExited', exitCode: 1 });
+    const exit = makeNotificationEvent('tab-1', 'pane-1', { type: 'processExited', exitCode: 1 , signalName: null });
     const bg = makeNotificationEvent('tab-1', 'pane-1', { type: 'backgroundOutput' });
     expect(exit.notification?.type).not.toBe(bg.notification?.type);
   });

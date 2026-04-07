@@ -192,6 +192,9 @@
   "close_confirm_body": "A process is running in this terminal. Closing it will terminate the process.",
   "close_confirm_action": "Close anyway",
 
+  "window_close_confirm_title": "Close window?",
+  "window_close_confirm_body": "{count} pane(s) with running processes will be terminated.",
+
   "pane_navigate_up": "Navigate to pane above",
   "pane_navigate_down": "Navigate to pane below",
   "pane_navigate_left": "Navigate to pane on the left",

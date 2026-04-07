@@ -135,3 +135,27 @@ pub async fn set_active_pane(
 
     Ok(())
 }
+
+/// FS-PTY-008: Detect whether a non-shell foreground process is active in a pane.
+///
+/// Returns `true` when the PTY foreground process group (from `tcgetpgrp`) differs
+/// from the shell's PID — indicating that the user has run a command that has not
+/// yet returned to the shell prompt.
+///
+/// Returns `false` when:
+/// - The pane does not exist.
+/// - The pane is not in `Running` state (already terminated, closing, etc.).
+/// - The pane is an SSH pane (no local PTY master fd).
+/// - The shell PID is unknown (session type does not track it).
+///
+/// The `tcgetpgrp` syscall is performed inside the registry, delegated through
+/// `PtySession::foreground_pgid()` in the platform layer — no `unsafe` here.
+#[tauri::command]
+pub async fn has_foreground_process(
+    pane_id: PaneId,
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<bool, TauTermError> {
+    registry
+        .has_foreground_process(&pane_id)
+        .map_err(TauTermError::from)
+}

@@ -40,6 +40,9 @@ use crate::preferences::schema::{Preferences, PreferencesPatch, UserTheme};
 /// cause excessive IPC payload sizes.
 const MAX_CONNECTIONS: usize = 1_000;
 
+/// Names of built-in themes that must never be deleted by the user.
+const BUILT_IN_THEME_NAMES: &[&str] = &["umbra", "solstice", "archipel"];
+
 /// The preferences store — thread-safe, injected as `State<Arc<RwLock<PreferencesStore>>>`.
 pub struct PreferencesStore {
     prefs: RwLock<Preferences>,
@@ -158,7 +161,16 @@ impl PreferencesStore {
     }
 
     /// Delete a user theme by name.
+    ///
+    /// Returns `Err(PreferencesError::Validation)` if `name` matches a built-in
+    /// theme (`umbra`, `solstice`, `archipel`) — those are not user-owned and
+    /// must never be removed.
     pub fn delete_theme(&self, name: &str) -> Result<(), PreferencesError> {
+        if BUILT_IN_THEME_NAMES.contains(&name) {
+            return Err(PreferencesError::Validation(format!(
+                "Built-in theme '{name}' cannot be deleted"
+            )));
+        }
         let mut prefs = self.prefs.write();
         prefs.themes.retain(|t| t.name != name);
         let updated = prefs.clone();
@@ -485,7 +497,7 @@ fn dirs_or_home() -> Result<PathBuf, PreferencesError> {
 #[cfg(test)]
 mod tests {
     use super::{MAX_CONNECTIONS, PreferencesStore, camel_to_snake, snake_to_camel};
-    use crate::preferences::schema::{AppearancePatch, Language, PreferencesPatch};
+    use crate::preferences::schema::{AppearancePatch, Language, PreferencesPatch, UserTheme};
 
     // -----------------------------------------------------------------------
     // apply_patch — AppearancePatch merge semantics
@@ -752,5 +764,124 @@ mod tests {
                 "roundtrip failed for '{original}': snake='{snake}', restored='{restored}'"
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Built-in theme protection
+    // -----------------------------------------------------------------------
+
+    fn make_user_theme(name: &str) -> UserTheme {
+        let black = "#000000".to_string();
+        UserTheme {
+            name: name.to_string(),
+            palette: std::array::from_fn(|_| black.clone()),
+            foreground: black.clone(),
+            background: black.clone(),
+            cursor_color: black.clone(),
+            selection_bg: black.clone(),
+            line_height: None,
+        }
+    }
+
+    /// delete_theme must reject the built-in "umbra" theme.
+    #[test]
+    fn test_delete_theme_rejects_builtin_umbra() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        let result = store.read().delete_theme("umbra");
+        assert!(result.is_err(), "deleting built-in theme 'umbra' must fail");
+        match result.unwrap_err() {
+            crate::error::PreferencesError::Validation(msg) => {
+                assert!(
+                    msg.contains("umbra"),
+                    "error message should mention 'umbra', got: {msg}"
+                );
+            }
+            other => panic!("expected Validation error, got: {other:?}"),
+        }
+    }
+
+    /// delete_theme must reject the built-in "solstice" theme.
+    #[test]
+    fn test_delete_theme_rejects_builtin_solstice() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        let result = store.read().delete_theme("solstice");
+        assert!(
+            result.is_err(),
+            "deleting built-in theme 'solstice' must fail"
+        );
+        match result.unwrap_err() {
+            crate::error::PreferencesError::Validation(msg) => {
+                assert!(
+                    msg.contains("solstice"),
+                    "error message should mention 'solstice', got: {msg}"
+                );
+            }
+            other => panic!("expected Validation error, got: {other:?}"),
+        }
+    }
+
+    /// delete_theme must reject the built-in "archipel" theme.
+    #[test]
+    fn test_delete_theme_rejects_builtin_archipel() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        let result = store.read().delete_theme("archipel");
+        assert!(
+            result.is_err(),
+            "deleting built-in theme 'archipel' must fail"
+        );
+        match result.unwrap_err() {
+            crate::error::PreferencesError::Validation(msg) => {
+                assert!(
+                    msg.contains("archipel"),
+                    "error message should mention 'archipel', got: {msg}"
+                );
+            }
+            other => panic!("expected Validation error, got: {other:?}"),
+        }
+    }
+
+    /// delete_theme must allow deleting a user-defined theme.
+    #[test]
+    fn test_delete_theme_allows_user_defined_theme() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let path = tmp.path().join("preferences.toml");
+        let store = PreferencesStore::new_with_defaults(path);
+
+        // Save a user-defined theme first.
+        let theme = make_user_theme("my-theme");
+        store
+            .read()
+            .save_theme(theme)
+            .expect("save_theme must succeed");
+
+        // Verify it is present.
+        let themes = store.read().get_themes();
+        assert!(
+            themes.iter().any(|t| t.name == "my-theme"),
+            "theme 'my-theme' must be present after save"
+        );
+
+        // Delete it — must succeed.
+        let result = store.read().delete_theme("my-theme");
+        assert!(
+            result.is_ok(),
+            "deleting user-defined theme 'my-theme' must succeed"
+        );
+
+        // Verify it is gone.
+        let themes_after = store.read().get_themes();
+        assert!(
+            !themes_after.iter().any(|t| t.name == "my-theme"),
+            "theme 'my-theme' must be absent after delete"
+        );
     }
 }

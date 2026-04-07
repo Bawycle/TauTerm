@@ -227,6 +227,7 @@ This catches cases where tier 1 is absent (tabs) or insufficient (elements that 
 | Tab bar Escape | `TabBar.svelte` `handleTabKeydown` | `onEscapeTabBar?.()` callback |
 | Tab bar printable key | `TabBar.svelte` `handleTabKeydown` catch-all | `onEscapeTabBar?.()` — tab bar is a transient navigation surface, not a permanent focus owner |
 | SSH panel close | `TerminalView.svelte` `ConnectionManager` `onclose` prop | `tv.activeViewportEl?.focus()` with modal guard |
+| Preferences panel close | `TerminalView.svelte` `PreferencesPanel` `onclose` prop | `tv.activeViewportEl?.focus()` — no modal guard needed (modal already dismissed) |
 | Fullscreen toggle | `useTerminalView.core.svelte.ts` `onFullscreenStateChanged` handler | `bag.activeViewportEl?.focus()` — deferred to post-WM-stabilisation event |
 | Bits UI dialogs | Bits UI `FocusScope` | Automatic restoration to the element that opened the dialog |
 | Pane split | Backend sets `active_pane_id` to the new pane | `$effect` in `useTerminalPane` fires |

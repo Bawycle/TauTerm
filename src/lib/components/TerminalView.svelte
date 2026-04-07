@@ -277,6 +277,7 @@
     preferences={preferences.value}
     onclose={() => {
       tv.prefsOpen = false;
+      tv.activeViewportEl?.focus({ preventScroll: true });
     }}
     onupdate={tv.handlePreferencesUpdate}
   />

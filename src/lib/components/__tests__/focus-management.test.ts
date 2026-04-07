@@ -15,6 +15,7 @@
  *   TEST-FOCUS-015 — SSH panel onclose: activeViewportEl.focus() restored (static check)
  *   TEST-FOCUS-016 — Fullscreen onclick: activeViewportEl.focus() restored after toggle (static check)
  *   TEST-FOCUS-017 — Tab bar printable key: onEscapeTabBar invoked (pure logic)
+ *   TEST-FOCUS-018 — Preferences panel onclose: activeViewportEl.focus() restored (static check)
  *
  * Architecture note on TEST-FOCUS-001/002/003:
  *   The `onFocusIn` focus guard is defined as a closure inside `createViewState()`
@@ -1132,5 +1133,35 @@ describe('TEST-FOCUS-017: Tab bar printable key triggers onEscapeTabBar', () => 
     // During IME composition, isComposing=true even for single-char keys
     handle({ key: 'a', isComposing: true, preventDefault: vi.fn() }, 'tab-1');
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEST-FOCUS-018: Preferences panel onclose — activeViewportEl.focus() restored
+//
+// When PreferencesPanel closes, Bits UI FocusScope returns focus to the
+// settings button in StatusBar — not to the terminal. The onclose callback
+// must explicitly restore focus. No modal guard is needed: by the time onclose
+// fires, the modal is already dismissed and no longer in the DOM.
+// ---------------------------------------------------------------------------
+
+describe('TEST-FOCUS-018: Preferences panel onclose restores focus to activeViewportEl', () => {
+  it('TerminalView.svelte PreferencesPanel onclose contains activeViewportEl focus call (static check)', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(
+      process.cwd(),
+      'src/lib/components/TerminalView.svelte',
+    );
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    // Locate the PreferencesPanel onclose block via the prefsOpen assignment
+    const oncloseIdx = source.indexOf('tv.prefsOpen = false');
+    expect(oncloseIdx).toBeGreaterThan(-1);
+
+    const oncloseBlock = source.slice(oncloseIdx, oncloseIdx + 200);
+    expect(oncloseBlock).toContain('activeViewportEl');
+    expect(oncloseBlock).toContain('focus');
+    expect(oncloseBlock).toContain('preventScroll');
   });
 });

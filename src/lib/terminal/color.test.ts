@@ -2,6 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  ANSI_16_VARS,
   resolve256Color,
   resolveColorDto,
   resolveColor,
@@ -11,23 +12,43 @@ import {
 import type { ColorDto, Color } from '$lib/ipc/types';
 
 // ---------------------------------------------------------------------------
+// ANSI_16_VARS: export and correct token names
+// ---------------------------------------------------------------------------
+describe('ANSI_16_VARS', () => {
+  it('maps index 0 to --term-color-0', () => {
+    expect(ANSI_16_VARS[0]).toBe('var(--term-color-0)');
+  });
+  it('maps index 15 to --term-color-15', () => {
+    expect(ANSI_16_VARS[15]).toBe('var(--term-color-15)');
+  });
+  it('has exactly 16 entries', () => {
+    expect(ANSI_16_VARS.length).toBe(16);
+  });
+  it('contains no --ansi-* references', () => {
+    for (const v of ANSI_16_VARS) {
+      expect(v).not.toContain('--ansi-');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // TUITC-FN-020: ANSI 16 colors map to CSS token variables
 // ---------------------------------------------------------------------------
 describe('TUITC-FN-020: ANSI 16 fg colors → CSS token vars', () => {
-  it('ANSI index 0 → var(--ansi-black)', () => {
-    expect(resolve256Color(0)).toBe('var(--ansi-black)');
+  it('ANSI index 0 → var(--term-color-0)', () => {
+    expect(resolve256Color(0)).toBe('var(--term-color-0)');
   });
-  it('ANSI index 1 → var(--ansi-red)', () => {
-    expect(resolve256Color(1)).toBe('var(--ansi-red)');
+  it('ANSI index 1 → var(--term-color-1)', () => {
+    expect(resolve256Color(1)).toBe('var(--term-color-1)');
   });
-  it('ANSI index 7 → var(--ansi-white)', () => {
-    expect(resolve256Color(7)).toBe('var(--ansi-white)');
+  it('ANSI index 7 → var(--term-color-7)', () => {
+    expect(resolve256Color(7)).toBe('var(--term-color-7)');
   });
-  it('ANSI index 8 → var(--ansi-bright-black)', () => {
-    expect(resolve256Color(8)).toBe('var(--ansi-bright-black)');
+  it('ANSI index 8 → var(--term-color-8)', () => {
+    expect(resolve256Color(8)).toBe('var(--term-color-8)');
   });
-  it('ANSI index 15 → var(--ansi-bright-white)', () => {
-    expect(resolve256Color(15)).toBe('var(--ansi-bright-white)');
+  it('ANSI index 15 → var(--term-color-15)', () => {
+    expect(resolve256Color(15)).toBe('var(--term-color-15)');
   });
 });
 
@@ -109,9 +130,9 @@ describe('TUITC-FN-023/024: default color → undefined (CSS inheritance)', () =
 // resolveColor (SnapshotCell) — same logic, no default variant
 // ---------------------------------------------------------------------------
 describe('resolveColor (SnapshotCell Color type)', () => {
-  it('ANSI index 1 → var(--ansi-red)', () => {
+  it('ANSI index 1 → var(--term-color-1)', () => {
     const color: Color = { type: 'ansi', index: 1 };
-    expect(resolveColor(color)).toBe('var(--ansi-red)');
+    expect(resolveColor(color)).toBe('var(--term-color-1)');
   });
 
   it('ansi256 index 196 → rgb(255,0,0)', () => {

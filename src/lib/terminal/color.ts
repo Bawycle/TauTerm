@@ -18,25 +18,26 @@ import type { ColorDto, Color } from '$lib/ipc/types';
 
 /**
  * CSS custom property names for ANSI 0–15.
- * These map to the `--ansi-*` tokens defined in src/app.css.
+ * These map to the `--term-color-N` tokens defined in src/app.css (Umbra baseline)
+ * and overridden at runtime by the active theme via applyTheme().
  */
-const ANSI_16_VARS: readonly string[] = [
-  'var(--ansi-black)', // 0
-  'var(--ansi-red)', // 1
-  'var(--ansi-green)', // 2
-  'var(--ansi-yellow)', // 3
-  'var(--ansi-blue)', // 4
-  'var(--ansi-magenta)', // 5
-  'var(--ansi-cyan)', // 6
-  'var(--ansi-white)', // 7
-  'var(--ansi-bright-black)', // 8
-  'var(--ansi-bright-red)', // 9
-  'var(--ansi-bright-green)', // 10
-  'var(--ansi-bright-yellow)', // 11
-  'var(--ansi-bright-blue)', // 12
-  'var(--ansi-bright-magenta)', // 13
-  'var(--ansi-bright-cyan)', // 14
-  'var(--ansi-bright-white)', // 15
+export const ANSI_16_VARS: readonly string[] = [
+  'var(--term-color-0)', // 0
+  'var(--term-color-1)', // 1
+  'var(--term-color-2)', // 2
+  'var(--term-color-3)', // 3
+  'var(--term-color-4)', // 4
+  'var(--term-color-5)', // 5
+  'var(--term-color-6)', // 6
+  'var(--term-color-7)', // 7
+  'var(--term-color-8)', // 8
+  'var(--term-color-9)', // 9
+  'var(--term-color-10)', // 10
+  'var(--term-color-11)', // 11
+  'var(--term-color-12)', // 12
+  'var(--term-color-13)', // 13
+  'var(--term-color-14)', // 14
+  'var(--term-color-15)', // 15
 ];
 
 /**

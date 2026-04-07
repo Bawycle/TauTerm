@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
   import { Dialog } from 'bits-ui';
-  import { X } from 'lucide-svelte';
+  import { X, Check, Copy, Pencil, Trash2 } from 'lucide-svelte';
   import TextInput from '$lib/ui/TextInput.svelte';
   import Dropdown from '$lib/ui/Dropdown.svelte';
   import Button from '$lib/ui/Button.svelte';
@@ -31,6 +31,8 @@
     BellType,
   } from '$lib/ipc/types';
   import { contrastRatio, WCAG_AA_THRESHOLD } from '$lib/utils/contrast';
+  import { isBuiltInTheme, BUILT_IN_THEME_NAMES, getThemeSwatch } from '$lib/theming/built-in-themes';
+  import { buildMinimalValidTheme } from '$lib/theming/validate';
 
   // ---------------------------------------------------------------------------
   // Props
@@ -201,9 +203,6 @@
   // Tâche #15: Theme editor (FS-THEME-003..006)
   // ---------------------------------------------------------------------------
 
-  /** The default built-in theme name — cannot be deleted. */
-  const DEFAULT_THEME_NAME = 'umbra';
-
   /** All user themes loaded from backend. */
   let themes = $state<UserTheme[]>([]);
   /** Whether the themes list has been loaded. */
@@ -217,10 +216,12 @@
   let editingTheme = $state<UserTheme | null>(null);
   /** Whether we are creating a new theme (vs editing an existing one). */
   let isNewTheme = $state(false);
+  /** Hovered theme name for showing action buttons. */
+  let hoveredThemeName = $state<string | null>(null);
 
-  /** Load themes when the Themes section becomes active. */
+  /** Load themes when the Themes or Appearance section becomes active. */
   $effect(() => {
-    if (activeSection === 'themes' && !themesLoaded) {
+    if ((activeSection === 'themes' || activeSection === 'appearance') && !themesLoaded) {
       loadThemes();
     }
   });
@@ -262,7 +263,7 @@
   }
 
   async function handleDeleteTheme(name: string) {
-    if (name === DEFAULT_THEME_NAME) return;
+    if (isBuiltInTheme(name)) return;
     themeBusy = true;
     themeError = null;
     try {
@@ -270,7 +271,7 @@
       themes = themes.filter((t) => t.name !== name);
       // If the deleted theme was active, reset to default.
       if (preferences?.appearance?.themeName === name) {
-        onupdate?.({ appearance: { ...preferences.appearance, themeName: DEFAULT_THEME_NAME } });
+        onupdate?.({ appearance: { ...preferences.appearance, themeName: 'umbra' } });
       }
     } catch {
       themeError = 'Failed to delete theme';
@@ -280,34 +281,57 @@
   }
 
   function handleNewTheme() {
-    const blankPalette: UserTheme['palette'] = [
-      '#000000',
-      '#800000',
-      '#008000',
-      '#808000',
-      '#000080',
-      '#800080',
-      '#008080',
-      '#c0c0c0',
-      '#808080',
-      '#ff0000',
-      '#00ff00',
-      '#ffff00',
-      '#0000ff',
-      '#ff00ff',
-      '#00ffff',
-      '#ffffff',
-    ];
+    const defaults = buildMinimalValidTheme();
     editingTheme = {
       name: '',
-      palette: blankPalette,
-      foreground: '#c0c0c0',
-      background: '#000000',
-      cursorColor: '#ffffff',
-      selectionBg: '#4040a0',
+      palette: [
+        defaults['term-color-0'], defaults['term-color-1'], defaults['term-color-2'], defaults['term-color-3'],
+        defaults['term-color-4'], defaults['term-color-5'], defaults['term-color-6'], defaults['term-color-7'],
+        defaults['term-color-8'], defaults['term-color-9'], defaults['term-color-10'], defaults['term-color-11'],
+        defaults['term-color-12'], defaults['term-color-13'], defaults['term-color-14'], defaults['term-color-15'],
+      ] as UserTheme['palette'],
+      foreground: defaults['term-fg'],
+      background: defaults['term-bg'],
+      cursorColor: defaults['term-cursor-bg'],
+      selectionBg: defaults['term-selection-bg'],
     };
     isNewTheme = true;
     themeError = null;
+  }
+
+  function handleDuplicateTheme(sourceName: string) {
+    const defaults = buildMinimalValidTheme();
+    const source = themes.find(t => t.name === sourceName);
+    const basePalette = source
+      ? [...source.palette] as UserTheme['palette']
+      : [
+          defaults['term-color-0'], defaults['term-color-1'], defaults['term-color-2'], defaults['term-color-3'],
+          defaults['term-color-4'], defaults['term-color-5'], defaults['term-color-6'], defaults['term-color-7'],
+          defaults['term-color-8'], defaults['term-color-9'], defaults['term-color-10'], defaults['term-color-11'],
+          defaults['term-color-12'], defaults['term-color-13'], defaults['term-color-14'], defaults['term-color-15'],
+        ] as UserTheme['palette'];
+    editingTheme = {
+      name: `Copy of ${sourceName}`,
+      palette: basePalette,
+      foreground: source?.foreground ?? defaults['term-fg'],
+      background: source?.background ?? defaults['term-bg'],
+      cursorColor: source?.cursorColor ?? defaults['term-cursor-bg'],
+      selectionBg: source?.selectionBg ?? defaults['term-selection-bg'],
+      lineHeight: source?.lineHeight,
+    };
+    isNewTheme = true;
+    themeError = null;
+  }
+
+  function isLightTheme(name: string, userThemes: UserTheme[]): boolean {
+    if (name === 'solstice') return true;
+    const swatch = getThemeSwatch(name, userThemes);
+    const hex = swatch.bg.replace('#', '');
+    if (hex.length < 6) return false;
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 128;
   }
 
   function handleEditTheme(theme: UserTheme) {
@@ -496,6 +520,20 @@
               />
 
               <Dropdown
+                id="pref-theme"
+                label={m.preferences_appearance_theme()}
+                options={[
+                  ...BUILT_IN_THEME_NAMES.map(name => ({
+                    value: name,
+                    label: name.charAt(0).toUpperCase() + name.slice(1)
+                  })),
+                  ...themes.map(t => ({ value: t.name, label: t.name }))
+                ]}
+                value={preferences?.appearance?.themeName ?? 'umbra'}
+                onchange={(val) => handleActivateTheme(val)}
+              />
+
+              <Dropdown
                 id="pref-language"
                 label={m.preferences_appearance_language()}
                 options={languageOptions}
@@ -571,6 +609,33 @@
             {/if}
 
             {#if editingTheme !== null}
+              <!-- ---- Theme editor ---- -->
+              {#if isBuiltInTheme(editingTheme.name)}
+                <!-- Read-only display for built-in themes -->
+                <div class="space-y-4">
+                  <p class="text-(--font-size-ui-base) font-medium text-(--color-text-primary) mb-2">
+                    {editingTheme.name.charAt(0).toUpperCase() + editingTheme.name.slice(1)}
+                  </p>
+                  <p class="text-(--font-size-ui-sm) text-(--color-text-secondary) mb-4">
+                    {m.theme_builtin_label()} — {isLightTheme(editingTheme.name, themes) ? m.theme_light_label() : m.theme_dark_label()}
+                  </p>
+                  <!-- Read-only color swatches display -->
+                  <div class="flex gap-1 mb-4">
+                    {#each editingTheme.palette as color}
+                      <div class="w-5 h-5 rounded-sm border border-(--color-border)" style="background:{color}" title={color}></div>
+                    {/each}
+                  </div>
+                  <div class="flex gap-2">
+                    <Button variant="secondary" onclick={() => handleDuplicateTheme(editingTheme?.name ?? '')}>
+                      <Copy class="w-4 h-4 mr-2" />
+                      {m.theme_duplicate_to_edit()}
+                    </Button>
+                    <Button variant="ghost" onclick={handleCancelEdit}>
+                      {m.theme_cancel()}
+                    </Button>
+                  </div>
+                </div>
+              {:else}
               <!-- ---- Theme editor form ---- -->
               <div class="space-y-4">
                 <p class="text-(--font-size-ui-base) font-medium text-(--color-text-primary) mb-2">
@@ -764,49 +829,84 @@
                   </Button>
                 </div>
               </div>
+              {/if}
             {:else}
               <!-- ---- Theme list ---- -->
               <div class="space-y-4">
-                <!-- Built-in theme row -->
+                <!-- Built-in themes group -->
                 <div>
-                  <p
-                    class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider mb-2"
-                  >
+                  <p class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider mb-2">
                     {m.theme_section_builtin()}
                   </p>
-                  <div
-                    class="flex items-center justify-between h-[44px] px-3 rounded-[2px] border border-(--color-border)"
-                  >
-                    <span class="text-(--font-size-ui-base) text-(--color-text-primary)">
-                      {m.theme_default_label()}
-                    </span>
-                    <div class="flex items-center gap-2">
-                      {#if preferences?.appearance?.themeName === DEFAULT_THEME_NAME}
-                        <span
-                          class="text-(--font-size-ui-xs) text-(--color-accent-text) font-medium"
-                        >
-                          {m.theme_active_label()}
+                  <div class="space-y-1">
+                    {#each BUILT_IN_THEME_NAMES as themeName (themeName)}
+                      {@const isActive = preferences?.appearance?.themeName === themeName}
+                      {@const swatch = getThemeSwatch(themeName, themes)}
+                      {@const isLight = isLightTheme(themeName, themes)}
+                      <div
+                        class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive ? 'border-(--color-accent) bg-(--color-accent-subtle)' : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
+                        role="button"
+                        tabindex="0"
+                        aria-label={themeName}
+                        aria-pressed={isActive}
+                        onclick={() => handleActivateTheme(themeName)}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleActivateTheme(themeName); } }}
+                        onmouseenter={() => { hoveredThemeName = themeName; }}
+                        onmouseleave={() => { hoveredThemeName = null; }}
+                      >
+                        <!-- Active indicator — reserved space always -->
+                        <div class="w-4 h-4 flex-shrink-0 mr-2 flex items-center justify-center">
+                          {#if isActive}
+                            <Check class="w-4 h-4 text-(--color-accent)" />
+                          {/if}
+                        </div>
+
+                        <!-- Color swatch strip -->
+                        <div class="flex gap-[2px] mr-3 flex-shrink-0">
+                          {#each [swatch.bg, swatch.fg, swatch.accent, swatch.cursor, swatch.color1, swatch.color6] as color}
+                            <div class="w-4 h-4 rounded-sm border border-(--color-border-subtle)" style="background:{color}"></div>
+                          {/each}
+                        </div>
+
+                        <!-- Name -->
+                        <span class="text-(--font-size-ui-base) text-(--color-text-primary) flex-1 truncate">
+                          {themeName.charAt(0).toUpperCase() + themeName.slice(1)}
                         </span>
-                      {:else}
-                        <Button
-                          variant="secondary"
-                          disabled={themeBusy}
-                          onclick={() => handleActivateTheme(DEFAULT_THEME_NAME)}
-                        >
-                          {m.theme_activate()}
-                        </Button>
-                      {/if}
-                    </div>
+
+                        <!-- Badges -->
+                        <span class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-2 flex-shrink-0">
+                          {isLight ? m.theme_light_label() : m.theme_dark_label()}
+                        </span>
+                        <span class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-1 mr-2 flex-shrink-0">
+                          · {m.theme_builtin_label()}
+                        </span>
+
+                        <!-- Duplicate button — visible when active or hovered -->
+                        <div class="flex-shrink-0 {isActive || hoveredThemeName === themeName ? 'opacity-100' : 'opacity-0 pointer-events-none'}">
+                          <Button
+                            variant="ghost"
+                            class="h-7 w-7 p-0"
+                            aria-label={m.theme_duplicate_to_edit()}
+                            onclick={(e) => { e.stopPropagation(); handleDuplicateTheme(themeName); }}
+                          >
+                            <Copy class="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    {/each}
                   </div>
                 </div>
 
-                <!-- Custom themes -->
+                <!-- My themes group -->
                 <div>
-                  <p
-                    class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider mb-2"
-                  >
-                    {m.theme_section_custom()}
-                  </p>
+                  <div class="flex items-center justify-between mb-2">
+                    <p class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider">
+                      {m.theme_section_my_themes()}
+                    </p>
+                    <Button variant="secondary" class="h-7 text-(--font-size-ui-xs) px-2" onclick={handleNewTheme}>
+                      {m.theme_new()}
+                    </Button>
+                  </div>
 
                   {#if themes.length === 0}
                     <p class="text-(--font-size-ui-base) text-(--color-text-secondary) mb-3">
@@ -815,43 +915,63 @@
                   {:else}
                     <div class="space-y-1">
                       {#each themes as theme (theme.name)}
+                        {@const isActive = preferences?.appearance?.themeName === theme.name}
+                        {@const swatch = getThemeSwatch(theme.name, themes)}
+                        {@const isLight = isLightTheme(theme.name, themes)}
                         <div
-                          class="flex items-center justify-between h-[44px] px-3 rounded-[2px] border border-(--color-border)"
+                          class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive ? 'border-(--color-accent) bg-(--color-accent-subtle)' : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
+                          role="button"
+                          tabindex="0"
+                          aria-label={theme.name}
+                          aria-pressed={isActive}
+                          onclick={() => handleActivateTheme(theme.name)}
+                          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleActivateTheme(theme.name); } }}
+                          onmouseenter={() => { hoveredThemeName = theme.name; }}
+                          onmouseleave={() => { hoveredThemeName = null; }}
                         >
-                          <span
-                            class="text-(--font-size-ui-base) text-(--color-text-primary) truncate mr-2"
-                          >
+                          <!-- Active indicator -->
+                          <div class="w-4 h-4 flex-shrink-0 mr-2 flex items-center justify-center">
+                            {#if isActive}
+                              <Check class="w-4 h-4 text-(--color-accent)" />
+                            {/if}
+                          </div>
+
+                          <!-- Swatch strip -->
+                          <div class="flex gap-[2px] mr-3 flex-shrink-0">
+                            {#each [swatch.bg, swatch.fg, swatch.accent, swatch.cursor, swatch.color1, swatch.color6] as color}
+                              <div class="w-4 h-4 rounded-sm border border-(--color-border-subtle)" style="background:{color}"></div>
+                            {/each}
+                          </div>
+
+                          <!-- Name -->
+                          <span class="text-(--font-size-ui-base) text-(--color-text-primary) flex-1 truncate">
                             {theme.name}
                           </span>
+
+                          <!-- Light/Dark badge -->
+                          <span class="text-(--font-size-ui-2xs) text-(--color-text-tertiary) ml-2 mr-3 flex-shrink-0">
+                            {isLight ? m.theme_light_label() : m.theme_dark_label()}
+                          </span>
+
+                          <!-- Action buttons -->
                           <div class="flex items-center gap-1 flex-shrink-0">
-                            {#if preferences?.appearance?.themeName === theme.name}
-                              <span
-                                class="text-(--font-size-ui-xs) text-(--color-accent-text) font-medium mr-1"
-                              >
-                                {m.theme_active_label()}
-                              </span>
-                            {:else}
-                              <Button
-                                variant="secondary"
-                                disabled={themeBusy}
-                                onclick={() => handleActivateTheme(theme.name)}
-                              >
-                                {m.theme_activate()}
-                              </Button>
-                            {/if}
                             <Button
                               variant="ghost"
+                              class="h-7 w-7 p-0"
+                              aria-label={m.theme_edit()}
                               disabled={themeBusy}
-                              onclick={() => handleEditTheme(theme)}
+                              onclick={(e) => { e.stopPropagation(); handleEditTheme(theme); }}
                             >
-                              {m.theme_edit()}
+                              <Pencil class="w-3.5 h-3.5" />
                             </Button>
                             <Button
-                              variant="destructive"
+                              variant="ghost"
+                              class="h-7 w-7 p-0 text-(--color-error)"
+                              aria-label={m.theme_delete()}
                               disabled={themeBusy}
-                              onclick={() => handleDeleteTheme(theme.name)}
+                              onclick={(e) => { e.stopPropagation(); handleDeleteTheme(theme.name); }}
                             >
-                              {m.theme_delete()}
+                              <Trash2 class="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         </div>
@@ -859,10 +979,6 @@
                     </div>
                   {/if}
                 </div>
-
-                <Button variant="secondary" onclick={handleNewTheme}>
-                  {m.theme_new()}
-                </Button>
               </div>
             {/if}
 

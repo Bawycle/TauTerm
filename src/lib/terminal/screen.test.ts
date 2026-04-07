@@ -212,6 +212,43 @@ describe('TUITC-FN-070: applyUpdates patches only changed cells', () => {
     // Grid unchanged
     expect(grid[0].content).toBe(' ');
   });
+
+  it('undersized grid: in-bounds cells applied, out-of-bounds cells silently dropped', () => {
+    // Scenario: grid was created for 2×3 (6 cells) but updates arrive for a
+    // 4×5 grid (20 cells). This simulates a resize where the grid was not
+    // reallocated before applyUpdates is called.
+    // applyUpdates uses `stride` (cols) from the caller, so index = row*stride+col.
+    const grid = buildGridFromSnapshot([], 2, 3); // 6 cells
+    expect(grid.length).toBe(6);
+
+    const inBoundsUpdate: CellUpdate = {
+      row: 0,
+      col: 2,
+      content: 'A',
+      width: 1,
+      attrs: makeAttrs({ bold: true }),
+    };
+    // row=0, col=2 with stride=5 → index 2, which IS within grid.length=6
+    const outOfBoundsUpdate: CellUpdate = {
+      row: 3,
+      col: 0,
+      content: 'B',
+      width: 1,
+      attrs: makeAttrs(),
+    };
+    // row=3, col=0 with stride=5 → index 15, which is BEYOND grid.length=6
+
+    applyUpdates(grid, [inBoundsUpdate, outOfBoundsUpdate], 5);
+
+    // In-bounds cell is applied
+    expect(grid[2].content).toBe('A');
+    expect(grid[2].bold).toBe(true);
+
+    // Out-of-bounds cell is silently dropped — grid still has 6 cells
+    expect(grid.length).toBe(6);
+    // No cell in the grid contains 'B'
+    expect(grid.every((cell) => cell.content !== 'B')).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

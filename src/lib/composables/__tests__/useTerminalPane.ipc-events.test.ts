@@ -1072,3 +1072,163 @@ describe('TPSC-INIT-002: screen-update received during snapshot fetch is applied
     expect(container.querySelector('.terminal-pane')).not.toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// TPSC-RESIZE-005: isFullRedraw with changed dimensions reallocates grid
+// Regression test: grid was not resized before applyUpdates, causing cells
+// beyond the old grid.length to be silently dropped and rows to render empty.
+// ---------------------------------------------------------------------------
+
+describe('TPSC-RESIZE-005: isFullRedraw with new dimensions resizes grid correctly', () => {
+  it('gridRows.length matches new rows after isFullRedraw with larger dimensions', async () => {
+    const { container } = await mountPane();
+
+    // Initial state: default 80×24 grid. Fire a full redraw with smaller,
+    // verifiable dimensions (5 cols × 3 rows = 15 cells).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 5,
+        rows: 3,
+        isFullRedraw: true,
+        cells: [],
+      }),
+    );
+    flushSync();
+
+    // After the first full redraw, verify baseline: 3 rows rendered.
+    const rowsAfterShrink = container.querySelectorAll('.terminal-pane__row');
+    expect(rowsAfterShrink.length).toBe(3);
+
+    // Now fire a full redraw with LARGER dimensions (8 cols × 6 rows = 48 cells).
+    // Before the fix, the grid stayed at 15 cells and rows 3-5 were empty.
+    const largeCells = [];
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 8; c++) {
+        largeCells.push({
+          row: r,
+          col: c,
+          content: r >= 3 ? 'X' : ' ', // Mark new rows with 'X'
+          width: 1,
+          attrs: {
+            bold: false,
+            dim: false,
+            italic: false,
+            underline: 0,
+            blink: false,
+            inverse: false,
+            hidden: false,
+            strikethrough: false,
+          },
+        });
+      }
+    }
+
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 8,
+        rows: 6,
+        isFullRedraw: true,
+        cells: largeCells,
+      }),
+    );
+    flushSync();
+
+    // CRITICAL ASSERTION: gridRows must have 6 rows, not 3.
+    const rowsAfterGrow = container.querySelectorAll('.terminal-pane__row');
+    expect(rowsAfterGrow.length).toBe(6);
+
+    // CRITICAL ASSERTION: rows 3-5 must contain 'X', not be empty/blank.
+    // Before the fix, these rows would contain only NBSP (default cells).
+    for (let r = 3; r < 6; r++) {
+      const cells = rowsAfterGrow[r].querySelectorAll('.terminal-pane__cell');
+      const rowText = Array.from(cells)
+        .map((el) => el.textContent ?? '')
+        .join('');
+      expect(rowText).toContain('X');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-RESIZE-006: incremental update after resize applies cells on new rows
+// Regression test: after a full redraw resize, incremental updates targeting
+// rows beyond the old grid size must land correctly (not be silently dropped).
+// ---------------------------------------------------------------------------
+
+describe('TPSC-RESIZE-006: incremental update after resize targets new rows', () => {
+  it('cells on rows beyond old dimensions are rendered after resize + incremental update', async () => {
+    const { container } = await mountPane();
+
+    // Step 1: establish a small grid (4 cols × 2 rows = 8 cells).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 2,
+        isFullRedraw: true,
+        cells: [],
+      }),
+    );
+    flushSync();
+
+    const rowsBefore = container.querySelectorAll('.terminal-pane__row');
+    expect(rowsBefore.length).toBe(2);
+
+    // Step 2: resize to 4 cols × 5 rows via isFullRedraw.
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 5,
+        isFullRedraw: true,
+        cells: [],
+      }),
+    );
+    flushSync();
+
+    const rowsAfterResize = container.querySelectorAll('.terminal-pane__row');
+    expect(rowsAfterResize.length).toBe(5);
+
+    // Step 3: incremental update targeting row 4 (index beyond old 2-row grid).
+    // Before the fix, this cell would be dropped by applyUpdates (oob)
+    // because grid.length was still 8 (2*4) instead of 20 (5*4).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 5,
+        isFullRedraw: false,
+        cells: [
+          {
+            row: 4,
+            col: 1,
+            content: 'Z',
+            width: 1,
+            attrs: {
+              bold: false,
+              dim: false,
+              italic: false,
+              underline: 0,
+              blink: false,
+              inverse: false,
+              hidden: false,
+              strikethrough: false,
+            },
+          },
+        ],
+      }),
+    );
+    flushSync();
+
+    // CRITICAL ASSERTION: row 4, col 1 must contain 'Z'.
+    const rowsAfterIncremental = container.querySelectorAll('.terminal-pane__row');
+    expect(rowsAfterIncremental.length).toBe(5);
+    const row4Cells = rowsAfterIncremental[4].querySelectorAll('.terminal-pane__cell');
+    const row4Text = Array.from(row4Cells)
+      .map((el) => el.textContent ?? '')
+      .join('');
+    expect(row4Text).toContain('Z');
+  });
+});

@@ -56,8 +56,7 @@ const LS_OUTPUT_LINES = [
 ];
 
 /** Full output block: \r\n prefix + lines joined by \r\n + trailing \r\n. */
-const LS_OUTPUT_BLOCK =
-  '\r\n' + LS_OUTPUT_LINES.map((l) => l + '\r\n').join('');
+const LS_OUTPUT_BLOCK = '\r\n' + LS_OUTPUT_LINES.map((l) => l + '\r\n').join('');
 
 // ---------------------------------------------------------------------------
 // IPC helpers (fire-and-forget pattern — see pty-roundtrip.spec.ts for rationale)
@@ -251,16 +250,13 @@ describe('ls -al basic flow', () => {
   before(async () => {
     // Dismiss any lingering close-confirmation dialog from a preceding spec.
     await browser.execute((): void => {
-      const btn = document.querySelector<HTMLButtonElement>(
-        '[data-testid="close-confirm-cancel"]',
-      );
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-cancel"]');
       if (btn) btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
     await browser.waitUntil(
       () =>
         browser.execute(
-          (): boolean =>
-            document.querySelector('[data-testid="close-confirm-cancel"]') === null,
+          (): boolean => document.querySelector('[data-testid="close-confirm-cancel"]') === null,
         ),
       { timeout: 3_000, timeoutMsg: 'Lingering close-confirmation dialog did not dismiss' },
     );
@@ -308,7 +304,8 @@ describe('ls -al basic flow', () => {
     // 1.2 / UX-SC-02: cursor element must be present.
     await browser.waitUntil(cursorExists, {
       timeout: 5_000,
-      timeoutMsg: 'Cursor (.terminal-pane__cursor) did not appear after prompt injection (criterion 1.2)',
+      timeoutMsg:
+        'Cursor (.terminal-pane__cursor) did not appear after prompt injection (criterion 1.2)',
     });
 
     // 1.2: cursor must not carry the --unfocused modifier.
@@ -327,9 +324,9 @@ describe('ls -al basic flow', () => {
 
     // UX-SC-04: terminal must not be obscured by a modal or preferences panel.
     // The selector is passed as a parameter so it stays in sync with Selectors.preferencesPanel.
-    const panelOpen = await browser.execute((sel: string): boolean => {
+    const panelOpen = (await browser.execute((sel: string): boolean => {
       return document.querySelector(sel) !== null;
-    }, Selectors.preferencesPanel) as boolean;
+    }, Selectors.preferencesPanel)) as boolean;
     expect(panelOpen).toBe(false); // UX-SC-04
   });
 
@@ -521,9 +518,9 @@ describe('ls -al basic flow', () => {
     // ProcessTerminatedPane renders as .process-terminated-pane when the PTY
     // process exits. TerminalPane.svelte has no --terminated modifier class on
     // the wrapper div; the banner is a separate child element. (criterion 5.3)
-    const terminated = await browser.execute((sel: string): boolean => {
+    const terminated = (await browser.execute((sel: string): boolean => {
       return document.querySelector(sel) !== null;
-    }, Selectors.processTerminatedPane) as boolean;
+    }, Selectors.processTerminatedPane)) as boolean;
     expect(terminated).toBe(false); // criterion 5.3
   });
 
@@ -599,5 +596,95 @@ describe('ls -al basic flow', () => {
     // Asserting scroll_offset = 0 requires a Tauri command or data attribute
     // not currently present. (criterion 6.2 / UX-SC-25)
     expect(scrollbarVisible).toBe(false); // UX-SC-25: no scrollback history
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: atomic single-burst injection (grid resize + full output)
+// ---------------------------------------------------------------------------
+//
+// The phased injection in the suite above uses 50 ms pauses between each
+// phase. This is sufficient to trigger debounce flush but does NOT reproduce
+// the real shell behaviour: a shell sends the entire output — command echo,
+// ls output, and return prompt — as a single PTY write, which arrives in one
+// screen-update event burst. The grid-mismatch bug (grid not resized before
+// applyUpdates) is only reliably triggered when the resize and the large
+// output arrive in the same burst without a chance for an intermediate render.
+//
+// This suite injects the complete sequence in a single inject() call to guard
+// that specific regression path.
+
+describe('ls -al single-burst injection (grid resize regression)', () => {
+  let paneId: string;
+
+  before(async () => {
+    // Dismiss any lingering close-confirmation dialog from the preceding suite.
+    await browser.execute((): void => {
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-cancel"]');
+      if (btn) btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          (): boolean => document.querySelector('[data-testid="close-confirm-cancel"]') === null,
+        ),
+      { timeout: 3_000, timeoutMsg: 'Lingering close-confirmation dialog did not dismiss' },
+    );
+
+    await browser.waitUntil(
+      async () => {
+        try {
+          return await $(Selectors.activeTerminalPane).isExisting();
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 15_000, timeoutMsg: 'Active terminal pane did not appear within 15 s' },
+    );
+
+    const rawId = await $(Selectors.activeTerminalPane).getAttribute('data-pane-id');
+    expect(rawId).toBeTruthy();
+    paneId = rawId as string;
+  });
+
+  it('renders complete output from atomic single-burst injection', async () => {
+    // Build the full sequence as one contiguous string, exactly as a real shell
+    // would write it to the PTY in a single burst:
+    //   initial prompt → command echo → output lines → return prompt
+    //
+    // No pauses between phases — the entire string arrives in one inject() call
+    // and is processed by the VT pipeline in a single event burst.
+    const burst = PROMPT + 'ls -al' + LS_OUTPUT_BLOCK + '\r\n' + PROMPT;
+
+    await inject(paneId, burst);
+
+    // Wait for the return prompt to be visible — this is the authoritative signal
+    // that the full burst was processed and the grid rendered completely.
+    await waitForTextInGrid(PROMPT.trim(), 15_000);
+
+    // All ls output lines must be present in the grid (no truncation due to
+    // grid being too small after the implicit resize that the burst may trigger).
+    const gridText = await getGridText();
+    for (const line of LS_OUTPUT_LINES) {
+      expect(gridText).toContain(line.trim());
+    }
+
+    // The return prompt must be on its own row, after all output rows.
+    const rows = await getGridRows();
+    const lastOutputRowIdx = rows.reduce((last, row, idx) => {
+      if (row.includes('Cargo.toml')) return idx;
+      return last;
+    }, -1);
+    const promptRowIdx = rows.reduce((last, row, idx) => {
+      if (row.trimEnd().endsWith(PROMPT.trimEnd())) return idx;
+      return last;
+    }, -1);
+
+    expect(promptRowIdx).toBeGreaterThan(-1); // return prompt found
+    expect(promptRowIdx).toBeGreaterThan(lastOutputRowIdx); // prompt after output
+
+    // No raw escape sequences must have leaked through.
+    const hasEscapes = await gridContainsRawEscapes();
+    expect(hasEscapes).toBe(false);
   });
 });

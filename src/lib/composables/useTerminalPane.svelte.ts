@@ -402,8 +402,19 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // The event's cols/rows are authoritative — they reflect the grid dimensions at
   // the time the backend produced this event, eliminating stride mismatch races.
   function applyScreenUpdate(update: ScreenUpdateEvent): void {
+    const expectedGridSize = update.rows * update.cols;
+
     // WP3a: reset scroll offset on full repaint (alternate screen entry/exit, resize).
     if (update.isFullRedraw) scrollOffset = 0;
+
+    // Ensure the flat grid matches the event dimensions before applying updates.
+    // A terminal resize changes rows×cols, making the old grid too small: cells
+    // beyond grid.length would be silently dropped by applyUpdates (oob skip),
+    // and buildFullGridRows would read undefined → defaultCell() for those positions.
+    // Recreate the grid when dimensions change so every cell index is valid.
+    if (grid.length !== expectedGridSize) {
+      grid = Array.from({ length: expectedGridSize }, () => defaultCell());
+    }
 
     applyUpdates(grid, update.cells, update.cols);
     cursor = update.cursor;
@@ -446,6 +457,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     unlistens.push(
       await onScreenUpdate((update) => {
         if (update.paneId !== props.paneId()) return;
+
         if (buffering) {
           pendingUpdates.push(update);
           return;
@@ -457,6 +469,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     // Fetch the initial screen snapshot.
     try {
       const snapshot = await getPaneScreenSnapshot(props.paneId());
+
       cols = snapshot.cols;
       rows = snapshot.rows;
       grid = buildGridFromSnapshot(snapshot.cells, snapshot.rows, snapshot.cols);

@@ -756,6 +756,55 @@ describe('TV-LTAB-001: closing the last tab closes the window (FS-TAB-008)', () 
 });
 
 // ---------------------------------------------------------------------------
+// TV-LTAB-002: exit auto-close of last pane in last tab closes window
+// ---------------------------------------------------------------------------
+
+describe('TV-LTAB-002: exit 0 in last pane of last tab closes window (FS-PTY-005 + FS-TAB-008)', () => {
+  it('calls window.destroy() when notification-changed processExited(0) removes the last pane', async () => {
+    const pane = makePaneState({ id: 'pane-x' });
+    const tab = makeTab({ id: 'tab-x', activePaneId: 'pane-x', layout: { type: 'leaf', paneId: 'pane-x', state: pane } });
+
+    // Capture the notification-changed listener so we can fire it manually.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let notificationHandler: ((e: any) => void) | null = null;
+    vi.spyOn(tauriEvent, 'listen').mockImplementation(async (event, handler) => {
+      if (event === 'notification-changed') notificationHandler = handler;
+      return () => {};
+    });
+
+    vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_session_state') return { tabs: [tab], activeTabId: tab.id };
+      if (cmd === 'get_preferences') return basePrefs;
+      if (cmd === 'get_connections') return [];
+      // close_pane returns null → last pane of the tab removed → removeTab called
+      if (cmd === 'close_pane') return null;
+      return undefined;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    instances.push(mount(TerminalViewWithProvider, { target: container, props: {} }));
+    await settle();
+
+    expect(notificationHandler).not.toBeNull();
+
+    // Simulate ProcessExited(exitCode: 0) for the pane.
+    notificationHandler!({
+      event: 'notification-changed',
+      id: 1,
+      payload: {
+        tabId: tab.id,
+        paneId: 'pane-x',
+        notification: { type: 'processExited', exitCode: 0, signalName: null },
+      },
+    });
+    await settle();
+
+    expect(mockAppWindow.closed).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // E2E-deferred
 // ---------------------------------------------------------------------------
 

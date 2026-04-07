@@ -422,7 +422,12 @@ export function useTerminalView() {
       );
       const updatedTab: TabState | null = await closePane(paneId);
       if (updatedTab === null) {
-        if (ownerTab) removeTab(ownerTab.id);
+        if (ownerTab) {
+          removeTab(ownerTab.id);
+          if (sessionState.tabs.length === 0) {
+            await getCurrentWindow().destroy();
+          }
+        }
       } else {
         updateTab(updatedTab);
       }

@@ -37,7 +37,7 @@
   }: Props = $props();
 
   const baseClasses =
-    'inline-flex items-center justify-center gap-1 min-h-[44px] px-4 text-[13px] font-medium leading-none whitespace-nowrap rounded-[2px] cursor-pointer disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2';
+    'inline-flex items-center justify-center gap-1 min-h-[44px] px-4 text-[13px] font-medium leading-none whitespace-nowrap rounded-(--radius-sm) cursor-pointer disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2';
 
   const variantClasses: Record<NonNullable<Props['variant']>, string> = {
     primary:

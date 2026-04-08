@@ -211,7 +211,7 @@
         {m.connection_manager_title()}
       </h2>
       <button
-        class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-[2px]"
+        class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-(--radius-sm)"
         onclick={onclose}
         aria-label={m.action_close()}
       >

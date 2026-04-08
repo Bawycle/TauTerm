@@ -67,7 +67,7 @@
   <Select.Root type="single" {value} onValueChange={(v) => onchange?.(v)} {disabled}>
     <Select.Trigger
       id={uid}
-      class="relative w-full h-[44px] px-3 pr-9 text-(--font-size-ui-base) bg-(--term-bg) border border-(--color-border) rounded-[2px] flex items-center text-left cursor-pointer disabled:cursor-not-allowed disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) {triggerTextClass}"
+      class="relative w-full h-[44px] px-3 pr-9 text-(--font-size-ui-base) bg-(--term-bg) border border-(--color-border) rounded-(--radius-sm) flex items-center text-left cursor-pointer disabled:cursor-not-allowed disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) {triggerTextClass}"
     >
       {#snippet child({ props })}
         <button {...props} type="button" class="w-full h-full flex items-center">
@@ -81,7 +81,7 @@
     </Select.Trigger>
 
     <Select.Content
-      class="z-(--z-dropdown) w-[var(--bits-select-anchor-width)] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) max-h-[240px] overflow-y-auto"
+      class="z-(--z-dropdown) w-[var(--bits-select-anchor-width)] bg-(--color-bg-raised) border border-(--color-border) rounded-(--radius-md) shadow-(--shadow-raised) max-h-[240px] overflow-y-auto"
       sideOffset={4}
     >
       {#each options as option (option.value)}

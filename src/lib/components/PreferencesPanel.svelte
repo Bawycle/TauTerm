@@ -137,7 +137,7 @@
     <Dialog.Content
       class="preferences-panel fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
              w-[640px] max-w-[90vw] max-h-[80vh]
-             bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
+             bg-(--color-bg-raised) border border-(--color-border) rounded-(--radius-md)
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
       aria-modal="true"
       onCloseAutoFocus={(e) => {
@@ -151,7 +151,7 @@
           {m.preferences_title()}
         </Dialog.Title>
         <Dialog.Close
-          class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-[2px]"
+          class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-(--radius-sm)"
           aria-label={m.action_close()}
         >
           <X size={16} aria-hidden="true" />

@@ -68,7 +68,7 @@
         {@const swatch = getThemeSwatch(themeName, themes)}
         {@const isLight = isLightTheme(themeName, themes)}
         <div
-          class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive
+          class="flex items-center h-[44px] px-3 rounded-(--radius-sm) border cursor-pointer {isActive
             ? 'border-(--color-accent) bg-(--color-accent-subtle)'
             : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
           role="button"
@@ -166,7 +166,7 @@
           {@const swatch = getThemeSwatch(theme.name, themes)}
           {@const isLight = isLightTheme(theme.name, themes)}
           <div
-            class="flex items-center h-[44px] px-3 rounded-[2px] border cursor-pointer {isActive
+            class="flex items-center h-[44px] px-3 rounded-(--radius-sm) border cursor-pointer {isActive
               ? 'border-(--color-accent) bg-(--color-accent-subtle)'
               : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
             role="button"

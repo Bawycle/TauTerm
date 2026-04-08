@@ -35,7 +35,7 @@
   </Tooltip.Trigger>
 
   <Tooltip.Content
-    class="z-(--z-tooltip) px-2 py-1 text-(--font-size-ui-xs) text-(--color-text-primary) bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) max-w-[240px] pointer-events-none"
+    class="z-(--z-tooltip) px-2 py-1 text-(--font-size-ui-xs) text-(--color-text-primary) bg-(--color-bg-raised) border border-(--color-border) rounded-(--radius-md) shadow-(--shadow-raised) max-w-[240px] pointer-events-none"
     sideOffset={4}
   >
     {content}

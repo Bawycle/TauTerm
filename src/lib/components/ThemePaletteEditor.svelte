@@ -23,7 +23,7 @@
   }
 </script>
 
-<fieldset class="border border-(--color-border) rounded-[2px] p-3">
+<fieldset class="border border-(--color-border) rounded-(--radius-sm) p-3">
   <legend
     class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider px-1"
   >
@@ -36,7 +36,7 @@
           type="color"
           id="theme-palette-{i}"
           value={color}
-          class="w-[44px] h-[32px] cursor-pointer rounded-[2px] border border-(--color-border) bg-transparent"
+          class="w-[44px] h-[32px] cursor-pointer rounded-(--radius-sm) border border-(--color-border) bg-transparent"
           oninput={(e) => onpalettechange(i, (e.currentTarget as HTMLInputElement).value)}
           aria-label={paletteLabel(i)}
         />

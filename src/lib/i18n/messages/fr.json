@@ -62,6 +62,9 @@
   "connection_manager_title": "Connexions SSH",
   "connection_new": "Nouvelle connexion",
   "connection_edit": "Modifier",
+  "connection_edit_title": "Modifier la connexion",
+  "connection_action_add": "Ajouter la connexion",
+  "connection_action_save_changes": "Enregistrer les modifications",
   "connection_duplicate": "Dupliquer",
   "connection_delete": "Supprimer",
   "connection_connect": "Connecter",
@@ -72,7 +75,7 @@
   "connection_field_label": "Libellé",
 
   "ssh_reconnect": "Reconnecter",
-  "ssh_banner_disconnected": "Session déconnectée : {reason}",
+  "ssh_banner_disconnected_title": "Session déconnectée",
   "ssh_banner_deprecated_algorithm": "La connexion utilise un algorithme déprécié : {algorithm}. Le serveur devrait être mis à jour pour utiliser un algorithme d'échange de clés moderne.",
   "ssh_banner_deprecated_algorithm_dismiss": "Ignorer l'avertissement d'algorithme déprécié",
   "ssh_reconnection_separator_label": "reconnecté",

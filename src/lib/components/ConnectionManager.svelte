@@ -26,6 +26,7 @@
   import {
     X,
     Plus,
+    Check,
     Server,
     ExternalLink,
     SplitSquareVertical,
@@ -328,6 +329,9 @@
       role="form"
       aria-label={editingId ? m.connection_edit() : m.connection_new()}
     >
+      <h3 class="connection-manager__form-title">
+        {editingId ? m.connection_edit_title() : m.connection_new()}
+      </h3>
       <div class="space-y-3">
         <TextInput
           id="cm-label"
@@ -441,7 +445,13 @@
 
       <div class="flex gap-2 mt-6">
         <Button variant="primary" onclick={handleSave}>
-          {m.action_save()}
+          {#if editingId}
+            <Check size={16} aria-hidden="true" />
+            {m.connection_action_save_changes()}
+          {:else}
+            <Plus size={16} aria-hidden="true" />
+            {m.connection_action_add()}
+          {/if}
         </Button>
         <Button variant="ghost" onclick={handleCancel}>
           {m.action_cancel()}
@@ -589,5 +599,12 @@
 
   .connection-manager__form {
     padding: var(--space-4, 16px) 0;
+  }
+
+  .connection-manager__form-title {
+    font-size: var(--font-size-ui-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-3);
   }
 </style>

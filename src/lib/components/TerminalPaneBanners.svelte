@@ -70,12 +70,19 @@
 <!-- SSH disconnected banner — shown when SSH connection drops (FS-SSH-040/041) -->
 {#if sshState?.type === 'disconnected'}
   <div class="terminal-pane__ssh-disconnected" role="status" aria-live="polite">
-    <span class="terminal-pane__ssh-disconnected-label"
-      >{m.ssh_banner_disconnected({ reason: sshState.reason ?? '' })}</span
-    >
-    <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={onReconnect}
-      >{m.ssh_reconnect()}</button
-    >
+    <div class="terminal-pane__ssh-disconnected-content">
+      <span class="terminal-pane__ssh-disconnected-label">
+        {m.ssh_banner_disconnected_title()}
+      </span>
+      {#if sshState.reason}
+        <span class="terminal-pane__ssh-disconnected-reason">
+          {sshState.reason}
+        </span>
+      {/if}
+    </div>
+    <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={onReconnect}>
+      {m.ssh_reconnect()}
+    </button>
   </div>
 {/if}
 
@@ -87,18 +94,36 @@
     left: 0;
     right: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-4);
-    background-color: var(--color-bg-overlay);
-    border-top: 1px solid var(--color-border-subtle);
+    background-color: var(--color-error-bg);
+    border-top: 1px solid var(--color-error);
     z-index: var(--z-overlay);
   }
 
+  .terminal-pane__ssh-disconnected-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
   .terminal-pane__ssh-disconnected-label {
-    color: var(--color-text-muted);
+    color: var(--color-error-text);
     font-size: var(--font-size-ui-sm);
+  }
+
+  .terminal-pane__ssh-disconnected-reason {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-ui-sm);
+    /* TODO: --font-mono does not exist; using --font-mono-ui (closest available token) */
+    font-family: var(--font-mono-ui);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 60ch;
   }
 
   .terminal-pane__ssh-reconnect-btn {

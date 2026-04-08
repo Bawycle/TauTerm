@@ -58,7 +58,7 @@
   const contentWidth = $derived(size === 'medium' ? 'w-[560px]' : 'w-[420px]');
 
   const contentClass = $derived(
-    `fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${contentWidth} max-w-[90vw] bg-(--color-bg-raised) border border-(--color-border) rounded-(--radius-md) shadow-(--shadow-overlay) p-6`,
+    `fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${contentWidth} max-w-[90vw] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-overlay) p-6`,
   );
 </script>
 

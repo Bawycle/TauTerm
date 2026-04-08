@@ -421,6 +421,9 @@
     outline: none;
     user-select: none;
     position: relative;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
   }
 
   :global(.tab-bar__tab[draggable='true']) {
@@ -443,6 +446,7 @@
     background-color: var(--color-tab-active-bg);
     color: var(--color-tab-active-fg);
     font-weight: var(--font-weight-semibold);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
   }
 
   :global(.tab-bar__tab:focus-visible) {

@@ -211,7 +211,7 @@
         {m.connection_manager_title()}
       </h2>
       <button
-        class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-(--radius-sm)"
+        class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-(--radius-sm) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out"
         onclick={onclose}
         aria-label={m.action_close()}
       >
@@ -493,8 +493,10 @@
     width: 100%;
     padding: var(--space-2, 8px) 0;
     color: var(--color-text-muted);
-    font-size: var(--font-size-ui-sm);
-    font-weight: 500;
+    font-size: var(--font-size-ui-xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-label);
+    text-transform: uppercase;
     text-align: left;
     cursor: pointer;
     background: transparent;
@@ -567,6 +569,9 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     outline: none;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
   }
 
   .connection-manager__action-btn:hover {

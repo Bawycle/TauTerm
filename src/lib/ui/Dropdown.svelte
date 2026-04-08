@@ -82,7 +82,7 @@
 
     <Select.Portal to="body">
       <Select.Content
-        class="z-(--z-dropdown) w-[var(--bits-select-anchor-width)] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-raised) max-h-[240px] overflow-y-auto"
+        class="z-(--z-popover) w-[var(--bits-select-anchor-width)] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-raised) max-h-[240px] overflow-y-auto"
         sideOffset={4}
       >
         {#each options as option (option.value)}

@@ -170,7 +170,7 @@
         step="0.1"
         value={editingTheme.lineHeight ?? ''}
         placeholder="1.2"
-        class="h-[36px] px-3 rounded-[2px] border border-(--color-border)
+        class="h-[36px] px-3 rounded-(--radius-sm) border border-(--color-border)
                bg-(--color-bg-input) text-(--color-text-primary) text-(--font-size-ui-base)
                focus:outline-2 focus:outline-(--color-focus-ring)"
         oninput={(e) => {

@@ -58,7 +58,7 @@
   const contentWidth = $derived(size === 'medium' ? 'w-[560px]' : 'w-[420px]');
 
   const contentClass = $derived(
-    `fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${contentWidth} max-w-[90vw] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-overlay) p-6`,
+    `fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${contentWidth} max-w-[90vw] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-overlay) p-6`,
   );
 </script>
 
@@ -84,7 +84,7 @@
           </AlertDialog.Title>
 
           <AlertDialog.Cancel
-            class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-[2px] -mr-3 -mt-1 flex-shrink-0"
+            class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-(--radius-sm) -mr-3 -mt-1 flex-shrink-0"
             aria-label={m.dialog_close()}
           >
             <X size={16} aria-hidden="true" />
@@ -128,7 +128,7 @@
           </Dialog.Title>
 
           <Dialog.Close
-            class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-[2px] -mr-3 -mt-1 flex-shrink-0"
+            class="flex items-center justify-center w-[44px] h-[44px] text-(--color-text-secondary) hover:text-(--color-text-primary) hover:bg-(--color-hover-bg) rounded-(--radius-sm) -mr-3 -mt-1 flex-shrink-0"
             aria-label={m.dialog_close()}
           >
             <X size={16} aria-hidden="true" />

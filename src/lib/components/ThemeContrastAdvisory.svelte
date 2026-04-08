@@ -19,7 +19,7 @@
 </script>
 
 <div
-  class="flex items-start gap-2 p-3 rounded-[2px]
+  class="flex items-start gap-2 p-3 rounded-(--radius-sm)
          bg-(--color-warning-bg) border border-(--color-warning)"
   role="alert"
   aria-live="polite"

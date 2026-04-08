@@ -79,7 +79,8 @@
 </script>
 
 <p
-  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase tracking-wider mb-4"
+  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase mb-4"
+  style="letter-spacing: var(--letter-spacing-label)"
 >
   {m.preferences_section_terminal()}
 </p>

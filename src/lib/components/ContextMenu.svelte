@@ -110,10 +110,10 @@
   });
 
   const menuContentClass =
-    'z-(--z-dropdown) min-w-[180px] max-w-[280px] bg-(--color-bg-raised) border border-(--color-border) rounded-[4px] shadow-(--shadow-raised) py-1';
+    'z-(--z-dropdown) min-w-[180px] max-w-[280px] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-raised) py-1';
 
   const menuItemClass =
-    'flex items-center justify-between gap-2 h-[44px] px-3 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer select-none outline-none hover:bg-(--color-hover-bg) focus:bg-(--color-hover-bg) active:bg-(--color-active-bg) data-[disabled]:text-(--color-text-tertiary) data-[disabled]:pointer-events-none';
+    'flex items-center justify-between gap-2 h-[44px] px-3 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer select-none outline-none hover:bg-(--color-hover-bg) focus:bg-(--color-hover-bg) active:bg-(--color-active-bg) data-[disabled]:text-(--color-text-tertiary) data-[disabled]:pointer-events-none transition-[background-color,color,border-color] duration-(--duration-fast) ease-out';
 
   /** Left side of a menu item: icon + label. */
   const menuItemLabelClass = 'flex items-center gap-2 min-w-0';

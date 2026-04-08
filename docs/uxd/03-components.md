@@ -32,7 +32,7 @@
 - **Height:** `--size-tab-height` (40px).
 - **Min width:** 120px. **Max width:** 240px.
 - **Horizontal padding:** `--space-3` (12px) left, `--space-2` (8px) right.
-- **Border radius:** `--radius-sm` (3px) on top-left and top-right only; bottom corners are `--radius-none`.
+- **Border radius:** `--radius-sm` (4px) on top-left and top-right only; bottom corners are `--radius-none`.
 - **ARIA role:** `tab`. `aria-selected="true"` for active tab.
 - **Title font:** `--font-size-ui-base` (13px), `--font-ui`.
 - **Title truncation:** Ellipsis when text exceeds available width.
@@ -42,10 +42,12 @@
 
 | State | Background | Text Color | Text Weight | Border |
 |-------|-----------|------------|-------------|--------|
-| Active | `--color-tab-active-bg` (`#16140f`) | `--color-tab-active-fg` (`#e8e3d8`) | `--font-weight-semibold` (600) | none (seamless with terminal) |
+| Active | `--color-tab-active-bg` (`#16140f`) | `--color-tab-active-fg` (`#e8e3d8`) | `--font-weight-semibold` (600) | `border-bottom: 2px solid var(--color-accent)` (`#4a92bf`) |
 | Inactive | `--color-tab-inactive-bg` (transparent) | `--color-tab-inactive-fg` (`#9c9890`) | `--font-weight-normal` (400) | none |
 | Hover (inactive) | `--color-tab-hover-bg` (`#2c2921`) | `--color-tab-hover-fg` (`#9c9890`) | `--font-weight-normal` (400) | none |
-| Focus (keyboard) | Same as inactive + focus ring | Same as inactive | `--font-weight-normal` (400) | 2px solid `--color-focus-ring`, offset 2px inset |
+| Focus (keyboard) | Same as inactive + focus ring | Same as inactive | `--font-weight-normal` (400) | 2px solid `--color-focus-ring`, offset 3px inset |
+
+**Transition:** `background-color, color, border-color var(--duration-fast) var(--ease-out)` on state changes.
 
 **Interaction:**
 - **Click:** Switches to this tab (mouse).
@@ -77,7 +79,7 @@ All indicators are cleared when the user switches to the indicated tab (FS-NOTIF
 - **Resting color:** `--color-tab-close-fg` (`#6b6660`).
 - **Hover color:** `--color-tab-close-hover-fg` (`#ccc7bc`); background `--color-hover-bg` (`#2c2921`), `--radius-sm`.
 - **Active (pressed):** Background `--color-active-bg` (`#35312a`).
-- **Focus ring:** 2px solid `--color-focus-ring`, offset 2px.
+- **Focus ring:** 2px solid `--color-focus-ring`, offset 3px.
 - **Behavior:** On click, closes the tab. If a foreground process is running, triggers confirmation dialog (FS-PTY-008).
 - **Visibility:** Always visible on active tab. On inactive tabs, visible only on hover over the tab item.
 
@@ -91,7 +93,7 @@ All indicators are cleared when the user switches to the indicated tab (FS-NOTIF
 - **Resting color:** `--color-tab-new-fg` (`#6b6660`).
 - **Hover:** Icon `--color-tab-new-hover-fg` (`#ccc7bc`); background `--color-hover-bg`.
 - **Active:** Background `--color-active-bg`.
-- **Focus ring:** 2px solid `--color-focus-ring`, offset 2px.
+- **Focus ring:** 2px solid `--color-focus-ring`, offset 3px.
 - **ARIA label:** "New tab".
 - **Tooltip:** "New Tab (Ctrl+Shift+T)" — shown after `--duration-slow` (300ms) hover delay.
 - **Overflow behaviour (FS-TAB-009):** If the tab bar is in horizontal scroll mode when the new tab is created, the tab bar scrolls to bring the new tab into view (see [§12.2](05-accessibility.md#122-tab-bar-at-narrow-widths)).
@@ -139,7 +141,7 @@ A fixed-width button anchored to the right edge of the tab row, outside the scro
 - **Resting color:** `--color-text-secondary`.
 - **Hover:** Icon `--color-text-primary`; background `--color-hover-bg`.
 - **Active (panel open):** Icon `--color-accent`; background `--color-tab-active-bg`.
-- **Focus ring:** 2px solid `--color-focus-ring`, offset 2px.
+- **Focus ring:** 2px solid `--color-focus-ring`, offset 3px.
 - **ARIA label:** "Open SSH connections" / "Close SSH connections" (toggles). `aria-pressed` reflects open/closed state.
 - **Tooltip:** "SSH Connections" — shown after `--duration-slow` (300ms) hover delay.
 
@@ -348,8 +350,8 @@ Triggered by Ctrl+Shift+F or context menu "Search" (FS-SEARCH-007).
 - **Width:** `min(var(--size-search-overlay-width), calc(100% - 2 * var(--space-md)))` — the overlay shrinks to fit the pane with `--space-md` (`--space-4`, 16px) margin on each side when the pane is narrower than 360px.
 - **Height:** Auto (content-driven, single row of controls).
 - **Background:** `--color-bg-raised` (`#2c2921`).
-- **Border:** 1px solid `--color-border` (`#35312a`).
-- **Border radius:** `--radius-md` (6px).
+- **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
+- **Border radius:** `--radius-md` (8px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-search` (20).
 - **ARIA role:** `search`.
@@ -430,8 +432,8 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - **Panel width:** `--size-preferences-panel-width` (640px).
 - **Panel max-height:** 80vh.
 - **Background:** `--color-bg-raised` (`#2c2921`).
-- **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (6px).
+- **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
+- **Border radius:** `--radius-md` (8px).
 - **Shadow:** `--shadow-overlay`.
 - **Z-index:** `--z-overlay` (40).
 - **Internal padding:** `--space-6` (24px).
@@ -452,10 +454,12 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 **Section navigation order rationale:** Language is not a separate nav section. It is a subsection within Appearance (after Themes quick-select, font, and line height controls). This placement ensures that a user opening Preferences for the first time to change the display language finds it in the first content-heavy section they encounter, without scrolling past Terminal Behavior, Connections, and Themes. Language is a display preference (how the UI looks to the user) — grouping it with font, size, and theme is semantically consistent.
 
 - **Header:** `--font-size-ui-lg` (16px), `--font-weight-semibold`, `--color-text-primary`. Close button (Lucide `X`) top-right.
-- **Section navigation:** Left column, width `--size-preferences-nav-width` (180px). Vertical list of section labels. Active section: `--color-accent-text` (`#7ab3d3`), left border 2px solid `--color-accent`. Inactive: `--color-text-secondary`. Hover: `--color-hover-bg` background.
+- **Section navigation:** Left column, width `--size-preferences-nav-width` (180px). Vertical list of section labels. Active section: `--color-accent-text` (`#7ab3d3`), left border 2px solid `--color-accent`. Inactive: `--color-text-secondary`. Hover: `--color-hover-bg` background. Transition: `background-color, color, border-color var(--duration-fast) var(--ease-out)`.
 - **Section content:** Right area, scrollable independently if content exceeds height.
+- **Section headings within content** (e.g., "KEYBOARD", "APPEARANCE", "CONNECTIONS", "THEMES"): Caption level — `--font-size-ui-xs` (11px), `--font-weight-semibold` (600), `text-transform: uppercase`, `letter-spacing: var(--letter-spacing-label)` (0.09em), `--color-text-heading`.
 - **Section separator:** `--space-6` (24px) between sections within content area.
 - **Focus trap:** Keyboard focus is trapped within the panel while open. Tab cycles through section nav, then through form controls in the active section. Escape closes the panel.
+- **Nested interactive overlays:** Any dropdown, select, or combobox rendered inside the Preferences panel must use a portal to `<body>` (see §7.16 — Dropdown / Select). The panel's `overflow: hidden` and independent scroll region would otherwise clip the list. This applies to all dropdowns in the Appearance section (theme quick-select, language), Terminal Behavior section (cursor shape, bell type), and any future select controls added to the panel.
 
 #### 7.6.3 Preference Sections (FS-PREF-004)
 
@@ -514,7 +518,7 @@ The Connection Manager is accessible as a standalone right-side slide-in panel (
 - **Width:** `--size-connection-manager-width` (400px).
 - **Height:** Full terminal area height (below tab bar, above status bar).
 - **Background:** `--color-bg-raised` (`#2c2921`).
-- **Left border:** 1px solid `--color-border`.
+- **Left border:** 1px solid `--color-border-overlay` (`#4a4640`).
 - **Shadow:** `--shadow-overlay`.
 - **Z-index:** `--z-overlay` (40).
 - **Internal padding:** `--space-4` (16px).
@@ -550,6 +554,8 @@ Connections are displayed under **collapsible group section headings**. Each gro
 | Default | transparent | `--color-border-subtle` bottom |
 | Hover | `--color-hover-bg` | unchanged |
 | Focus | transparent | 2px solid `--color-focus-ring` (inset) |
+
+**Transition:** `background-color var(--duration-fast) var(--ease-out)` on state changes.
 
 **Actions (visible on hover, always accessible via keyboard/context menu):**
 - **Open in new tab:** Lucide `ExternalLink`. Tooltip: "Open in new tab".
@@ -613,8 +619,8 @@ _Note: "Duplicate Tab" and "Close Other Tabs" are UXD additions not required by 
 #### 7.8.3 Context Menu Styling
 
 - **Background:** `--color-bg-raised` (`#2c2921`).
-- **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (6px).
+- **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
+- **Border radius:** `--radius-md` (8px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-dropdown` (30).
 - **Padding:** `--space-1` (4px) vertical.
@@ -639,6 +645,8 @@ _Note: "Duplicate Tab" and "Close Other Tabs" are UXD additions not required by 
 | Active | `--color-active-bg` | `--color-text-primary` |
 | Disabled | transparent | `--color-text-tertiary` |
 
+**Transition:** `background-color, color var(--duration-fast) var(--ease-out)` on state changes.
+
 **Separator:** 1px solid `--color-border`, `--space-1` (4px) vertical margin, full width minus `--space-3` (12px) horizontal margin.
 
 ### 7.9 Dialog / Modal
@@ -654,8 +662,8 @@ Used for confirmations (FS-PTY-008), SSH host key verification (FS-SSH-011), SSH
 #### 7.9.2 Dialog Panel
 
 - **Background:** `--color-bg-raised` (`#2c2921`).
-- **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (6px).
+- **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
+- **Border radius:** `--radius-md` (8px).
 - **Shadow:** `--shadow-overlay`.
 - **Z-index:** `--z-modal` (50).
 - **Width:** 420px (small dialog), 560px (medium, e.g., host key verification). Max-width: 90vw.
@@ -778,8 +786,8 @@ Shown when SSH authentication requires a password or keyboard-interactive respon
 ### 7.10 Tooltip
 
 - **Background:** `--color-bg-raised` (`#2c2921`).
-- **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (6px).
+- **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
+- **Border radius:** `--radius-md` (8px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-tooltip` (60).
 - **Padding:** `--space-1` (4px) vertical, `--space-2` (8px) horizontal.
@@ -814,7 +822,7 @@ When text is selected (auto-copy to PRIMARY selection per FS-CLIP-004):
 
 ### 7.14 Button Variants
 
-All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `--font-weight-medium` (500), height `--size-target-min` (44px), horizontal padding `--space-4` (16px). Icons (when present) are `--size-icon-sm` (14px) with `--space-1` (4px) gap to label text.
+All button variants share: `--radius-sm` (4px), `--font-size-ui-base` (13px), `--font-weight-medium` (500), height `--size-target-min` (44px), horizontal padding `--space-4` (16px). Icons (when present) are `--size-icon-sm` (14px) with `--space-1` (4px) gap to label text. All variants apply `transition: background-color, color, border-color var(--duration-fast) var(--ease-out)` for smooth state changes.
 
 #### Primary Button
 
@@ -823,7 +831,7 @@ All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `-
 | Default | `--color-accent` (`#4a92bf`) | `--color-text-inverted` (`#0e0d0b`) | none |
 | Hover | `--color-blue-500` (`#2e6f9c`) | `--color-text-inverted` | none |
 | Active | `--color-blue-600` (`#1e4d6e`) | `--color-text-inverted` | none |
-| Focus | `--color-accent` | `--color-text-inverted` | 2px solid `--color-focus-ring`, offset 2px `--color-focus-ring-offset` |
+| Focus | `--color-accent` | `--color-text-inverted` | 2px solid `--color-focus-ring`, offset 3px `--color-focus-ring-offset` |
 | Disabled | `--color-neutral-700` (`#35312a`) | `--color-text-tertiary` (`#6b6660`) | none |
 
 #### Secondary Button
@@ -833,7 +841,7 @@ All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `-
 | Default | transparent | `--color-accent-text` (`#7ab3d3`) | 1px solid `--color-accent` |
 | Hover | `--color-accent-subtle` (`#1a3a52`) | `--color-accent-text` | 1px solid `--color-accent` |
 | Active | `--color-blue-700` (`#1a3a52`) | `--color-accent-text` | 1px solid `--color-accent` |
-| Focus | transparent | `--color-accent-text` | 2px solid `--color-focus-ring`, offset 2px |
+| Focus | transparent | `--color-accent-text` | 2px solid `--color-focus-ring`, offset 3px |
 | Disabled | transparent | `--color-text-tertiary` | 1px solid `--color-neutral-700` |
 
 #### Ghost Button
@@ -843,7 +851,7 @@ All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `-
 | Default | transparent | `--color-text-primary` (`#ccc7bc`) | none |
 | Hover | `--color-hover-bg` (`#2c2921`) | `--color-text-primary` | none |
 | Active | `--color-active-bg` (`#35312a`) | `--color-text-primary` | none |
-| Focus | transparent | `--color-text-primary` | 2px solid `--color-focus-ring`, offset 2px |
+| Focus | transparent | `--color-text-primary` | 2px solid `--color-focus-ring`, offset 3px |
 | Disabled | transparent | `--color-text-tertiary` | none |
 
 #### Destructive Button
@@ -853,7 +861,7 @@ All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `-
 | Default | `--color-error` (`#c44444`) | `--color-neutral-100` (`#f5f2ea`) | none |
 | Hover | `--color-red-500` (`#9c2c2c`) | `--color-neutral-100` | none |
 | Active | `--color-red-700` (`#3d1212`) | `--color-neutral-100` | none |
-| Focus | `--color-error` | `--color-neutral-100` | 2px solid `--color-focus-ring`, offset 2px |
+| Focus | `--color-error` | `--color-neutral-100` | 2px solid `--color-focus-ring`, offset 3px |
 | Disabled | `--color-neutral-700` | `--color-text-tertiary` | none |
 
 ### 7.15 Text Input / Form Field
@@ -869,7 +877,7 @@ All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `-
 ```
 
 - **Label:** `--font-size-ui-sm` (12px), `--font-weight-medium` (500), `--color-text-secondary`. `--space-1` (4px) bottom margin.
-- **Input field:** Height `--size-target-min` (44px). Background `--term-bg` (`#16140f`). Border 1px solid `--color-border`. `--radius-sm` (3px). Horizontal padding `--space-3` (12px). Font `--font-size-ui-base` (13px), `--color-text-primary`.
+- **Input field:** Height `--size-target-min` (44px). Background `--term-bg` (`#16140f`). Border 1px solid `--color-border`. `--radius-sm` (4px). Horizontal padding `--space-3` (12px). Font `--font-size-ui-base` (13px), `--color-text-primary`.
 - **Placeholder:** `--color-text-tertiary` (`#6b6660`).
 - **Helper text:** `--font-size-ui-sm` (12px), `--color-text-secondary`. `--space-1` (4px) top margin.
 - **Error text:** `--font-size-ui-sm` (12px), `--color-error-text` (`#d97878`). `--space-1` (4px) top margin.
@@ -909,14 +917,19 @@ All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `-
 **Closed state:** Identical to text input (§7.15) with a Lucide `ChevronDown` icon (`--size-icon-sm`, `--color-icon-default`) right-aligned inside the field.
 
 **Open state:**
-- The dropdown menu appears below the trigger field.
+- The dropdown menu appears below the trigger field by default.
 - **Background:** `--color-bg-raised`.
-- **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (6px).
+- **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
+- **Border radius:** `--radius-md` (8px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-dropdown` (30).
 - **Max height:** 240px (scrollable).
 - **Option items:** Same styling as context menu items (§7.8.3). Active/selected option has left border 2px solid `--color-accent` and background `--color-accent-subtle`.
+
+**Portal and collision detection:**
+- The dropdown list is rendered via a portal to `<body>` (Bits UI `Select.Content` with `use:portal`). This prevents clipping by scrollable ancestors or CSS-transformed containers — a concern inside the Preferences panel, which has `overflow: hidden` and an independent scroll region.
+- Positioning is delegated to Floating UI (integrated in Bits UI): the list flips to open above the trigger when vertical space below is insufficient (`avoidCollisions: true`).
+- **Side offset:** `sideOffset: 4` (4px gap between the trigger bottom edge and the list top edge). This matches the current implementation and is the canonical value — do not override it at the component level.
 
 ### 7.17 Keyboard Shortcut Recorder
 

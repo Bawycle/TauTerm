@@ -37,17 +37,17 @@
   }: Props = $props();
 
   const baseClasses =
-    'inline-flex items-center justify-center gap-1 min-h-[44px] px-4 text-[13px] font-medium leading-none whitespace-nowrap rounded-[2px] cursor-pointer disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2';
+    'inline-flex items-center justify-center gap-1 min-h-[44px] px-4 text-[13px] font-medium leading-none whitespace-nowrap rounded-(--radius-sm) cursor-pointer disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2';
 
   const variantClasses: Record<NonNullable<Props['variant']>, string> = {
     primary:
-      'bg-(--color-accent) text-(--color-text-inverted) hover:bg-(--color-blue-500) active:bg-(--color-blue-600) disabled:bg-(--color-neutral-700) disabled:text-(--color-text-tertiary)',
+      'bg-(--color-accent) text-(--color-text-inverted) hover:bg-(--color-blue-500) active:bg-(--color-blue-600) disabled:bg-(--color-neutral-700) disabled:text-(--color-text-tertiary) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out',
     secondary:
-      'bg-transparent text-(--color-accent-text) border border-(--color-accent) hover:bg-(--color-accent-subtle) active:bg-(--color-blue-700) disabled:border-(--color-neutral-700) disabled:text-(--color-text-tertiary)',
+      'bg-transparent text-(--color-accent-text) border border-(--color-accent) hover:bg-(--color-accent-subtle) active:bg-(--color-blue-700) disabled:border-(--color-neutral-700) disabled:text-(--color-text-tertiary) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out',
     ghost:
-      'bg-transparent text-(--color-text-primary) hover:bg-(--color-hover-bg) active:bg-(--color-active-bg) disabled:text-(--color-text-tertiary)',
+      'bg-transparent text-(--color-text-primary) hover:bg-(--color-hover-bg) active:bg-(--color-active-bg) disabled:text-(--color-text-tertiary) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out',
     destructive:
-      'bg-(--color-error) text-(--color-neutral-100) hover:bg-(--color-red-500) active:bg-(--color-red-700) disabled:bg-(--color-neutral-700) disabled:text-(--color-text-tertiary)',
+      'bg-(--color-error) text-(--color-neutral-100) hover:bg-(--color-red-500) active:bg-(--color-red-700) disabled:bg-(--color-neutral-700) disabled:text-(--color-text-tertiary) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out',
   };
 
   const classes = $derived(`${baseClasses} ${variantClasses[variant ?? 'primary']}`);

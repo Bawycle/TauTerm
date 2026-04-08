@@ -65,6 +65,7 @@
   /* Borders and dividers */
   --color-border: var(--color-neutral-700); /* #35312a */
   --color-border-subtle: var(--color-neutral-750); /* #2c2921 */
+  --color-border-overlay: var(--color-neutral-600); /* #4a4640 — floating surfaces: menus, modals, tooltips */
   --color-divider: var(--color-neutral-700); /* #35312a — pane divider line */
   --color-divider-active: var(--color-blue-400); /* #4a92bf — divider on hover/drag */
 
@@ -229,6 +230,8 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
 
+  --letter-spacing-label: 0.09em; /* uppercase section labels (11px semibold) */
+
   /* ===================================================
      SPACING TOKENS (base unit: 4px)
   =================================================== */
@@ -271,9 +274,9 @@
      BORDER RADIUS TOKENS
   =================================================== */
 
-  --radius-none: 0px; /* panels, tab bar, terminal area, dividers */
-  --radius-sm: 2px; /* buttons, text inputs, dropdown items, tab items */
-  --radius-md: 4px; /* modals, tooltips, context menus, search overlay */
+  --radius-none: 0px; /* terminal area, pane dividers, tab bar body — content infrastructure */
+  --radius-sm: 4px; /* buttons, text inputs, dropdown triggers, tab items, badge containers */
+  --radius-md: 8px; /* modals, overlays, context menus, tooltips, search overlay, dropdown content */
   --radius-full: 9999px; /* status dots, activity badges, toggle thumb */
 
   /* ===================================================
@@ -296,6 +299,7 @@
   --z-fullscreen-chrome: 45; /* fullscreen UI overlaid above z-overlay but below modal */
   --z-modal-backdrop: 49;
   --z-modal: 50;
+  --z-popover: 55; /* portaled dropdowns/popovers rendered above modal dialogs */
   --z-tooltip: 60;
 
   /* ===================================================
@@ -339,7 +343,7 @@ body {
 /* Focus ring — applied consistently across all interactive elements */
 :focus-visible {
   outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 /* Custom scrollbar — minimal, matches theme */

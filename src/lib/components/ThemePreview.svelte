@@ -17,7 +17,7 @@
 </script>
 
 <div
-  class="theme-preview rounded-[2px] border border-(--color-border) overflow-hidden"
+  class="theme-preview rounded-(--radius-sm) border border-(--color-border) overflow-hidden"
   style={previewStyle}
   aria-label={m.theme_preview_label()}
   role="img"

@@ -2,8 +2,8 @@
 
 # Artistic Direction — TauTerm
 
-> **Version:** 1.2.0
-> **Date:** 2026-04-07
+> **Version:** 1.3.0
+> **Date:** 2026-04-08
 > **Status:** Draft
 > **Author:** UX/UI Designer — TauTerm team
 
@@ -613,16 +613,22 @@ User themes replace semantic and component tokens. Primitive tokens can also be 
 
 ### 7.4 Radius Tokens
 
-The UI uses very low border radius throughout. TauTerm is a precision tool; rounded corners communicate softness that works against its character. The exception is interactive controls (buttons, text inputs), where a slight radius aids identification as interactive elements.
+The radius system is calibrated for a 2025 precision tool, not a 2005 one. The distinction matters: zero-radius UI everywhere reads as dated (Win32, GTK2), not as precise. Modern precision tools — VS Code, Zed, Ghostty, Grafana — use a modest but perceptible radius on their overlay surfaces while keeping structural chrome (the terminal area itself, dividers, the tab bar body) rectilinear. This is the right partition.
+
+**The rule is not "softness vs. precision" — it is "content vs. container."**
+- **Content surfaces** (terminal area, pane dividers, the tab bar as a whole) have no radius. These are infrastructure: they tile, extend edge-to-edge, and must not introduce visual complexity at their boundaries.
+- **Container surfaces** (overlays, menus, dialogs, badges) are discrete objects floating above content. A small radius correctly signals "this is a distinct widget" and places the UI in the contemporary register without compromising the professional character.
 
 ```css
 @theme {
-  --radius-none: 0px;    /* panels, tab bar, terminal area, dividers */
-  --radius-sm:   2px;    /* buttons, text inputs, dropdown items */
-  --radius-md:   4px;    /* modals, tooltips, context menus */
-  --radius-full: 9999px; /* status dots, activity badges */
+  --radius-none: 0px;    /* terminal area, pane dividers, tab bar body — content infrastructure */
+  --radius-sm:   3px;    /* buttons, text inputs, tab items, badge containers — interactive widgets */
+  --radius-md:   6px;    /* modals, overlays, context menus, tooltips, search overlay, dropdown content */
+  --radius-full: 9999px; /* status dots, activity badges, toggle thumb — circular indicators */
 }
 ```
+
+`--radius-sm` at 3px is sub-expressive: noticeable at close range, invisible in the peripheral field. It signals "interactive, bounded widget" without reading as decorative. `--radius-md` at 6px places overlay surfaces firmly in the contemporary tool register (VS Code uses 5px, Zed uses 6px, Grafana panels use 4–6px). Anything below 4px on a modal is invisible at arm's length; anything above 8px starts reading as mobile UI.
 
 ### 7.5 Shadow Tokens
 

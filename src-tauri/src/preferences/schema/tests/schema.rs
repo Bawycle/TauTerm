@@ -162,8 +162,7 @@ fn sec_ipc_005_empty_string_language_rejected() {
 /// SEC-IPC-005: SQL injection payload as language value must fail.
 #[test]
 fn sec_ipc_005_language_sql_injection_payload_rejected() {
-    let result: Result<Language, _> =
-        serde_json::from_str("\"en'; DROP TABLE preferences; --\"");
+    let result: Result<Language, _> = serde_json::from_str("\"en'; DROP TABLE preferences; --\"");
     assert!(
         result.is_err(),
         "SQL injection payload as language must be rejected (SEC-IPC-005)"

@@ -34,6 +34,41 @@ Ces deux optimisations ont été explicitement mises hors scope de la campagne d
 
 ---
 
+### Détachement d'onglet et déplacement inter-fenêtres
+
+Permet de détacher un onglet de sa fenêtre pour en créer une nouvelle (comme Firefox), et de déplacer un onglet d'une fenêtre à l'autre par drag-and-drop.
+
+#### Détachement d'onglet → nouvelle fenêtre
+
+- [ ] Commande Tauri `detach_tab(tab_id)` : crée une nouvelle fenêtre Tauri, transfère la session PTY existante (sans la fermer ni la recréer) dans le registre de la nouvelle fenêtre, et ferme l'onglet dans la fenêtre d'origine
+- [ ] Exposer le détachement dans le menu contextuel de l'onglet ("Détacher dans une nouvelle fenêtre")
+- [ ] Raccourci clavier configurable (non assigné par défaut)
+- [ ] Cas limite : détacher le dernier onglet d'une fenêtre doit fermer la fenêtre d'origine après ouverture de la nouvelle
+
+#### Déplacement d'onglet entre fenêtres (drag-and-drop)
+
+- [ ] Drag initié depuis la tab bar : détecter un drag qui sort de la tab bar vers une zone hors fenêtre → déclencher `detach_tab` et ouvrir une nouvelle fenêtre positionnée au curseur (comme Firefox)
+- [ ] Drop sur une tab bar d'une autre fenêtre : protocole de transfert inter-fenêtres (Tauri multi-window messaging ou IPC dédié) pour déplacer la session PTY sans interruption
+- [ ] Indicateur visuel pendant le drag (ghost tab, zone de drop highlight sur les autres tab bars)
+- [ ] Cas limite : drop annulé (Escape ou release hors cible valide) → aucun changement d'état
+
+#### Backend Rust
+
+- [ ] Abstraire le registre de sessions (`SessionRegistry`) pour qu'un **ensemble de sessions** (toutes les panes de l'onglet — PTY locaux et SSH) soit transférable entre contextes de fenêtre sans être détruit/recréé
+- [ ] Le transfert opère au niveau de l'onglet, pas de la session individuelle : toutes les panes (y compris les layouts split) migrent atomiquement
+- [ ] Les sessions SSH (connexion TCP + canal SSH + PTY distant) doivent être traitées au même titre que les PTY locaux : le canal reste ouvert, seule l'appartenance de la session à une fenêtre change dans le registre
+- [ ] Événement IPC `tab-transferred { tab_id, source_window_id, target_window_id }` émis après transfert réussi (discriminated payload, `#[serde(tag = "type")]`)
+- [ ] Tests nextest : transfert d'un onglet multi-panes, transfert avec session SSH active, détachement du dernier onglet, annulation de transfert
+
+#### Contraintes
+
+- Aucune session (PTY local ou SSH) **ne doit être interrompue** pendant le transfert — pas de kill/respawn, pas de déconnexion SSH
+- L'état VT complet de chaque pane (screen buffer, scrollback, cursor) doit être préservé intégralement
+- Le layout des panes (splits, ratios) doit être reproduit à l'identique dans la fenêtre de destination
+- Chaque fenêtre Tauri doit avoir un identifiant stable pour le routage des événements IPC
+
+---
+
 ### Claude Code Agent Teams — multi-pane support
 
 **Condition préalable : [anthropics/claude-code#26572](https://github.com/anthropics/claude-code/issues/26572)**

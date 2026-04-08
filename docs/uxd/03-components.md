@@ -400,7 +400,34 @@ For the active pane, when it hosts an SSH session:
 
 For local sessions, no connection indicator is shown in the status bar — the absence of an indicator is the signal for "local."
 
-#### 7.5.2 Disconnection Overlay (in-pane)
+#### 7.5.2 Connection-in-Progress Overlay (in-pane)
+
+When an SSH pane is in the `connecting` or `authenticating` state (FS-SSH-010), a centered overlay is displayed within the pane. At this stage the pane has no terminal content yet — nothing to preserve behind a banner — so a full-pane centered overlay is appropriate.
+
+**Component:** `SshConnectingOverlay`
+
+**Position:** `position: absolute; inset: 0` — covers the entire pane.
+
+**Layout:** `display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3)`.
+
+**Background:** None — the overlay is transparent, showing the pane's natural `--term-bg`.
+
+**Pointer events:** `none` — the overlay is informational only, not interactive.
+
+**Icon:** Lucide `Network`, size `--size-icon-lg` (20px), color `--color-ssh-connecting-fg` (`#d48a20`).
+- `connecting` state: continuous rotation animation, 1 revolution per second, `animation-timing-function: linear`.
+- `authenticating` state: opacity 0.5→1→0.5, period `--duration-slow` (300ms) per cycle, `animation-timing-function: linear`, infinite repeat.
+- `prefers-reduced-motion: reduce`: animation disabled on both states — static icon.
+
+**Label text:** `--font-size-ui-sm` (12px), `--color-text-muted` (`#6b6660`), `font-family: var(--font-ui)`.
+- `connecting` state: i18n key `ssh_overlay_connecting` ("Connecting…" / "Connexion en cours…").
+- `authenticating` state: i18n key `ssh_overlay_authenticating` ("Authenticating…" / "Authentification en cours…").
+
+**Dismissal:** When `sshState` transitions to `connected`, the overlay disappears instantly (`--duration-instant`, 0ms). No exit animation — the user is waiting for the terminal, not for chrome to finish animating.
+
+**ARIA:** `role="status"`, `aria-live="polite"`.
+
+#### 7.5.3 Disconnection Overlay (in-pane)
 
 When an SSH session transitions to Disconnected (FS-SSH-022):
 
@@ -769,7 +796,7 @@ Shown when SSH authentication requires a password or keyboard-interactive respon
 
 **Action buttons:**
 - **"Cancel"** — ghost button variant. Cancels the connection attempt (FS-SSH-016). Focus is NOT placed here by default; the password field is focused.
-- **"OK"** — primary button variant. Disabled when the password field is empty. Clicking submits credentials.
+- **"Connect"** (i18n key `action_connect`) — primary button variant. Disabled when the password field is empty. Clicking submits credentials. "Connect" is used instead of the generic "OK" to communicate the action explicitly: the user is initiating a connection, not confirming an abstract dialog.
 - Layout: right-aligned row per §7.9.2 pattern. `--space-2` (8px) gap between buttons.
 
 **Focus management:**

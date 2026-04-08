@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::vt::processor::VtProcessor;
 use crate::vt::{
     charset::translate_dec_special,
     modes::{Charset, CharsetSlot},
 };
-use crate::vt::processor::VtProcessor;
 
 pub(super) fn handle_print(p: &mut VtProcessor, c: char) {
     // Apply DEC Special Graphics mapping if active.

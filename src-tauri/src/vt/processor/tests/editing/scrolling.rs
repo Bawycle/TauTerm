@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use super::super::helpers::{make_vt, grapheme_at};
+use super::super::helpers::{grapheme_at, make_vt};
 
 // ---------------------------------------------------------------------------
 // TEST-VT-052 — CSI S / T (scroll up/down) within scroll region (FS-VT-052)

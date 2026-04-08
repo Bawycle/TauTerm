@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::vt::{osc::{OscAction, parse_osc}};
+use crate::vt::osc::{OscAction, parse_osc};
 use crate::vt::processor::VtProcessor;
 
 /// Maximum number of entries in the title stack (OSC 22/23).

@@ -31,7 +31,9 @@ mod emitter;
 mod event_builders;
 mod reader;
 
-pub(crate) use event_builders::{build_mode_state_event, build_screen_update_event, build_scrolled_viewport_event};
+pub(crate) use event_builders::{
+    build_mode_state_event, build_screen_update_event, build_scrolled_viewport_event,
+};
 pub use reader::spawn_pty_read_task;
 
 use crate::vt::DirtyRegion;

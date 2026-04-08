@@ -14,7 +14,6 @@
     node           — the PaneNode to render (leaf or split)
     tabId          — parent tab identifier (forwarded to TerminalPane)
     activePaneId   — currently active pane (controls `active` on TerminalPane)
-    sshStates      — Map<PaneId, SshLifecycleState> forwarded to TerminalPane
     terminatedPanes — Set<PaneId> of panes whose process exited
     wordDelimiters — forwarded to TerminalPane
     canClosePane   — whether there are multiple panes (controls close visibility)
@@ -25,14 +24,7 @@
     onsplitv       — called when user requests vertical split from context menu
 -->
 <script lang="ts">
-  import type {
-    PaneNode,
-    PaneId,
-    TabId,
-    SshLifecycleState,
-    SearchMatch,
-    BellType,
-  } from '$lib/ipc/types';
+  import type { PaneNode, PaneId, TabId, SearchMatch, BellType } from '$lib/ipc/types';
   import TerminalPane from './TerminalPane.svelte';
   import SplitPane from './SplitPane.svelte';
 
@@ -40,7 +32,6 @@
     node: PaneNode;
     tabId: TabId;
     activePaneId: PaneId;
-    sshStates: Map<PaneId, SshLifecycleState>;
     terminatedPanes: Set<PaneId>;
     /** Maps each leaf paneId to its 1-based display number for aria-label. */
     paneNumbers?: Map<PaneId, number>;
@@ -76,7 +67,6 @@
     node,
     tabId,
     activePaneId,
-    sshStates,
     terminatedPanes,
     paneNumbers,
     wordDelimiters,
@@ -171,7 +161,6 @@
       paneNumber={paneNumbers?.get(node.paneId)}
       terminated={terminatedPanes.has(node.paneId)}
       {canClosePane}
-      sshState={sshStates.get(node.paneId) ?? null}
       {wordDelimiters}
       {confirmMultilinePaste}
       {cursorBlinkMs}
@@ -210,7 +199,6 @@
         node={node.first}
         {tabId}
         {activePaneId}
-        {sshStates}
         {terminatedPanes}
         {paneNumbers}
         {wordDelimiters}
@@ -253,7 +241,6 @@
         node={node.second}
         {tabId}
         {activePaneId}
-        {sshStates}
         {terminatedPanes}
         {paneNumbers}
         {wordDelimiters}

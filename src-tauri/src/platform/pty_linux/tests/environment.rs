@@ -2,7 +2,6 @@
 
 use super::{open_linux_session_with_env, read_until_timeout};
 
-
 // -----------------------------------------------------------------------
 // FPL-S-004 to FPL-S-009 — Environment variable injection (FS-PTY-011)
 // -----------------------------------------------------------------------
@@ -22,8 +21,7 @@ fn fpl_s_004_env_term_is_xterm_256color() {
     let reader = session
         .reader_handle()
         .expect("LinuxPtySession must have a reader");
-    let output =
-        read_until_timeout(reader, "xterm-256color", std::time::Duration::from_secs(5));
+    let output = read_until_timeout(reader, "xterm-256color", std::time::Duration::from_secs(5));
     assert!(
         output.is_some(),
         "FPL-S-004: TERM=xterm-256color must appear in child process output"

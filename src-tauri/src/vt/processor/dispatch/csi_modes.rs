@@ -64,9 +64,7 @@ pub(super) fn decrst(p: &mut VtProcessor, params: &vte::Params) {
                 // Disabling DECAWM cancels any pending wrap immediately.
                 p.wrap_pending = false;
             }
-            9 | 1000 | 1002 | 1003 => {
-                p.modes.mouse_reporting = MouseReportingMode::None
-            }
+            9 | 1000 | 1002 | 1003 => p.modes.mouse_reporting = MouseReportingMode::None,
             12 => p.cursor_blink = false,
             25 => p.modes.cursor_visible = false,
             47 => p.leave_alternate(false),

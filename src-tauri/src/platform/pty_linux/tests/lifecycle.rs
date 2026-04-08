@@ -79,8 +79,7 @@ fn fpl_c_001_close_delivers_sighup_to_child() {
     use std::path::PathBuf;
 
     // Unique marker file for this test run.
-    let marker_path =
-        PathBuf::from(format!("/tmp/tauterm_fpl_c_001_{}.txt", std::process::id()));
+    let marker_path = PathBuf::from(format!("/tmp/tauterm_fpl_c_001_{}.txt", std::process::id()));
     // Cleanup if left from a previous failed run.
     let _ = std::fs::remove_file(&marker_path);
 

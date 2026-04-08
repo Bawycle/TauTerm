@@ -10,16 +10,16 @@ use crate::events::{
     emit_notification_changed, emit_osc52_write_requested, emit_screen_update,
     emit_session_state_changed,
     types::{
-        BellTriggeredEvent, CursorStyleChangedEvent, NotificationChangedEvent, Osc52WriteRequestedEvent,
-        PaneNotificationDto, SessionChangeType, SessionStateChangedEvent,
+        BellTriggeredEvent, CursorStyleChangedEvent, NotificationChangedEvent,
+        Osc52WriteRequestedEvent, PaneNotificationDto, SessionChangeType, SessionStateChangedEvent,
     },
 };
 use crate::session::ids::PaneId;
 use crate::session::registry::SessionRegistry;
 use crate::vt::VtProcessor;
 
-use super::event_builders::{build_mode_state_event, build_screen_update_event};
 use super::ProcessOutput;
+use super::event_builders::{build_mode_state_event, build_screen_update_event};
 
 // ---------------------------------------------------------------------------
 // emit_all_pending — flush one coalesced window to the frontend

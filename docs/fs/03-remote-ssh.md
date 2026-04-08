@@ -91,6 +91,19 @@
 - FS-SSH-041: The reconnection button/action is visible in the disconnected pane.
 - FS-SSH-042: After reconnection, previous scrollback is intact, with a clear separator line.
 
+### 3.10.6 Session Teardown and Lifecycle Integration
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FS-SSH-043 | When the user closes a tab or pane hosting an active SSH session (via `close_tab` or `close_pane`), the SSH connection to the remote host MUST be terminated as part of that close operation. If the pane ID is not found in the SSH registry (e.g., the session was already in Closed or Disconnected state), the absence of a connection entry MUST be ignored — the close operation MUST NOT fail due to a missing SSH session. | Must |
+| FS-SSH-044 | When the remote shell exits with code 0 (normal exit — e.g., user types `exit`), the SSH session MUST transition to the Closed state and the pane hosting that session MUST be closed automatically, with no user confirmation required. This behavior is symmetrical to local PTY exit code 0 (FS-PTY-005). The same last-pane and last-tab rules apply (FS-TAB-008). | Must |
+| FS-SSH-045 | While an SSH pane is in the `connecting` or `authenticating` state (FS-SSH-010), the pane MUST display a visual overlay indicating the connection is in progress. The overlay MUST reflect the current state with a distinct label and animation. When the session transitions to `connected`, the overlay MUST dismiss and keyboard focus MUST be given to that pane's terminal viewport automatically, provided it is the currently active pane. If the `connected` transition occurs for a background pane, focus MUST NOT be transferred. | Must |
+
+**Acceptance criteria:**
+- FS-SSH-043: Closing a tab with an active SSH session terminates the remote connection (verified via server-side session log). Closing a tab whose SSH session is already disconnected or closed does not produce an error.
+- FS-SSH-044: Typing `exit` in an SSH pane causes the pane to close automatically — no banner is shown, no user action is required. If it was the last pane in a tab, the tab also closes. If it was the only tab, the application window closes.
+- FS-SSH-045: While connecting, the pane shows the connecting overlay with the appropriate animation and label. While authenticating, the overlay updates. On successful connection, the overlay disappears and the terminal viewport receives keyboard focus (if the pane is active). No click on the pane is required to start typing.
+
 ---
 
 ## 3.11 FS-CRED: Credential Security

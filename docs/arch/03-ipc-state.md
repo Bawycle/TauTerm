@@ -303,7 +303,11 @@ The `hasForegroundProcess` flag is the single source of truth for whether a conf
 
 **Disconnected:** Network drop, keepalive timeout (FS-SSH-020: 3 missed keepalives), write failure, or remote process exit with non-zero code. Reconnection is available from this state.
 
-**Closed:** User-initiated close, or remote process exit with code 0. No reconnection available from this state; a new `open_ssh_connection` is required.
+**Closed:** User-initiated close (via `close_tab`/`close_pane`), explicit `close_ssh_connection` command, or remote process exit with code 0. No reconnection available from this state; a new `open_ssh_connection` is required.
+
+**SSH teardown on tab/pane close (FS-SSH-043):** The `close_tab` and `close_pane` command handlers call `ssh_manager.close_connection(pane_id)` for each pane being removed, before removing those panes from the `SessionRegistry`. This call is best-effort: a `PaneNotFound` error is silently ignored (the session was already Closed or Disconnected). No `TauTermError` is surfaced to the frontend for a missing SSH entry during a close operation.
+
+**SSH `Closed` state → automatic pane close (FS-SSH-044):** When `ssh_task.rs` emits `ssh-state-changed` with `state: Closed` (remote shell exited with code 0), the frontend handler calls `doClosePane(paneId)` — the same code path used for PTY exit code 0. This invokes `close_pane` on the backend, which applies the same last-pane and last-tab rules (§4.5.3). The `SshLifecycleState` TypeScript union therefore includes the `{ type: 'closed' }` variant, which must be handled in the `ssh-state-changed` event listener.
 
 The `SshLifecycleState` enum is the single source of truth for SSH state. It is emitted to the frontend via `ssh-state-changed` events and embedded in `PaneState` for snapshot queries.
 

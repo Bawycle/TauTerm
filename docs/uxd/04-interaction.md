@@ -83,7 +83,11 @@ When a non-modal overlay or panel is dismissed, focus returns to the active term
 
 #### 8.2.8 Auto-Focus on Active Pane (FS-UX-003)
 
-The active terminal pane's viewport receives keyboard focus automatically — without requiring a mouse click — in three situations: (1) on application launch, (2) when a new tab is created, (3) when the user switches to a different tab. Focus is applied immediately after mount, without scrolling the page. This does not apply to terminated panes.
+The active terminal pane's viewport receives keyboard focus automatically — without requiring a mouse click — in four situations: (1) on application launch, (2) when a new tab is created, (3) when the user switches to a different tab, (4) when the active pane's SSH session transitions to the `connected` state.
+
+Situation (4): when the `ssh-state-changed` event delivers `state.type === 'connected'` for the pane matching `activePaneId`, `focus()` is called on `activeViewportEl` immediately. This removes the need for the user to click the terminal after authentication completes. If the `connected` event arrives for a background pane (not the active one), focus is not transferred — the user's current context is not disrupted.
+
+Focus is applied immediately after mount, without scrolling the page. This does not apply to terminated panes.
 
 #### 8.2.9 Multi-Pane Focus Rule (FS-UX-015)
 
@@ -161,12 +165,31 @@ A passive indicator that appears whenever `scroll_offset > 0` to signal that the
 - **Paste from CLIPBOARD:** Ctrl+Shift+V (FS-CLIP-005).
 - **Multi-line paste warning (FS-CLIP-009):** When bracketed paste is NOT active and pasted text contains newlines, a confirmation dialog appears. Heading: "Paste multi-line text?" Body: "The text contains {N} lines. Pasting multi-line text directly into a terminal may execute commands unintentionally." Action: "Paste" (primary), "Cancel" (ghost, default focus). A toggle "Don't ask again" at the bottom of the dialog, persisted in preferences.
 
-### 8.6 SSH Connection Interruption Feedback
+### 8.6 SSH Connection State Feedback
+
+#### 8.6.1 Connecting and Authenticating States
+
+When an SSH pane enters `connecting` or `authenticating` state (FS-SSH-010):
+
+1. **Tab badge:** Transitions to the animated state for `connecting` (rotating icon) or `authenticating` (pulsing icon) per [§7.1.7](03-components.md#717-ssh-badge-on-tab).
+2. **Status bar indicator:** Displays "Connecting to {host}…" or "Authenticating…" per [§7.5.1](03-components.md#751-status-bar-indicator).
+3. **Pane overlay:** A centered overlay appears within the pane with an animated icon and a short label per [§7.5.2](03-components.md#752-connection-in-progress-overlay-in-pane). No user action is required or offered.
+4. **On connected:** All connecting/authenticating indicators dismiss instantly. The active pane's terminal viewport receives focus automatically (§8.2.8, situation 4).
+
+#### 8.6.2 SSH Closed State — Pane Auto-Close
+
+When the remote shell exits normally (exit code 0), the backend transitions the SSH session to the `closed` state and emits `ssh-state-changed: { type: 'closed' }` (FS-SSH-044). The pane closes automatically — no banner or user confirmation is shown. This is indistinguishable from closing a local PTY pane after a clean exit.
+
+If the closed pane was the last in its tab, the tab closes. If it was the only remaining tab, the application window closes. The same visual flow as a user-initiated `close_pane` applies.
+
+No "Reconnect" control is shown for the `closed` state — it is a terminal state by design (FS-SSH-010).
+
+#### 8.6.3 Disconnection Feedback
 
 Per FS-SSH-022, disconnection is detected within 1 second:
 
 1. **Immediate (0-1s):** Tab SSH badge transitions to Disconnected state ([§7.1.7](03-components.md#717-ssh-badge-on-tab)). Status bar indicator changes to "Disconnected" ([§7.5.1](03-components.md#751-status-bar-indicator)).
-2. **Pane overlay (after detection):** Disconnection banner appears at bottom of pane ([§7.5.2](03-components.md#752-disconnection-overlay-in-pane)) with reason text and "Reconnect" button.
+2. **Pane overlay (after detection):** Disconnection banner appears at bottom of pane ([§7.5.3](03-components.md#753-disconnection-overlay-in-pane)) with reason text and "Reconnect" button.
 3. **Terminal content:** Remains visible and scrollable. No content is lost.
 4. **Reconnect action:** Accessible from the pane banner (primary button), the tab context menu, and the connection manager. On reconnect, a separator line ([§7.19](03-components.md#719-ssh-reconnection-separator-fs-ssh-042)) marks the boundary.
 

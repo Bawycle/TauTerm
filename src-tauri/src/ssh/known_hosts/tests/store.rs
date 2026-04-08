@@ -161,12 +161,7 @@ fn system_fallback_plain_host_trusted() {
     fs::write(&sys_path, sys_content.as_bytes()).expect("write sys");
 
     let result = store
-        .lookup_with_system_fallback(
-            "remote.server",
-            "ssh-ed25519",
-            &key_bytes,
-            Some(&sys_path),
-        )
+        .lookup_with_system_fallback("remote.server", "ssh-ed25519", &key_bytes, Some(&sys_path))
         .expect("lookup");
 
     assert!(
@@ -267,12 +262,7 @@ fn system_fallback_missing_system_file_returns_unknown() {
     let nonexistent_path = sys_dir.path().join("does_not_exist");
 
     let result = store
-        .lookup_with_system_fallback(
-            "some.host",
-            "ssh-ed25519",
-            &[0xAA],
-            Some(&nonexistent_path),
-        )
+        .lookup_with_system_fallback("some.host", "ssh-ed25519", &[0xAA], Some(&nonexistent_path))
         .expect("lookup must not error on missing system file");
 
     assert!(
@@ -313,9 +303,8 @@ fn system_fallback_tauterm_trusted_takes_precedence() {
 fn known_hosts_skips_comments_and_empty_lines() {
     let key_bytes = vec![1u8; 4];
     let key_b64 = BASE64.encode(&key_bytes);
-    let content = format!(
-        "# This is a comment\n\nexample.org ssh-ed25519 {key_b64}\n# Another comment\n"
-    );
+    let content =
+        format!("# This is a comment\n\nexample.org ssh-ed25519 {key_b64}\n# Another comment\n");
 
     let (_dir, path) = write_temp_known_hosts(&content);
     let store = KnownHostsStore::new(path);

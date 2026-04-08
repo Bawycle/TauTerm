@@ -13,12 +13,12 @@
 //! Lines evicted by a partial DECSTBM scroll region are discarded (not stored).
 //! The alternate screen buffer never contributes to scrollback.
 
+mod buffer;
+mod dirty_region;
 mod dirty_rows;
+mod operations;
 mod scrollback;
 mod snapshot;
-mod dirty_region;
-mod buffer;
-mod operations;
 
 #[cfg(test)]
 mod tests;

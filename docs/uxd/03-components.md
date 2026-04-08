@@ -459,6 +459,7 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - **Section headings within content** (e.g., "KEYBOARD", "APPEARANCE", "CONNECTIONS", "THEMES"): Caption level — `--font-size-ui-xs` (11px), `--font-weight-semibold` (600), `text-transform: uppercase`, `letter-spacing: var(--letter-spacing-label)` (0.09em), `--color-text-heading`.
 - **Section separator:** `--space-6` (24px) between sections within content area.
 - **Focus trap:** Keyboard focus is trapped within the panel while open. Tab cycles through section nav, then through form controls in the active section. Escape closes the panel.
+- **Nested interactive overlays:** Any dropdown, select, or combobox rendered inside the Preferences panel must use a portal to `<body>` (see §7.16 — Dropdown / Select). The panel's `overflow: hidden` and independent scroll region would otherwise clip the list. This applies to all dropdowns in the Appearance section (theme quick-select, language), Terminal Behavior section (cursor shape, bell type), and any future select controls added to the panel.
 
 #### 7.6.3 Preference Sections (FS-PREF-004)
 
@@ -916,7 +917,7 @@ All button variants share: `--radius-sm` (4px), `--font-size-ui-base` (13px), `-
 **Closed state:** Identical to text input (§7.15) with a Lucide `ChevronDown` icon (`--size-icon-sm`, `--color-icon-default`) right-aligned inside the field.
 
 **Open state:**
-- The dropdown menu appears below the trigger field.
+- The dropdown menu appears below the trigger field by default.
 - **Background:** `--color-bg-raised`.
 - **Border:** 1px solid `--color-border-overlay` (`#4a4640`).
 - **Border radius:** `--radius-md` (8px).
@@ -924,6 +925,11 @@ All button variants share: `--radius-sm` (4px), `--font-size-ui-base` (13px), `-
 - **Z-index:** `--z-dropdown` (30).
 - **Max height:** 240px (scrollable).
 - **Option items:** Same styling as context menu items (§7.8.3). Active/selected option has left border 2px solid `--color-accent` and background `--color-accent-subtle`.
+
+**Portal and collision detection:**
+- The dropdown list is rendered via a portal to `<body>` (Bits UI `Select.Content` with `use:portal`). This prevents clipping by scrollable ancestors or CSS-transformed containers — a concern inside the Preferences panel, which has `overflow: hidden` and an independent scroll region.
+- Positioning is delegated to Floating UI (integrated in Bits UI): the list flips to open above the trigger when vertical space below is insufficient (`avoidCollisions: true`).
+- **Side offset:** `sideOffset: 4` (4px gap between the trigger bottom edge and the list top edge). This matches the current implementation and is the canonical value — do not override it at the component level.
 
 ### 7.17 Keyboard Shortcut Recorder
 

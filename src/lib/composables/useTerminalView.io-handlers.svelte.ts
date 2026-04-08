@@ -66,7 +66,7 @@ export function createIoHandlers(
   // Connection manager
   // -------------------------------------------------------------------------
 
-  async function handleConnectionSave(config: SshConnectionConfig) {
+  async function handleConnectionSave(config: SshConnectionConfig, _password?: string) {
     try {
       const id: string = await saveConnection(config);
       const exists = s.savedConnections.some((c) => c.id === id);
@@ -75,6 +75,9 @@ export function createIoHandlers(
       } else {
         s.savedConnections = [...s.savedConnections, { ...config, id }];
       }
+      // TODO(SEC-CRED-004): store `_password` under real `id` via SecretService IPC
+      // once a `store_password(connectionId, password)` command is available.
+      // The password must never be stored under the placeholder '' sent for new connections.
     } catch {
       // Non-fatal
     }

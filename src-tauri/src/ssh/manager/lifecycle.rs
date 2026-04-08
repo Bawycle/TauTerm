@@ -92,6 +92,20 @@ impl SshManager {
         let conn = SshConnection::new(pane_id.clone(), config.clone());
         self.connections.insert(pane_id.clone(), conn);
 
+        // Notify the frontend immediately so it can show the connecting overlay
+        // (UXD §7.5.2). The task will emit Authenticating once the handshake
+        // completes. Without this event the frontend stays at null sshState
+        // until Authenticating fires (after TCP + SSH handshake), which may be
+        // too late to show any feedback before the credential dialog appears.
+        crate::events::emit_ssh_state_changed(
+            &app,
+            crate::events::SshStateChangedEvent {
+                pane_id: pane_id.clone(),
+                state: SshLifecycleState::Connecting,
+                reason: None,
+            },
+        );
+
         // Pass Arc<Self> into the task so it can update the shared map.
         let manager = Arc::clone(self);
         let config = config.clone();
@@ -119,12 +133,15 @@ impl SshManager {
                 // prompt was in flight (transport error, timeout, etc.), remove
                 // the stale pending-credentials entry so it doesn't accumulate.
                 manager.pending_credentials.remove(&task_pane_id);
+                let reason_str = format!("Connection failed: {e}");
                 crate::events::emit_ssh_state_changed(
                     &task_app,
                     crate::events::SshStateChangedEvent {
                         pane_id: task_pane_id,
-                        state: SshLifecycleState::Disconnected,
-                        reason: Some(format!("Connection failed: {e}")),
+                        state: SshLifecycleState::Disconnected {
+                            reason: Some(reason_str.clone()),
+                        },
+                        reason: Some(reason_str),
                     },
                 );
             }

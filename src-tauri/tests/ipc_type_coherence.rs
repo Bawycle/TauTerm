@@ -171,7 +171,9 @@ fn ipc_ssh_state_changed_connecting_serializes() {
 fn ipc_ssh_state_changed_disconnected_with_reason_serializes() {
     let event = SshStateChangedEvent {
         pane_id: make_pane_id(),
-        state: SshLifecycleState::Disconnected,
+        state: SshLifecycleState::Disconnected {
+            reason: Some("connection reset by peer".to_string()),
+        },
         reason: Some("connection reset by peer".to_string()),
     };
     let json = serde_json::to_string(&event).expect("serialize");

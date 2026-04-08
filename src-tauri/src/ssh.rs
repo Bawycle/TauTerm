@@ -56,7 +56,11 @@ pub enum SshLifecycleState {
     /// Session is active.
     Connected,
     /// Session lost due to network drop or keepalive timeout.
-    Disconnected,
+    ///
+    /// `reason` carries a human-readable explanation (e.g. "keepalive timeout",
+    /// "Connection lost: …") so the frontend can display it without needing a
+    /// parallel field in `SshStateChangedEvent`.
+    Disconnected { reason: Option<String> },
     /// User-initiated close or remote exit with code 0.
     Closed,
 }

@@ -163,11 +163,16 @@ pub(crate) fn classify_disconnect_reason(
             Some(format!("Server disconnected: {:?}", info.reason_code)),
             false,
         ),
-        russh::client::DisconnectReason::Error(e) => (
-            SshLifecycleState::Disconnected,
-            Some(format!("Connection lost: {e:?}")),
-            true,
-        ),
+        russh::client::DisconnectReason::Error(e) => {
+            let reason_str = format!("Connection lost: {e:?}");
+            (
+                SshLifecycleState::Disconnected {
+                    reason: Some(reason_str.clone()),
+                },
+                Some(reason_str),
+                true,
+            )
+        }
     }
 }
 
@@ -375,9 +380,8 @@ mod tests {
         let reason: DisconnectReason<SshError> =
             DisconnectReason::Error(SshError::Connection("keepalive timeout".to_string()));
         let (state, msg, is_error) = classify_disconnect_reason(&reason);
-        assert_eq!(
-            state,
-            SshLifecycleState::Disconnected,
+        assert!(
+            matches!(state, SshLifecycleState::Disconnected { .. }),
             "Transport error must map to Disconnected (TEST-SSH-UNIT-004 — keepalive path)"
         );
         assert!(
@@ -410,7 +414,7 @@ mod tests {
         let reason: DisconnectReason<SshError> =
             DisconnectReason::Error(SshError::Auth("all methods failed".to_string()));
         let (state, _msg, is_error) = classify_disconnect_reason(&reason);
-        assert_eq!(state, SshLifecycleState::Disconnected);
+        assert!(matches!(state, SshLifecycleState::Disconnected { .. }));
         assert!(is_error);
     }
 
@@ -457,8 +461,11 @@ mod tests {
     fn set_state_transitions_to_disconnected() {
         let conn = SshConnection::new(PaneId::new(), make_config());
         conn.set_state(SshLifecycleState::Connected);
-        conn.set_state(SshLifecycleState::Disconnected);
-        assert_eq!(conn.state(), SshLifecycleState::Disconnected);
+        conn.set_state(SshLifecycleState::Disconnected { reason: None });
+        assert!(matches!(
+            conn.state(),
+            SshLifecycleState::Disconnected { .. }
+        ));
     }
 
     #[test]
@@ -477,8 +484,11 @@ mod tests {
         assert_eq!(conn.state(), SshLifecycleState::Authenticating);
         conn.set_state(SshLifecycleState::Connected);
         assert_eq!(conn.state(), SshLifecycleState::Connected);
-        conn.set_state(SshLifecycleState::Disconnected);
-        assert_eq!(conn.state(), SshLifecycleState::Disconnected);
+        conn.set_state(SshLifecycleState::Disconnected { reason: None });
+        assert!(matches!(
+            conn.state(),
+            SshLifecycleState::Disconnected { .. }
+        ));
         conn.set_state(SshLifecycleState::Closed);
         assert_eq!(conn.state(), SshLifecycleState::Closed);
     }
@@ -487,5 +497,35 @@ mod tests {
     fn ssh_lifecycle_state_serializes_with_type_tag() {
         let json = serde_json::to_string(&SshLifecycleState::Connected).expect("serialize failed");
         assert!(json.contains("\"type\":\"connected\""), "got: {json}");
+    }
+
+    /// `Disconnected { reason: Some(...) }` must serialize with `"type":"disconnected"`
+    /// and a `"reason"` field so the frontend can display it.
+    #[test]
+    fn disconnected_with_reason_serializes_correctly() {
+        let state = SshLifecycleState::Disconnected {
+            reason: Some("keepalive timeout".to_string()),
+        };
+        let json = serde_json::to_string(&state).expect("serialize failed");
+        assert!(
+            json.contains("\"type\":\"disconnected\""),
+            "type tag must be 'disconnected'; got: {json}"
+        );
+        assert!(
+            json.contains("\"reason\":\"keepalive timeout\""),
+            "reason must be present; got: {json}"
+        );
+    }
+
+    /// `Disconnected { reason: None }` must serialize without a `"reason"` field
+    /// (skip_serializing_if on Option — but this depends on serde derive for struct variants).
+    #[test]
+    fn disconnected_without_reason_serializes_with_null_reason() {
+        let state = SshLifecycleState::Disconnected { reason: None };
+        let json = serde_json::to_string(&state).expect("serialize failed");
+        assert!(
+            json.contains("\"type\":\"disconnected\""),
+            "type tag must be 'disconnected'; got: {json}"
+        );
     }
 }

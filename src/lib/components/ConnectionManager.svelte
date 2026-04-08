@@ -52,17 +52,17 @@
   interface Props {
     standalone?: boolean;
     connections?: SshConnectionConfig[];
-    onsave?: (config: SshConnectionConfig) => void;
+    /**
+     * Called when the user saves a connection config.
+     * `password` is present when auth method is "password" and a password was
+     * entered. The parent is responsible for storing it via SecretService
+     * (SEC-CRED-004) using the real ConnectionId returned by the backend —
+     * never using the placeholder empty string sent for new connections.
+     */
+    onsave?: (config: SshConnectionConfig, password?: string) => void;
     ondelete?: (connectionId: string) => void;
     onopen?: (args: OpenTarget) => void;
     onclose?: () => void;
-    /**
-     * Called after save when auth method is "password" and a password was entered.
-     * The password must be stored via SecretService (SEC-CRED-004) — it is never
-     * persisted in SshConnectionConfig or transmitted over IPC as part of the config.
-     * The parent is responsible for calling the appropriate credential-store IPC command.
-     */
-    onstorepassword?: (connectionId: string, password: string) => void;
   }
 
   const {
@@ -72,7 +72,6 @@
     ondelete,
     onopen,
     onclose,
-    onstorepassword,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -168,12 +167,12 @@
       identityFile: formAuthMethod === 'identity' ? formIdentityFile : undefined,
       allowOsc52Write: formAllowOsc52,
     };
-    onsave?.(config);
-    // If password auth, emit to parent for SecretService storage (SEC-CRED-004).
-    // The password is never stored in SshConnectionConfig.
-    if (formAuthMethod === 'password' && formPassword) {
-      onstorepassword?.(config.id, formPassword);
-    }
+    // Pass password to parent so it can store it via SecretService (SEC-CRED-004)
+    // after the backend returns the real ConnectionId. The parent must NOT store
+    // it under config.id (which may be '' for new connections).
+    const password =
+      formAuthMethod === 'password' && formPassword ? formPassword : undefined;
+    onsave?.(config, password);
     // Clear password from component state immediately (SEC-UI-002)
     formPassword = '';
     showForm = false;

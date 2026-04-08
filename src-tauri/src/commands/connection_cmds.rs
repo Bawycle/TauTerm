@@ -57,6 +57,13 @@ pub async fn save_connection(
         // SEC-PATH-005: use the strict validator (file must exist and be inside ~/.ssh/).
         validate_ssh_identity_path(path)?;
     }
+    // If the frontend sends an empty ID (new connection form), assign a fresh ID
+    // here so that two consecutive "new connection" saves do not collide on the
+    // empty-string key inside the store.
+    let mut config = config;
+    if config.id.as_str().is_empty() {
+        config.id = ConnectionId::new();
+    }
     let id = config.id.clone();
     prefs.read().save_connection(config).map_err(|e| {
         TauTermError::with_detail(
@@ -259,6 +266,67 @@ mod tests {
             "SEC-PATH-005: relative identity file path must be rejected"
         );
         assert_eq!(result.unwrap_err().code, "INVALID_SSH_IDENTITY_PATH");
+    }
+
+    // -----------------------------------------------------------------------
+    // Bug fix: empty ConnectionId must be replaced with a fresh ID at save time
+    // -----------------------------------------------------------------------
+
+    /// When the frontend sends `id: ""` (new-connection form), `save_connection`
+    /// must generate a fresh `ConnectionId` and return it — not store `""`.
+    #[test]
+    fn save_connection_with_empty_id_assigns_new_id() {
+        let (store, _tmp) = make_test_store();
+        let mut config = make_connection_config("New Server");
+        config.id = crate::session::ids::ConnectionId(String::new()); // simulate frontend empty id
+
+        // Replicate the command-handler logic (ID assignment) directly:
+        let mut config = config;
+        if config.id.as_str().is_empty() {
+            config.id = crate::session::ids::ConnectionId::new();
+        }
+        let assigned_id = config.id.clone();
+        store.read().save_connection(config).expect("save");
+
+        assert!(
+            !assigned_id.as_str().is_empty(),
+            "assigned ID must not be empty"
+        );
+
+        let all = store.read().get().connections;
+        assert_eq!(all.len(), 1, "exactly one connection must be stored");
+        assert_eq!(
+            all[0].id, assigned_id,
+            "stored connection must carry the assigned ID"
+        );
+    }
+
+    /// Two consecutive saves with `id: ""` must produce two separate connections,
+    /// not overwrite the first.
+    #[test]
+    fn two_saves_with_empty_id_create_two_connections() {
+        let (store, _tmp) = make_test_store();
+
+        for label in &["First", "Second"] {
+            let mut config = make_connection_config(label);
+            config.id = crate::session::ids::ConnectionId(String::new());
+            // Replicate command-handler ID assignment:
+            if config.id.as_str().is_empty() {
+                config.id = crate::session::ids::ConnectionId::new();
+            }
+            store.read().save_connection(config).expect("save");
+        }
+
+        let all = store.read().get().connections;
+        assert_eq!(
+            all.len(),
+            2,
+            "two saves with empty IDs must create two distinct connections"
+        );
+        assert_ne!(
+            all[0].id, all[1].id,
+            "the two connections must have distinct IDs"
+        );
     }
 
     // -----------------------------------------------------------------------

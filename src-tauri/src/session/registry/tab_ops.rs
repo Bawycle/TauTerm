@@ -155,6 +155,19 @@ impl SessionRegistry {
         Ok(tab_state)
     }
 
+    /// Return the pane IDs for a tab without removing anything.
+    ///
+    /// Used by the `close_tab` command handler to collect pane IDs before
+    /// tearing down per-pane resources (e.g. SSH connections).
+    pub fn get_tab_pane_ids(&self, tab_id: &TabId) -> Vec<PaneId> {
+        let inner = self.inner.read();
+        inner
+            .tabs
+            .get(tab_id)
+            .map(|e| e.panes.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
     /// Close a tab and all its panes.
     ///
     /// Returns the new `active_tab_id` after closing (i.e. the tab that becomes

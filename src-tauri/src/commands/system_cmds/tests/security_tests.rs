@@ -230,8 +230,7 @@ fn sec_ipc_005_unknown_language_variant_rejected_by_serde() {
 #[test]
 fn sec_ipc_005_language_injection_payload_rejected() {
     use crate::preferences::schema::Language;
-    let result: Result<Language, _> =
-        serde_json::from_str("\"en'; DROP TABLE preferences; --\"");
+    let result: Result<Language, _> = serde_json::from_str("\"en'; DROP TABLE preferences; --\"");
     assert!(
         result.is_err(),
         "SQL injection payload as language must be rejected (SEC-IPC-005)"

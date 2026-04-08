@@ -27,6 +27,7 @@ export const Selectors = {
   // Terminal state overlays
   preferencesPanel: ".preferences-panel",
   processTerminatedPane: ".process-terminated-pane",
+  sshConnectingOverlay: ".ssh-connecting-overlay",
   // SSH connection manager
   sshButton: ".terminal-view__ssh-btn",
   connectionManager: ".connection-manager",

@@ -211,7 +211,9 @@ mod linux {
         );
 
         // Disconnect cleanly.
-        let _ = session.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
     }
 
     // -----------------------------------------------------------------------
@@ -239,7 +241,9 @@ mod linux {
             "SSH-INT-002: pubkey authentication with pre-authorized key must succeed (FS-SSH-012)"
         );
 
-        let _ = session.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
     }
 
     // -----------------------------------------------------------------------
@@ -270,7 +274,9 @@ mod linux {
             "SSH-INT-003: keyboard-interactive authentication with correct password must succeed (FS-SSH-012)"
         );
 
-        let _ = session.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
     }
 
     // -----------------------------------------------------------------------
@@ -290,9 +296,13 @@ mod linux {
             .await
             .expect("TCP/SSH connect must succeed");
 
-        let result = authenticate_password(&mut session, &env.user, "definitely-wrong-password-xyz")
-            .await
-            .expect("authenticate_password must not return a transport error on credential rejection");
+        let result = authenticate_password(
+            &mut session,
+            &env.user,
+            "definitely-wrong-password-xyz",
+        )
+        .await
+        .expect("authenticate_password must not return a transport error on credential rejection");
 
         assert!(
             !result,
@@ -423,7 +433,9 @@ mod linux {
         );
 
         if let Ok(session) = session_result {
-            let _ = session.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+            let _ = session
+                .disconnect(russh::Disconnect::ByApplication, "", "en")
+                .await;
         }
     }
 
@@ -571,8 +583,7 @@ mod linux {
             Arc::clone(&lookup_result),
         );
 
-        let reconnect = russh::client::connect(config, env.addr().as_str(), handler)
-            .await;
+        let reconnect = russh::client::connect(config, env.addr().as_str(), handler).await;
 
         let lookup = lookup_result.lock().await;
         assert!(
@@ -589,7 +600,9 @@ mod linux {
         );
 
         if let Ok(session) = reconnect {
-            let _ = session.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+            let _ = session
+                .disconnect(russh::Disconnect::ByApplication, "", "en")
+                .await;
         }
     }
 
@@ -679,8 +692,7 @@ mod linux {
             "SSH-INT-011: keepalive interval must be 30 seconds (FS-SSH-020)"
         );
         assert_eq!(
-            SSH_KEEPALIVE_MAX_MISSES,
-            3,
+            SSH_KEEPALIVE_MAX_MISSES, 3,
             "SSH-INT-011: keepalive max misses must be 3 (FS-SSH-020)"
         );
     }
@@ -710,7 +722,10 @@ mod linux {
         let authed = authenticate_password(&mut session, &env.user, &env.password)
             .await
             .expect("password auth must not produce a transport error");
-        assert!(authed, "SSH-INT-012: authentication must succeed before PTY test");
+        assert!(
+            authed,
+            "SSH-INT-012: authentication must succeed before PTY test"
+        );
 
         // Open a session channel.
         let mut channel = session
@@ -736,10 +751,10 @@ mod linux {
             .request_pty(
                 true, // want_reply
                 "xterm-256color",
-                80,  // cols
-                24,  // rows
-                0,   // pixel width
-                0,   // pixel height
+                80, // cols
+                24, // rows
+                0,  // pixel width
+                0,  // pixel height
                 terminal_modes,
             )
             .await;
@@ -773,6 +788,73 @@ mod linux {
              RFC 4254 terminal modes)"
         );
 
-        let _ = session.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
+    }
+
+    // -----------------------------------------------------------------------
+    // SSH-INT-013 — try_authenticate with wrong credentials returns Ok(false)
+    //              (FS-SSH-012, regression guard for credential prompt loop)
+    //
+    // This test exercises the FULL authentication sequence used by connect_task:
+    //   keyboard-interactive (with wrong password) → Ok(false)
+    //   then password          (with wrong password) → Ok(false)
+    //
+    // Both methods must return Ok(false) — NOT a transport error — so that the
+    // connect_task auth loop can emit a credential-prompt event instead of
+    // propagating an error via `?` and skipping the prompt entirely.
+    //
+    // If either method returns Err on a wrong-password rejection (as opposed to
+    // a genuine transport failure), this test catches the regression.
+    // -----------------------------------------------------------------------
+
+    /// SSH-INT-013: both keyboard-interactive and password auth return Ok(false)
+    /// when called in sequence with wrong credentials on the same session.
+    #[tokio::test]
+    async fn ssh_int_013_try_authenticate_wrong_credentials_returns_ok_false() {
+        let Some(env) = SshTestEnv::load() else {
+            eprintln!("SKIP: SSH test environment variables not set");
+            return;
+        };
+
+        let mut session = connect_accept_all(&env)
+            .await
+            .expect("TCP/SSH connect must succeed");
+
+        const WRONG_PASSWORD: &str = "definitely-wrong-password-xyz-regression";
+
+        // Step 1: keyboard-interactive with wrong password — must be Ok(false).
+        let kbd_result = authenticate_keyboard_interactive(&mut session, &env.user, WRONG_PASSWORD)
+            .await
+            .expect(
+                "SSH-INT-013: authenticate_keyboard_interactive with wrong password must return \
+                 Ok(false), not Err (transport error). If this fails, the connect_task auth loop \
+                 will exit via `?` before emitting a credential-prompt event.",
+            );
+        assert!(
+            !kbd_result,
+            "SSH-INT-013: keyboard-interactive with wrong password must return Ok(false), not Ok(true)"
+        );
+
+        // Step 2: password auth with wrong password on the SAME session — must also be Ok(false).
+        // This simulates the sequence in try_authenticate: kbd-interactive then password.
+        let pw_result = authenticate_password(&mut session, &env.user, WRONG_PASSWORD)
+            .await
+            .expect(
+                "SSH-INT-013: authenticate_password with wrong password (called after a failed \
+                 keyboard-interactive on the same session) must return Ok(false), not Err. \
+                 If this fails, the server may be disconnecting after MaxAuthTries is exhausted \
+                 after only two attempts, preventing the credential-prompt from being emitted.",
+            );
+        assert!(
+            !pw_result,
+            "SSH-INT-013: password auth with wrong password (after kbd-interactive) must return Ok(false)"
+        );
+
+        // Connection may be closed by server after auth failure — acceptable.
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
     }
 }

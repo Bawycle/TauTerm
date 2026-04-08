@@ -89,3 +89,76 @@ pub async fn inject_ssh_failure(
     failure_registry.arm(count);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// SSH connect-task delay injection
+// ---------------------------------------------------------------------------
+
+/// Milliseconds to sleep at the very start of the next `connect_task` run,
+/// after the `Connecting` state event has already been emitted and the
+/// overlay is visible on screen.
+///
+/// Single-shot: the value is atomically swapped to 0 on first read, so it
+/// fires at most once per call to `inject_ssh_delay`.
+static SSH_CONNECT_DELAY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Consume the pending connect-task delay (resets to 0).
+///
+/// Returns `Some(ms)` if a non-zero delay was pending, `None` otherwise.
+pub fn consume_ssh_connect_delay() -> Option<u64> {
+    let v = SSH_CONNECT_DELAY_MS.swap(0, std::sync::atomic::Ordering::SeqCst);
+    if v > 0 { Some(v) } else { None }
+}
+
+/// Arm the next `connect_task` with a synthetic delay.
+///
+/// The delay is inserted at the very start of `connect_task`, which runs
+/// after `open_connection_inner` has already emitted the `Connecting` state
+/// event and the overlay is rendered.  This holds the connection in
+/// `connecting` state long enough for WebdriverIO to observe it.
+///
+/// Single-shot: consumed (zeroed) the first time `connect_task` runs after
+/// this is set.
+#[tauri::command]
+pub async fn inject_ssh_delay(delay_ms: u64) -> Result<(), String> {
+    SSH_CONNECT_DELAY_MS.store(delay_ms, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Credential-prompt injection
+// ---------------------------------------------------------------------------
+
+/// Directly emit a `credential-prompt` event for a pane without requiring a
+/// live SSH auth flow.
+///
+/// This lets E2E tests assert that the `.ssh-credential-dialog` renders when
+/// a `credential-prompt` event arrives (frontend rendering path exercised).
+///
+/// No sender is stored in `pending_credentials`.  When the test submits the
+/// dialog, `handleProvideCredentials` calls `clearCredentialPrompt()` first
+/// (which closes the dialog) then invokes `provide_credentials` IPC — that
+/// call returns `NoPendingCredentials`, which is silently swallowed by the
+/// `catch {}` in the frontend handler.  The dialog correctly closes.
+#[tauri::command]
+pub async fn inject_credential_prompt(
+    pane_id: crate::session::ids::PaneId,
+    host: String,
+    username: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::events::{CredentialPromptEvent, emit_credential_prompt};
+
+    emit_credential_prompt(
+        &app,
+        CredentialPromptEvent {
+            pane_id,
+            host,
+            username,
+            prompt: None,
+            failed: false,
+            is_keychain_available: false,
+        },
+    );
+    Ok(())
+}

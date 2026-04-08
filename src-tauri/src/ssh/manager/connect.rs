@@ -37,6 +37,14 @@ impl SshManager {
         registry: Arc<SessionRegistry>,
         is_reconnect: bool,
     ) -> Result<(), SshError> {
+        // E2E: hold in `Connecting` state long enough for WebdriverIO to observe
+        // the connecting overlay (UXD §7.5.2). Fires once per armed delay, then
+        // resets. No-op in production builds.
+        #[cfg(feature = "e2e-testing")]
+        if let Some(ms) = crate::commands::testing::consume_ssh_connect_delay() {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+        }
+
         let addr = format!("{}:{}", config.host, config.port);
 
         // Use per-connection keepalive overrides when present (FS-SSH-020).
@@ -81,6 +89,12 @@ impl SshManager {
 
         loop {
             attempt += 1;
+            tracing::debug!(
+                pane_id = %pane_id,
+                attempt,
+                has_credentials = current_credentials.is_some(),
+                "connect_task: starting auth attempt"
+            );
             let authenticated = Self::try_authenticate(
                 &mut session,
                 &username,
@@ -88,11 +102,16 @@ impl SshManager {
                 current_credentials.as_ref(),
             )
             .await?;
+            tracing::debug!(
+                pane_id = %pane_id,
+                attempt,
+                authenticated,
+                "connect_task: try_authenticate returned"
+            );
 
             // Extract keychain-save intent before dropping credentials (FS-CRED-003).
-            let password_for_keychain: Option<zeroize::Zeroizing<String>> = current_credentials
-                .as_ref()
-                .and_then(|c| {
+            let password_for_keychain: Option<zeroize::Zeroizing<String>> =
+                current_credentials.as_ref().and_then(|c| {
                     if c.save_in_keychain {
                         c.password
                             .as_ref()
@@ -128,9 +147,12 @@ impl SshManager {
             }
 
             let (tx, rx) = tokio::sync::oneshot::channel::<super::Credentials>();
-            self.pending_credentials.insert(
-                pane_id.clone(),
-                super::PendingCredentials { sender: tx },
+            self.pending_credentials
+                .insert(pane_id.clone(), super::PendingCredentials { sender: tx });
+            tracing::info!(
+                pane_id = %pane_id,
+                attempt,
+                "connect_task: emitting credential-prompt event"
             );
             crate::events::emit_credential_prompt(
                 &app,
@@ -151,18 +173,19 @@ impl SshManager {
             .await
             {
                 Ok(Ok(creds)) => {
+                    tracing::info!(pane_id = %pane_id, "connect_task: auth input received from user prompt");
                     current_credentials = Some(creds);
                 }
                 Ok(Err(_)) => {
                     // Sender dropped — user cancelled the dialog.
+                    tracing::info!(pane_id = %pane_id, "connect_task: credential prompt cancelled (sender dropped)");
                     return Err(SshError::Auth("cancelled by user".to_string()));
                 }
                 Err(_) => {
                     // Timeout expired without a response.
+                    tracing::info!(pane_id = %pane_id, "connect_task: credential prompt timed out");
                     self.pending_credentials.remove(&pane_id);
-                    return Err(SshError::Auth(
-                        "credential prompt timed out".to_string(),
-                    ));
+                    return Err(SshError::Auth("credential prompt timed out".to_string()));
                 }
             }
         }

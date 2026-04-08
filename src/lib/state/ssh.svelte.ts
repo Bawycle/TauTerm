@@ -39,8 +39,16 @@ const _ssh = $state<{
   credentialPrompt: null,
 });
 
-/** SSH lifecycle state keyed by PaneId. */
-export const sshStates = $state<Map<PaneId, SshLifecycleState>>(new Map());
+/**
+ * SSH lifecycle state keyed by PaneId.
+ *
+ * Using a plain object ($state<Record>) instead of $state<Map> because
+ * Svelte 5's reactive proxy tracks object property accesses (including
+ * non-existent keys) correctly. Map.get(nonExistentKey) does NOT create a
+ * reactive subscription for future Map.set(key, ...) calls, making $derived
+ * consumers blind to new entries added after mount.
+ */
+export const sshStates = $state<Record<PaneId, SshLifecycleState | undefined>>({});
 
 /**
  * Active TOFU / key-change host key dialog, or null when none pending.
@@ -66,8 +74,10 @@ export const credentialPrompt = {
  * Bracketed paste mode per pane.
  * Tracked from mode-state-changed events so TerminalView can handle
  * Ctrl+Shift+V without coupling to each TerminalPane instance.
+ *
+ * Plain object for the same reactivity reason as sshStates.
  */
-export const bracketedPasteByPane = $state<Map<PaneId, boolean>>(new Map());
+export const bracketedPasteByPane = $state<Record<PaneId, boolean | undefined>>({});
 
 // ---------------------------------------------------------------------------
 // Updaters — called from event handlers
@@ -77,11 +87,7 @@ export const bracketedPasteByPane = $state<Map<PaneId, boolean>>(new Map());
  * Apply a SshStateChangedEvent to the per-pane SSH lifecycle map.
  */
 export function applySshStateChanged(ev: SshStateChangedEvent): void {
-  const next = new Map(sshStates);
-  next.set(ev.paneId, ev.state);
-  // Replace the map reference to trigger Svelte 5 reactivity.
-  sshStates.clear();
-  for (const [k, v] of next) sshStates.set(k, v);
+  sshStates[ev.paneId] = ev.state;
 }
 
 /**
@@ -122,19 +128,19 @@ export function clearCredentialPrompt(): CredentialPromptEvent | null {
  * Update bracketed paste mode for a pane.
  */
 export function setBracketedPaste(paneId: PaneId, active: boolean): void {
-  bracketedPasteByPane.set(paneId, active);
+  bracketedPasteByPane[paneId] = active;
 }
 
 /**
  * Returns the bracketed paste mode for a given pane (false if unknown).
  */
 export function getBracketedPaste(paneId: PaneId): boolean {
-  return bracketedPasteByPane.get(paneId) ?? false;
+  return bracketedPasteByPane[paneId] ?? false;
 }
 
 /**
  * Returns the SSH lifecycle state for a given pane, or null if unknown.
  */
 export function getSshState(paneId: PaneId): SshLifecycleState | null {
-  return sshStates.get(paneId) ?? null;
+  return sshStates[paneId] ?? null;
 }

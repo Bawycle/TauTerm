@@ -30,6 +30,7 @@ import {
   sessionState,
   applySessionDelta,
   collectLeafPanes,
+  getActiveTab,
 } from '$lib/state/session.svelte';
 import {
   setHostKeyPrompt,
@@ -106,8 +107,23 @@ export async function setupViewListeners(
   unlistens.push(await onHostKeyPrompt(setHostKeyPrompt));
   unlistens.push(await onCredentialPrompt(setCredentialPrompt));
   unlistens.push(
-    await onSshStateChanged((ev) => {
+    await onSshStateChanged(async (ev) => {
       applySshStateChanged(ev);
+
+      if (ev.state.type === 'connected') {
+        // Auto-focus the terminal viewport when SSH connects (UXD §8.2.8).
+        // Only focus if this is the currently active pane and no modal is open.
+        if (
+          getActiveTab()?.activePaneId === ev.paneId &&
+          !document.querySelector('[role="dialog"][aria-modal="true"]')
+        ) {
+          bag.activeViewportEl?.focus({ preventScroll: true });
+        }
+      } else if (ev.state.type === 'closed') {
+        // Remote shell exited cleanly (user typed `exit`, remote EOF).
+        // Auto-close the pane — same behaviour as PTY process exit.
+        await doClosePane(ev.paneId);
+      }
     }),
   );
   unlistens.push(

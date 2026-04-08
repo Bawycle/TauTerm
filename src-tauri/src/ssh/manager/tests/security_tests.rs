@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use super::super::{Credentials};
+use super::super::Credentials;
 
 // -----------------------------------------------------------------------
 // SEC-CRED-003 — Credentials::Debug redacts password and private_key_path

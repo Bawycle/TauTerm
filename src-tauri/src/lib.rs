@@ -193,6 +193,10 @@ pub fn run() {
             commands::testing::inject_pty_output,
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_ssh_failure,
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_ssh_delay,
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_credential_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,6 +8,10 @@
  *   TPSC-STRUCT-001 — TerminalPane mounts without errors
  *   TPSC-STRUCT-002 — viewport element has expected CSS class
  *   TPSC-STRUCT-003 — pane element has data-pane-id attribute
+ *   SSH-OVERLAY-REACT-001 — connecting overlay renders when sshStates is set to 'connecting'
+ *   SSH-OVERLAY-REACT-002 — connecting overlay renders when sshStates is set to 'authenticating'
+ *   SSH-OVERLAY-REACT-003 — connecting overlay disappears when sshStates transitions to 'connected'
+ *   SSH-OVERLAY-REACT-004 — overlay ignores state for a different paneId
  *
  * E2E-deferred (require capturing IPC listen() handlers — not feasible in jsdom
  * because vitest module aliases prevent vi.mock from intercepting the listen binding
@@ -21,9 +25,10 @@
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { mount, unmount } from 'svelte';
+import { mount, unmount, tick } from 'svelte';
 import { flushSync } from 'svelte';
 import TerminalPane from '../TerminalPane.svelte';
+import { applySshStateChanged, sshStates } from '$lib/state/ssh.svelte';
 
 // ---------------------------------------------------------------------------
 // JSDOM polyfills
@@ -272,4 +277,102 @@ describe('TPSC-FN-006 [E2E-deferred]: screen-update event updates scrollbackLine
 
 describe('TPSC-FN-007 [E2E-deferred]: events for different paneId are ignored', () => {
   it.todo('scroll-position-changed for a different pane does not show button');
+});
+
+// ---------------------------------------------------------------------------
+// SSH connecting overlay reactivity (SSH-OVERLAY-REACT-*)
+//
+// Verifies that TerminalPane reads sshStates directly from the module-level
+// $state proxy (not via prop), so mutations to sshStates are reactive.
+// This is the regression test for the bug where the overlay never appeared
+// because $state(Map) mutations are not tracked when the Map is passed as prop.
+// ---------------------------------------------------------------------------
+
+// Flush Svelte reactive updates triggered by module-level $state mutations.
+// tick() waits for Svelte to process pending DOM updates after a state change.
+async function settle(): Promise<void> {
+  await tick();
+  flushSync();
+  await tick();
+}
+
+describe('SSH-OVERLAY-REACT-001: overlay renders when sshStates becomes connecting', () => {
+  it('shows .ssh-connecting-overlay when state is set BEFORE mount', async () => {
+    // Diagnostic variant: set state BEFORE mounting to verify $derived reads it on first render.
+    // This distinguishes "new key added after mount" from "existing key updated after mount".
+    const paneId = 'react-test-pane-1';
+    applySshStateChanged({ paneId, state: { type: 'connecting' } });
+
+    const { container, instance } = await mountPane({ paneId });
+    instances.push(instance);
+
+    expect(container.querySelector('.ssh-connecting-overlay')).not.toBeNull();
+
+    sshStates[paneId] = undefined;
+  });
+
+  it('shows .ssh-connecting-overlay when state transitions to connecting AFTER mount', async () => {
+    const paneId = 'react-test-pane-1b';
+    const { container, instance } = await mountPane({ paneId });
+    instances.push(instance);
+
+    expect(container.querySelector('.ssh-connecting-overlay')).toBeNull();
+
+    applySshStateChanged({ paneId, state: { type: 'connecting' } });
+    expect(sshStates[paneId]).toEqual({ type: 'connecting' });
+    await settle();
+
+    expect(container.querySelector('.ssh-connecting-overlay')).not.toBeNull();
+
+    sshStates[paneId] = undefined;
+  });
+});
+
+describe('SSH-OVERLAY-REACT-002: overlay renders when sshStates becomes authenticating', () => {
+  it('shows .ssh-connecting-overlay when state transitions to authenticating', async () => {
+    const paneId = 'react-test-pane-2';
+    const { container, instance } = await mountPane({ paneId });
+    instances.push(instance);
+
+    applySshStateChanged({ paneId, state: { type: 'authenticating' } });
+    await settle();
+
+    expect(container.querySelector('.ssh-connecting-overlay')).not.toBeNull();
+
+    sshStates[paneId] = undefined;
+  });
+});
+
+describe('SSH-OVERLAY-REACT-003: overlay disappears when sshStates transitions to connected', () => {
+  it('hides .ssh-connecting-overlay when state moves from connecting to connected', async () => {
+    const paneId = 'react-test-pane-3';
+    const { container, instance } = await mountPane({ paneId });
+    instances.push(instance);
+
+    applySshStateChanged({ paneId, state: { type: 'connecting' } });
+    await settle();
+    expect(container.querySelector('.ssh-connecting-overlay')).not.toBeNull();
+
+    applySshStateChanged({ paneId, state: { type: 'connected' } });
+    await settle();
+    expect(container.querySelector('.ssh-connecting-overlay')).toBeNull();
+
+    sshStates[paneId] = undefined;
+  });
+});
+
+describe('SSH-OVERLAY-REACT-004: overlay ignores state for a different paneId', () => {
+  it('does not show overlay when sshStates is set for a different pane', async () => {
+    const paneId = 'react-test-pane-4';
+    const otherPaneId = 'react-test-pane-other';
+    const { container, instance } = await mountPane({ paneId });
+    instances.push(instance);
+
+    applySshStateChanged({ paneId: otherPaneId, state: { type: 'connecting' } });
+    await settle();
+
+    expect(container.querySelector('.ssh-connecting-overlay')).toBeNull();
+
+    sshStates[otherPaneId] = undefined;
+  });
 });

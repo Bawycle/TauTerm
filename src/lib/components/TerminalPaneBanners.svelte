@@ -20,6 +20,7 @@
 -->
 <script lang="ts">
   import ProcessTerminatedPane from './ProcessTerminatedPane.svelte';
+  import SshConnectingOverlay from './SshConnectingOverlay.svelte';
   import SshDeprecatedAlgorithmBanner from './SshDeprecatedAlgorithmBanner.svelte';
   import * as m from '$lib/paraglide/messages';
   import type { SshLifecycleState } from '$lib/ipc/types';
@@ -61,11 +62,16 @@
   <ProcessTerminatedPane {exitCode} {signalName} {onrestart} onclose={onclosepane} />
 {/if}
 
+<!-- SSH connecting overlay — shown while establishing connection (UXD §7.5.2) -->
+{#if sshState?.type === 'connecting' || sshState?.type === 'authenticating'}
+  <SshConnectingOverlay state={sshState.type} />
+{/if}
+
 <!-- SSH disconnected banner — shown when SSH connection drops (FS-SSH-040/041) -->
 {#if sshState?.type === 'disconnected'}
   <div class="terminal-pane__ssh-disconnected" role="status" aria-live="polite">
     <span class="terminal-pane__ssh-disconnected-label"
-      >{m.ssh_banner_disconnected({ reason: '' })}</span
+      >{m.ssh_banner_disconnected({ reason: sshState.reason ?? '' })}</span
     >
     <button class="terminal-pane__ssh-reconnect-btn" type="button" onclick={onReconnect}
       >{m.ssh_reconnect()}</button

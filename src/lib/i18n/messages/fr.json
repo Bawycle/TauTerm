@@ -21,6 +21,9 @@
   "ssh_state_disconnected": "Déconnecté : {reason}",
   "ssh_state_closed": "Fermé",
 
+  "ssh_overlay_connecting": "Connexion en cours…",
+  "ssh_overlay_authenticating": "Authentification en cours…",
+
   "notification_process_exit_success": "Processus terminé proprement",
   "notification_process_exit_failure": "Processus terminé avec le code {code}",
   "notification_bell": "Sonnerie",
@@ -79,6 +82,7 @@
   "error_connection_failed": "Échec de la connexion",
 
   "action_ok": "OK",
+  "action_connect": "Se connecter",
   "action_cancel": "Annuler",
   "action_save": "Enregistrer",
   "action_delete": "Supprimer",

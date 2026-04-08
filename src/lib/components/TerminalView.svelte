@@ -29,7 +29,7 @@
   import { Network, MousePointerClick, Maximize2, Minimize2 } from 'lucide-svelte';
   import { useTerminalView } from '$lib/composables/useTerminalView.svelte';
   import { sessionState, getActiveTab, getActivePanes } from '$lib/state/session.svelte';
-  import { sshStates, hostKeyPrompt, credentialPrompt } from '$lib/state/ssh.svelte';
+  import { hostKeyPrompt, credentialPrompt } from '$lib/state/ssh.svelte';
   import { terminatedPanes } from '$lib/state/notifications.svelte';
   import { preferences } from '$lib/state/preferences.svelte';
   import { fullscreenState } from '$lib/state/fullscreen.svelte';
@@ -190,7 +190,6 @@
           node={activeTab.layout}
           tabId={activeTab.id}
           activePaneId={activeTab.activePaneId}
-          {sshStates}
           {terminatedPanes}
           wordDelimiters={preferences.value?.terminal.wordDelimiters}
           confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}

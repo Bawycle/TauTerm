@@ -167,9 +167,9 @@ describe('SSH-CRED-FN-005: submit calls onsubmit with password', () => {
     pwInput!.dispatchEvent(new Event('input', { bubbles: true }));
     flushSync();
 
-    // Find and click the OK button by its text content (m.action_ok() = "OK")
+    // Find and click the Connect button by its text content (m.action_connect() = "Connect")
     const buttons = Array.from(document.body.querySelectorAll('button'));
-    const okButton = buttons.find((b) => b.textContent?.trim() === 'OK');
+    const okButton = buttons.find((b) => b.textContent?.trim() === 'Connect');
     expect(okButton).toBeDefined();
     okButton!.click();
     flushSync();

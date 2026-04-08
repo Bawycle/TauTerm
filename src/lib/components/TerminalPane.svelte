@@ -36,6 +36,7 @@
   import TerminalPaneReconnectionSeparators from './TerminalPaneReconnectionSeparators.svelte';
   import TerminalPanePasteDialog from './TerminalPanePasteDialog.svelte';
   import * as m from '$lib/paraglide/messages';
+  import { sshStates } from '$lib/state/ssh.svelte';
   import type {
     PaneId,
     TabId,
@@ -61,8 +62,6 @@
     signalName?: string;
     /** Whether there is more than one pane (controls Close Pane visibility). */
     canClosePane?: boolean;
-    /** SSH lifecycle state for Disconnected reconnect UI. */
-    sshState?: SshLifecycleState | null;
     /**
      * Characters treated as word delimiters for double-click word selection.
      * Mirrors the Rust backend default (TerminalPrefs.wordDelimiters).
@@ -129,7 +128,6 @@
     exitCode = 0,
     signalName,
     canClosePane = true,
-    sshState = null,
     wordDelimiters = ' \t|"\'`&()*,;<=>[]{}~',
     confirmMultilinePaste = true,
     cursorBlinkMs = 533,
@@ -148,6 +146,15 @@
     ondimensionschange,
     onviewportactive,
   }: Props = $props();
+
+  // ── SSH lifecycle state — derived directly from module-level reactive Record ─
+  // sshStates is a $state<Record> (plain object). Accessing sshStates[paneId]
+  // creates a per-key reactive dependency, including for keys not yet present.
+  // Using a plain object instead of $state<Map> avoids a Svelte 5 limitation:
+  // Map.get(nonExistentKey) does not subscribe to future Map.set(key, ...) calls,
+  // so $derived consumers mounted before the SSH connection starts would never
+  // see the Connecting/Authenticating state transitions.
+  const sshState = $derived(sshStates[paneId] ?? null);
 
   // ── SSH deprecated algorithm banner state (FS-SSH-014, UXD §7.21) ─────────
   // Local state: stays in the component as it is purely per-pane UI state.

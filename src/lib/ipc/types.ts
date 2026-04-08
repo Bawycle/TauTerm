@@ -78,7 +78,7 @@ export type SshLifecycleState =
   | { type: 'connecting' }
   | { type: 'authenticating' }
   | { type: 'connected' }
-  | { type: 'disconnected' }
+  | { type: 'disconnected'; reason?: string }
   | { type: 'closed' };
 
 /**

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, State};
 
-use crate::error::TauTermError;
+use crate::error::{SshError, TauTermError};
 use crate::events::{SessionChangeType, SessionStateChangedEvent, emit_session_state_changed};
 use crate::session::{
     SessionRegistry,
@@ -17,6 +17,7 @@ use crate::session::{
     registry::CreateTabConfig,
     tab::{SplitDirection, TabState},
 };
+use crate::ssh::SshManager;
 
 #[tauri::command]
 pub async fn create_tab(
@@ -30,8 +31,19 @@ pub async fn create_tab(
 pub async fn close_tab(
     tab_id: TabId,
     registry: State<'_, Arc<SessionRegistry>>,
+    ssh_manager: State<'_, Arc<SshManager>>,
     app: AppHandle,
 ) -> Result<(), TauTermError> {
+    // Close any SSH connections for panes in this tab before removing the tab
+    // from the registry. Best-effort: PaneNotFound is expected for PTY panes.
+    for pane_id in registry.get_tab_pane_ids(&tab_id) {
+        if let Err(e) = ssh_manager.close_connection(pane_id).await
+            && !matches!(e, SshError::PaneNotFound(_))
+        {
+            tracing::warn!("close_tab: SSH close_connection failed: {e}");
+        }
+    }
+
     let new_active_tab_id = registry
         .close_tab(tab_id.clone())
         .map_err(TauTermError::from)?;
@@ -86,7 +98,14 @@ pub async fn split_pane(
 pub async fn close_pane(
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,
+    ssh_manager: State<'_, Arc<SshManager>>,
 ) -> Result<Option<TabState>, TauTermError> {
+    // Close any SSH connection for this pane before removing it. Best-effort.
+    if let Err(e) = ssh_manager.close_connection(pane_id.clone()).await
+        && !matches!(e, SshError::PaneNotFound(_))
+    {
+        tracing::warn!("close_pane: SSH close_connection failed: {e}");
+    }
     registry.close_pane(pane_id).map_err(TauTermError::from)
 }
 

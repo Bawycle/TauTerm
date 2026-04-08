@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use std::collections::HashMap;
+
 use super::*;
 use crate::session::lifecycle::PaneLifecycleState;
+use crate::session::pane::PaneSession;
+use crate::session::tab::{PaneNode, TabState};
 
 // -----------------------------------------------------------------------
 // TEST-SPRINT-001 — FS-PTY-013: CreateTabConfig.login=true → "--login" args
@@ -205,4 +209,158 @@ fn termination_info_non_terminated_state_returns_none() {
             "non-Terminated state {state:?} must return None"
         );
     }
+}
+
+// -----------------------------------------------------------------------
+// SSH-CLOSE-001 — get_tab_pane_ids returns correct pane IDs
+//
+// `close_tab` iterates `registry.get_tab_pane_ids(&tab_id)` to collect all
+// pane IDs before calling `ssh_manager.close_connection` for each.
+// These tests verify the contract of `get_tab_pane_ids`:
+//   - returns the expected pane ID for a single-pane tab
+//   - returns an empty vec for an unknown tab
+//   - returns all pane IDs for a multi-pane (split) tab
+//
+// `SessionRegistry` requires `AppHandle` and cannot be constructed in unit
+// tests. We test the equivalent logic by operating on `RegistryInner` and
+// `TabEntry` directly (both private types accessible via `use super::*`).
+// This mirrors the pattern used by `extract_termination_info` above.
+// -----------------------------------------------------------------------
+
+/// Build a minimal `PaneSession` for use in registry inner state fixtures.
+fn make_pane_session(pane_id: &crate::session::ids::PaneId) -> PaneSession {
+    PaneSession::new(pane_id.clone(), 80, 24, 1000)
+}
+
+/// Build a minimal `TabState` wrapping a single leaf pane.
+fn make_leaf_tab_state(
+    tab_id: &crate::session::ids::TabId,
+    pane_id: &crate::session::ids::PaneId,
+) -> TabState {
+    let pane_state = make_pane_session(pane_id).to_state();
+    TabState {
+        id: tab_id.clone(),
+        label: None,
+        active_pane_id: pane_id.clone(),
+        order: 0,
+        layout: PaneNode::Leaf {
+            pane_id: pane_id.clone(),
+            state: pane_state,
+        },
+    }
+}
+
+/// Helper that replicates the `get_tab_pane_ids` logic on a `RegistryInner`
+/// directly, since `SessionRegistry` requires `AppHandle` in construction.
+fn inner_get_tab_pane_ids(
+    inner: &RegistryInner,
+    tab_id: &crate::session::ids::TabId,
+) -> Vec<crate::session::ids::PaneId> {
+    inner
+        .tabs
+        .get(tab_id)
+        .map(|e| e.panes.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn ssh_close_001_get_tab_pane_ids_single_pane() {
+    // SSH-CLOSE-001: get_tab_pane_ids returns the single pane ID for a tab
+    // with one pane. Used by close_tab to collect panes before SSH disconnect.
+    let tab_id = crate::session::ids::TabId::new();
+    let pane_id = crate::session::ids::PaneId::new();
+
+    let tab_state = make_leaf_tab_state(&tab_id, &pane_id);
+    let pane_session = make_pane_session(&pane_id);
+
+    let mut panes = HashMap::new();
+    panes.insert(pane_id.clone(), pane_session);
+
+    let mut inner = RegistryInner::new();
+    inner.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            state: tab_state,
+            panes,
+        },
+    );
+
+    let ids = inner_get_tab_pane_ids(&inner, &tab_id);
+    assert_eq!(
+        ids.len(),
+        1,
+        "single-pane tab must yield exactly one pane ID"
+    );
+    assert_eq!(
+        ids[0], pane_id,
+        "returned pane ID must match the inserted pane"
+    );
+}
+
+#[test]
+fn ssh_close_001_get_tab_pane_ids_unknown_tab_returns_empty() {
+    // SSH-CLOSE-001: get_tab_pane_ids returns empty vec for an unknown tab.
+    // close_tab iterating over an empty vec is safe (no-op for SSH manager).
+    let unknown_tab = crate::session::ids::TabId::new();
+    let inner = RegistryInner::new();
+
+    let ids = inner_get_tab_pane_ids(&inner, &unknown_tab);
+    assert!(
+        ids.is_empty(),
+        "unknown tab must yield an empty pane ID vec (no SSH disconnect calls)"
+    );
+}
+
+#[test]
+fn ssh_close_001_get_tab_pane_ids_split_tab_returns_all_panes() {
+    // SSH-CLOSE-001: get_tab_pane_ids returns all pane IDs for a split tab.
+    // close_tab must call close_connection for every pane, not just the first.
+    let tab_id = crate::session::ids::TabId::new();
+    let pane_a = crate::session::ids::PaneId::new();
+    let pane_b = crate::session::ids::PaneId::new();
+
+    let state_a = make_pane_session(&pane_a).to_state();
+    let state_b = make_pane_session(&pane_b).to_state();
+
+    let tab_state = TabState {
+        id: tab_id.clone(),
+        label: None,
+        active_pane_id: pane_a.clone(),
+        order: 0,
+        layout: PaneNode::Split {
+            direction: crate::session::tab::SplitDirection::Horizontal,
+            ratio: 0.5,
+            first: Box::new(PaneNode::Leaf {
+                pane_id: pane_a.clone(),
+                state: state_a,
+            }),
+            second: Box::new(PaneNode::Leaf {
+                pane_id: pane_b.clone(),
+                state: state_b,
+            }),
+        },
+    };
+
+    let mut panes = HashMap::new();
+    panes.insert(pane_a.clone(), make_pane_session(&pane_a));
+    panes.insert(pane_b.clone(), make_pane_session(&pane_b));
+
+    let mut inner = RegistryInner::new();
+    inner.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            state: tab_state,
+            panes,
+        },
+    );
+
+    let mut ids = inner_get_tab_pane_ids(&inner, &tab_id);
+    ids.sort_by(|a, b| a.to_string().cmp(&b.to_string())); // stabilise order
+    let mut expected = vec![pane_a, pane_b];
+    expected.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+
+    assert_eq!(
+        ids, expected,
+        "split tab must yield both pane IDs so both SSH connections are closed"
+    );
 }

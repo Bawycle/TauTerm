@@ -80,19 +80,21 @@
       {/snippet}
     </Select.Trigger>
 
-    <Select.Content
-      class="z-(--z-dropdown) w-[var(--bits-select-anchor-width)] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-raised) max-h-[240px] overflow-y-auto"
-      sideOffset={4}
-    >
-      {#each options as option (option.value)}
-        <Select.Item
-          value={option.value}
-          label={option.label}
-          class="h-[44px] px-3 flex items-center text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer hover:bg-(--color-hover-bg) data-[highlighted]:bg-(--color-hover-bg) data-[selected]:bg-(--color-accent-subtle) data-[selected]:border-l-2 data-[selected]:border-(--color-accent) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out"
-        >
-          {option.label}
-        </Select.Item>
-      {/each}
-    </Select.Content>
+    <Select.Portal to="body">
+      <Select.Content
+        class="z-(--z-dropdown) w-[var(--bits-select-anchor-width)] bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md) shadow-(--shadow-raised) max-h-[240px] overflow-y-auto"
+        sideOffset={4}
+      >
+        {#each options as option (option.value)}
+          <Select.Item
+            value={option.value}
+            label={option.label}
+            class="h-[44px] px-3 flex items-center text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer hover:bg-(--color-hover-bg) data-[highlighted]:bg-(--color-hover-bg) data-[selected]:bg-(--color-accent-subtle) data-[selected]:border-l-2 data-[selected]:border-(--color-accent) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out"
+          >
+            {option.label}
+          </Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Portal>
   </Select.Root>
 </div>

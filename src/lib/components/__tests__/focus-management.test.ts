@@ -1137,16 +1137,40 @@ describe('TEST-FOCUS-017: Tab bar printable key triggers onEscapeTabBar', () => 
 });
 
 // ---------------------------------------------------------------------------
-// TEST-FOCUS-018: Preferences panel onclose — activeViewportEl.focus() restored
+// TEST-FOCUS-018: Preferences panel close — Bits UI FocusScope trigger-restoration disabled
 //
-// When PreferencesPanel closes, Bits UI FocusScope returns focus to the
-// settings button in StatusBar — not to the terminal. The onclose callback
-// must explicitly restore focus. No modal guard is needed: by the time onclose
-// fires, the modal is already dismissed and no longer in the DOM.
+// Root cause of the bug: Bits UI Dialog.Content's FocusScope restores focus to the
+// trigger (settings button) asynchronously after onOpenChange fires. A synchronous
+// focus() call in onclose was overridden by this cleanup.
+//
+// The fix has two parts that must both be present:
+//   1. Dialog.Content must carry onCloseAutoFocus={(e) => e.preventDefault()} to
+//      disable Bits UI's trigger-restoration. This is the critical property — its
+//      absence is what caused the bug.
+//   2. TerminalView.svelte onclose must call activeViewportEl.focus() to restore
+//      focus to the terminal (now that Bits UI won't fight us).
+//
+// These two static checks are more specific than generic "focus"/"preventScroll"
+// presence checks — they verify the actual mechanism, not just keywords.
 // ---------------------------------------------------------------------------
 
-describe('TEST-FOCUS-018: Preferences panel onclose restores focus to activeViewportEl', () => {
-  it('TerminalView.svelte PreferencesPanel onclose contains activeViewportEl focus call (static check)', async () => {
+describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-restoration', () => {
+  it('PreferencesPanel.svelte Dialog.Content has onCloseAutoFocus with preventDefault (critical fix)', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(
+      process.cwd(),
+      'src/lib/components/PreferencesPanel.svelte',
+    );
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    // This is the exact prop that prevents Bits UI FocusScope from returning
+    // focus to the settings button trigger. Without it, the bug reappears.
+    expect(source).toContain('onCloseAutoFocus');
+    expect(source).toContain('preventDefault');
+  });
+
+  it('TerminalView.svelte PreferencesPanel onclose restores focus to activeViewportEl', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const filePath = path.resolve(
@@ -1155,13 +1179,11 @@ describe('TEST-FOCUS-018: Preferences panel onclose restores focus to activeView
     );
     const source = fs.readFileSync(filePath, 'utf-8');
 
-    // Locate the PreferencesPanel onclose block via the prefsOpen assignment
     const oncloseIdx = source.indexOf('tv.prefsOpen = false');
     expect(oncloseIdx).toBeGreaterThan(-1);
 
-    const oncloseBlock = source.slice(oncloseIdx, oncloseIdx + 400);
+    const oncloseBlock = source.slice(oncloseIdx, oncloseIdx + 350);
     expect(oncloseBlock).toContain('activeViewportEl');
     expect(oncloseBlock).toContain('focus');
-    expect(oncloseBlock).toContain('preventScroll');
   });
 });

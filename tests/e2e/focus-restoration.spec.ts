@@ -77,10 +77,10 @@ describe('TauTerm — Terminal focus restoration after panel interactions (FS-UX
   // -------------------------------------------------------------------------
 
   it('TEST-E2E-FOCUS-001: terminal is focused after closing preferences panel', async () => {
-    // Open preferences via keyboard shortcut (Ctrl+Shift+,).
+    // Open preferences via keyboard shortcut (Ctrl+,).
     await browser.execute((): void => {
       document.dispatchEvent(new KeyboardEvent('keydown', {
-        key: ',', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
+        key: ',', ctrlKey: true, bubbles: true, cancelable: true,
       }));
     });
 
@@ -147,11 +147,11 @@ describe('TauTerm — Terminal focus restoration after panel interactions (FS-UX
       { timeout: 3_000, timeoutMsg: 'SSH connection manager did not open' },
     );
 
-    // Close the panel — press Escape which the connection manager handles.
+    // Close via the X button inside the panel header (triggers the onclose callback
+    // which is the code path our focus-restoration fix covers).
     await browser.execute((): void => {
-      document.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Escape', bubbles: true, cancelable: true,
-      }));
+      const closeBtn = document.querySelector<HTMLButtonElement>('.connection-manager__header button');
+      closeBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
 
     // Wait for panel to disappear.

@@ -36,9 +36,13 @@
     preferences?: Preferences;
     onclose?: () => void;
     onupdate?: (patch: PreferencesPatch) => void;
+    /** Called by Bits UI FocusScope when the dialog closes, before it restores
+     *  focus to the trigger. Typically used to call e.preventDefault() and
+     *  restore focus to the terminal viewport instead. */
+    onCloseAutoFocus?: (e: Event) => void;
   }
 
-  let { open = $bindable(false), preferences, onclose, onupdate }: Props = $props();
+  let { open = $bindable(false), preferences, onclose, onupdate, onCloseAutoFocus }: Props = $props();
 
   // ---------------------------------------------------------------------------
   // Section navigation
@@ -136,7 +140,10 @@
              bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
       aria-modal="true"
-      onCloseAutoFocus={(e) => e.preventDefault()}
+      onCloseAutoFocus={(e) => {
+        e.preventDefault();
+        onCloseAutoFocus?.(e);
+      }}
     >
       <!-- Header -->
       <div class="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">

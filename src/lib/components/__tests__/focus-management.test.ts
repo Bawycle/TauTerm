@@ -1170,7 +1170,7 @@ describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-resto
     expect(source).toContain('preventDefault');
   });
 
-  it('TerminalView.svelte PreferencesPanel onclose restores focus to activeViewportEl', async () => {
+  it('TerminalView.svelte onCloseAutoFocus prop restores focus to activeViewportEl', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const filePath = path.resolve(
@@ -1179,11 +1179,15 @@ describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-resto
     );
     const source = fs.readFileSync(filePath, 'utf-8');
 
-    const oncloseIdx = source.indexOf('tv.prefsOpen = false');
-    expect(oncloseIdx).toBeGreaterThan(-1);
+    // The focus restoration is in onCloseAutoFocus, not onclose, because
+    // onCloseAutoFocus fires at the exact right moment in the Bits UI lifecycle
+    // (when FocusScope would restore focus to the trigger). At that point the
+    // dialog is still in the DOM, so no modal guard is used.
+    const onCloseAutoFocusIdx = source.indexOf('onCloseAutoFocus');
+    expect(onCloseAutoFocusIdx).toBeGreaterThan(-1);
 
-    const oncloseBlock = source.slice(oncloseIdx, oncloseIdx + 350);
-    expect(oncloseBlock).toContain('activeViewportEl');
-    expect(oncloseBlock).toContain('focus');
+    const handlerBlock = source.slice(onCloseAutoFocusIdx, onCloseAutoFocusIdx + 500);
+    expect(handlerBlock).toContain('activeViewportEl');
+    expect(handlerBlock).toContain('focus');
   });
 });

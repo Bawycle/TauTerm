@@ -277,9 +277,13 @@
     preferences={preferences.value}
     onclose={() => {
       tv.prefsOpen = false;
-      // onCloseAutoFocus on Dialog.Content is set to preventDefault(), so
-      // Bits UI FocusScope will NOT return focus to the trigger (settings button).
-      // We restore focus to the terminal directly and synchronously here.
+    }}
+    onCloseAutoFocus={() => {
+      // Bits UI FocusScope fires this at the exact moment it would normally
+      // restore focus to the trigger (settings button). We intercept here to
+      // redirect focus to the terminal viewport instead.
+      // No modal guard: this dialog is still in the DOM when the event fires,
+      // so querySelector('[role="dialog"]') would return it and block the call.
       tv.activeViewportEl?.focus({ preventScroll: true });
     }}
     onupdate={tv.handlePreferencesUpdate}

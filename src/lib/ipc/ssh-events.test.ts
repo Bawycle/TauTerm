@@ -42,6 +42,7 @@ function makeSshStateEvent(
 function makeHostKeyEvent(overrides: Partial<HostKeyPromptEvent> = {}): HostKeyPromptEvent {
   return {
     paneId: 'pane-1',
+    connectionId: 'conn-1',
     host: 'my-server.example.com',
     keyType: 'ssh-ed25519',
     fingerprint: 'SHA256:abc123',
@@ -57,6 +58,8 @@ function makeCredentialEvent(
     paneId: 'pane-1',
     host: 'my-server.example.com',
     username: 'alice',
+    failed: false,
+    isKeychainAvailable: false,
     ...overrides,
   };
 }

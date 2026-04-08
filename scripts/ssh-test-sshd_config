@@ -1,0 +1,38 @@
+# SSH server configuration for TauTerm integration tests.
+# This file is NOT a production sshd_config.
+# It configures a minimal sshd suitable for automated testing.
+
+# Listen on a non-standard port to avoid collisions.
+Port 2222
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# Host keys (generated at build time in Containerfile.ssh-test).
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+
+# Enable all authentication methods needed for test coverage.
+PasswordAuthentication yes
+PubkeyAuthentication yes
+KbdInteractiveAuthentication yes
+
+# PAM is required for keyboard-interactive authentication.
+UsePAM yes
+
+# Do not attempt DNS lookups — makes connections faster in a container.
+UseDNS no
+
+# Logging: write to stderr for container log visibility.
+SyslogFacility AUTH
+LogLevel INFO
+
+# Allow the test user and the no-auth user (only).
+AllowUsers tauterm tauterm-noauth
+
+# Security settings appropriate for an isolated test environment.
+PermitRootLogin no
+StrictModes no
+X11Forwarding no
+PrintMotd no
+PrintLastLog no
+TCPKeepAlive yes

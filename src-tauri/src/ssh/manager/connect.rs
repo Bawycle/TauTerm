@@ -71,19 +71,100 @@ impl SshManager {
             .map(|c| c.username.clone())
             .unwrap_or_else(|| config.username.clone());
 
-        // Authentication order: pubkey → keyboard-interactive → password (FS-SSH-012).
-        let authenticated =
-            Self::try_authenticate(&mut session, &username, config, credentials.as_ref()).await?;
+        // Authentication retry loop: try → on failure emit credential-prompt → wait → retry.
+        // Max 3 attempts; 120 s timeout per prompt (FS-SSH-015/016/017).
+        const MAX_AUTH_ATTEMPTS: u32 = 3;
+        const CREDENTIAL_PROMPT_TIMEOUT_SECS: u64 = 120;
 
-        // SECURITY (FS-CRED-003): drop credentials immediately after auth so ZeroizeOnDrop
-        // wipes the password/key bytes without waiting until end of the connect_task future
-        // (which may stay alive for minutes across the PTY channel lifetime).
-        drop(credentials);
+        let mut current_credentials = credentials;
+        let mut attempt: u32 = 0;
 
-        if !authenticated {
-            return Err(SshError::Auth(
-                "All authentication methods failed.".to_string(),
-            ));
+        loop {
+            attempt += 1;
+            let authenticated = Self::try_authenticate(
+                &mut session,
+                &username,
+                config,
+                current_credentials.as_ref(),
+            )
+            .await?;
+
+            // Extract keychain-save intent before dropping credentials (FS-CRED-003).
+            let password_for_keychain: Option<zeroize::Zeroizing<String>> = current_credentials
+                .as_ref()
+                .and_then(|c| {
+                    if c.save_in_keychain {
+                        c.password
+                            .as_ref()
+                            .map(|p| zeroize::Zeroizing::new(p.clone()))
+                    } else {
+                        None
+                    }
+                });
+            // SECURITY (FS-CRED-003): drop credentials immediately after each auth attempt
+            // so ZeroizeOnDrop wipes password bytes. `Credentials` derives `ZeroizeOnDrop`
+            // which zeroes all fields — including `password: Option<String>` — on drop.
+            // `password_for_keychain` carries a separate `Zeroizing<String>` copy.
+            // Using `drop()` here moves the value, which triggers the Drop impl
+            // and avoids the `unused_assignments` lint that `= None` would produce.
+            drop(current_credentials);
+
+            if authenticated {
+                if let Some(ref password) = password_for_keychain
+                    && let Err(e) = self
+                        .credential_manager
+                        .store_password(&config.id.to_string(), &username, password)
+                        .await
+                {
+                    tracing::warn!("Failed to save password to keychain: {e}");
+                }
+                break;
+            }
+
+            if attempt >= MAX_AUTH_ATTEMPTS {
+                return Err(SshError::Auth(
+                    "Maximum authentication attempts exceeded.".to_string(),
+                ));
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel::<super::Credentials>();
+            self.pending_credentials.insert(
+                pane_id.clone(),
+                super::PendingCredentials { sender: tx },
+            );
+            crate::events::emit_credential_prompt(
+                &app,
+                crate::events::CredentialPromptEvent {
+                    pane_id: pane_id.clone(),
+                    host: config.host.clone(),
+                    username: username.clone(),
+                    prompt: None,
+                    failed: attempt > 1,
+                    is_keychain_available: self.credential_manager.is_available(),
+                },
+            );
+
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(CREDENTIAL_PROMPT_TIMEOUT_SECS),
+                rx,
+            )
+            .await
+            {
+                Ok(Ok(creds)) => {
+                    current_credentials = Some(creds);
+                }
+                Ok(Err(_)) => {
+                    // Sender dropped — user cancelled the dialog.
+                    return Err(SshError::Auth("cancelled by user".to_string()));
+                }
+                Err(_) => {
+                    // Timeout expired without a response.
+                    self.pending_credentials.remove(&pane_id);
+                    return Err(SshError::Auth(
+                        "credential prompt timed out".to_string(),
+                    ));
+                }
+            }
         }
 
         // Open a session channel and request a PTY (FS-SSH-013).

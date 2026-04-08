@@ -115,6 +115,9 @@ impl SshConnection {
 /// `accept_host_key` / `reject_host_key` command handlers can retrieve them.
 pub struct TauTermSshHandler {
     pub pane_id: PaneId,
+    /// Connection config ID — carried in TOFU events so the frontend can reopen
+    /// the connection after the user accepts the host key.
+    pub connection_id: crate::session::ids::ConnectionId,
     pub host: String,
     pub app: AppHandle,
     /// Path to TauTerm's known-hosts file. Uses `KnownHostsStore::default_path()`
@@ -128,6 +131,7 @@ impl TauTermSshHandler {
     pub fn new(pane_id: PaneId, config: &SshConnectionConfig, app: AppHandle) -> Self {
         Self {
             pane_id,
+            connection_id: config.id.clone(),
             host: config.host.clone(),
             app,
             known_hosts_path: None,
@@ -183,6 +187,7 @@ impl russh::client::Handler for TauTermSshHandler {
         server_public_key: &russh::keys::PublicKey,
     ) -> impl Future<Output = Result<bool, Self::Error>> + Send {
         let pane_id = self.pane_id.clone();
+        let connection_id = self.connection_id.clone();
         let host = self.host.clone();
         let app = self.app.clone();
         let known_hosts_path = self.known_hosts_path.clone();
@@ -238,6 +243,7 @@ impl russh::client::Handler for TauTermSshHandler {
                         &app,
                         HostKeyPromptEvent {
                             pane_id,
+                            connection_id,
                             host,
                             key_type,
                             fingerprint,
@@ -266,6 +272,7 @@ impl russh::client::Handler for TauTermSshHandler {
                         &app,
                         HostKeyPromptEvent {
                             pane_id,
+                            connection_id,
                             host,
                             key_type,
                             fingerprint,

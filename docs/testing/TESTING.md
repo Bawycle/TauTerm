@@ -32,6 +32,7 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 | Rust unit + integration | `cargo nextest` | `cargo nextest run` (from `src-tauri/`) |
 | Rust VT conformance | `cargo nextest` | included in `cargo nextest run` |
 | Rust SecretService (keyring) | Podman + nextest | `./scripts/run-keyring-tests.sh` |
+| Rust SSH integration         | Podman + nextest | `./scripts/run-ssh-tests.sh` |
 | Rust formatting | `rustfmt` | `cargo fmt -- --check` |
 | Rust linting | `clippy` | `cargo clippy -- -D warnings` |
 | Frontend unit | Vitest | `pnpm vitest run` |
@@ -149,6 +150,44 @@ Uses `tauri::test::mock_app`. Scenarios:
 ./scripts/run-keyring-tests.sh --no-build  # reuse existing image
 ./scripts/run-keyring-tests.sh --dry-run   # print commands only
 ```
+
+These tests are **not** part of the default `cargo nextest run` gate. They are an optional step, run on-demand or in a dedicated CI job.
+
+#### SSH integration tests (Podman container)
+
+`src-tauri/tests/ssh_integration.rs` — exercises `russh` auth functions (`authenticate_password`, `authenticate_pubkey`, `authenticate_keyboard_interactive`) and `KnownHostsStore` TOFU lookups against a real OpenSSH server (SSH-INT-001 to SSH-INT-012). These tests cannot run in a standard CI environment without a live sshd process.
+
+**Why a custom image:** The test container runs `sshd` on port 2222 with a pre-configured test user (`tauterm`), a known password, and a pre-authorized ED25519 key pair. A second user (`tauterm-noauth`) has no valid credentials, allowing auth-failure tests without configuring PAM policy.
+
+**Image:** `Containerfile.ssh-test` (project root) — single-stage `rust:1.86-slim-bookworm` with `openssh-server`. The test binary is pre-compiled during image build.
+
+**Key materials:** The ED25519 key pair is generated at image build time and embedded in the image at `/root/.ssh-test-keys/`. The private key path is exported as `TAUTERM_TEST_PUBKEY_PATH`. These are ephemeral test credentials only — never used in production.
+
+**nextest profile:** `ssh` (defined in `src-tauri/.config/nextest.toml`) — `test-threads = 4`, `slow-timeout = 30s`, `fail-fast = false`.
+
+**Running:**
+```bash
+./scripts/run-ssh-tests.sh             # build image + run
+./scripts/run-ssh-tests.sh --no-build  # reuse existing image
+./scripts/run-ssh-tests.sh --dry-run   # print commands only
+```
+
+**Coverage:**
+
+| Test ID     | FS reference | Scenario                                                    |
+|-------------|--------------|-------------------------------------------------------------|
+| SSH-INT-001 | FS-SSH-012   | Password auth succeeds                                      |
+| SSH-INT-002 | FS-SSH-012   | Pubkey (ED25519) auth succeeds                              |
+| SSH-INT-003 | FS-SSH-012   | Keyboard-interactive auth succeeds                          |
+| SSH-INT-004 | FS-SSH-012   | Wrong password → Ok(false), not Err                        |
+| SSH-INT-005 | FS-SSH-011   | First connection → `Unknown` TOFU trigger                  |
+| SSH-INT-006 | FS-SSH-011   | Trusted host key → connection accepted                      |
+| SSH-INT-007 | FS-SSH-011   | Mismatched key → `Mismatch`, connection rejected            |
+| SSH-INT-008 | FS-SSH-011   | Accept host key, store, reconnect succeeds                  |
+| SSH-INT-009 | FS-CRED-006  | Path traversal in identity_file → Err                      |
+| SSH-INT-010 | FS-CRED-006  | Directory path as identity_file → Err                      |
+| SSH-INT-011 | FS-SSH-020   | Keepalive constants: 30 s interval, 3 max misses            |
+| SSH-INT-012 | FS-SSH-013   | PTY request with `xterm-256color` + RFC 4254 modes succeeds |
 
 These tests are **not** part of the default `cargo nextest run` gate. They are an optional step, run on-demand or in a dedicated CI job.
 

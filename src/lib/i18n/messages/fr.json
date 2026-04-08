@@ -175,6 +175,8 @@
   "dropdown_placeholder": "Sélectionner…",
 
   "ssh_credential_password_for": "Mot de passe pour {username}@{host} :",
+  "ssh_credential_auth_failed": "Mot de passe incorrect, veuillez réessayer.",
+  "ssh_credential_save_in_keychain": "Enregistrer le mot de passe dans le trousseau",
 
   "tab_bar_tabs_aria_label": "Onglets du terminal",
   "tab_bar_ssh_badge_aria_label": "Session SSH",

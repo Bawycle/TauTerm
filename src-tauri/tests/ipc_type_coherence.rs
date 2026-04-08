@@ -21,7 +21,7 @@ use tau_term_lib::{
         SshStateChangedEvent,
     },
     session::{
-        ids::{PaneId, TabId},
+        ids::{ConnectionId, PaneId, TabId},
         lifecycle::PaneLifecycleState,
         pane::PaneState,
         tab::{PaneNode, SplitDirection, TabState},
@@ -267,6 +267,8 @@ fn ipc_credential_prompt_event_serializes() {
         host: "example.com".to_string(),
         username: "alice".to_string(),
         prompt: Some("Password:".to_string()),
+        failed: false,
+        is_keychain_available: false,
     };
     let json = serde_json::to_string(&event).expect("CredentialPromptEvent must serialize");
     assert!(json.contains("example.com"));
@@ -280,6 +282,8 @@ fn ipc_credential_prompt_event_without_prompt_serializes() {
         host: "host.local".to_string(),
         username: "bob".to_string(),
         prompt: None,
+        failed: false,
+        is_keychain_available: false,
     };
     let json = serde_json::to_string(&event).expect("serialize");
     // skip_serializing_if = None → "prompt" key must be absent.
@@ -293,6 +297,7 @@ fn ipc_credential_prompt_event_without_prompt_serializes() {
 fn ipc_host_key_prompt_event_serializes() {
     let event = HostKeyPromptEvent {
         pane_id: make_pane_id(),
+        connection_id: ConnectionId::new(),
         host: "example.com".to_string(),
         key_type: "ed25519".to_string(),
         fingerprint: "SHA256:abc123".to_string(),

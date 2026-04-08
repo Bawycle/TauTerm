@@ -32,7 +32,7 @@
 - **Height:** `--size-tab-height` (40px).
 - **Min width:** 120px. **Max width:** 240px.
 - **Horizontal padding:** `--space-3` (12px) left, `--space-2` (8px) right.
-- **Border radius:** `--radius-sm` (2px) on top-left and top-right only; bottom corners are `--radius-none`.
+- **Border radius:** `--radius-sm` (3px) on top-left and top-right only; bottom corners are `--radius-none`.
 - **ARIA role:** `tab`. `aria-selected="true"` for active tab.
 - **Title font:** `--font-size-ui-base` (13px), `--font-ui`.
 - **Title truncation:** Ellipsis when text exceeds available width.
@@ -112,6 +112,7 @@ For tabs hosting SSH sessions (FS-SSH-002):
 
 - **Position:** Before the title text, with `--space-1` (4px) gap.
 - **Visual:** Rounded rectangle (`--radius-sm`), padding `--space-1` horizontal.
+  *Radius rationale:* `--radius-sm` is used here because this is a **label-type badge** (an icon inside a shaped container), not a punctual indicator like an activity dot. The rounded rectangle container shape makes it identifiable as a distinct widget, not a free-floating icon. This is the same rationale as buttons and text inputs — a container that houses content uses `--radius-sm`, while point indicators (dots, filled circles) use `--radius-full`.
 - **Content:** Lucide `Network` icon at `--size-icon-sm` (14px).
 
 **States by SSH lifecycle (FS-SSH-010):**
@@ -348,7 +349,7 @@ Triggered by Ctrl+Shift+F or context menu "Search" (FS-SEARCH-007).
 - **Height:** Auto (content-driven, single row of controls).
 - **Background:** `--color-bg-raised` (`#2c2921`).
 - **Border:** 1px solid `--color-border` (`#35312a`).
-- **Border radius:** `--radius-md` (4px).
+- **Border radius:** `--radius-md` (6px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-search` (20).
 - **ARIA role:** `search`.
@@ -430,7 +431,7 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - **Panel max-height:** 80vh.
 - **Background:** `--color-bg-raised` (`#2c2921`).
 - **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (4px).
+- **Border radius:** `--radius-md` (6px).
 - **Shadow:** `--shadow-overlay`.
 - **Z-index:** `--z-overlay` (40).
 - **Internal padding:** `--space-6` (24px).
@@ -613,7 +614,7 @@ _Note: "Duplicate Tab" and "Close Other Tabs" are UXD additions not required by 
 
 - **Background:** `--color-bg-raised` (`#2c2921`).
 - **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (4px).
+- **Border radius:** `--radius-md` (6px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-dropdown` (30).
 - **Padding:** `--space-1` (4px) vertical.
@@ -642,7 +643,7 @@ _Note: "Duplicate Tab" and "Close Other Tabs" are UXD additions not required by 
 
 ### 7.9 Dialog / Modal
 
-Used for confirmations (FS-PTY-008), SSH host key verification (FS-SSH-011), and destructive action confirmations.
+Used for confirmations (FS-PTY-008), SSH host key verification (FS-SSH-011), SSH credential prompts (FS-SSH-015, FS-SSH-017, FS-SSH-018), and destructive action confirmations.
 
 #### 7.9.1 Backdrop
 
@@ -654,7 +655,7 @@ Used for confirmations (FS-PTY-008), SSH host key verification (FS-SSH-011), and
 
 - **Background:** `--color-bg-raised` (`#2c2921`).
 - **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (4px).
+- **Border radius:** `--radius-md` (6px).
 - **Shadow:** `--shadow-overlay`.
 - **Z-index:** `--z-modal` (50).
 - **Width:** 420px (small dialog), 560px (medium, e.g., host key verification). Max-width: 90vw.
@@ -704,11 +705,81 @@ For closing tabs/panes with a non-shell foreground process active (FS-PTY-008). 
 - **Primary action:** "Accept New Key" — destructive button variant (non-default).
 - **Secondary action:** "Reject" — ghost button variant. **Reject is the default focused action.**
 
+#### 7.9.5 SSH Credential Prompt Dialog (FS-SSH-015, FS-SSH-017, FS-SSH-018, FS-CRED-007)
+
+Shown when SSH authentication requires a password or keyboard-interactive response and no credential is available from the keychain (or when the keychain is unavailable per FS-CRED-005).
+
+**Trigger contexts:**
+- Auth method is "password" and no keychain entry exists for this connection (FS-CRED-007).
+- Auth method is "password" and keychain is unavailable (FS-CRED-005).
+- Server requests keyboard-interactive authentication and a challenge prompt is provided.
+- Re-prompt after an authentication failure (FS-SSH-017).
+
+**Width:** 420px (small). **ARIA role:** `dialog`.
+
+**Anatomy:**
+```
++-[LockKeyhole icon] [Title]--------------------+
+|  [Intro text]                                 |
+|                                               |
+|  Username  [readonly field]                   |
+|  [prompt label / "Password"]  [input field]   |
+|                                               |
+|  [x] Save in keychain         [Cancel] [OK]   |
++-----------------------------------------------+
+```
+
+**Header:**
+- **Icon:** Lucide `LockKeyhole`, `--size-icon-md` (16px), `--color-icon-default`, inline-left of the title.
+- **Title:** "Authenticate" (default) — `--font-size-ui-lg` (16px), `--font-weight-semibold`, `--color-text-primary`.
+
+**Intro text:**
+- Default (no prior failure): "{username}@{host}" — `--font-size-ui-sm` (12px), `--color-text-secondary`.
+- On retry (FS-SSH-017): "Authentication failed. Please try again." — same size, `--color-error`. Prefixed with Lucide `AlertCircle` icon (`--size-icon-sm`, 14px, `--color-error`).
+- Keychain unavailable (FS-CRED-005): appended notice below the intro text — "Credential storage is unavailable. Your password will not be saved." — `--font-size-ui-xs` (11px), `--color-text-secondary`. The "Save in keychain" toggle is hidden in this state.
+- Maximum retries reached before dialog closes: not shown as a dialog state — the connection aborts and the session transitions to Disconnected.
+
+**Username field:**
+- Read-only text input; shows the username from the saved connection.
+- Styling: same as §7.15 text input but with `background-color: var(--color-bg-surface)` (visually distinct from editable fields) and `cursor: default`.
+- Label: "Username" — `--font-size-ui-xs` (11px), `--font-weight-semibold`, `--color-text-secondary`.
+
+**Password / challenge field:**
+- Label: server-provided keyboard-interactive prompt text when present; otherwise "Password" — `--font-size-ui-xs` (11px), `--font-weight-semibold`, `--color-text-secondary`.
+- Input type: `password` (masked). No show/hide toggle — omitted intentionally to reduce interaction complexity in an authentication context.
+- Autofocus on dialog open.
+- Height: `--size-target-min` (44px). Full width.
+- `Enter` key submits the form.
+- Styling: §7.15 text input.
+
+**"Save in keychain" toggle:**
+- A checkbox-style toggle (§7.16), label "Save password in keychain" — `--font-size-ui-sm` (13px), `--color-text-primary`.
+- **Default state: unchecked** (FS-SSH-018). The user must opt in explicitly.
+- Hidden when keychain is unavailable (FS-CRED-005).
+- Positioned below the password field, above the action buttons. Full-width row with the checkbox left-aligned and the label immediately to its right.
+- Hit area: minimum `--size-target-min` (44px) height.
+
+**Action buttons:**
+- **"Cancel"** — ghost button variant. Cancels the connection attempt (FS-SSH-016). Focus is NOT placed here by default; the password field is focused.
+- **"OK"** — primary button variant. Disabled when the password field is empty. Clicking submits credentials.
+- Layout: right-aligned row per §7.9.2 pattern. `--space-2` (8px) gap between buttons.
+
+**Focus management:**
+- On open: focus is placed on the password input field, not on "OK". This allows immediate typing.
+- Focus trap active within the dialog (Bits UI `FocusScope`).
+- Tab order: username field (not focusable, skipped) → password field → "Save in keychain" checkbox → "Cancel" button → "OK" button.
+- On close (submit or cancel): focus returns to the element that triggered the connection attempt (e.g., the connection list item or the reconnect button).
+- `Escape` key cancels (same as clicking "Cancel").
+
+**Backdrop:** `--color-bg-overlay` at 60% opacity. Clicking the backdrop does NOT close the dialog — the user must make an explicit choice (FS-SSH-016).
+
+**Retry counter:** Not displayed in the UI. The backend tracks retry count per FS-SSH-017; the frontend only receives re-prompt events with a `failed: true` flag. Showing a counter would create unnecessary anxiety and is not actionable information.
+
 ### 7.10 Tooltip
 
 - **Background:** `--color-bg-raised` (`#2c2921`).
 - **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (4px).
+- **Border radius:** `--radius-md` (6px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-tooltip` (60).
 - **Padding:** `--space-1` (4px) vertical, `--space-2` (8px) horizontal.
@@ -743,7 +814,7 @@ When text is selected (auto-copy to PRIMARY selection per FS-CLIP-004):
 
 ### 7.14 Button Variants
 
-All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `--font-weight-medium` (500), height `--size-target-min` (44px), horizontal padding `--space-4` (16px). Icons (when present) are `--size-icon-sm` (14px) with `--space-1` (4px) gap to label text.
+All button variants share: `--radius-sm` (3px), `--font-size-ui-base` (13px), `--font-weight-medium` (500), height `--size-target-min` (44px), horizontal padding `--space-4` (16px). Icons (when present) are `--size-icon-sm` (14px) with `--space-1` (4px) gap to label text.
 
 #### Primary Button
 
@@ -798,7 +869,7 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 ```
 
 - **Label:** `--font-size-ui-sm` (12px), `--font-weight-medium` (500), `--color-text-secondary`. `--space-1` (4px) bottom margin.
-- **Input field:** Height `--size-target-min` (44px). Background `--term-bg` (`#16140f`). Border 1px solid `--color-border`. `--radius-sm` (2px). Horizontal padding `--space-3` (12px). Font `--font-size-ui-base` (13px), `--color-text-primary`.
+- **Input field:** Height `--size-target-min` (44px). Background `--term-bg` (`#16140f`). Border 1px solid `--color-border`. `--radius-sm` (3px). Horizontal padding `--space-3` (12px). Font `--font-size-ui-base` (13px), `--color-text-primary`.
 - **Placeholder:** `--color-text-tertiary` (`#6b6660`).
 - **Helper text:** `--font-size-ui-sm` (12px), `--color-text-secondary`. `--space-1` (4px) top margin.
 - **Error text:** `--font-size-ui-sm` (12px), `--color-error-text` (`#d97878`). `--space-1` (4px) top margin.
@@ -841,7 +912,7 @@ All button variants share: `--radius-sm` (2px), `--font-size-ui-base` (13px), `-
 - The dropdown menu appears below the trigger field.
 - **Background:** `--color-bg-raised`.
 - **Border:** 1px solid `--color-border`.
-- **Border radius:** `--radius-md` (4px).
+- **Border radius:** `--radius-md` (6px).
 - **Shadow:** `--shadow-raised`.
 - **Z-index:** `--z-dropdown` (30).
 - **Max height:** 240px (scrollable).

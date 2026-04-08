@@ -34,7 +34,7 @@ interface MountOpts {
   host?: string;
   username?: string;
   prompt?: string;
-  onsubmit?: (password: string) => void;
+  onsubmit?: (password: string, saveInKeychain?: boolean) => void;
   oncancel?: () => void;
   onclose?: () => void;
 }
@@ -175,7 +175,7 @@ describe('SSH-CRED-FN-005: submit calls onsubmit with password', () => {
     flushSync();
 
     expect(onsubmit).toHaveBeenCalledOnce();
-    expect(onsubmit).toHaveBeenCalledWith('mypassword');
+    expect(onsubmit).toHaveBeenCalledWith('mypassword', false);
   });
 });
 
@@ -227,7 +227,7 @@ describe('SSH-CRED-FN-007: Enter key submits the form', () => {
     flushSync();
 
     expect(onsubmit).toHaveBeenCalledOnce();
-    expect(onsubmit).toHaveBeenCalledWith('enterpass');
+    expect(onsubmit).toHaveBeenCalledWith('enterpass', false);
   });
 });
 

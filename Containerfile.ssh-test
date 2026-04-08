@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Containerfile.ssh-test
+#
+# Podman image for running SSH integration tests against a real OpenSSH server.
+#
+# The container provides:
+#   - A pre-configured OpenSSH server (sshd) on port 2222
+#   - A test user "tauterm" with password "tauterm-test-pw"
+#   - A pre-authorized ED25519 key pair for pubkey auth tests
+#   - A second test user "tauterm-noauth" for auth-failure tests
+#
+# Build:  podman build -t tauterm-ssh-test -f Containerfile.ssh-test .
+# Run:    podman run --rm --security-opt label=disable -p 2222:2222 tauterm-ssh-test
+#
+# The entrypoint starts sshd, then runs the Rust integration tests.
+
+FROM docker.io/library/rust:1.86-slim-bookworm
+
+# System dependencies:
+#   - build-essential, pkg-config: base compilation toolchain
+#   - libdbus-1-dev: D-Bus C library (dbus crate — transitive Tauri dep)
+#   - libssl-dev: OpenSSL (russh + transitive)
+#   - libwebkit2gtk-4.1-dev: WebKit/GTK (Tauri mandatory dep at compile time)
+#   - libayatana-appindicator3-dev: system-tray (Tauri optional but linked)
+#   - librsvg2-dev: SVG rendering (Tauri)
+#   - libxdo-dev: xdotool bindings (Tauri)
+#   - openssh-server: sshd for test SSH server
+#   - curl: install cargo-nextest
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libdbus-1-dev \
+    libssl-dev \
+    libwebkit2gtk-4.1-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    libxdo-dev \
+    openssh-client \
+    openssh-server \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-nextest.
+RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/cargo/bin
+
+# ---------------------------------------------------------------------------
+# Test user setup
+# ---------------------------------------------------------------------------
+
+# Primary test user: password auth + pubkey auth
+RUN useradd -m -s /bin/bash tauterm \
+    && echo 'tauterm:tauterm-test-pw' | chpasswd
+
+# Secondary test user: used exclusively for auth-failure tests.
+# No password set in /etc/shadow — any auth attempt will fail.
+RUN useradd -m -s /bin/bash tauterm-noauth \
+    && passwd -l tauterm-noauth
+
+# ---------------------------------------------------------------------------
+# SSH host keys (generated at build time — stable across runs)
+# ---------------------------------------------------------------------------
+RUN mkdir -p /etc/ssh && \
+    rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub && \
+    ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N '' && \
+    ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ''
+
+# ---------------------------------------------------------------------------
+# ED25519 key pair for pubkey auth tests
+#
+# The private key is embedded in the image for test use only.
+# It is NOT a production credential.
+# ---------------------------------------------------------------------------
+RUN mkdir -p /root/.ssh-test-keys && \
+    ssh-keygen -t ed25519 -f /root/.ssh-test-keys/id_ed25519_test -N '' && \
+    mkdir -p /home/tauterm/.ssh && \
+    cp /root/.ssh-test-keys/id_ed25519_test.pub /home/tauterm/.ssh/authorized_keys && \
+    chmod 700 /home/tauterm/.ssh && \
+    chmod 600 /home/tauterm/.ssh/authorized_keys && \
+    chown -R tauterm:tauterm /home/tauterm/.ssh
+
+# Expose the private key path in a well-known location for test code.
+ENV TAUTERM_TEST_PUBKEY_PATH=/root/.ssh-test-keys/id_ed25519_test
+
+# ---------------------------------------------------------------------------
+# sshd configuration
+# ---------------------------------------------------------------------------
+RUN mkdir -p /var/run/sshd
+
+COPY scripts/ssh-test-sshd_config /etc/ssh/sshd_config_test
+
+# ---------------------------------------------------------------------------
+# Rust workspace
+# ---------------------------------------------------------------------------
+WORKDIR /app
+COPY src-tauri/ .
+
+# Disable incremental compilation and debug symbols to limit disk usage
+# (the image build environment has constrained overlay storage).
+ENV CARGO_INCREMENTAL=0
+ENV CARGO_PROFILE_DEV_DEBUG=0
+
+# Pre-compile the integration test binary (without running it), then remove
+# intermediate build artefacts to keep the image layer small.
+# The test binary itself is kept in target/debug/deps/.
+RUN cargo nextest run --no-run --test ssh_integration && \
+    find /app/target/debug -maxdepth 1 -name "*.d" -delete && \
+    find /app/target/debug/build -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/target/debug/.fingerprint -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/target/debug/deps -name "*.o" -delete 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+COPY scripts/run-ssh-tests-inner.sh /usr/local/bin/run-ssh-tests-inner
+RUN chmod +x /usr/local/bin/run-ssh-tests-inner
+
+ENTRYPOINT ["run-ssh-tests-inner"]

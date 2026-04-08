@@ -42,6 +42,7 @@ This table maps major UX/UI decisions in this document to their source requireme
 | [§7.8](03-components.md#78-context-menu) | Context menu in terminal area | UR §3.1 (dual modality), UR §3.2 (discoverability) | FS-A11Y-006 |
 | [§7.9.3](03-components.md#793-destructive-confirmation-dialog) | Destructive confirmation with safe default | UR §2.2 (Jordan — no silent failures) | FS-PTY-008 |
 | [§7.9.4](03-components.md#794-ssh-host-key-verification-dialog-fs-ssh-011) | SSH host key verification dialogs; MITM uses ShieldAlert in error color | UR §9.3 (security) | FS-SSH-011 |
+| [§7.9.5](03-components.md#795-ssh-credential-prompt-dialog-fs-ssh-015-fs-ssh-017-fs-ssh-018-fs-cred-007) | SSH credential prompt: password/keyboard-interactive, opt-in keychain save, retry on failure | UR §9.2 (SSH usability), UR §2.2 (Jordan — no silent failures) | FS-SSH-015, FS-SSH-016, FS-SSH-017, FS-SSH-018, FS-CRED-005, FS-CRED-007 |
 | [§7.13](03-components.md#713-first-launch-context-menu-hint-fs-ux-002) | First-launch context menu hint | UR §2.3 (Sam — discoverability) | FS-UX-002 |
 | [§7.14](03-components.md#714-button-variants) | Button variants (primary, secondary, ghost, destructive) | UR §3.1 (dual modality — visible controls) | — |
 | [§7.17](03-components.md#717-keyboard-shortcut-recorder) | Keyboard shortcut recorder with conflict detection; WebView-level interception note | UR §6 (configurable shortcuts) | FS-KBD-002 |

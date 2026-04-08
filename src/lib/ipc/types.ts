@@ -328,6 +328,10 @@ export interface CredentialPromptEvent {
   username: string;
   /** Optional prompt text from the server (keyboard-interactive). */
   prompt?: string;
+  /** `true` when a previous attempt failed — frontend shows an error indicator. */
+  failed: boolean;
+  /** `true` when the OS keychain is available — frontend shows "Save in keychain" checkbox. */
+  isKeychainAvailable: boolean;
 }
 
 /**
@@ -337,6 +341,8 @@ export interface CredentialPromptEvent {
  */
 export interface HostKeyPromptEvent {
   paneId: PaneId;
+  /** Connection config ID — used to reopen the connection after TOFU acceptance. */
+  connectionId: string;
   host: string;
   keyType: string;
   fingerprint: string;
@@ -859,6 +865,8 @@ export interface Credentials {
   username: string;
   password?: string;
   privateKeyPath?: string;
+  /** When `true`, the backend stores the accepted password in the OS keychain (FS-CRED-007). */
+  saveInKeychain?: boolean;
 }
 
 /**

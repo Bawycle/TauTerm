@@ -18,7 +18,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::session::{PaneId, TabId, TabState};
+use crate::session::{ConnectionId, PaneId, TabId, TabState};
 use crate::ssh::SshLifecycleState;
 use crate::vt::modes::{MouseEncoding, MouseReportingMode};
 
@@ -218,6 +218,12 @@ pub struct CredentialPromptEvent {
     /// Optional prompt text from the server (keyboard-interactive).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
+    /// `true` when a previous authentication attempt failed (stale/wrong password).
+    /// The frontend uses this to show an error indicator in the credential dialog.
+    pub failed: bool,
+    /// `true` when the OS keychain is available so the frontend can offer a
+    /// "Save in keychain" checkbox (FS-CRED-007).
+    pub is_keychain_available: bool,
 }
 
 /// Emitted on first connection or when the host key has changed.
@@ -225,6 +231,8 @@ pub struct CredentialPromptEvent {
 #[serde(rename_all = "camelCase")]
 pub struct HostKeyPromptEvent {
     pub pane_id: PaneId,
+    /// Connection config ID — frontend uses it to reopen the connection after TOFU acceptance.
+    pub connection_id: ConnectionId,
     pub host: String,
     pub key_type: String,
     pub fingerprint: String,

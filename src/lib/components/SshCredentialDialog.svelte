@@ -7,13 +7,15 @@
   `provide_credentials`.
 
   Props:
-    open     — whether dialog is open
-    host     — the configured host (for display only)
-    username — pre-filled username from the saved connection
-    prompt   — optional keyboard-interactive server prompt text
-    onsubmit — called with the entered credentials
-    oncancel — called when user cancels (causes connection abort)
-    onclose  — called when dialog closes
+    open               — whether dialog is open
+    host               — the configured host (for display only)
+    username           — pre-filled username from the saved connection
+    prompt             — optional keyboard-interactive server prompt text
+    failed             — previous attempt was rejected (show error message)
+    isKeychainAvailable — OS keychain is available (show save checkbox)
+    onsubmit           — called with the entered credentials and saveInKeychain flag
+    oncancel           — called when user cancels (causes connection abort)
+    onclose            — called when dialog closes
 -->
 <script lang="ts">
   import Dialog from '$lib/ui/Dialog.svelte';
@@ -25,23 +27,41 @@
     host: string;
     username: string;
     prompt?: string;
-    onsubmit?: (password: string) => void;
+    failed?: boolean;
+    isKeychainAvailable?: boolean;
+    onsubmit?: (password: string, saveInKeychain: boolean) => void;
     oncancel?: () => void;
     onclose?: () => void;
   }
 
-  const { open, host, username, prompt, onsubmit, oncancel, onclose }: Props = $props();
+  const {
+    open,
+    host,
+    username,
+    prompt,
+    failed = false,
+    isKeychainAvailable = false,
+    onsubmit,
+    oncancel,
+    onclose,
+  }: Props = $props();
 
   let password = $state('');
+  let saveInKeychain = $state(false);
 
   function handleSubmit() {
-    onsubmit?.(password);
+    onsubmit?.(password, saveInKeychain);
     password = '';
-    onclose?.();
+    saveInKeychain = false;
+    // Do NOT call onclose here: the parent controls `open` by clearing the
+    // credential-prompt state when onsubmit fires. Calling onclose would
+    // cascade into handleCancel → oncancel, signalling a cancellation after
+    // a successful submit.
   }
 
   function handleCancel() {
     password = '';
+    saveInKeychain = false;
     oncancel?.();
     onclose?.();
   }
@@ -60,6 +80,12 @@
       <p class="ssh-credential-dialog__intro">
         {prompt ?? m.ssh_credential_password_for({ username, host })}
       </p>
+
+      {#if failed}
+        <p class="ssh-credential-dialog__error">
+          {m.ssh_credential_auth_failed()}
+        </p>
+      {/if}
 
       <div class="ssh-credential-dialog__field">
         <label class="ssh-credential-dialog__label" for="ssh-credential-username">
@@ -88,6 +114,15 @@
           onkeydown={handleKeydown}
         />
       </div>
+
+      {#if isKeychainAvailable}
+        <div class="ssh-credential-dialog__field ssh-credential-dialog__field--checkbox">
+          <label class="ssh-credential-dialog__checkbox-label">
+            <input type="checkbox" bind:checked={saveInKeychain} />
+            {m.ssh_credential_save_in_keychain()}
+          </label>
+        </div>
+      {/if}
     </div>
   {/snippet}
 
@@ -139,5 +174,25 @@
   .ssh-credential-dialog__input:focus-visible {
     border-color: var(--color-focus-ring);
     box-shadow: 0 0 0 2px var(--color-focus-ring);
+  }
+
+  .ssh-credential-dialog__error {
+    color: var(--color-error);
+    font-size: var(--font-size-ui-sm);
+  }
+
+  .ssh-credential-dialog__field--checkbox {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .ssh-credential-dialog__checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-ui-sm);
+    color: var(--color-text-secondary);
+    font-family: var(--font-ui);
+    cursor: pointer;
   }
 </style>

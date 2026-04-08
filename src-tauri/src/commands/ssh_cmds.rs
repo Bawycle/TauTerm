@@ -52,6 +52,7 @@ async fn open_ssh_connection_impl(
                 username: config.username.clone(),
                 password: Some(password),
                 private_key_path: config.identity_file.clone(),
+                save_in_keychain: false,
             }),
             Ok(None) => None,
             Err(e) => {

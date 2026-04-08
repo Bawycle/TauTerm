@@ -12,6 +12,7 @@ fn sec_cred_003_password_redacted_in_debug_output() {
         username: "alice".to_string(),
         password: Some("hunter2".to_string()),
         private_key_path: None,
+        save_in_keychain: false,
     };
     let debug_str = format!("{:?}", creds);
     assert!(
@@ -32,6 +33,7 @@ fn sec_cred_003_none_password_debug_output_safe() {
         username: "alice".to_string(),
         password: None,
         private_key_path: None,
+        save_in_keychain: false,
     };
     let debug_str = format!("{:?}", creds);
     assert!(
@@ -46,6 +48,7 @@ fn sec_cred_003_private_key_path_redacted_in_debug() {
         username: "alice".to_string(),
         password: None,
         private_key_path: Some("/home/alice/.ssh/id_ed25519".to_string()),
+        save_in_keychain: false,
     };
     let debug_str = format!("{:?}", creds);
     assert!(

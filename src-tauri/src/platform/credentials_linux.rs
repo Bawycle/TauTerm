@@ -42,26 +42,46 @@ impl LinuxCredentialStore {
 
     /// Probe Secret Service availability by attempting a connection.
     ///
-    /// This is a blocking call using `tokio::task::block_in_place` so that it
-    /// can be called from synchronous context. Returns `false` if D-Bus is
-    /// unavailable or the Secret Service daemon is not running.
+    /// Uses `block_in_place` + the current Tokio handle so this synchronous
+    /// call works correctly both inside and outside an async context.
     fn probe_availability() -> bool {
-        // We use `tokio::task::block_in_place` + a one-shot runtime to probe
-        // without requiring `async` in the trait. On Linux, the D-Bus call
-        // must be made on a thread with an async runtime context.
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(_) => return false,
-        };
-
         // Probe with Dh — same encrypted path as real store/get/delete operations.
         // Using Plain would succeed even when D-Bus encryption negotiation fails,
         // giving a false positive: we would claim availability but real operations
         // would then fail. If Dh fails we return false (genuinely unavailable).
-        rt.block_on(async { SecretService::connect(EncryptionType::Dh).await.is_ok() })
+        run_blocking(async { SecretService::connect(EncryptionType::Dh).await.is_ok() })
+            .unwrap_or(false)
+    }
+}
+
+/// Run an async block from a synchronous context.
+///
+/// - If we are inside a Tokio runtime (the common case — Tauri commands run on
+///   Tokio workers), we use `block_in_place` so the worker thread is allowed to
+///   block without stalling the scheduler, then drive the future on the current
+///   handle.
+/// - If no runtime is active (unit tests, CLI tools), we fall back to a
+///   dedicated `current_thread` runtime.
+///
+/// This avoids the "Cannot start a runtime from within a runtime" panic that
+/// occurs when `Builder::new_current_thread().build()` is called while already
+/// inside a Tokio runtime.
+fn run_blocking<F, T>(fut: F) -> Result<T, std::io::Error>
+where
+    F: std::future::Future<Output = T> + Send,
+{
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            // Already inside a runtime — block the current thread in place.
+            Ok(tokio::task::block_in_place(|| handle.block_on(fut)))
+        }
+        Err(_) => {
+            // No active runtime (e.g. unit tests) — spin up a temporary one.
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            Ok(rt.block_on(fut))
+        }
     }
 }
 
@@ -73,12 +93,8 @@ impl CredentialStore for LinuxCredentialStore {
     fn store(&self, key: &str, secret: &[u8]) -> Result<(), CredentialError> {
         let key = key.to_string();
         let secret = secret.to_vec();
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| CredentialError::Io(e.to_string()))?;
 
-        rt.block_on(async {
+        run_blocking(async {
             let ss = SecretService::connect(EncryptionType::Dh)
                 .await
                 .map_err(|e| {
@@ -114,16 +130,13 @@ impl CredentialStore for LinuxCredentialStore {
 
             Ok(())
         })
+        .map_err(|e| CredentialError::Io(e.to_string()))?
     }
 
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, CredentialError> {
         let key = key.to_string();
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| CredentialError::Io(e.to_string()))?;
 
-        rt.block_on(async {
+        run_blocking(async {
             let ss = SecretService::connect(EncryptionType::Dh)
                 .await
                 .map_err(|e| {
@@ -162,16 +175,13 @@ impl CredentialStore for LinuxCredentialStore {
                 }
             }
         })
+        .map_err(|e| CredentialError::Io(e.to_string()))?
     }
 
     fn delete(&self, key: &str) -> Result<(), CredentialError> {
         let key = key.to_string();
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| CredentialError::Io(e.to_string()))?;
 
-        rt.block_on(async {
+        run_blocking(async {
             let ss = SecretService::connect(EncryptionType::Dh)
                 .await
                 .map_err(|e| {
@@ -195,6 +205,7 @@ impl CredentialStore for LinuxCredentialStore {
 
             Ok(())
         })
+        .map_err(|e| CredentialError::Io(e.to_string()))?
     }
 }
 

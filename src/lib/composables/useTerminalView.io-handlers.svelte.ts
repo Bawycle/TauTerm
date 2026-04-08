@@ -145,6 +145,12 @@ export function createIoHandlers(
     } catch {
       /* non-fatal */
     }
+    // Two-phase TOFU: the key is now trusted, reopen the connection.
+    try {
+      await openSshConnection(prompt.paneId, prompt.connectionId);
+    } catch {
+      s.connectionOpenError = true;
+    }
   }
 
   async function handleRejectHostKey() {
@@ -157,11 +163,11 @@ export function createIoHandlers(
     }
   }
 
-  async function handleProvideCredentials(password: string) {
+  async function handleProvideCredentials(password: string, saveInKeychain: boolean) {
     const prompt = clearCredentialPrompt();
     if (!prompt) return;
     try {
-      await provideCredentials(prompt.paneId, { username: prompt.username, password });
+      await provideCredentials(prompt.paneId, { username: prompt.username, password, saveInKeychain });
     } catch {
       /* non-fatal */
     }

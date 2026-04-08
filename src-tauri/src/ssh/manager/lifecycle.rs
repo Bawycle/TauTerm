@@ -19,6 +19,7 @@ impl SshManager {
             connections: dashmap::DashMap::new(),
             pending_credentials: dashmap::DashMap::new(),
             pending_host_keys: dashmap::DashMap::new(),
+            credential_manager: Arc::new(crate::credentials::CredentialManager::new()),
         })
     }
 
@@ -114,6 +115,10 @@ impl SshManager {
 
             if let Err(e) = result {
                 manager.connections.remove(&task_pane_id);
+                // Defensive cleanup: if connect_task failed while a credential
+                // prompt was in flight (transport error, timeout, etc.), remove
+                // the stale pending-credentials entry so it doesn't accumulate.
+                manager.pending_credentials.remove(&task_pane_id);
                 crate::events::emit_ssh_state_changed(
                     &task_app,
                     crate::events::SshStateChangedEvent {

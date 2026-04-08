@@ -26,6 +26,8 @@ mod lifecycle;
 #[cfg(test)]
 mod tests;
 
+use std::sync::Arc;
+
 use dashmap::DashMap;
 use tokio::sync::oneshot;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -74,6 +76,8 @@ pub struct SshManager {
     pub(super) pending_credentials: DashMap<PaneId, PendingCredentials>,
     /// Pending host key verifications awaiting user acceptance/rejection.
     pub pending_host_keys: DashMap<PaneId, PendingHostKey>,
+    /// Credential manager for OS keychain access (store/retrieve passwords).
+    pub(super) credential_manager: Arc<crate::credentials::CredentialManager>,
 }
 
 /// Credentials for SSH authentication.
@@ -90,6 +94,9 @@ pub struct Credentials {
     pub password: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_key_path: Option<String>,
+    /// Whether the user wants the password saved to the OS keychain (FS-CRED-007).
+    #[serde(default)]
+    pub save_in_keychain: bool,
 }
 
 impl std::fmt::Debug for Credentials {
@@ -101,6 +108,7 @@ impl std::fmt::Debug for Credentials {
                 "private_key_path",
                 &self.private_key_path.as_deref().map(|_| "<redacted>"),
             )
+            .field("save_in_keychain", &self.save_in_keychain)
             .finish()
     }
 }

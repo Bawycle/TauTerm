@@ -307,6 +307,8 @@
     host={credentialPrompt.value?.host ?? ''}
     username={credentialPrompt.value?.username ?? ''}
     prompt={credentialPrompt.value?.prompt}
+    failed={credentialPrompt.value?.failed ?? false}
+    isKeychainAvailable={credentialPrompt.value?.isKeychainAvailable ?? false}
     onsubmit={tv.handleProvideCredentials}
     oncancel={tv.handleCancelCredentials}
     onclose={tv.handleCancelCredentials}

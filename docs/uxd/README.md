@@ -4,7 +4,7 @@
 
 This directory contains the UX/UI Design documentation for TauTerm, split from the original `docs/UXD.md` for easier navigation.
 
-> **Version:** 1.4.0 | **Status:** Draft
+> **Version:** 1.5.0 | **Status:** Draft
 > **Input documents:** [UR.md](../UR.md), [FS.md](../FS.md), [AD.md](../AD.md)
 
 FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this directory.
@@ -48,6 +48,7 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 | Connection Manager spec | [03-components.md](03-components.md) | §7.7 |
 | Context Menu spec | [03-components.md](03-components.md) | §7.8 |
 | Dialog / Modal spec | [03-components.md](03-components.md) | §7.9 |
+| SSH Credential Prompt Dialog | [03-components.md](03-components.md) | §7.9.5 |
 | Button variants | [03-components.md](03-components.md) | §7.14 |
 | Text Input / Form Field | [03-components.md](03-components.md) | §7.15 |
 | Toggle & Dropdown | [03-components.md](03-components.md) | §7.16 |

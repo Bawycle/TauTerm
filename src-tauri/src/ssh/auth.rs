@@ -218,11 +218,13 @@ mod tests {
             username: "user".to_string(),
             password: Some("secret".to_string()),
             private_key_path: None,
+            save_in_keychain: false,
         };
         let creds_without_password = Credentials {
             username: "user".to_string(),
             password: None,
             private_key_path: None,
+            save_in_keychain: false,
         };
 
         // Gate condition: `if let Some(creds) = credentials && let Some(ref password) = creds.password`

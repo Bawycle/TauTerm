@@ -9,39 +9,18 @@
  */
 
 import { onMount, onDestroy } from 'svelte';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   getSessionState,
   getPreferences,
-  getConnections,
-  hasForegroundProcess,
 } from '$lib/ipc/commands';
 import {
-  onSessionStateChanged,
-  onSshStateChanged,
-  onHostKeyPrompt,
-  onCredentialPrompt,
-  onNotificationChanged,
-  onModeStateChanged,
-  onFullscreenStateChanged,
-} from '$lib/ipc/events';
-import {
-  sessionState,
   setInitialSession,
-  applySessionDelta,
-  collectLeafPanes,
 } from '$lib/state/session.svelte';
 import {
-  setHostKeyPrompt,
-  clearHostKeyPrompt as _clearHostKeyPrompt,
-  setCredentialPrompt,
-  clearCredentialPrompt as _clearCredentialPrompt,
-  applySshStateChanged,
-  setBracketedPaste,
-} from '$lib/state/ssh.svelte';
-import { applyNotificationChanged } from '$lib/state/notifications.svelte';
-import { setPreferences, setPreferencesFallback, preferences } from '$lib/state/preferences.svelte';
-import { setFullscreen, fullscreenState } from '$lib/state/fullscreen.svelte';
+  setPreferences, setPreferencesFallback, preferences,
+} from '$lib/state/preferences.svelte';
+import { fullscreenState } from '$lib/state/fullscreen.svelte';
+import { setupViewListeners } from './useTerminalView.lifecycle.svelte';
 import type { SshConnectionConfig, PaneId } from '$lib/ipc/types';
 
 // ---------------------------------------------------------------------------
@@ -230,83 +209,8 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
       setPreferencesFallback();
     }
 
-    try {
-      savedConnections = await getConnections();
-    } catch {
-      // Non-fatal
-    }
-
-    // Sync initial fullscreen state and register WM close handler.
-    try {
-      const appWindow = getCurrentWindow();
-
-      const isFs = await appWindow.isFullscreen();
-      setFullscreen(isFs);
-
-      // FS-PTY-008: intercept WM close button to check for active non-shell processes.
-      //
-      // Tauri 2 pattern: onCloseRequested wrapper calls this.destroy() automatically
-      // if the handler does NOT call event.preventDefault(). So:
-      //   - No active processes → don't prevent → wrapper calls destroy() → window closes.
-      //   - Active processes → prevent → show dialog → user confirms → destroy() manually.
-      //
-      // Never use close() for programmatic closes: close() re-emits CloseRequested,
-      // and if no listener calls destroy() in response, the window stays open.
-      closeUnlisten = await appWindow.onCloseRequested(async (event) => {
-        const allPanes = sessionState.tabs.flatMap((tab) => collectLeafPanes(tab.layout));
-        // .catch(() => false): IPC error → treat as no foreground process (fail-open, allows close)
-        const activeFlags = await Promise.all(
-          allPanes.map((p) => hasForegroundProcess(p.paneId).catch(() => false)),
-        );
-        const activeCount = activeFlags.filter(Boolean).length;
-
-        if (activeCount > 0) {
-          event.preventDefault();
-          pendingWindowClose = { paneCount: activeCount };
-        }
-        // activeCount === 0: don't prevent → Tauri wrapper calls destroy() automatically.
-      });
-      // Expose the unlisten handle on the state bag so the orchestrator can
-      // remove it before calling destroy() in close-confirmation handlers.
-      bag.closeUnlisten = closeUnlisten;
-    } catch {
-      /* non-fatal — Tauri window APIs unavailable in test/non-Tauri environments */
-    }
-
-    unlistens.push(await onSessionStateChanged(applySessionDelta));
-    unlistens.push(await onHostKeyPrompt(setHostKeyPrompt));
-    unlistens.push(await onCredentialPrompt(setCredentialPrompt));
-    unlistens.push(
-      await onSshStateChanged((ev) => {
-        applySshStateChanged(ev);
-      }),
-    );
-    unlistens.push(
-      await onNotificationChanged(async (ev) => {
-        const action = applyNotificationChanged(ev);
-        if (action?.type === 'autoClose') {
-          await doClosePane(action.paneId);
-        }
-      }),
-    );
-    unlistens.push(
-      await onModeStateChanged((mode) => {
-        setBracketedPaste(mode.paneId, mode.bracketedPaste);
-      }),
-    );
-    // Listen for WM-driven fullscreen changes.
-    // The backend emits this event after a 200 ms delay to let the WM stabilise
-    // the window geometry before the frontend reads dimensions. Restoring focus
-    // here (rather than in the onclick handler) ensures the element is focused
-    // only once the window is in its final state.
-    unlistens.push(
-      await onFullscreenStateChanged((ev) => {
-        setFullscreen(ev.isFullscreen);
-        if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
-          bag.activeViewportEl?.focus({ preventScroll: true });
-        }
-      }),
-    );
+    const listenerUnlistens = await setupViewListeners(bag, doClosePane);
+    for (const u of listenerUnlistens) unlistens.push(u);
   });
 
   onDestroy(() => {

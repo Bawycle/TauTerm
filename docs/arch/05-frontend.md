@@ -130,21 +130,53 @@ src/
       ContextMenu.svelte            — base context menu (Bits UI Menu)
 ```
 
-### 11.2 TerminalPane Component Split
+### 11.2 Composable Layer
 
-`TerminalPane.svelte` is the most complex component in the application. To prevent it from becoming an unmaintainable monolith, the following governance rule applies:
+The project uses `lib/composables/` for all Svelte 5 composables (`.svelte.ts` files). Each composable encapsulates reactive state and IPC subscriptions for one concern. Complex composables are split into focused sub-composables; the main composable imports them and merges their return values into a single public API.
 
-**If `TerminalPane.svelte` exceeds 250 lines, extract reactive logic to `TerminalPane.svelte.ts`.**
+#### useTerminalPane composables
 
-`TerminalPane.svelte.ts` exports composables (functions returning reactive state):
-- IPC event subscription management (`$effect` with cleanup)
-- `ScreenGrid` instance and diff application
-- Selection state machine integration
-- Cursor blink timer state
+```
+lib/composables/
+  useTerminalPane.svelte.ts          — CORE: grid/cursor/mode state, IPC subscriptions,
+                                       DOM refs, selection, onMount/onDestroy lifecycle.
+                                       Composes all sub-composables below.
+  useTerminalPane.cursor-blink.svelte.ts — cursorVisible, blink timer, asymmetric 2:1 cycle
+  useTerminalPane.visual-fx.svelte.ts    — bellFlashing, borderPulse, selectionFlashing timers
+  useTerminalPane.scrollbar-state.svelte.ts — scrollbarVisible, fade timer, drag state
+  useTerminalPane.paste-dialog.svelte.ts — pasteConfirmOpen, pasteConfirmText, handlers
+  useTerminalPane.resize.svelte.ts       — ResizeObserver, cellMeasureProbe, sendResize,
+                                           font-size $effect
+```
 
-`TerminalPane.svelte` retains only: the component template markup, event handler binding (`on:keydown`, `on:mousedown`, etc.), and calls to the composable functions. This separation keeps the template readable and the logic testable in isolation.
+#### useTerminalView composables
 
-This pattern applies to any component that grows beyond 250 lines. The rule is: **logic goes in the `.svelte.ts` composable file; template and DOM bindings stay in the `.svelte` file.**
+```
+lib/composables/
+  useTerminalView.svelte.ts              — re-exports public API; delegates to sub-modules
+  useTerminalView.core.svelte.ts         — ViewState interface + createViewState factory:
+                                           reactive state bag, $effect timers, focus guard,
+                                           initial onMount fetches (session/prefs/connections)
+  useTerminalView.lifecycle.svelte.ts    — setupViewListeners(): all IPC event listener setup
+                                           (session-state-changed, ssh-state-changed,
+                                           host-key-prompt, credential-prompt,
+                                           notification-changed, mode-state-changed,
+                                           fullscreen-state-changed, window-close-requested)
+  useTerminalView.io-handlers.svelte.ts  — createIoHandlers(): SSH CRUD, auth dialogs,
+                                           paste, search, keyboard shortcuts, handleGlobalKeydown
+```
+
+#### TabBar composables
+
+```
+lib/composables/
+  useTabBarRename.svelte.ts    — renamingTabId, renameValue, startRename/confirmRename/cancelRename,
+                                 $effect for external requestedRenameTabId
+  useTabBarDnd.svelte.ts       — dragTabId, dropIndicatorIndex, drag event handlers
+  useTabBarContextMenu.svelte.ts — contextMenuTabId, coordinates, open/close/rename handlers
+```
+
+**Governance rule:** logic goes in `.svelte.ts` composable files; template and DOM bindings stay in `.svelte` files. When a composable exceeds ~600 lines, extract cohesive sub-concerns into named sub-composables following the pattern above. All sub-composables accept getter functions (not raw values) for Svelte 5 reactivity across module boundaries.
 
 ### 11.3 Keyboard Shortcut Interception and Recording
 

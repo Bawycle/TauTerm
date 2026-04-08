@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: MPL-2.0
+
+use serde::{Deserialize, Serialize};
+
+use super::appearance::CursorStyle;
+use super::keyboard::KeyboardPrefs;
+use super::language::Language;
+use super::terminal::TerminalPrefs;
+
+/// Partial update for appearance preferences — only the fields provided are changed.
+///
+/// Using a dedicated patch type (instead of `Option<AppearancePrefs>` in `PreferencesPatch`)
+/// allows field-by-field updates without read-before-write: e.g. changing the language
+/// without knowing or sending the current font size.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AppearancePatch {
+    pub font_family: Option<String>,
+    pub font_size: Option<f32>,
+    pub cursor_style: Option<CursorStyle>,
+    pub cursor_blink_ms: Option<u32>,
+    pub theme_name: Option<String>,
+    pub opacity: Option<f32>,
+    pub language: Option<Language>,
+    pub context_menu_hint_shown: Option<bool>,
+    pub fullscreen: Option<bool>,
+}
+
+/// A partial preferences update (only the fields the user changed).
+/// All fields are optional so the frontend can send minimal payloads.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PreferencesPatch {
+    pub appearance: Option<AppearancePatch>,
+    pub terminal: Option<TerminalPrefs>,
+    pub keyboard: Option<KeyboardPrefs>,
+}

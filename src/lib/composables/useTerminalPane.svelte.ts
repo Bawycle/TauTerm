@@ -9,13 +9,13 @@
  *   - ScreenGrid state (cell grid, cursor)
  *   - Scroll state (offset, scrollback lines, scrollbar derived values)
  *   - Terminal mode state (DECCKM, mouse reporting, bracketed paste, etc.)
- *   - Cursor blink timer
- *   - Border pulse state (inactive pane activity indicators)
- *   - Selection flash state (copy feedback)
- *   - Bell flash state
- *   - Paste confirmation dialog state
- *   - Scrollbar interaction state
- *   - Resize debounce
+ *   - Cursor blink timer (via useCursorBlink)
+ *   - Border pulse state (via useVisualFx)
+ *   - Selection flash state (via useVisualFx)
+ *   - Bell flash state (via useVisualFx)
+ *   - Paste confirmation dialog state (via usePasteDialog)
+ *   - Scrollbar interaction state (via useScrollbarState)
+ *   - Resize debounce (via useTerminalResize)
  *
  * Returns a reactive object used by TerminalPane.svelte.
  * The template and DOM event handlers remain in the .svelte file.
@@ -34,7 +34,6 @@ import {
 } from '$lib/ipc/events';
 import {
   getPaneScreenSnapshot,
-  resizePane,
   sendInput,
   scrollPane,
   copyToClipboard,
@@ -44,7 +43,6 @@ import {
   reconnectSsh,
 } from '$lib/ipc/commands';
 import { buildGridFromSnapshot, applyUpdates } from '$lib/terminal/screen.js';
-import { measureCellDimensions } from '$lib/terminal/cell-dimensions.js';
 import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
 import { SelectionManager } from '$lib/terminal/selection.js';
 import { pasteToBytes } from '$lib/terminal/paste.js';
@@ -53,7 +51,6 @@ import type {
   CursorState,
   BellType,
   SearchMatch,
-  NotificationChangedEvent,
   ScreenUpdateEvent,
 } from '$lib/ipc/types';
 import type { CellStyle } from '$lib/terminal/screen.js';
@@ -69,7 +66,11 @@ import {
   scrollbarThumbTopPct as calcScrollbarThumbTopPct,
   scrollbarYToOffset as scrollbarYToOffsetPure,
 } from './useTerminalPane.scrollbar.js';
-import type { BorderPulse } from './useTerminalPane.bell.js';
+import { useCursorBlink } from './useTerminalPane.cursor-blink.svelte.js';
+import { useVisualFx } from './useTerminalPane.visual-fx.svelte.js';
+import { useScrollbarState } from './useTerminalPane.scrollbar-state.svelte.js';
+import { usePasteDialog } from './useTerminalPane.paste-dialog.svelte.js';
+import { useTerminalResize } from './useTerminalPane.resize.svelte.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -132,13 +133,6 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let bracketedPasteActive = $state(false);
 
   // -------------------------------------------------------------------------
-  // Cursor blink
-  // -------------------------------------------------------------------------
-
-  let cursorVisible = $state(true);
-  let blinkPhaseTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // -------------------------------------------------------------------------
   // Selection
   // -------------------------------------------------------------------------
 
@@ -148,58 +142,53 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let hasSelection = $state(false);
 
   // -------------------------------------------------------------------------
-  // Scrollbar interaction
-  // -------------------------------------------------------------------------
-
-  let scrollbarVisible = $state(false);
-  let scrollbarFadeTimer: ReturnType<typeof setTimeout> | null = null;
-  let scrollbarDragging = $state(false);
-  let scrollbarHover = $state(false);
-  let scrollbarDragStartY = 0;
-  let scrollbarDragStartOffset = 0;
-
-  // -------------------------------------------------------------------------
-  // Visual states
-  // -------------------------------------------------------------------------
-
-  let bellFlashing = $state(false);
-  let bellFlashTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // BorderPulse type is imported from useTerminalPane.bell.ts
-  let borderPulse = $state<BorderPulse>(null);
-  let borderPulseTimer: ReturnType<typeof setTimeout> | null = null;
-
-  let selectionFlashing = $state(false);
-  let selectionFlashTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // -------------------------------------------------------------------------
-  // Paste confirmation dialog
-  // -------------------------------------------------------------------------
-
-  let pasteConfirmOpen = $state(false);
-  let pasteConfirmText = $state('');
-
-  // -------------------------------------------------------------------------
   // DOM refs (set by template)
   // -------------------------------------------------------------------------
 
   let viewportEl = $state<HTMLDivElement | undefined>();
   let scrollbarEl = $state<HTMLDivElement | undefined>();
 
-  // D2-P16: reusable DOM probe for cell dimension measurement — created once,
-  // kept attached to viewportEl for the lifetime of the pane. Avoids the
-  // create/append/measure/removeChild cycle on every sendResize() call.
-  let cellMeasureProbe: HTMLDivElement | null = null;
-
   // -------------------------------------------------------------------------
-  // Derived
+  // Sub-composables
   // -------------------------------------------------------------------------
 
   const currentCursorShape = $derived(cursorShape(cursor.shape));
   const currentCursorBlinks = $derived(cursor.blink && cursorBlinks(cursor.shape));
 
+  const cursorBlink = useCursorBlink({
+    cursorBlinkMs: props.cursorBlinkMs,
+    currentCursorBlinks: () => currentCursorBlinks,
+  });
+
+  const visualFx = useVisualFx({
+    bellType: props.bellType,
+    isActive: props.active,
+  });
+
+  const scrollbarState = useScrollbarState();
+
+  const pasteDialog = usePasteDialog();
+
+  const resize = useTerminalResize({
+    paneId: props.paneId,
+    viewportEl: () => viewportEl,
+    getCols: () => cols,
+    getRows: () => rows,
+    ondimensionschange: props.ondimensionschange,
+    fontFamily: props.fontFamily,
+    fontSize: props.fontSize,
+    lineHeight: props.lineHeight,
+  });
+
+  // -------------------------------------------------------------------------
+  // Derived
+  // -------------------------------------------------------------------------
+
   const showScrollbar = $derived(
-    scrollbarVisible || scrollOffset > 0 || scrollbarHover || scrollbarDragging,
+    scrollbarState.scrollbarVisible ||
+      scrollOffset > 0 ||
+      scrollbarState.scrollbarHover ||
+      scrollbarState.scrollbarDragging,
   );
 
   const scrollbarThumbHeightPct = $derived(calcScrollbarThumbHeightPct(rows, scrollbackLines));
@@ -258,136 +247,6 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       viewportEl?.focus({ preventScroll: true });
     }
   });
-
-  // Cursor blink timer — restarts when cursorBlinkMs or blink mode changes.
-  // Uses asymmetric 2:1 ratio: ON = cursorBlinkMs, OFF = cursorBlinkMs / 2.
-  // NOTE: currentCursorBlinks is read here (not inside startCursorBlink) so
-  // that this effect re-runs when the blink mode changes, AND to avoid
-  // startCursorBlink() becoming an implicit dependency via a nested read.
-  $effect(() => {
-    const onMs = props.cursorBlinkMs();
-    const blinks = currentCursorBlinks;
-    // Cancel any running cycle — this is the only write to cursorVisible inside
-    // the effect body; writes to $state inside effects are allowed in Svelte 5.
-    if (blinkPhaseTimer) {
-      clearTimeout(blinkPhaseTimer);
-      blinkPhaseTimer = null;
-    }
-    cursorVisible = true;
-    if (!blinks) return;
-
-    const offMs = Math.round(onMs / 2);
-
-    function scheduleOffPhase() {
-      cursorVisible = false;
-      blinkPhaseTimer = setTimeout(() => {
-        cursorVisible = true;
-        blinkPhaseTimer = setTimeout(scheduleOffPhase, onMs);
-      }, offMs);
-    }
-
-    blinkPhaseTimer = setTimeout(scheduleOffPhase, onMs);
-
-    return () => {
-      if (blinkPhaseTimer) {
-        clearTimeout(blinkPhaseTimer);
-        blinkPhaseTimer = null;
-      }
-      cursorVisible = true;
-    };
-  });
-
-  // Clear border pulse when pane becomes active
-  $effect(() => {
-    if (props.active() && borderPulse !== null) {
-      if (borderPulseTimer) clearTimeout(borderPulseTimer);
-      borderPulseTimer = null;
-      borderPulse = null;
-    }
-  });
-
-  // -------------------------------------------------------------------------
-  // Resize debounce
-  // -------------------------------------------------------------------------
-
-  let resizeObserver: ResizeObserver | null = null;
-  let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // F8 — re-measure and resize when font props change (family, size, line-height).
-  // Reading props.fontFamily/fontSize/lineHeight subscribes to them reactively;
-  // any change from the preferences panel triggers a new sendResize() call so that
-  // cols/rows are recomputed with the new cell dimensions.
-  $effect(() => {
-    props.fontFamily?.();
-    props.fontSize?.();
-    props.lineHeight?.();
-    scheduleSendResize();
-  });
-
-  function ensureCellMeasureProbe(): HTMLDivElement | null {
-    if (!viewportEl) return null;
-    if (!cellMeasureProbe) {
-      cellMeasureProbe = document.createElement('div');
-      cellMeasureProbe.style.cssText =
-        'position:absolute;visibility:hidden;pointer-events:none;height:1lh;width:1ch';
-      viewportEl.appendChild(cellMeasureProbe);
-    }
-    return cellMeasureProbe;
-  }
-
-  function scheduleSendResize() {
-    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
-    props.ondimensionschange()?.(cols, rows);
-    resizeDebounceTimer = setTimeout(sendResize, 50);
-  }
-
-  async function sendResize() {
-    if (!viewportEl) return;
-    const rect = viewportEl.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    // Bug 1a: measure 1lh and 1ch via a DOM probe so dimensions exactly match the
-    // CSS units used by the terminal grid cells (height:1lh, width:1ch).
-    // Falls back to measureCellDimensions (Canvas 2D) then to a grid-based estimate.
-    // D2-P16: the probe is created once and reused across calls (ensureCellMeasureProbe).
-    let cellW: number;
-    let cellH: number;
-    try {
-      const probe = ensureCellMeasureProbe();
-      const probeRect = probe?.getBoundingClientRect();
-
-      if (probeRect && probeRect.height > 0 && probeRect.width > 0) {
-        cellH = probeRect.height;
-        cellW = probeRect.width;
-      } else {
-        // Fallback: CSS lh/ch not supported or probe returned zero.
-        const family = props.fontFamily?.() ?? 'monospace';
-        const size = props.fontSize?.() ?? 13;
-        const lh = props.lineHeight?.() ?? 1.2;
-        const dims = measureCellDimensions(family, size, lh);
-        cellW = dims.width > 0 ? dims.width : Math.max(1, rect.width / cols);
-        cellH = dims.height > 0 ? dims.height : Math.max(1, rect.height / rows);
-      }
-    } catch {
-      cellW = Math.max(1, rect.width / cols);
-      cellH = Math.max(1, rect.height / rows);
-    }
-
-    const newCols = Math.max(1, Math.floor(rect.width / cellW));
-    const newRows = Math.max(1, Math.floor(rect.height / cellH));
-    const pixelWidth = Math.max(1, Math.floor(rect.width));
-    const pixelHeight = Math.max(1, Math.floor(rect.height));
-
-    // cols/rows are now updated from ScreenUpdateEvent.cols/rows in applyScreenUpdate —
-    // the event is the authoritative source of truth, eliminating stride mismatch.
-    try {
-      await resizePane(props.paneId(), newCols, newRows, pixelWidth, pixelHeight);
-    } catch {
-      // IPC failure — no cols/rows state to roll back (they update via screen-update events).
-      // Log only the generic label, never the path (security constraint).
-      console.error('resize_pane IPC failed');
-    }
-  }
 
   // -------------------------------------------------------------------------
   // Mount / destroy
@@ -512,13 +371,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
         if (pos.paneId !== props.paneId()) return;
         scrollOffset = pos.offset;
         scrollbackLines = pos.scrollbackLines;
-        scrollbarVisible = true;
-        if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
-        if (scrollOffset === 0) {
-          scrollbarFadeTimer = setTimeout(() => {
-            scrollbarVisible = false;
-          }, 1500);
-        }
+        scrollbarState.showScrollbar(pos.offset === 0);
       }),
     );
 
@@ -546,7 +399,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     unlistens.push(
       await onBellTriggered((ev) => {
         if (ev.paneId !== props.paneId()) return;
-        handleBell();
+        visualFx.handleBell();
       }),
     );
 
@@ -554,45 +407,26 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       await onNotificationChanged((ev) => {
         if (ev.paneId !== props.paneId()) return;
         if (props.active()) return;
-        handleNotificationForBorderPulse(ev);
+        visualFx.handleNotificationForBorderPulse(ev);
       }),
     );
 
     if (viewportEl) {
-      resizeObserver = new ResizeObserver(() => scheduleSendResize());
-      resizeObserver.observe(viewportEl);
+      resize.startObserving(viewportEl);
     }
   });
 
   onDestroy(() => {
     for (const unlisten of unlistens) unlisten();
     unlistens = [];
-    if (bellFlashTimer) clearTimeout(bellFlashTimer);
-    if (borderPulseTimer) clearTimeout(borderPulseTimer);
-    if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
-    resizeObserver?.disconnect();
-    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
-    if (scrollbarFadeTimer) clearTimeout(scrollbarFadeTimer);
+    visualFx.cleanup();
+    resize.cleanup();
+    scrollbarState.cleanup();
     if (scrollRafId !== null) {
       cancelAnimationFrame(scrollRafId);
       scrollRafId = null;
     }
-    cellMeasureProbe?.remove();
-    cellMeasureProbe = null;
   });
-
-  // -------------------------------------------------------------------------
-  // Cursor blink helpers
-  // -------------------------------------------------------------------------
-
-  /** Cancel any running blink cycle and restore cursor to visible. */
-  function stopCursorBlink() {
-    if (blinkPhaseTimer) {
-      clearTimeout(blinkPhaseTimer);
-      blinkPhaseTimer = null;
-    }
-    cursorVisible = true;
-  }
 
   // -------------------------------------------------------------------------
   // Keyboard input
@@ -665,7 +499,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       if (hasSelection) {
         try {
           await copyToClipboard(text);
-          triggerSelectionFlash();
+          visualFx.triggerSelectionFlash();
         } catch {
           /* non-fatal */
         }
@@ -846,8 +680,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   async function pasteText(text: string) {
     const hasNewlines = text.includes('\n');
     if (!bracketedPasteActive && hasNewlines && props.confirmMultilinePaste()) {
-      pasteConfirmText = text;
-      pasteConfirmOpen = true;
+      pasteDialog.openPasteConfirm(text);
       return;
     }
     const encoded = pasteToBytes(text, bracketedPasteActive);
@@ -855,16 +688,14 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   }
 
   async function handlePasteConfirm() {
-    const text = pasteConfirmText;
-    pasteConfirmOpen = false;
-    pasteConfirmText = '';
+    const text = pasteDialog.pasteConfirmText;
+    pasteDialog.closePasteConfirm();
     const encoded = pasteToBytes(text, bracketedPasteActive);
     if (encoded) await sendBytes(encoded);
   }
 
   function handlePasteCancel() {
-    pasteConfirmOpen = false;
-    pasteConfirmText = '';
+    pasteDialog.closePasteConfirm();
   }
 
   // -------------------------------------------------------------------------
@@ -897,30 +728,31 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const thumbRect = thumbEl?.getBoundingClientRect();
 
     if (thumbRect && event.clientY >= thumbRect.top && event.clientY <= thumbRect.bottom) {
-      scrollbarDragging = true;
-      scrollbarDragStartY = event.clientY;
-      scrollbarDragStartOffset = scrollOffset;
+      scrollbarState.startDrag(event.clientY, scrollOffset);
     } else {
       scrollToOffset(scrollbarYToOffset(event.clientY));
     }
   }
 
   function handleScrollbarPointermove(event: PointerEvent) {
-    if (!scrollbarDragging) return;
+    if (!scrollbarState.scrollbarDragging) return;
     event.preventDefault();
-    const deltaY = event.clientY - scrollbarDragStartY;
+    const deltaY = event.clientY - scrollbarState.getDragStartY();
     if (!scrollbarEl) return;
     const trackHeight = scrollbarEl.getBoundingClientRect().height;
     const totalLines = rows + scrollbackLines;
     const deltaLines = Math.round((deltaY / trackHeight) * totalLines);
-    const newOffset = Math.max(0, Math.min(scrollbackLines, scrollbarDragStartOffset - deltaLines));
+    const newOffset = Math.max(
+      0,
+      Math.min(scrollbackLines, scrollbarState.getDragStartOffset() - deltaLines),
+    );
     scrollToOffset(newOffset);
   }
 
   function handleScrollbarPointerup(event: PointerEvent) {
-    if (!scrollbarDragging) return;
+    if (!scrollbarState.scrollbarDragging) return;
     event.preventDefault();
-    scrollbarDragging = false;
+    scrollbarState.endDrag();
     (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
   }
 
@@ -942,97 +774,6 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       /* non-fatal */
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Bell handler
-  // -------------------------------------------------------------------------
-
-  function handleBell() {
-    if (props.bellType() === 'none') return;
-
-    if (props.bellType() === 'visual' || props.bellType() === 'both') {
-      if (bellFlashTimer) clearTimeout(bellFlashTimer);
-      bellFlashing = true;
-      bellFlashTimer = setTimeout(() => {
-        bellFlashing = false;
-        bellFlashTimer = null;
-      }, 80);
-    }
-
-    if (props.bellType() === 'audio' || props.bellType() === 'both') {
-      try {
-        const ctx = new AudioContext();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 440;
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.08);
-        osc.onended = () => ctx.close();
-      } catch {
-        // AudioContext unavailable in test environments — non-fatal.
-      }
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Border pulse
-  // -------------------------------------------------------------------------
-
-  function triggerBorderPulse(type: BorderPulse, durationMs: number) {
-    if (borderPulse === 'exit' && type !== 'exit') return;
-    if (borderPulseTimer) clearTimeout(borderPulseTimer);
-    borderPulse = type;
-    borderPulseTimer = setTimeout(() => {
-      borderPulse = null;
-      borderPulseTimer = null;
-    }, durationMs);
-  }
-
-  function handleNotificationForBorderPulse(ev: NotificationChangedEvent) {
-    if (ev.notification === null) {
-      if (borderPulse !== 'exit') {
-        clearTimeout(borderPulseTimer ?? undefined);
-        borderPulseTimer = null;
-        borderPulse = null;
-      }
-      return;
-    }
-    switch (ev.notification.type) {
-      case 'backgroundOutput':
-        triggerBorderPulse('output', 800);
-        break;
-      case 'bell':
-        triggerBorderPulse('bell', 800);
-        break;
-      case 'processExited':
-        triggerBorderPulse('exit', 1500);
-        break;
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Selection flash
-  // -------------------------------------------------------------------------
-
-  function triggerSelectionFlash() {
-    if (selectionFlashTimer) clearTimeout(selectionFlashTimer);
-    selectionFlashing = true;
-    selectionFlashTimer = setTimeout(() => {
-      selectionFlashing = false;
-      selectionFlashTimer = null;
-    }, 80);
-  }
-
-  // -------------------------------------------------------------------------
-  // Cell rendering helper
-  // -------------------------------------------------------------------------
-
-  // cellStyle is imported from useTerminalPane.handlers.ts — used directly.
 
   // -------------------------------------------------------------------------
   // Return all state and handlers for TerminalPane.svelte
@@ -1064,7 +805,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       return cursor;
     },
     get cursorVisible() {
-      return cursorVisible;
+      return cursorBlink.cursorVisible;
     },
     get scrollOffset() {
       return scrollOffset;
@@ -1131,37 +872,37 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       return hasSelection;
     },
     get selectionFlashing() {
-      return selectionFlashing;
+      return visualFx.selectionFlashing;
     },
 
     // Scrollbar
     get scrollbarVisible() {
-      return scrollbarVisible;
+      return scrollbarState.scrollbarVisible;
     },
     get scrollbarDragging() {
-      return scrollbarDragging;
+      return scrollbarState.scrollbarDragging;
     },
     get scrollbarHover() {
-      return scrollbarHover;
+      return scrollbarState.scrollbarHover;
     },
     set scrollbarHover(v: boolean) {
-      scrollbarHover = v;
+      scrollbarState.scrollbarHover = v;
     },
 
     // Visual states
     get bellFlashing() {
-      return bellFlashing;
+      return visualFx.bellFlashing;
     },
     get borderPulse() {
-      return borderPulse;
+      return visualFx.borderPulse;
     },
 
     // Paste dialog
     get pasteConfirmOpen() {
-      return pasteConfirmOpen;
+      return pasteDialog.pasteConfirmOpen;
     },
     get pasteConfirmText() {
-      return pasteConfirmText;
+      return pasteDialog.pasteConfirmText;
     },
 
     // Methods

@@ -30,10 +30,12 @@
 -->
 <script lang="ts">
   import { Plus } from 'lucide-svelte';
-  import { invoke } from '@tauri-apps/api/core';
   import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
   import { useTabBarScroll } from '$lib/composables/TabBar.scroll.svelte';
+  import { useTabBarRename } from '$lib/composables/useTabBarRename.svelte';
+  import { useTabBarDnd } from '$lib/composables/useTabBarDnd.svelte';
+  import { useTabBarContextMenu } from '$lib/composables/useTabBarContextMenu.svelte';
   import TabBarItem from './TabBarItem.svelte';
   import TabBarScroll from './TabBarScroll.svelte';
   import TabBarContextMenu from './TabBarContextMenu.svelte';
@@ -78,159 +80,6 @@
   // parent, which creates a new array reference with the same length).
   const tabCount = $derived(tabs.length);
 
-  // ── Inline rename state (FS-TAB-006) ────────────────────────────────────────
-  let renamingTabId = $state<string | null>(null);
-  let renameValue = $state('');
-  // Note: input focus is handled locally within TabBarItem ($effect on isRenaming).
-
-  /** Enter rename mode for the given tab. */
-  function startRename(tabId: string, currentTitle: string) {
-    renamingTabId = tabId;
-    renameValue = currentTitle;
-  }
-
-  /** Confirm rename: send IPC, then exit rename mode. */
-  async function confirmRename(tabId: string) {
-    if (renamingTabId !== tabId) return;
-    const label: string | null = renameValue.trim() === '' ? null : renameValue.trim();
-    try {
-      await invoke('rename_tab', { tabId, label });
-    } catch {
-      // IPC errors are non-fatal; title stays unchanged on next state update.
-    }
-    renamingTabId = null;
-    renameValue = '';
-    onRenameComplete?.();
-  }
-
-  /** Cancel rename without saving. */
-  function cancelRename() {
-    renamingTabId = null;
-    renameValue = '';
-    onRenameComplete?.();
-  }
-
-  // React to an external rename request (e.g. F2 global shortcut from TerminalView).
-  $effect(() => {
-    if (requestedRenameTabId === null || requestedRenameTabId === undefined) return;
-    const tab = sortedTabs.find((t) => t.id === requestedRenameTabId);
-    if (!tab) return;
-    startRename(tab.id, tabDisplayTitle(tab));
-    onRenameHandled?.();
-  });
-
-  // ── DOM refs for scroll composable ──────────────────────────────────────────
-  let tabsContainerEl = $state<HTMLDivElement | null>(null);
-  let tabBarEl = $state<HTMLDivElement | null>(null);
-  let newTabBtnEl = $state<HTMLButtonElement | null>(null);
-
-  // ── Scroll composable ────────────────────────────────────────────────────────
-  const scroll = useTabBarScroll({
-    tabsContainerEl: () => tabsContainerEl,
-    tabBarEl: () => tabBarEl,
-    newTabBtnEl: () => newTabBtnEl,
-    activeTabId: () => activeTabId,
-    sortedTabs: () => sortedTabs,
-    tabNotification,
-    tabCount: () => tabCount,
-  });
-
-  // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────
-  let dragTabId = $state<string | null>(null);
-  let dropIndicatorIndex = $state<number | null>(null);
-
-  function handleDragStart(event: DragEvent, tabId: string) {
-    dragTabId = tabId;
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', tabId);
-    }
-  }
-
-  function handleDragOver(event: DragEvent, index: number) {
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    dropIndicatorIndex = index;
-  }
-
-  function handleDragLeave(event: DragEvent) {
-    const relatedTarget = event.relatedTarget as Node | null;
-    const bar = (event.currentTarget as HTMLElement).closest('.tab-bar__tabs');
-    if (bar && relatedTarget && bar.contains(relatedTarget)) return;
-    dropIndicatorIndex = null;
-  }
-
-  async function handleDrop(event: DragEvent, targetIndex: number) {
-    event.preventDefault();
-    const sourceId = event.dataTransfer?.getData('text/plain') ?? dragTabId;
-    if (!sourceId) {
-      resetDrag();
-      return;
-    }
-    const sorted = sortedTabs;
-    const sourceIdx = sorted.findIndex((t) => t.id === sourceId);
-    if (sourceIdx === -1 || sourceIdx === targetIndex || sourceIdx + 1 === targetIndex) {
-      resetDrag();
-      return;
-    }
-
-    const remaining = sorted.filter((t) => t.id !== sourceId);
-    let newOrder: number;
-    if (targetIndex === 0) {
-      newOrder = remaining.length > 0 ? remaining[0].order - 1 : 0;
-    } else {
-      const insertAfter = sourceIdx < targetIndex ? targetIndex - 1 : targetIndex;
-      const clampedInsert = Math.min(insertAfter, remaining.length - 1);
-      if (clampedInsert < remaining.length - 1) {
-        newOrder = Math.floor(
-          (remaining[clampedInsert].order + remaining[clampedInsert + 1].order) / 2,
-        );
-        if (newOrder === remaining[clampedInsert].order) {
-          newOrder = remaining[clampedInsert].order + 1;
-        }
-      } else {
-        newOrder = remaining[clampedInsert].order + 1;
-      }
-    }
-
-    try {
-      await invoke('reorder_tab', { tabId: sourceId, newOrder });
-    } catch {
-      // Non-fatal; backend is source of truth.
-    }
-    resetDrag();
-  }
-
-  function handleDragEnd() {
-    resetDrag();
-  }
-
-  function resetDrag() {
-    dragTabId = null;
-    dropIndicatorIndex = null;
-  }
-
-  // ── Tab context menu state (UXD §7.8.2) ─────────────────────────────────────
-  let contextMenuTabId = $state<string | null>(null);
-  let contextMenuX = $state(0);
-  let contextMenuY = $state(0);
-
-  function handleTabContextMenu(event: MouseEvent, tabId: string) {
-    event.preventDefault();
-    contextMenuX = event.clientX;
-    contextMenuY = event.clientY;
-    contextMenuTabId = tabId;
-  }
-
-  function handleContextMenuClose() {
-    contextMenuTabId = null;
-  }
-
-  function handleContextMenuRename(tabId: string, title: string) {
-    contextMenuTabId = null;
-    startRename(tabId, title);
-  }
-
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   /** Extract the root (first leaf) pane state from a tab's layout tree. */
@@ -256,13 +105,48 @@
     return getRootPane(tab)?.sessionType === 'ssh';
   }
 
+  // ── Inline rename state (FS-TAB-006) ────────────────────────────────────────
+  const rename = useTabBarRename({
+    requestedRenameTabId: () => requestedRenameTabId,
+    onRenameHandled: () => onRenameHandled?.(),
+    onRenameComplete: () => onRenameComplete?.(),
+    getTabDisplayTitle: (tabId) => {
+      const tab = sortedTabs.find((t) => t.id === tabId);
+      return tab ? tabDisplayTitle(tab) : null;
+    },
+  });
+
+  // ── DOM refs for scroll composable ──────────────────────────────────────────
+  let tabsContainerEl = $state<HTMLDivElement | null>(null);
+  let tabBarEl = $state<HTMLDivElement | null>(null);
+  let newTabBtnEl = $state<HTMLButtonElement | null>(null);
+
+  // ── Scroll composable ────────────────────────────────────────────────────────
+  const scroll = useTabBarScroll({
+    tabsContainerEl: () => tabsContainerEl,
+    tabBarEl: () => tabBarEl,
+    newTabBtnEl: () => newTabBtnEl,
+    activeTabId: () => activeTabId,
+    sortedTabs: () => sortedTabs,
+    tabNotification,
+    tabCount: () => tabCount,
+  });
+
+  // ── Drag-and-drop reorder state (FS-TAB-005) ────────────────────────────────
+  const dnd = useTabBarDnd({ tabs: () => sortedTabs });
+
+  // ── Tab context menu state (UXD §7.8.2) ─────────────────────────────────────
+  const contextMenu = useTabBarContextMenu({
+    onRenameRequest: (tabId, title) => rename.startRename(tabId, title),
+  });
+
   /** Keyboard handler for tab items (TUITC-UX-111 to 113). */
   function handleTabKeydown(event: KeyboardEvent, tabId: string, title: string) {
-    if (renamingTabId === tabId) return;
+    if (rename.renamingTabId === tabId) return;
 
     if (event.key === 'F2') {
       event.preventDefault();
-      startRename(tabId, title);
+      rename.startRename(tabId, title);
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       onTabClick(tabId);
@@ -296,10 +180,10 @@
   function handleRenameKeydown(event: KeyboardEvent, tabId: string) {
     if (event.key === 'Enter') {
       event.preventDefault();
-      confirmRename(tabId);
+      rename.confirmRename(tabId);
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      cancelRename();
+      rename.cancelRename();
     }
   }
 </script>
@@ -317,7 +201,7 @@
   <div
     bind:this={tabsContainerEl}
     class="tab-bar__tabs"
-    ondragleave={handleDragLeave}
+    ondragleave={dnd.handleDragLeave}
     onscroll={scroll.updateScrollState}
     role="presentation"
   >
@@ -325,8 +209,8 @@
       {@const isActive = tab.id === activeTabId}
       {@const notification = tabNotification(tab)}
       {@const title = tabDisplayTitle(tab)}
-      {@const isRenaming = renamingTabId === tab.id}
-      {@const isDragging = dragTabId === tab.id}
+      {@const isRenaming = rename.renamingTabId === tab.id}
+      {@const isDragging = dnd.dragTabId === tab.id}
 
       <TabBarItem
         {tab}
@@ -334,32 +218,32 @@
         {isActive}
         {isDragging}
         {isRenaming}
-        {renameValue}
+        renameValue={rename.renameValue}
         {notification}
         {title}
         isSSH={isSSHTab(tab)}
-        {dropIndicatorIndex}
-        {dragTabId}
+        dropIndicatorIndex={dnd.dropIndicatorIndex}
+        dragTabId={dnd.dragTabId}
         {onTabClick}
         {onTabClose}
-        onStartRename={startRename}
-        onConfirmRename={confirmRename}
-        onCancelRename={cancelRename}
+        onStartRename={rename.startRename}
+        onConfirmRename={rename.confirmRename}
+        onCancelRename={rename.cancelRename}
         onRenameValueChange={(v) => {
-          renameValue = v;
+          rename.renameValue = v;
         }}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        onDrop={handleDrop}
-        onContextMenu={handleTabContextMenu}
+        onDragStart={dnd.handleDragStart}
+        onDragOver={dnd.handleDragOver}
+        onDragEnd={dnd.handleDragEnd}
+        onDrop={dnd.handleDrop}
+        onContextMenu={contextMenu.handleTabContextMenu}
         onTabKeydown={handleTabKeydown}
         onRenameKeydown={handleRenameKeydown}
       />
     {/each}
 
     <!-- Drop indicator: shown after the last tab -->
-    {#if dropIndicatorIndex === sortedTabs.length && dragTabId !== null}
+    {#if dnd.dropIndicatorIndex === sortedTabs.length && dnd.dragTabId !== null}
       <div class="tab-bar__drop-indicator" aria-hidden="true"></div>
     {/if}
   </div>
@@ -387,21 +271,21 @@
   </button>
 
   <!-- Tab context menu (UXD §7.8.2) -->
-  {#if contextMenuTabId !== null}
-    {@const ctxTab = sortedTabs.find((t) => t.id === contextMenuTabId)}
+  {#if contextMenu.contextMenuTabId !== null}
+    {@const ctxTab = sortedTabs.find((t) => t.id === contextMenu.contextMenuTabId)}
     {#if ctxTab}
       {@const ctxTitle = tabDisplayTitle(ctxTab)}
       <TabBarContextMenu
-        {contextMenuTabId}
-        {contextMenuX}
-        {contextMenuY}
+        contextMenuTabId={contextMenu.contextMenuTabId}
+        contextMenuX={contextMenu.contextMenuX}
+        contextMenuY={contextMenu.contextMenuY}
         {onNewTab}
-        onRename={() => handleContextMenuRename(ctxTab.id, ctxTitle)}
+        onRename={() => contextMenu.handleContextMenuRename(ctxTab.id, ctxTitle)}
         onCloseTab={() => {
-          handleContextMenuClose();
+          contextMenu.handleContextMenuClose();
           onTabClose(ctxTab.id);
         }}
-        onClose={handleContextMenuClose}
+        onClose={contextMenu.handleContextMenuClose}
       />
     {/if}
   {/if}

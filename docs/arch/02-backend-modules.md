@@ -31,14 +31,37 @@ src-tauri/src/
       emoji.rs        — is_emoji_vs_eligible() (Unicode VS-16 table), flush_pending_emoji()
       regional_indicator.rs — handle_regional_indicator(), RI pairing and narrow flush
       screen.rs       — enter_alternate(), leave_alternate(), cursor/buffer helpers
-      dispatch.rs     — impl vte::Perform for VtPerformBridge: CSI/OSC/ESC/execute dispatch
+      dispatch.rs     — impl vte::Perform for VtPerformBridge: CSI/OSC/ESC/execute dispatch;
+                        delegates to sub-modules by sequence family
+      dispatch/
+        helpers.rs    — common param extraction utilities
+        print.rs      — print(), DEC special graphics
+        execute.rs    — C0 controls: BEL, BS, HT, LF, CR, SI/SO
+        osc.rs        — osc_dispatch(): title stack, hyperlinks, clipboard
+        csi_cursor.rs — CUU/CUD/CUF/CUB/CUP/HVP/CHA/HPA/VPA cursor movement
+        csi_erase.rs  — ED/EL/ECH/DECSR erase operations
+        csi_scroll.rs — scroll region, IL/DL/S/T
+        csi_modes.rs  — DECSET/DECRST mode handlers
+        csi_misc.rs   — DECSCUSR/DSR/DA cursor shape; DECSC/DECRC save/restore
+        esc.rs        — ESC sequences: RI, charset, keypad modes
       tests.rs        — unit + security test entry point (cfg(test)); declares test sub-modules
       tests/
         helpers.rs    — make_vt(), grapheme_at(), attrs_at() (shared test utilities)
         security.rs   — SEC-PTY-001..007 security tests
         basic.rs      — TEST-VT-002..007: split CSI, UTF-8, wide chars, SGR
         modes.rs      — TEST-VT-008..023: cursor, alt screen, scroll region, charset
-        editing.rs    — ICH/DCH/IL/DL/RI/DECAWM/CSI scroll/cursor shape/BEL
+        editing.rs    — ICH/DCH/IL/DL/RI/DECAWM/CSI scroll/cursor shape/BEL; declares sub-modules
+        editing/
+          cursor.rs              — resize/cursor-position tests
+          text_composition.rs    — combining chars, phantom cells
+          scrolling.rs           — CSI S/T scroll tests
+          cursor_shape.rs        — DECSCUSR tests
+          bell.rs                — BEL rate limiting tests
+          char_insert_delete.rs  — ICH/DCH tests
+          line_insert_delete.rs  — IL/DL tests
+          reverse_index.rs       — RI tests
+          wrap_mode.rs           — DECAWM tests
+          osc_title.rs           — OSC title sanitization tests
         features.rs   — TEST-SB-002, TEST-OSC8 (hyperlinks), TEST-OSC52 (clipboard)
         cursor_dirty.rs — DirtyRegion.cursor_moved tracking
         resize_full_redraw.rs — full_redraw flag on resize
@@ -47,13 +70,22 @@ src-tauri/src/
                         scrolled off the top of a full-screen scroll region enter the ring.
                         Lines evicted by a partial DECSTBM region (margins not spanning the
                         full screen) are discarded — they do not enter scrollback (FS-VT-053,
-                        FS-SB-004).
+                        FS-SB-004). Declares sub-modules.
+    screen_buffer/
+      dirty_rows.rs   — DirtyRows: bitfield dirty-row tracking (up to 256 rows)
+      scrollback.rs   — ScrollbackLine, ScrollbackLineRef structs
+      snapshot.rs     — ScreenSnapshot, SnapshotCell: serializable frontend rendering contract
+      dirty_region.rs — DirtyRegion: cursor + cell dirty tracking, merge logic
+      buffer.rs       — ScreenBuffer struct: grid access (new/get/get_mut/get_row)
+      operations.rs   — erase/insert/delete/scroll/resize/take_dirty/snapshot methods
     cell.rs           — Cell, CellAttrs (SGR attributes), Color (Ansi16/Ansi256/Rgb),
                         Hyperlink; all Copy/Clone/PartialEq
     modes.rs          — ModeState: all DECSET/DECRST boolean and enum modes;
                         save/restore on alternate screen switch
-    sgr.rs            — SGR attribute parsing: parse_sgr_params() → CellAttrs delta;
-                        colon sub-params for ITU T.416 and extended underline
+    sgr.rs            — apply_sgr()/parse_extended_color(): SGR attribute parsing → CellAttrs delta;
+                        colon sub-params for ITU T.416 and extended underline.
+                        Test module split into sgr/tests/ sub-modules by attribute family
+                        (reset, attributes, ansi_colors, color_256, truecolor, underline, edge_cases).
     osc.rs            — OSC dispatch: title (0/1/2), title stack (22/23),
                         hyperlink (8), clipboard (52) with per-connection policy
     mouse.rs          — Mouse event encoding: X10, SGR (1006), URXVT (1015);
@@ -61,8 +93,13 @@ src-tauri/src/
                         of other modes; else if URXVT (1015) active → encode as URXVT;
                         else encode as X10 (limited to col/row ≤ 223). Matches xterm
                         reference behavior (FS-VT-081).
-    search.rs         — search(): iterate scrollback, skip soft-wrap boundaries,
-                        return SearchMatch positions
+    search.rs         — SearchQuery, SearchMatch types; re-exports search_scrollback; declares sub-modules
+    search/
+      matcher.rs           — Matcher enum, build_matcher(): regex/literal dispatch
+      text_conversion.rs   — cells_to_text(), logical_line_to_text(), phantom cell handling
+      logical_lines.rs     — LogicalLine, build_logical_lines(): soft-wrap boundary joining
+      literal.rs           — find_literal_logical(): literal match finding
+      api.rs               — search_scrollback() public entry point
     charset.rs        — DEC Special Graphics mapping; SI/SO charset switching;
                         G0/G1 designator state
 
@@ -89,9 +126,13 @@ src-tauri/src/
     pane.rs           — PaneSession: owns PtyTaskHandle or SshChannelHandle;
                         Arc<RwLock<VtProcessor>>; PaneLifecycleState
     lifecycle.rs      — PaneLifecycleState enum; transitions; restart logic
-    pty_task.rs       — PtyReadTask: Tokio task per pane; reads AsyncFd,
-                        calls VtProcessor::process, coalesces dirty regions,
-                        emits screen-update; back-pressure
+    pty_task.rs       — ProcessOutput, PtyTaskHandle types; re-exports spawn_pty_read_task;
+                        reads AsyncFd, calls VtProcessor::process, coalesces dirty regions,
+                        emits screen-update; back-pressure. Declares sub-modules.
+    pty_task/
+      reader.rs        — Task 1: PTY read loop, spawn_pty_read_task() entry point
+      emitter.rs       — Task 2: coalescer loop, emit_all_pending()
+      event_builders.rs — build_mode_state_event(), build_screen_update_event(), cell_color_to_dto()
     ssh_task.rs       — SshReadTask: Tokio task per SSH pane; reads async russh::Channel,
                         feeds bytes to VtProcessor, emits screen-update events;
                         mirrors pty_task.rs but operates on async SSH channel
@@ -102,17 +143,26 @@ src-tauri/src/
   ssh.rs              — re-exports: SshManager, SshConnectionConfig,
                         SshLifecycleState, Credentials, HostKeyInfo
   ssh/
-    manager.rs        — SshManager: DashMap<PaneId, SshConnection>; open/close/reconnect.
+    manager.rs        — SshManager struct def; re-exports all public items; declares sub-modules.
                         Manages live sessions only. Saved SshConnectionConfig are owned by
                         PreferencesStore (sub-key `connections`) — SshManager reads/writes
                         them via State<PreferencesStore>; it holds no connection store of its own.
+    manager/
+      pending.rs     — PendingCredentials, PendingHostKey structs
+      credentials.rs — Credentials struct + manual Debug impl (SEC-CRED-003: no token leak)
+      lifecycle.rs   — new(), open_connection(), close_connection(), reconnect()
+      auth.rs        — connect_task(), try_authenticate()
+      io_ops.rs      — send_input(), resize_pane(), provide_credentials(), get_state(), connection_count()
     connection.rs     — SshConnection: state machine; russh client handle;
                         routes PTY output → VtProcessor; resize; emits ssh-state-changed
     auth.rs           — auth sequence: publickey → keyboard-interactive → password;
                         credential prompt round-trip
-    known_hosts.rs    — TauTerm known-hosts file: parse, lookup, add, update;
-                        OpenSSH-compatible format; import action from ~/.ssh/known_hosts
-                        (explicit user action only — not read automatically at startup; see [§8.3](06-appendix.md#83-ssh-security))
+    known_hosts.rs    — KnownHostEntry, KnownHostLookup types; re-exports KnownHostsStore;
+                        OpenSSH-compatible format; import from ~/.ssh/known_hosts on explicit
+                        user action only (see [§8.3](06-appendix.md#83-ssh-security)); declares sub-modules
+    known_hosts/
+      store.rs        — KnownHostsStore: new/load/lookup/lookup_with_system_fallback/
+                        add_entry/remove_entries_for_host/import_from
     keepalive.rs      — Tokio keepalive task: interval, miss counter, disconnect trigger
     algorithms.rs     — deprecated algorithm detection; emits in-pane banner event
 
@@ -128,7 +178,14 @@ src-tauri/src/
                           key conversion bridge (IPC camelCase ↔ TOML snake_case)
       path.rs         — preferences_path(), dirs_or_home(): XDG config path resolution
       tests.rs        — unit tests: apply_patch, key conversion, connection limits
-    schema.rs         — Preferences struct and all nested types (serde + validation)
+    schema.rs         — Preferences top-level struct; re-exports all nested types; declares sub-modules
+    schema/
+      appearance.rs  — AppearancePrefs, AppearancePatch, CursorStyle
+      terminal.rs    — TerminalPrefs, BellType
+      keyboard.rs    — KeyboardPrefs
+      language.rs    — Language enum (FS-I18N-006, SEC-IPC-005 — never a free String)
+      theme.rs       — UserTheme struct
+      patch.rs       — PreferencesPatch struct
 
   credentials.rs      — public API: CredentialManager (wraps PAL CredentialStore)
 
@@ -156,8 +213,13 @@ src-tauri/src/
                         duplicate_connection
     preferences_cmds.rs — get_preferences, update_preferences, get_themes,
                         save_theme, delete_theme
-    system_cmds.rs    — copy_to_clipboard, get_clipboard, open_url,
-                        mark_context_menu_used, get_session_state
+    system_cmds.rs    — re-exports all command functions; declares sub-modules
+    system_cmds/
+      clipboard.rs   — copy_to_clipboard, get_clipboard, MAX_CLIPBOARD_LEN
+      url.rs         — open_url, validate_url_scheme (SEC-PATH-003/004)
+      window.rs      — toggle_fullscreen
+      preferences.rs — mark_context_menu_used
+      session.rs     — get_session_state
     testing.rs        — E2E testing commands (--features e2e-testing only):
                         inject_pty_output, inject_ssh_failure, SshFailureRegistry
 
@@ -167,7 +229,10 @@ src-tauri/src/
                         create_notification_backend();
                         #[cfg(target_os = ...)] dispatch lives here, not in sub-files
   platform/
-    pty_linux.rs          — UnixPtySystem wrapper; AsyncFd extraction; O_CLOEXEC
+    pty_linux.rs          — re-exports LinuxPtyBackend, LinuxPtySession; declares sub-modules
+    pty_linux/
+      backend.rs    — LinuxPtyBackend + PtyBackend impl (open_session)
+      session.rs    — LinuxPtySession + PtySession impl (read/write/resize/close/process query)
     credentials_linux.rs  — SecretService D-Bus adapter; SecVec<u8> zeroizing; fallback
     clipboard_linux.rs    — arboard adapter; X11 PRIMARY; Wayland fallback
     notifications_linux.rs — D-Bus org.freedesktop.Notifications adapter; no-op fallback

@@ -285,9 +285,9 @@ Base unit: 4px. All spacing values are multiples of 4px.
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--radius-none` | `0px` | Panels, tab bar, terminal area, dividers |
-| `--radius-sm` | `2px` | Buttons, text inputs, dropdown items, tab items |
-| `--radius-md` | `4px` | Modals, tooltips, context menus, search overlay |
+| `--radius-none` | `0px` | Terminal area, pane dividers, tab bar body — content infrastructure |
+| `--radius-sm` | `3px` | Buttons, text inputs, dropdown triggers, tab items, badge containers |
+| `--radius-md` | `6px` | Modals, overlays, context menus, tooltips, search overlay, dropdown content |
 | `--radius-full` | `9999px` | Status dots, activity badges, toggle thumb |
 
 ### 3.9 Shadow Tokens

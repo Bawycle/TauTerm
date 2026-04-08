@@ -277,14 +277,10 @@
     preferences={preferences.value}
     onclose={() => {
       tv.prefsOpen = false;
-      // Defer past Bits UI FocusScope's trigger-restoration microtask,
-      // which fires synchronously on dialog unmount and would otherwise
-      // override our focus call.
-      setTimeout(() => {
-        if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
-          tv.activeViewportEl?.focus({ preventScroll: true });
-        }
-      }, 0);
+      // onCloseAutoFocus on Dialog.Content is set to preventDefault(), so
+      // Bits UI FocusScope will NOT return focus to the trigger (settings button).
+      // We restore focus to the terminal directly and synchronously here.
+      tv.activeViewportEl?.focus({ preventScroll: true });
     }}
     onupdate={tv.handlePreferencesUpdate}
   />

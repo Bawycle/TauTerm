@@ -136,6 +136,7 @@
              bg-(--color-bg-raised) border border-(--color-border) rounded-[4px]
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
       aria-modal="true"
+      onCloseAutoFocus={(e) => e.preventDefault()}
     >
       <!-- Header -->
       <div class="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">

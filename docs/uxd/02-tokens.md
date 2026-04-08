@@ -91,6 +91,7 @@ Semantic tokens are the layer components consume. They map to primitives and can
 |-------|---------------|-------------|
 | `--color-border` | `#35312a` | Standard structural border |
 | `--color-border-subtle` | `#2c2921` | Low-contrast border for nested containers |
+| `--color-border-overlay` | `#4a4640` | Border for floating surfaces (menus, modals, tooltips) — one step lighter than `--color-border` to lift overlays off the surface they sit above |
 | `--color-divider` | `#35312a` | Pane divider visible line (default) |
 | `--color-divider-active` | `#4a92bf` | Pane divider on hover or drag |
 
@@ -122,7 +123,9 @@ Semantic tokens are the layer components consume. They map to primitives and can
 | `--color-hover-bg` | `#2c2921` | Generic hover background |
 | `--color-active-bg` | `#35312a` | Generic active/pressed background |
 | `--color-focus-ring` | `#4a92bf` | Keyboard focus ring color |
-| `--color-focus-ring-offset` | `#0e0d0b` | Gap between focus ring and element edge |
+| `--color-focus-ring-offset` | `#0e0d0b` | Gap color between focus ring and element edge (used as `outline-color` on the gap layer) |
+
+The global `:focus-visible` rule applies `outline: 2px solid var(--color-focus-ring)` with `outline-offset: 3px`. The 3px offset ensures the ring clears the element border cleanly and is visually distinct from element borders at 1px and 2px. Component specs that reference "offset 2px" in their focus state tables should be read as using this global default (updated from 2px to 3px).
 
 #### Status and Notification
 
@@ -240,6 +243,7 @@ Component tokens specialize semantic tokens for individual UI components.
 | `--font-weight-normal` | `400` | Default text weight |
 | `--font-weight-medium` | `500` | Slight emphasis (button labels) |
 | `--font-weight-semibold` | `600` | Active tab title, section headings |
+| `--letter-spacing-label` | `0.09em` | Uppercase section labels (11px semibold) — applied to Caption-level headings in PreferencesPanel and ConnectionManager |
 
 ### 3.6 Spacing Tokens
 
@@ -286,8 +290,8 @@ Base unit: 4px. All spacing values are multiples of 4px.
 | Token | Value | Usage |
 |-------|-------|-------|
 | `--radius-none` | `0px` | Terminal area, pane dividers, tab bar body — content infrastructure |
-| `--radius-sm` | `3px` | Buttons, text inputs, dropdown triggers, tab items, badge containers |
-| `--radius-md` | `6px` | Modals, overlays, context menus, tooltips, search overlay, dropdown content |
+| `--radius-sm` | `4px` | Buttons, text inputs, dropdown triggers, tab items, badge containers |
+| `--radius-md` | `8px` | Modals, overlays, context menus, tooltips, search overlay, dropdown content |
 | `--radius-full` | `9999px` | Status dots, activity badges, toggle thumb |
 
 ### 3.9 Shadow Tokens
@@ -401,7 +405,7 @@ system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-seri
 | Level Name | Token | Size | Weight | Line Height | Letter Spacing | Usage |
 |-----------|-------|------|--------|-------------|----------------|-------|
 | Badge | `--font-size-ui-2xs` | 10px | `--font-weight-medium` (500) | 1.2 | 0 | Badge counters, status dot labels |
-| Caption | `--font-size-ui-xs` | 11px | `--font-weight-semibold` (600) | 1.3 | 0.06em | Section headings (all-caps), tooltip text |
+| Caption | `--font-size-ui-xs` | 11px | `--font-weight-semibold` (600) | 1.3 | `--letter-spacing-label` (0.09em) | Section headings (all-caps), tooltip text |
 | Label | `--font-size-ui-sm` | 12px | `--font-weight-normal` (400) | 1.4 | 0 | Secondary labels, shortcut key text, descriptions |
 | Body | `--font-size-ui-base` | 13px | `--font-weight-normal` (400) | 1.4 | 0 | Primary UI text: tab titles, menu items, form fields, dialog body |
 | Body-emphasis | `--font-size-ui-base` | 13px | `--font-weight-semibold` (600) | 1.4 | 0 | Active tab title only |
@@ -412,7 +416,7 @@ system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-seri
 ### 4.5 Hierarchy Rules
 
 1. **Primary UI text** — Body level. Default for all labels, tab titles, menu items, form fields.
-2. **Section headings** — Caption level, all-caps, letter-spacing 0.06em, color `--color-text-heading`. Used for preference panel sections and grouped form labels. Small-caps headings establish hierarchy without consuming vertical space.
+2. **Section headings** — Caption level, all-caps, `letter-spacing: var(--letter-spacing-label)` (0.09em), color `--color-text-heading`. Used for preference panel sections and grouped form labels. Small-caps headings establish hierarchy without consuming vertical space.
 3. **Active tab title** — Body-emphasis level. The only surface where semibold weight is used on body-size text, distinguishing the active tab from inactive ones without relying on color alone.
 4. **Secondary text** — Label level, color `--color-text-secondary`. Descriptions, subtitles, supplementary labels.
 5. **Monospace UI elements** — Label level in `--font-mono-ui`. Shortcut displays, path fields.

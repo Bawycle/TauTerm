@@ -65,6 +65,7 @@
   /* Borders and dividers */
   --color-border: var(--color-neutral-700); /* #35312a */
   --color-border-subtle: var(--color-neutral-750); /* #2c2921 */
+  --color-border-overlay: var(--color-neutral-600); /* #4a4640 — floating surfaces: menus, modals, tooltips */
   --color-divider: var(--color-neutral-700); /* #35312a — pane divider line */
   --color-divider-active: var(--color-blue-400); /* #4a92bf — divider on hover/drag */
 
@@ -229,6 +230,8 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
 
+  --letter-spacing-label: 0.09em; /* uppercase section labels (11px semibold) */
+
   /* ===================================================
      SPACING TOKENS (base unit: 4px)
   =================================================== */
@@ -272,8 +275,8 @@
   =================================================== */
 
   --radius-none: 0px; /* terminal area, pane dividers, tab bar body — content infrastructure */
-  --radius-sm: 3px; /* buttons, text inputs, dropdown triggers, tab items, badge containers */
-  --radius-md: 6px; /* modals, overlays, context menus, tooltips, search overlay, dropdown content */
+  --radius-sm: 4px; /* buttons, text inputs, dropdown triggers, tab items, badge containers */
+  --radius-md: 8px; /* modals, overlays, context menus, tooltips, search overlay, dropdown content */
   --radius-full: 9999px; /* status dots, activity badges, toggle thumb */
 
   /* ===================================================
@@ -339,7 +342,7 @@ body {
 /* Focus ring — applied consistently across all interactive elements */
 :focus-visible {
   outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 /* Custom scrollbar — minimal, matches theme */

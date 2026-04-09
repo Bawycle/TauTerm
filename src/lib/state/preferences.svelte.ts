@@ -23,7 +23,7 @@ import type { Preferences } from '$lib/ipc/types';
 export const DEFAULT_PREFERENCES: Preferences = {
   appearance: {
     fontFamily: 'monospace',
-    fontSize: 13,
+    fontSize: 14,
     cursorStyle: 'block',
     cursorBlinkMs: 530,
     themeName: 'umbra',
@@ -35,7 +35,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   terminal: {
     scrollbackLines: 10000,
     allowOsc52Write: false,
-    wordDelimiters: ' ,;:.{}[]()"`|\\/',
+    wordDelimiters: ' \t|"\'`&()*,;<=>[]{}~',
     bellType: 'visual',
     confirmMultilinePaste: true,
   },

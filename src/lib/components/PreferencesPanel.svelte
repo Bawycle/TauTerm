@@ -17,7 +17,8 @@
 <script lang="ts">
   import { Dialog } from 'bits-ui';
   import { X } from 'lucide-svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { getThemes } from '$lib/ipc/commands';
+  import { DEFAULT_SHORTCUTS } from '$lib/preferences/shortcuts';
   import PreferencesSectionNav from './PreferencesSectionNav.svelte';
   import PreferencesKeyboardSection from './PreferencesKeyboardSection.svelte';
   import PreferencesAppearanceSection from './PreferencesAppearanceSection.svelte';
@@ -42,7 +43,13 @@
     onCloseAutoFocus?: (e: Event) => void;
   }
 
-  let { open = $bindable(false), preferences, onclose, onupdate, onCloseAutoFocus }: Props = $props();
+  let {
+    open = $bindable(false),
+    preferences,
+    onclose,
+    onupdate,
+    onCloseAutoFocus,
+  }: Props = $props();
 
   // ---------------------------------------------------------------------------
   // Section navigation
@@ -69,7 +76,7 @@
 
   $effect(() => {
     if ((activeSection === 'themes' || activeSection === 'appearance') && !sharedThemesLoaded) {
-      invoke<UserTheme[]>('get_themes')
+      getThemes()
         .then((loaded) => {
           sharedThemes = loaded;
           sharedThemesLoaded = true;
@@ -85,26 +92,11 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * Default shortcuts used as fallback when preferences.keyboard.bindings is empty.
-   * Matches the hardcoded shortcuts in TerminalView.handleGlobalKeydown.
-   */
-  const defaultShortcuts: Record<string, string> = {
-    new_tab: 'Ctrl+Shift+T',
-    close_tab: 'Ctrl+Shift+W',
-    paste: 'Ctrl+Shift+V',
-    search: 'Ctrl+Shift+F',
-    preferences: 'Ctrl+,',
-    next_tab: 'Ctrl+Tab',
-    prev_tab: 'Ctrl+Shift+Tab',
-    rename_tab: 'F2',
-  };
-
-  /**
    * Effective shortcuts — derived from preferences.keyboard.bindings merged with defaults.
    * Reactive to preferences prop changes: no $effect needed.
    */
   const shortcuts = $derived({
-    ...defaultShortcuts,
+    ...DEFAULT_SHORTCUTS,
     ...(preferences?.keyboard?.bindings ?? {}),
   });
 
@@ -117,6 +109,26 @@
     { id: 'next_tab', label: () => m.preferences_keyboard_action_label_next_tab() },
     { id: 'prev_tab', label: () => m.preferences_keyboard_action_label_prev_tab() },
     { id: 'rename_tab', label: () => m.preferences_keyboard_action_label_rename_tab() },
+    {
+      id: 'toggle_fullscreen',
+      label: () => m.preferences_keyboard_action_label_toggle_fullscreen(),
+    },
+    { id: 'split_pane_h', label: () => m.preferences_keyboard_action_label_split_pane_h() },
+    { id: 'split_pane_v', label: () => m.preferences_keyboard_action_label_split_pane_v() },
+    { id: 'close_pane', label: () => m.preferences_keyboard_action_label_close_pane() },
+    {
+      id: 'navigate_pane_left',
+      label: () => m.preferences_keyboard_action_label_navigate_pane_left(),
+    },
+    {
+      id: 'navigate_pane_right',
+      label: () => m.preferences_keyboard_action_label_navigate_pane_right(),
+    },
+    { id: 'navigate_pane_up', label: () => m.preferences_keyboard_action_label_navigate_pane_up() },
+    {
+      id: 'navigate_pane_down',
+      label: () => m.preferences_keyboard_action_label_navigate_pane_down(),
+    },
   ];
 
   async function handleShortcutChange(actionId: string, newShortcut: string) {
@@ -137,7 +149,7 @@
     <Dialog.Content
       class="preferences-panel fixed z-(--z-modal) top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
              w-[640px] max-w-[90vw] max-h-[80vh]
-             bg-(--color-bg-raised) border border-(--color-border) rounded-(--radius-md)
+             bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md)
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
       aria-modal="true"
       onCloseAutoFocus={(e) => {
@@ -161,7 +173,7 @@
       <Dialog.Description class="sr-only">{m.preferences_title()}</Dialog.Description>
 
       <!-- Body: left nav + right content -->
-      <div class="flex flex-1 min-h-0 border-t border-(--color-border)">
+      <div class="flex flex-1 min-h-0 border-t border-(--color-border-overlay)">
         <PreferencesSectionNav
           {sections}
           {activeSection}

@@ -38,10 +38,12 @@ mod path;
 mod schema_convert;
 #[cfg(test)]
 mod tests;
+mod validation;
 
 use io::load_from_disk;
 use path::preferences_path;
 use schema_convert::{camel_to_snake, rename_toml_keys};
+use validation::validate_and_clamp;
 
 /// Maximum number of saved SSH connections (SEC-PATH-005).
 ///
@@ -63,7 +65,8 @@ impl PreferencesStore {
     /// Load preferences from disk, falling back to defaults on any error.
     pub fn load() -> Result<Arc<RwLock<Self>>, PreferencesError> {
         let path = preferences_path()?;
-        let prefs = load_from_disk(&path);
+        let mut prefs = load_from_disk(&path);
+        validate_and_clamp(&mut prefs);
         Ok(Arc::new(RwLock::new(Self {
             prefs: RwLock::new(prefs),
             path,
@@ -81,7 +84,8 @@ impl PreferencesStore {
     pub fn load_or_default() -> Arc<RwLock<Self>> {
         match preferences_path() {
             Ok(path) => {
-                let prefs = load_from_disk(&path);
+                let mut prefs = load_from_disk(&path);
+                validate_and_clamp(&mut prefs);
                 Arc::new(RwLock::new(Self {
                     prefs: RwLock::new(prefs),
                     path,
@@ -141,11 +145,29 @@ impl PreferencesStore {
             }
         }
         if let Some(terminal) = patch.terminal {
-            prefs.terminal = terminal;
+            let t = &mut prefs.terminal;
+            if let Some(v) = terminal.scrollback_lines {
+                t.scrollback_lines = v;
+            }
+            if let Some(v) = terminal.allow_osc52_write {
+                t.allow_osc52_write = v;
+            }
+            if let Some(v) = terminal.word_delimiters {
+                t.word_delimiters = v;
+            }
+            if let Some(v) = terminal.bell_type {
+                t.bell_type = v;
+            }
+            if let Some(v) = terminal.confirm_multiline_paste {
+                t.confirm_multiline_paste = v;
+            }
         }
-        if let Some(keyboard) = patch.keyboard {
-            prefs.keyboard = keyboard;
+        if let Some(keyboard) = patch.keyboard
+            && let Some(v) = keyboard.bindings
+        {
+            prefs.keyboard.bindings = v;
         }
+        validate_and_clamp(&mut prefs);
         let updated = prefs.clone();
         drop(prefs);
         self.save_to_disk(&updated)?;
@@ -309,7 +331,11 @@ impl PreferencesStore {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&self.path, toml_str)?;
+        // Atomic write: write to a temp file then rename (ADR-0012, ADR-0016).
+        // Prevents file corruption on power loss or process kill mid-write.
+        let tmp_path = self.path.with_extension("toml.tmp");
+        std::fs::write(&tmp_path, toml_str)?;
+        std::fs::rename(&tmp_path, &self.path)?;
         Ok(())
     }
 }

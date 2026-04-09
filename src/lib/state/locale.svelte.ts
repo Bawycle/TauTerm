@@ -9,13 +9,12 @@
  * - Fallback to 'en' for unknown locale codes (FS-I18N-006)
  */
 
-import { invoke } from '@tauri-apps/api/core';
 import {
   setLocale as paraglideSetLocale,
   getLocale as paraglideGetLocale,
   overwriteGetLocale,
 } from '$lib/paraglide/runtime';
-import type { Preferences } from '$lib/ipc/types';
+import { getPreferences, updatePreferences } from '$lib/ipc/commands';
 
 /** Supported locale codes (FS-I18N-002). */
 export type SupportedLocale = 'en' | 'fr';
@@ -64,9 +63,7 @@ export async function setLocale(locale: SupportedLocale): Promise<void> {
   paraglideSetLocale(safe, { reload: false });
   currentLocale = safe;
   try {
-    await invoke<Preferences>('update_preferences', {
-      patch: { appearance: { language: safe } },
-    });
+    await updatePreferences({ appearance: { language: safe } });
   } catch (err) {
     // Persistence failure is non-fatal: locale is applied in-session.
     // Callers may surface this error if appropriate; we do not swallow silently.
@@ -95,7 +92,7 @@ export function applyLocaleChange(language: unknown): void {
  */
 export async function initLocale(): Promise<void> {
   try {
-    const prefs = await invoke<Preferences>('get_preferences');
+    const prefs = await getPreferences();
     const safe = toSupportedLocale(prefs.appearance.language);
     paraglideSetLocale(safe, { reload: false });
     currentLocale = safe;

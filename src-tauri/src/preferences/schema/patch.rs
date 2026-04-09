@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
-use super::appearance::CursorStyle;
-use super::keyboard::KeyboardPrefs;
+use super::appearance::{BellType, CursorStyle};
 use super::language::Language;
-use super::terminal::TerminalPrefs;
 
 /// Partial update for appearance preferences — only the fields provided are changed.
 ///
@@ -26,12 +26,33 @@ pub struct AppearancePatch {
     pub fullscreen: Option<bool>,
 }
 
+/// Partial update for terminal preferences — only the fields provided are changed.
+///
+/// Mirrors `AppearancePatch`: field-level merging avoids overwriting unrelated
+/// settings when, e.g., only `scrollback_lines` is changed from the UI.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TerminalPatch {
+    pub scrollback_lines: Option<usize>,
+    pub allow_osc52_write: Option<bool>,
+    pub word_delimiters: Option<String>,
+    pub bell_type: Option<BellType>,
+    pub confirm_multiline_paste: Option<bool>,
+}
+
+/// Partial update for keyboard preferences — only the fields provided are changed.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct KeyboardPatch {
+    pub bindings: Option<HashMap<String, String>>,
+}
+
 /// A partial preferences update (only the fields the user changed).
 /// All fields are optional so the frontend can send minimal payloads.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PreferencesPatch {
     pub appearance: Option<AppearancePatch>,
-    pub terminal: Option<TerminalPrefs>,
-    pub keyboard: Option<KeyboardPrefs>,
+    pub terminal: Option<TerminalPatch>,
+    pub keyboard: Option<KeyboardPatch>,
 }

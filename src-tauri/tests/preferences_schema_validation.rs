@@ -47,27 +47,27 @@ fn load_prefs_from_bytes(content: &[u8]) -> Preferences {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn font_size_zero_accepted_by_serde_no_panic() {
-    // Serde has no built-in range validator; 0.0 is technically a valid f32.
-    // The test verifies no panic — range enforcement is a UI concern (FS-PREF-003).
+fn font_size_zero_clamped_to_minimum() {
+    // Values below the minimum [6.0, 72.0] are clamped at load time.
     let json = br#"{"appearance": {"fontSize": 0.0}}"#;
     let prefs = load_prefs_from_bytes(json);
-    assert_eq!(prefs.appearance.font_size, 0.0);
+    assert_eq!(prefs.appearance.font_size, 6.0);
 }
 
 #[test]
-fn font_size_very_large_accepted_by_serde_no_panic() {
+fn font_size_very_large_clamped_to_maximum() {
+    // Values above 72.0 are clamped at load time.
     let json = br#"{"appearance": {"fontSize": 999.0}}"#;
     let prefs = load_prefs_from_bytes(json);
-    assert_eq!(prefs.appearance.font_size, 999.0);
+    assert_eq!(prefs.appearance.font_size, 72.0);
 }
 
 #[test]
-fn font_size_negative_accepted_by_serde_no_panic() {
-    // Negative values are not semantically valid but must not panic.
+fn font_size_negative_clamped_to_minimum() {
+    // Negative values are not semantically valid — clamped to minimum, no panic.
     let json = br#"{"appearance": {"fontSize": -1.0}}"#;
     let prefs = load_prefs_from_bytes(json);
-    assert_eq!(prefs.appearance.font_size, -1.0);
+    assert_eq!(prefs.appearance.font_size, 6.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,11 +89,11 @@ fn opacity_one_accepted_no_panic() {
 }
 
 #[test]
-fn opacity_out_of_range_above_accepted_by_serde_no_panic() {
-    // Serde does not enforce the [0, 1] constraint; that is a UI concern.
+fn opacity_out_of_range_above_clamped_to_maximum() {
+    // Values above 1.0 are clamped at load time; no panic.
     let json = br#"{"appearance": {"opacity": 2.5}}"#;
     let prefs = load_prefs_from_bytes(json);
-    assert_eq!(prefs.appearance.opacity, 2.5);
+    assert_eq!(prefs.appearance.opacity, 1.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,10 +101,11 @@ fn opacity_out_of_range_above_accepted_by_serde_no_panic() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn scrollback_lines_zero_accepted_no_panic() {
+fn scrollback_lines_zero_clamped_to_minimum() {
+    // Values below 100 are clamped at load time; no panic.
     let json = br#"{"terminal": {"scrollbackLines": 0}}"#;
     let prefs = load_prefs_from_bytes(json);
-    assert_eq!(prefs.terminal.scrollback_lines, 0);
+    assert_eq!(prefs.terminal.scrollback_lines, 100);
 }
 
 #[test]
@@ -127,10 +128,11 @@ fn cursor_blink_ms_zero_accepted_no_panic() {
 }
 
 #[test]
-fn cursor_blink_ms_max_u32_accepted_no_panic() {
+fn cursor_blink_ms_max_u32_clamped_to_maximum() {
+    // Values above 5000 ms are clamped at load time; no panic.
     let json = format!(r#"{{"appearance": {{"cursorBlinkMs": {}}}}}"#, u32::MAX);
     let prefs = load_prefs_from_bytes(json.as_bytes());
-    assert_eq!(prefs.appearance.cursor_blink_ms, u32::MAX);
+    assert_eq!(prefs.appearance.cursor_blink_ms, 5000);
 }
 
 // ---------------------------------------------------------------------------

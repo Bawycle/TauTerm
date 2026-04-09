@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use crate::preferences::schema::Preferences;
 
@@ -63,7 +63,20 @@ pub(super) fn load_from_disk(path: &PathBuf) -> Preferences {
     clamp_connections(migrated.unwrap_or_default())
 }
 
-/// Truncate the connections list to `MAX_CONNECTIONS` if it exceeds the limit.
+/// Return `true` if the path is safe to use as an identity file.
+///
+/// A safe path is absolute and contains no `..` components (SEC-PATH-005).
+fn is_safe_identity_path(path: &str) -> bool {
+    let p = Path::new(path);
+    if !p.is_absolute() {
+        return false;
+    }
+    // Reject any path that contains a ParentDir (`..`) component.
+    !p.components().any(|c| c == Component::ParentDir)
+}
+
+/// Truncate the connections list to `MAX_CONNECTIONS` if it exceeds the limit,
+/// and validate `identity_file` paths for path traversal (SEC-PATH-005).
 ///
 /// A malformed preferences file could contain an unbounded list of connections.
 /// This guard prevents DoS via memory exhaustion or excessively large IPC payloads
@@ -76,6 +89,18 @@ pub(super) fn clamp_connections(mut prefs: Preferences) -> Preferences {
             prefs.connections.len()
         );
         prefs.connections.truncate(MAX_CONNECTIONS);
+    }
+    // Validate identity_file paths — reject non-absolute or traversal paths.
+    for conn in &mut prefs.connections {
+        if let Some(ref path) = conn.identity_file
+            && !is_safe_identity_path(path)
+        {
+            tracing::warn!(
+                field = "identity_file",
+                "path rejected during load: not absolute or contains traversal"
+            );
+            conn.identity_file = None;
+        }
     }
     prefs
 }

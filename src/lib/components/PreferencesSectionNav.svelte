@@ -36,7 +36,7 @@
              hover:bg-(--color-hover-bg) focus-visible:outline-2 focus-visible:outline-(--color-focus-ring)"
       class:preferences-section-nav__item--active={activeSection === section.id}
       onclick={() => onselect(section.id)}
-      aria-current={activeSection === section.id ? 'page' : undefined}
+      aria-current={activeSection === section.id ? 'true' : undefined}
     >
       {section.label()}
     </button>

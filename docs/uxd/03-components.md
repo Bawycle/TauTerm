@@ -499,9 +499,10 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - Theme quick-select dropdown (§7.16) — this is a shortcut for switching the active theme. The full theme management surface (create, edit, duplicate, delete) is in the Themes section below.
 - Font family input (text input with monospace preview).
 - Font size input (number input, range 8-32).
-- Line height input (number input, range 1.0-2.0, step 0.1).
 - **Language subsection** — see below.
 - Section heading: "APPEARANCE" in Caption level.
+
+> **Design note — line height:** Line height is a per-theme property (`UserTheme.line_height`, range 1.0–2.0), configured in the Theme Editor (§7.20). It is not a global Appearance preference. Rationale: line height is intrinsically tied to the theme's font choice — a condensed font may require a different line height than a tall one. A global line-height preference would create an override-layering conflict with the per-theme value. The i18n key `preferences_appearance_line_height` belongs in the Theme Editor context.
 
 **Language subsection (within Appearance):**
 - A dropdown (§7.16) listing available locales. v1 options: "English" and "Français" (each option displays the language name in its own language).

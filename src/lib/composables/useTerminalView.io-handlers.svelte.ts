@@ -36,6 +36,7 @@ import { preferences, setPreferences } from '$lib/state/preferences.svelte';
 import { setFullscreen } from '$lib/state/fullscreen.svelte';
 import { applyLocaleChange } from '$lib/state/locale.svelte';
 import { applyPreferencesUpdate } from '$lib/preferences/applyUpdate';
+import { DEFAULT_SHORTCUTS } from '$lib/preferences/shortcuts';
 import { pasteToBytes } from '$lib/terminal/paste.js';
 import {
   sessionState,
@@ -170,7 +171,11 @@ export function createIoHandlers(
     const prompt = clearCredentialPrompt();
     if (!prompt) return;
     try {
-      await provideCredentials(prompt.paneId, { username: prompt.username, password, saveInKeychain });
+      await provideCredentials(prompt.paneId, {
+        username: prompt.username,
+        password,
+        saveInKeychain,
+      });
     } catch {
       /* non-fatal */
     }
@@ -280,27 +285,8 @@ export function createIoHandlers(
   // Shortcut resolution (FS-KBD-002)
   // -------------------------------------------------------------------------
 
-  const defaultShortcuts: Record<string, string> = {
-    new_tab: 'Ctrl+Shift+T',
-    close_tab: 'Ctrl+Shift+W',
-    paste: 'Ctrl+Shift+V',
-    search: 'Ctrl+Shift+F',
-    preferences: 'Ctrl+,',
-    next_tab: 'Ctrl+Tab',
-    prev_tab: 'Ctrl+Shift+Tab',
-    rename_tab: 'F2',
-    toggle_fullscreen: 'F11',
-    split_pane_h: 'Ctrl+Shift+D',
-    split_pane_v: 'Ctrl+Shift+E',
-    close_pane: 'Ctrl+Shift+Q',
-    navigate_pane_left: 'Ctrl+Shift+ArrowLeft',
-    navigate_pane_right: 'Ctrl+Shift+ArrowRight',
-    navigate_pane_up: 'Ctrl+Shift+ArrowUp',
-    navigate_pane_down: 'Ctrl+Shift+ArrowDown',
-  };
-
   function effectiveShortcut(actionId: string): string {
-    return preferences.value?.keyboard?.bindings?.[actionId] ?? defaultShortcuts[actionId] ?? '';
+    return preferences.value?.keyboard?.bindings?.[actionId] ?? DEFAULT_SHORTCUTS[actionId] ?? '';
   }
 
   function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {

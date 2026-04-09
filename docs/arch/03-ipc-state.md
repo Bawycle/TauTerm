@@ -29,6 +29,7 @@
 | `close_pane` | `{ pane_id: PaneId }` | `TabState \| null` | Close pane; returns updated `TabState` if the tab still exists, `null` if the last pane was closed (tab removed) |
 | `set_active_tab` | `{ tab_id: TabId }` | `()` | Switch to tab |
 | `set_active_pane` | `{ pane_id: PaneId }` | `()` | Change focus to pane |
+| `has_foreground_process` | `{ pane_id: PaneId }` | `bool` | Returns `true` if the PTY foreground process group differs from the shell's PID — i.e., a child process (e.g. `vim`, `ssh`) is currently running. Used by the frontend to prompt "a process is running" before closing a pane or tab. Implemented via `tcgetpgrp` on the PTY master fd. Returns `false` for SSH panes (shell PID unknown). |
 | `send_input` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | Write bytes to PTY |
 | `scroll_pane` | `{ pane_id: PaneId, offset: i64 }` | `ScrollPositionState` | Scroll scrollback |
 | `scroll_to_bottom` | `{ pane_id: PaneId }` | `()` | Jump to bottom of scrollback |
@@ -39,7 +40,7 @@
 | `get_connections` | — | `Vec<SshConnectionConfig>` | List saved SSH connections |
 | `save_connection` | `SshConnectionConfig` | `ConnectionId` | Create or update a saved connection |
 | `delete_connection` | `{ connection_id: ConnectionId }` | `()` | Delete saved connection |
-| `duplicate_connection` | `{ connection_id: ConnectionId }` | `ConnectionId` | Duplicate a saved SSH connection; returns new connection ID |
+| `duplicate_connection` | `{ connection_id: ConnectionId }` | `SshConnectionConfig` | Duplicate a saved SSH connection; returns the full config of the new copy (label suffixed with " (copy)", new `ConnectionId` assigned). Returning the full config avoids a round-trip `get_connections` call. |
 | `get_preferences` | — | `Preferences` | Read current preferences |
 | `update_preferences` | `PreferencesPatch` | `Preferences` | Write preferences (immediate apply) |
 | `get_themes` | — | `Vec<UserTheme>` | List all user themes |
@@ -55,8 +56,23 @@
 | `mark_context_menu_used` | — | `()` | Clear first-launch context menu hint |
 | `resize_pane` | `{ pane_id: PaneId, cols: u16, rows: u16, pixel_width: u16, pixel_height: u16 }` | `()` | Notify backend of pane resize; triggers `TIOCSWINSZ` + `SIGWINCH`. `pixel_width`/`pixel_height` are required for complete `TIOCSWINSZ` (image protocols, multiplexers). Resize events are debounced — see [§6.5](04-runtime-platform.md#65-back-pressure). |
 | `get_pane_screen_snapshot` | `{ pane_id: PaneId }` | `ScreenSnapshot` | Full screen state for initial render |
-| `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | *E2E testing only (--features e2e-testing):* Inject bytes into PTY pane channel |
-| `inject_ssh_failure` | `{ pane_id: PaneId, error_code: String }` | `()` | *E2E testing only (--features e2e-testing):* Inject SSH connection failure |
+| `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | *E2E testing only — see §4.2.1* |
+| `inject_ssh_failure` | `{ pane_id: PaneId, error_code: String }` | `()` | *E2E testing only — see §4.2.1* |
+| `inject_ssh_delay` | `{ delay_ms: u64 }` | `()` | *E2E testing only — see §4.2.1* |
+| `inject_credential_prompt` | `{ pane_id: PaneId, host: String, username: String }` | `()` | *E2E testing only — see §4.2.1* |
+
+#### 4.2.1 E2E Testing Commands (`--features e2e-testing`)
+
+The following commands are compiled **only** when the `e2e-testing` Cargo feature is enabled (see `CLAUDE.md` — build commands). They are absent from production binaries. They are used by WebdriverIO tests via `tauri-driver` to drive scenarios that require injecting artificial conditions.
+
+| Command | Input | Output | Purpose |
+|---------|-------|--------|---------|
+| `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | Inject raw bytes into a PTY pane's output channel, bypassing the real PTY. Allows VT round-trip tests without a running shell. |
+| `inject_ssh_failure` | `{ pane_id: PaneId, error_code: String }` | `()` | Force an SSH connection into a failed/disconnected state with a controlled error code. |
+| `inject_ssh_delay` | `{ delay_ms: u64 }` | `()` | Set a one-shot delay (milliseconds) that fires at the start of the next SSH `connect_task` run, after the `Connecting` state event has been emitted. Single-shot: the delay is atomically zeroed on first read. Used to hold the connecting overlay visible long enough for assertions. |
+| `inject_credential_prompt` | `{ pane_id: PaneId, host: String, username: String }` | `()` | Emit a `credential-prompt` event for the specified pane, simulating an SSH server requesting authentication. Used to test the credential dialog flow without a live SSH server. |
+
+These commands do not follow the `TauTermError` error envelope — they return `Result<(), String>` to keep E2E plumbing minimal. They must never be registered in production builds.
 
 ### 4.3 Events (emit — backend → frontend)
 

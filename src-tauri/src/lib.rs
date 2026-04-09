@@ -53,11 +53,10 @@ pub fn run() {
         )
         .init();
 
-    // Load preferences from disk (fallback to defaults on parse/IO errors).
-    // `PreferencesStore::load()` only fails if the config path cannot be determined
-    // (e.g., $HOME unset). This is a programming error / broken system — we panic.
-    let prefs: Arc<RwLock<PreferencesStore>> =
-        PreferencesStore::load().expect("Failed to determine preferences path — is $HOME set?");
+    // Load preferences from disk, falling back to defaults on any error (§7.5).
+    // `load_or_default` never panics: if the config path cannot be determined
+    // (e.g., $HOME unset) it logs a warning and returns an in-memory default store.
+    let prefs: Arc<RwLock<PreferencesStore>> = PreferencesStore::load_or_default();
 
     let ssh_manager = SshManager::new();
     let credential_manager = Arc::new(CredentialManager::new());

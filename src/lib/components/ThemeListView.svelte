@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import Button from '$lib/ui/Button.svelte';
+  import Dialog from '$lib/ui/Dialog.svelte';
   import { Check, Copy, Pencil, Trash2 } from 'lucide-svelte';
   import * as m from '$lib/paraglide/messages';
   import type { UserTheme } from '$lib/ipc/types';
@@ -44,6 +45,26 @@
 
   let hoveredThemeName = $state<string | null>(null);
 
+  // Delete confirmation state
+  let deleteConfirmOpen = $state(false);
+  let deleteConfirmName = $state('');
+
+  function requestDeleteTheme(name: string) {
+    deleteConfirmName = name;
+    deleteConfirmOpen = true;
+  }
+
+  function confirmDeleteTheme() {
+    deleteConfirmOpen = false;
+    ondelete(deleteConfirmName);
+    deleteConfirmName = '';
+  }
+
+  function cancelDeleteTheme() {
+    deleteConfirmOpen = false;
+    deleteConfirmName = '';
+  }
+
   function isLightTheme(name: string, userThemes: UserTheme[]): boolean {
     if (name === 'solstice') return true;
     const swatch = getThemeSwatch(name, userThemes);
@@ -55,6 +76,28 @@
     return 0.299 * r + 0.587 * g + 0.114 * b > 128;
   }
 </script>
+
+<!-- Delete confirmation dialog (Fix 8) -->
+<Dialog
+  bind:open={deleteConfirmOpen}
+  title={m.theme_delete_confirm_title()}
+  variant="alertdialog"
+  onclose={cancelDeleteTheme}
+>
+  {#snippet children()}
+    <p class="text-(--font-size-ui-base) text-(--color-text-secondary)">
+      {m.theme_delete_confirm_body({ name: deleteConfirmName })}
+    </p>
+  {/snippet}
+  {#snippet footer()}
+    <Button variant="ghost" onclick={cancelDeleteTheme}>
+      {m.action_cancel()}
+    </Button>
+    <Button variant="destructive" onclick={confirmDeleteTheme}>
+      {m.theme_delete_confirm_action()}
+    </Button>
+  {/snippet}
+</Dialog>
 
 <div class="space-y-4">
   <!-- Built-in themes group -->
@@ -68,12 +111,14 @@
         {@const swatch = getThemeSwatch(themeName, themes)}
         {@const isLight = isLightTheme(themeName, themes)}
         <div
-          class="flex items-center h-[44px] px-3 rounded-(--radius-sm) border cursor-pointer {isActive
+          class="flex items-center h-[44px] px-3 rounded-(--radius-sm) border cursor-pointer
+                 focus-visible:outline-2 focus-visible:outline-(--color-focus-ring) focus-visible:outline-offset-2
+                 {isActive
             ? 'border-(--color-accent) bg-(--color-accent-subtle)'
             : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
           role="button"
           tabindex="0"
-          aria-label={themeName}
+          aria-label="{themeName}{isActive ? ', ' + m.theme_active_label() : ''}"
           aria-pressed={isActive}
           onclick={() => onactivate(themeName)}
           onkeydown={(e) => {
@@ -129,7 +174,7 @@
           >
             <Button
               variant="ghost"
-              class="h-7 w-7 p-0"
+              class="min-h-[44px] w-[44px] p-0"
               aria-label={m.theme_duplicate_to_edit()}
               onclick={(e) => {
                 e.stopPropagation();
@@ -150,7 +195,11 @@
       <p class="text-(--font-size-ui-xs) text-(--color-text-tertiary) uppercase tracking-wider">
         {m.theme_section_my_themes()}
       </p>
-      <Button variant="secondary" class="h-7 text-(--font-size-ui-xs) px-2" onclick={onnew}>
+      <Button
+        variant="secondary"
+        class="min-h-[44px] text-(--font-size-ui-xs) px-3"
+        onclick={onnew}
+      >
         {m.theme_new()}
       </Button>
     </div>
@@ -166,12 +215,14 @@
           {@const swatch = getThemeSwatch(theme.name, themes)}
           {@const isLight = isLightTheme(theme.name, themes)}
           <div
-            class="flex items-center h-[44px] px-3 rounded-(--radius-sm) border cursor-pointer {isActive
+            class="flex items-center h-[44px] px-3 rounded-(--radius-sm) border cursor-pointer
+                   focus-visible:outline-2 focus-visible:outline-(--color-focus-ring) focus-visible:outline-offset-2
+                   {isActive
               ? 'border-(--color-accent) bg-(--color-accent-subtle)'
               : 'border-(--color-border) hover:border-(--color-border-subtle)'}"
             role="button"
             tabindex="0"
-            aria-label={theme.name}
+            aria-label="{theme.name}{isActive ? ', ' + m.theme_active_label() : ''}"
             aria-pressed={isActive}
             onclick={() => onactivate(theme.name)}
             onkeydown={(e) => {
@@ -220,7 +271,7 @@
             <div class="flex items-center gap-1 flex-shrink-0">
               <Button
                 variant="ghost"
-                class="h-7 w-7 p-0"
+                class="min-h-[44px] w-[44px] p-0"
                 aria-label={m.theme_edit()}
                 disabled={themeBusy}
                 onclick={(e) => {
@@ -232,12 +283,12 @@
               </Button>
               <Button
                 variant="ghost"
-                class="h-7 w-7 p-0 text-(--color-error)"
+                class="min-h-[44px] w-[44px] p-0 text-(--color-error)"
                 aria-label={m.theme_delete()}
                 disabled={themeBusy}
                 onclick={(e) => {
                   e.stopPropagation();
-                  ondelete(theme.name);
+                  requestDeleteTheme(theme.name);
                 }}
               >
                 <Trash2 class="w-3.5 h-3.5" />

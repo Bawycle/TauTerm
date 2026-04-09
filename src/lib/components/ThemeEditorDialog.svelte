@@ -170,7 +170,7 @@
         step="0.1"
         value={editingTheme.lineHeight ?? ''}
         placeholder="1.2"
-        class="h-[36px] px-3 rounded-(--radius-sm) border border-(--color-border)
+        class="min-h-[44px] px-3 rounded-(--radius-sm) border border-(--color-border)
                bg-(--color-bg-input) text-(--color-text-primary) text-(--font-size-ui-base)
                focus:outline-2 focus:outline-(--color-focus-ring)"
         oninput={(e) => {
@@ -195,7 +195,7 @@
     <!-- Real-time preview (UXD §7.20.5) -->
     <ThemePreview {previewStyle} />
 
-    <div class="flex gap-2 pt-2">
+    <div class="flex gap-2 pt-2 sticky bottom-0 bg-(--color-bg-raised) pb-2">
       <Button
         variant="primary"
         disabled={themeBusy || !editingTheme.name.trim()}

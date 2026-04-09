@@ -27,7 +27,7 @@
 </script>
 
 <p
-  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase mb-4"
+  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-heading) uppercase mb-4"
   style="letter-spacing: var(--letter-spacing-label)"
 >
   {m.preferences_section_keyboard()}

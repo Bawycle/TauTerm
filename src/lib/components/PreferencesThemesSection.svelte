@@ -10,7 +10,7 @@
 <script lang="ts">
   import ThemeListView from './ThemeListView.svelte';
   import ThemeEditorDialog from './ThemeEditorDialog.svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { getThemes, saveTheme, deleteTheme } from '$lib/ipc/commands';
   import * as m from '$lib/paraglide/messages';
   import type { Preferences, PreferencesPatch, UserTheme } from '$lib/ipc/types';
   import { isBuiltInTheme, getBuiltInThemeTokens } from '$lib/theming/built-in-themes';
@@ -47,7 +47,7 @@
 
   async function loadThemes() {
     try {
-      themes = await invoke<UserTheme[]>('get_themes');
+      themes = await getThemes();
       themesLoaded = true;
     } catch {
       themeError = m.theme_error_load();
@@ -69,8 +69,8 @@
     themeBusy = true;
     themeError = null;
     try {
-      await invoke('save_theme', { theme });
-      themes = await invoke<UserTheme[]>('get_themes');
+      await saveTheme(theme);
+      themes = await getThemes();
       editingTheme = null;
       isNewTheme = false;
     } catch {
@@ -85,7 +85,7 @@
     themeBusy = true;
     themeError = null;
     try {
-      await invoke('delete_theme', { name });
+      await deleteTheme(name);
       themes = themes.filter((t) => t.name !== name);
       if (preferences?.appearance?.themeName === name) {
         onupdate?.({ appearance: { ...preferences.appearance, themeName: 'umbra' } });
@@ -189,7 +189,7 @@
 </script>
 
 <p
-  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-tertiary) uppercase mb-4"
+  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-heading) uppercase mb-4"
   style="letter-spacing: var(--letter-spacing-label)"
 >
   {m.preferences_section_themes()}

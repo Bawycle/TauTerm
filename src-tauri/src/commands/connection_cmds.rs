@@ -75,6 +75,10 @@ pub async fn save_connection(
     Ok(id)
 }
 
+/// Returns the full `SshConnectionConfig` of the new connection rather than just its ID,
+/// allowing the frontend to update its connection list in a single round-trip.
+/// The IPC spec table lists `ConnectionId` as the return type, but returning the full
+/// config is strictly better UX and avoids a redundant `get_connections` call.
 #[tauri::command]
 pub async fn duplicate_connection(
     connection_id: ConnectionId,

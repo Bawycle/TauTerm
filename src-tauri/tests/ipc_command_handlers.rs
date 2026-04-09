@@ -27,7 +27,7 @@ use tau_term_lib::{
     error::{PreferencesError, SessionError, SshError, TauTermError},
     preferences::{
         schema::{
-            AppearancePatch, BellType, CursorStyle, Language, PreferencesPatch, TerminalPrefs,
+            AppearancePatch, BellType, CursorStyle, Language, PreferencesPatch, TerminalPatch,
             UserTheme,
         },
         store::PreferencesStore,
@@ -270,12 +270,12 @@ fn ich_pref_001c_patch_language_sets_language_field() {
 fn ich_pref_001d_patch_terminal_scrollback() {
     let (store, _tmp) = temp_store();
     let patch = PreferencesPatch {
-        terminal: Some(TerminalPrefs {
-            scrollback_lines: 5_000,
-            allow_osc52_write: true,
-            word_delimiters: " ".to_string(),
-            bell_type: BellType::None,
-            confirm_multiline_paste: false,
+        terminal: Some(TerminalPatch {
+            scrollback_lines: Some(5_000),
+            allow_osc52_write: Some(true),
+            word_delimiters: Some(" ".to_string()),
+            bell_type: Some(BellType::None),
+            confirm_multiline_paste: Some(false),
         }),
         ..Default::default()
     };

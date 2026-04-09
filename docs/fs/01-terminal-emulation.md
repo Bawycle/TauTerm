@@ -137,6 +137,7 @@
 | FS-VT-055 | When a line feed (LF, VT, FF) occurs and the cursor is positioned OUTSIDE the active scroll region (above the top margin or below the bottom margin), the cursor MUST move down one line without triggering any scroll. If the cursor is already at the last line of the screen and outside the scroll region, the line feed MUST be ignored (no scroll, no cursor movement beyond the screen boundary). | Must |
 | FS-VT-056 | DECOM (origin mode, DECSET/DECRST 6) MUST be supported. When DECOM is enabled, cursor addressing (CUP, HVP, and all absolute cursor movement sequences) MUST be relative to the top-left corner of the active scroll region. The cursor MUST be constrained within the scroll region in origin mode. When DECOM is disabled, cursor addressing is relative to the top-left corner of the full screen. DECOM MUST be disabled by default. | Must |
 | FS-VT-057 | DECOM state MUST be saved and restored by DECSC/DECRC. Switching screen buffers (DECSET/DECRST 1049) MUST reset DECOM to disabled in the newly active buffer, consistent with each buffer maintaining independent mode state (FS-VT-043). | Must |
+| FS-VT-058 | When a cursor positioning command (CUP/HVP, CHA/CSI G, HPA/CSI \`, VPA/CSI d, DECRC/ESC 8/CSI u) results in the cursor landing on a phantom cell (the trailing width-0 cell of a wide character), the cursor MUST be adjusted to the base cell (col − 1). DSR CPR (CSI 6n) MUST report the adjusted position. | Must |
 
 **Acceptance criteria:**
 - FS-VT-050: tmux with a status bar: the status bar remains fixed while the main area scrolls.
@@ -146,6 +147,7 @@
 - FS-VT-055: Setting a scroll region of lines 5–10 on a 24-line screen, then positioning the cursor at line 2 and issuing a LF, moves the cursor to line 3 without scrolling lines 5–10.
 - FS-VT-056: With DECOM enabled (`CSI ?6h`) and a scroll region of lines 5–10, `CSI 1;1H` positions the cursor at physical row 5, column 1. With DECOM disabled (`CSI ?6l`), `CSI 1;1H` positions the cursor at physical row 1, column 1.
 - FS-VT-057: vim (which uses scroll regions and DECOM internally) exits cleanly with DECOM restored to disabled and the normal screen cursor at its correct position.
+- FS-VT-058: `printf "\xe4\xb8\xad"` (wide CJK) at col 0; `CUP 1;2` leaves cursor at col 0 (base cell). DSR CPR responds `ESC[1;1R`. vim and helix in a CJK locale do not corrupt wide characters when repositioning the cursor.
 
 ### 3.1.7 Title / OSC Sequences
 

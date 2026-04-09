@@ -36,31 +36,11 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   - Add `cargo audit` and `cargo deny` (with `deny.toml`) to block advisories and non-compliant licenses
   - Trigger: push to `dev` and `main`, PR to `main`
 
-### VT Correctness
-
-- [ ] **Cursor on phantom cell of a wide char — missing normalization** `[Score: 17 | R:2, S:3, U:2, E:3]` *(correctness bug)*
-  When `CUP`, `HVP`, or any absolute cursor movement lands on a phantom cell (width=0, trailing slot of a wide char), the cursor should be normalized to the base cell (col − 1). Neither the code (`csi_cursor.rs`) nor the specs cover this case. `DSR CPR` (CSI 6 n) then returns an incorrect position; editors that write to this position (vim, helix, tmux) silently corrupt the wide char.
-  **Alacritty reference** (`alacritty_terminal/src/term/mod.rs`, fn `goto()`, patch #8786): the fix is trivial — after any absolute positioning, insert `if col > 0 && buf[row][col].flags.contains(WIDE_CHAR_SPACER) { cursor.col -= 1; }`. All the logic exists already — it's a 2-line guard to call consistently. The normalization already exists in `RenderableCursor::new` for rendering but does not affect the logical position used by `DSR CPR`.
-  Actions required:
-  1. Add FS-VT-0xx: "When a cursor positioning command results in the cursor landing on a phantom cell, the cursor MUST be adjusted to the base cell (col - 1)."
-  2. Implement `normalize_cursor_position()` in the VT processor (`src-tauri/src/vt/processor/dispatch/csi_cursor.rs`), called after every absolute movement (`cup`, `vpa`, `cha`, `hpa`, `decrc`). Check `cell.flags.contains(WIDE_CHAR_SPACER)` and decrement `col` if true.
-  3. Test with vim and helix in CJK locale.
-
 ---
 
 ## High Priority — Must Land in v1 (score 13–16)
 
 ### Security — Capability & Credential Coverage
-
-- [ ] **`capabilities/default.json` — audit of `core:default`** `[Score: 14 | R:2, S:2, U:1, E:3]`
-  The `core:default` preset has never been audited. Its exact content is opaque — if it includes capabilities unused by TauTerm (`core:process:allow-terminate`, etc.), the principle of least privilege is violated without the team knowing.
-  Action: consult the official Tauri 2 list of `core:default`, document the included capabilities in a comment in `default.json`, and replace with an explicit list if superfluous capabilities are identified.
-
-- [ ] **Credential regression test suite** `[Score: 15 | R:2, S:3, U:1, E:2]` (FS-CRED-001–009, SEC-CRED-001/002/005)
-  Three critical security scenarios remain `BLOCKED` in `docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md`: SEC-CRED-001 (credentials.json), SEC-CRED-002 (zeroize), SEC-CRED-005 (fallback keyring). No dedicated non-regression suite is defined as a merge criterion.
-  Actions required (after stub removal):
-  1. Create `src-tauri/tests/credential_regression.rs`: non-regression suite tagged including SEC-CRED-001/002/003/004/005/006.
-  2. Add this suite to merge criteria in `docs/testing/TESTING.md`.
 
 ### SSH
 

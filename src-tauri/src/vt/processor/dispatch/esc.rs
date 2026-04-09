@@ -3,6 +3,8 @@
 use crate::vt::modes::Charset;
 use crate::vt::processor::VtProcessor;
 
+use super::helpers::normalize_phantom_col;
+
 pub(super) fn handle_esc(p: &mut VtProcessor, intermediates: &[u8], byte: u8) {
     match (intermediates, byte) {
         // DECSC — save cursor (ESC 7)
@@ -32,6 +34,10 @@ pub(super) fn handle_esc(p: &mut VtProcessor, intermediates: &[u8], byte: u8) {
                 p.modes.decawm = pos.decawm;
                 p.modes.decom = pos.decom;
                 *p.active_cursor_mut() = pos;
+                // FS-VT-058: normalize cursor away from phantom cells after restore.
+                let row = p.cursor_row();
+                let col = normalize_phantom_col(p, row, p.cursor_col());
+                p.active_cursor_mut().col = col;
                 p.wrap_pending = false;
                 p.pending_dirty.mark_cursor_moved();
             }

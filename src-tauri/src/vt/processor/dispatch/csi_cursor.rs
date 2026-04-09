@@ -2,6 +2,8 @@
 
 use crate::vt::processor::VtProcessor;
 
+use super::helpers::normalize_phantom_col;
+
 /// CUU — cursor up (CSI Ps A)
 pub(super) fn cuu(p: &mut VtProcessor, n: u16) {
     p.wrap_pending = false;
@@ -55,8 +57,11 @@ pub(super) fn cup(p: &mut VtProcessor, row_param: u16, col_param: u16) {
     } else {
         row_0.min(p.rows.saturating_sub(1))
     };
-    p.active_cursor_mut().row = row;
-    p.active_cursor_mut().col = col;
+    // FS-VT-058: normalize cursor away from phantom cells.
+    let col = normalize_phantom_col(p, row, col);
+    let cursor = p.active_cursor_mut();
+    cursor.row = row;
+    cursor.col = col;
     p.pending_dirty.mark_cursor_moved();
 }
 
@@ -67,6 +72,8 @@ pub(super) fn cha(p: &mut VtProcessor, col_param: u16) {
         .max(1)
         .saturating_sub(1)
         .min(p.cols.saturating_sub(1));
+    // FS-VT-058: normalize cursor away from phantom cells.
+    let col = normalize_phantom_col(p, p.cursor_row(), col);
     p.active_cursor_mut().col = col;
     p.pending_dirty.mark_cursor_moved();
 }
@@ -79,6 +86,8 @@ pub(super) fn hpa(p: &mut VtProcessor, col_param: u16) {
         .max(1)
         .saturating_sub(1)
         .min(p.cols.saturating_sub(1));
+    // FS-VT-058: normalize cursor away from phantom cells.
+    let col = normalize_phantom_col(p, p.cursor_row(), col);
     p.active_cursor_mut().col = col;
     p.pending_dirty.mark_cursor_moved();
 }
@@ -90,7 +99,10 @@ pub(super) fn vpa(p: &mut VtProcessor, row_param: u16) {
         .max(1)
         .saturating_sub(1)
         .min(p.rows.saturating_sub(1));
+    // FS-VT-058: normalize cursor away from phantom cells on the new row.
+    let col = normalize_phantom_col(p, row, p.cursor_col());
     p.active_cursor_mut().row = row;
+    p.active_cursor_mut().col = col;
     p.pending_dirty.mark_cursor_moved();
 }
 

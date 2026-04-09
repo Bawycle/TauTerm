@@ -48,6 +48,20 @@ impl CredentialManager {
         }
     }
 
+    /// Create a `CredentialManager` backed by a caller-supplied store.
+    ///
+    /// Intended for integration tests that need to inject a controlled
+    /// `CredentialStore` implementation without requiring a live platform
+    /// Secret Service daemon. This constructor is part of the public API to
+    /// allow use from `tests/` integration test crates (which cannot access
+    /// `#[cfg(test)]-gated` items in the library).
+    ///
+    /// Do not use in production paths — production code always calls [`Self::new()`].
+    #[doc(hidden)]
+    pub fn new_with_store(store: Box<dyn crate::platform::CredentialStore>) -> Self {
+        Self { store }
+    }
+
     /// Returns `true` if the underlying platform credential store is operational.
     ///
     /// On Linux: probes the D-Bus Secret Service. Returns `false` if the daemon

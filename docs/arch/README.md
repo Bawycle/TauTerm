@@ -22,6 +22,7 @@ The architecture documentation has been split into focused files. See below for 
 | [06-appendix.md](06-appendix.md) | §8 Security Architecture (IPC boundary validation, PTY isolation, SSH security, CSP, terminal injection prevention) + §12 Future Extensibility (session persistence, plugin system, cloud sync, Kitty protocol, Windows/macOS port) + §13 ADR Index |
 | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) | §14 Screen Buffer Data Model (cell layout, scrollback memory formula, soft/hard wrap representation, minimum terminal size constraint) |
 | [08-logging.md](08-logging.md) | §15 Logging and Observability Strategy (instrumentation library, semantic levels, default filter by build profile, level classification of call sites, security constraints, performance) |
+| [capabilities.md](capabilities.md) | Tauri 2 capabilities audit — composition of `core:default`, frontend API surface audit, decision to replace with explicit minimal list |
 
 Testing strategy is in a separate document: [../testing/TESTING.md](../testing/TESTING.md).
 
@@ -94,6 +95,7 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | Security constraints on log content (no credentials, no full paths) | [08-logging.md](08-logging.md) §15.5 |
 | Performance constraints on hot-path logging | [08-logging.md](08-logging.md) §15.6 |
 | Structured logging for security events (M2 roadmap) | [08-logging.md](08-logging.md) §15.7 |
+| Tauri 2 capabilities: `core:default` composition, frontend API audit, minimal explicit list | [capabilities.md](capabilities.md) |
 
 ---
 

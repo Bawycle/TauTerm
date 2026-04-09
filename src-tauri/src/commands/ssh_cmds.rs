@@ -51,7 +51,7 @@ async fn open_ssh_connection_impl(
             Ok(Some(password)) => Some(Credentials {
                 username: config.username.to_string(),
                 password: Some(password),
-                private_key_path: config.identity_file.clone(),
+                private_key_path: config.identity_file.as_deref().map(str::to_owned),
                 save_in_keychain: false,
             }),
             Ok(None) => None,

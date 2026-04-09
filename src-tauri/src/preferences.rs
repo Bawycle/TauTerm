@@ -14,4 +14,6 @@ pub use schema::{
     PreferencesPatch, TerminalPrefs, UserTheme,
 };
 pub use store::PreferencesStore;
-pub use types::{FontFamily, SshHost, SshLabel, SshUsername, ThemeName, WordDelimiters};
+pub use types::{
+    FontFamily, SshHost, SshIdentityPath, SshLabel, SshUsername, ThemeName, WordDelimiters,
+};

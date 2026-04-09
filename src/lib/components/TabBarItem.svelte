@@ -175,13 +175,6 @@
         e.stopPropagation();
         onTabClose(tab.id);
       }}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          onTabClose(tab.id);
-        }
-      }}
     >
       <X size={14} aria-hidden="true" />
     </button>

@@ -17,7 +17,7 @@ pub use manager::{Credentials, SshManager};
 
 use serde::{Deserialize, Serialize};
 
-use crate::preferences::types::{SshHost, SshLabel, SshUsername};
+use crate::preferences::types::{SshHost, SshIdentityPath, SshLabel, SshUsername};
 use crate::session::ids::ConnectionId;
 
 /// Saved SSH connection configuration (persisted in preferences.json).
@@ -29,9 +29,14 @@ pub struct SshConnectionConfig {
     pub host: SshHost,
     pub port: u16,
     pub username: SshUsername,
-    /// Path to a private key file. Validated for path traversal (§8.1).
+    /// Path to a private key file.
+    ///
+    /// Structural validation (absolute, no traversal, no control chars, ≤4096 bytes) is enforced
+    /// by `SshIdentityPath::try_from` at IPC deserialization time (SEC-PATH-005).
+    /// File existence and `~/.ssh/` boundary are checked at connection time in
+    /// `lifecycle.rs::open_connection_inner`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub identity_file: Option<String>,
+    pub identity_file: Option<SshIdentityPath>,
     /// Per-connection OSC 52 write policy override.
     #[serde(default)]
     pub allow_osc52_write: bool,

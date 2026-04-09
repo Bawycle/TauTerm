@@ -123,3 +123,79 @@ describe('TEST-FOCUS-017: Tab bar printable key triggers onEscapeTabBar', () => 
     expect(cb).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// TEST-FOCUS-018: Delete key on focused tab closes tab (pure logic)
+//
+// When the user presses Delete on a focused tab, handleTabKeydown must call
+// onTabClose with the correct tabId. The early-return guard (rename in progress
+// on the same tab) must suppress the action. A rename on a DIFFERENT tab must
+// not block the close.
+// ---------------------------------------------------------------------------
+
+describe('TEST-FOCUS-018: Delete key on focused tab closes tab', () => {
+  function makeHandleTabKeydown(
+    getRenamingTabId: () => string | null,
+    onTabClose: (tabId: string) => void,
+    onFocusTerminal?: () => void,
+  ) {
+    return function handleTabKeydown(
+      event: {
+        key: string;
+        isComposing?: boolean;
+        ctrlKey?: boolean;
+        altKey?: boolean;
+        metaKey?: boolean;
+        preventDefault: () => void;
+      },
+      tabId: string,
+    ) {
+      if (getRenamingTabId() === tabId) return;
+      if (event.key === 'Delete') {
+        event.preventDefault();
+        onTabClose(tabId);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        onFocusTerminal?.();
+      } else if (
+        !event.isComposing &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        event.key.length === 1
+      ) {
+        onFocusTerminal?.();
+      }
+    };
+  }
+
+  it('Delete key on active tab calls onTabClose with the correct tabId', () => {
+    const closeCb = vi.fn();
+    const handle = makeHandleTabKeydown(() => null, closeCb);
+    handle({ key: 'Delete', preventDefault: vi.fn() }, 'tab-abc');
+    expect(closeCb).toHaveBeenCalledOnce();
+    expect(closeCb).toHaveBeenCalledWith('tab-abc');
+  });
+
+  it('Delete key during rename does NOT call onTabClose (early-return guard)', () => {
+    const closeCb = vi.fn();
+    const handle = makeHandleTabKeydown(() => 'tab-abc', closeCb);
+    handle({ key: 'Delete', preventDefault: vi.fn() }, 'tab-abc');
+    expect(closeCb).not.toHaveBeenCalled();
+  });
+
+  it('Delete key on a tab while a DIFFERENT tab is renaming calls onTabClose', () => {
+    const closeCb = vi.fn();
+    const handle = makeHandleTabKeydown(() => 'tab-xyz', closeCb);
+    handle({ key: 'Delete', preventDefault: vi.fn() }, 'tab-abc');
+    expect(closeCb).toHaveBeenCalledOnce();
+    expect(closeCb).toHaveBeenCalledWith('tab-abc');
+  });
+
+  it('Delete key calls preventDefault', () => {
+    const preventDefaultSpy = vi.fn();
+    const handle = makeHandleTabKeydown(() => null, vi.fn());
+    handle({ key: 'Delete', preventDefault: preventDefaultSpy }, 'tab-1');
+    expect(preventDefaultSpy).toHaveBeenCalledOnce();
+  });
+});

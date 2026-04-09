@@ -85,8 +85,11 @@ impl SshManager {
         }
 
         // Validate the identity file path before any network activity.
-        if let Some(ref key_path_str) = config.identity_file {
-            crate::platform::validation::validate_ssh_identity_path(key_path_str)
+        // SEC-PATH-005: structural checks (absolute, no traversal, no control chars, ≤4096 bytes)
+        // are already enforced by SshIdentityPath::try_from at IPC deserialization time.
+        // validate_ssh_identity_path adds the runtime checks: file existence and ~/.ssh/ boundary.
+        if let Some(ref key_path) = config.identity_file {
+            crate::platform::validation::validate_ssh_identity_path(key_path)
                 .map_err(|e| SshError::Auth(format!("invalid identity file path: {e}")))?;
         }
 
@@ -175,7 +178,7 @@ impl SshManager {
             Ok(Some(password)) => Some(Credentials {
                 username: config.username.to_string(),
                 password: Some(password),
-                private_key_path: config.identity_file.clone(),
+                private_key_path: config.identity_file.as_deref().map(str::to_owned),
                 save_in_keychain: false,
             }),
             Ok(None) => None,

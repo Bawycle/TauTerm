@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::preferences::types::SshIdentityPath;
+
 use super::super::Credentials;
 
 // -----------------------------------------------------------------------
@@ -79,7 +81,9 @@ fn sec_cred_004_ssh_connection_config_no_password_in_json() {
         host: SshHost::try_from("example.com".to_string()).unwrap(),
         port: 22,
         username: SshUsername::try_from("alice".to_string()).unwrap(),
-        identity_file: Some("/home/alice/.ssh/id_ed25519".to_string()),
+        identity_file: Some(
+            SshIdentityPath::try_from("/home/alice/.ssh/id_ed25519".to_string()).unwrap(),
+        ),
         allow_osc52_write: false,
         keepalive_interval_secs: None,
         keepalive_max_failures: None,

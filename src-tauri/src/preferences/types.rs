@@ -397,6 +397,71 @@ impl fmt::Display for WordDelimiters {
 impl_str_eq!(WordDelimiters);
 
 // ---------------------------------------------------------------------------
+// SshIdentityPath
+// ---------------------------------------------------------------------------
+
+/// A structurally validated SSH identity file path.
+///
+/// Enforces at serde/construction time: absolute path (starts with `/`),
+/// no `..` components, no control characters, max 4096 bytes.
+///
+/// Does NOT check file existence or `~/.ssh/` boundary — those are runtime
+/// checks in `lifecycle.rs::open_connection_inner` via
+/// `platform::validation::validate_ssh_identity_path`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct SshIdentityPath(String);
+
+impl SshIdentityPath {
+    pub fn as_path(&self) -> &std::path::Path {
+        std::path::Path::new(&self.0)
+    }
+}
+
+impl TryFrom<String> for SshIdentityPath {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        check_max_len(&s, 4096, "identity_file")?;
+        check_no_control_chars(&s, "identity_file")?;
+        if !s.starts_with('/') {
+            return Err("identity_file path must be absolute (must start with '/')".to_string());
+        }
+        if std::path::Path::new(&s)
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+        {
+            return Err(
+                "identity_file path must not contain '..' components (path traversal)".to_string(),
+            );
+        }
+        Ok(SshIdentityPath(s))
+    }
+}
+
+impl<'de> Deserialize<'de> for SshIdentityPath {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Self::try_from(s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl std::ops::Deref for SshIdentityPath {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for SshIdentityPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl_str_eq!(SshIdentityPath);
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -568,6 +633,61 @@ mod tests {
         assert!(
             result.is_err(),
             "serde must reject empty string for SshUsername"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SshIdentityPath
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ssh_identity_path_valid_accepted() {
+        assert!(SshIdentityPath::try_from("/home/user/.ssh/id_ed25519".to_string()).is_ok());
+    }
+
+    #[test]
+    fn ssh_identity_path_relative_rejected() {
+        assert!(SshIdentityPath::try_from("relative/path".to_string()).is_err());
+    }
+
+    #[test]
+    fn ssh_identity_path_traversal_rejected() {
+        assert!(SshIdentityPath::try_from("/home/user/../.ssh/id_rsa".to_string()).is_err());
+    }
+
+    #[test]
+    fn ssh_identity_path_control_char_rejected() {
+        assert!(SshIdentityPath::try_from("/home/user/.ssh/id_\x00rsa".to_string()).is_err());
+    }
+
+    #[test]
+    fn ssh_identity_path_exceeds_max_len_rejected() {
+        let s = format!("/{}", "a".repeat(4096));
+        assert!(SshIdentityPath::try_from(s).is_err());
+    }
+
+    #[test]
+    fn ssh_identity_path_empty_rejected() {
+        // Empty string is not absolute (does not start with '/').
+        assert!(SshIdentityPath::try_from(String::new()).is_err());
+    }
+
+    #[test]
+    fn ssh_identity_path_serde_round_trip() {
+        let original = SshIdentityPath::try_from("/home/user/.ssh/id_ed25519".to_string()).unwrap();
+        let json = serde_json::to_string(&original).expect("serialize");
+        let restored: SshIdentityPath = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn ssh_identity_path_serde_rejects_traversal() {
+        // serde must reject a path containing ".." at deserialization time.
+        let json = "\"/home/user/../.ssh/id_rsa\"";
+        let result = serde_json::from_str::<SshIdentityPath>(json);
+        assert!(
+            result.is_err(),
+            "serde must reject '..' components in SshIdentityPath"
         );
     }
 }

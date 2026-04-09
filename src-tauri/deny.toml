@@ -1,0 +1,86 @@
+# deny.toml — cargo deny configuration
+# SPDX-License-Identifier: MPL-2.0
+#
+# Ref: https://embarkstudios.github.io/cargo-deny/
+#
+# Review policy: revisit ignored advisories on every russh minor release and
+# on the 1st of each quarter.
+
+# ---------------------------------------------------------------------------
+# Advisories (security vulnerabilities and unmaintained crates)
+# ---------------------------------------------------------------------------
+
+[advisories]
+# Unmaintained crates: disabled here — cargo audit handles unmaintained
+# tracking via .cargo/audit.toml where we have full control over severity.
+# The bulk of these are GTK3 bindings (atk, gdk, gtk, webkit2gtk…) pulled
+# in by Tauri/wry and proc-macro-error — no maintained alternatives exist
+# that Tauri could switch to today.
+unmaintained = "none"
+
+# RUSTSEC-2023-0071 — Marvin Attack: potential key recovery through timing
+# sidechannels in `rsa`.
+#
+# Affected chain: tau-term → russh → rsa (0.9.x and 0.10.0-rc.x)
+#
+# Why ignored: no patched release of `rsa` exists as of 2026-04-09.
+# TauTerm is an SSH *client* (signs with the user key, does not decrypt
+# RSA-encrypted data from the peer), which significantly reduces the attack
+# surface compared to a server scenario. The issue is tracked upstream in
+# russh. Remove this ignore as soon as a fix lands.
+#
+# Next review: 2026-07-01
+ignore = ["RUSTSEC-2023-0071"]
+
+# ---------------------------------------------------------------------------
+# Licenses
+# ---------------------------------------------------------------------------
+
+[licenses]
+# All licenses that appear in the dependency tree, verified on 2026-04-09.
+# Only permissive and weak-copyleft licenses are present; no GPL/AGPL.
+#
+# Notes:
+#   - LGPL-2.1-or-later: only in r-efi (MIT OR Apache-2.0 OR LGPL-2.1-or-later)
+#     — satisfied by MIT, listed here for completeness.
+#   - Unicode-3.0: used by unicode-ident and related crates.
+#   - CC0-1.0: used by some data/schema crates.
+#   - Unlicense: used by a small number of crates as public-domain dedication.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Zlib",
+    "0BSD",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "LGPL-2.1-or-later",
+    # BSL-1.0 = Boost Software License 1.0 (permissive, OSI-approved).
+    # Used by clipboard-win and error-code (transitive via arboard).
+    # Not to be confused with the non-permissive "Business Source License".
+    "BSL-1.0",
+]
+
+# ---------------------------------------------------------------------------
+# Bans (duplicate crates, wildcard deps, etc.)
+# ---------------------------------------------------------------------------
+
+[bans]
+# Allow multiple versions of the same crate — Tauri's dependency tree has
+# many duplicate major versions (e.g. syn 1.x and 2.x). Enforcing uniqueness
+# would require upstream changes outside our control.
+multiple-versions = "warn"
+
+# ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+
+[sources]
+# Only allow crates from crates.io and our own git repositories.
+unknown-registry = "deny"
+unknown-git = "deny"

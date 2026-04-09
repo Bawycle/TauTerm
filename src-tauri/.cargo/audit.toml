@@ -1,0 +1,35 @@
+# audit.toml — cargo audit configuration
+# SPDX-License-Identifier: MPL-2.0
+#
+# Managed ignores for cargo audit advisories that cannot be fixed upstream.
+# Each entry must document: the advisory ID, the affected dependency chain,
+# why we cannot fix it, and a review deadline.
+#
+# Review policy: revisit all ignores on every russh minor release and on the
+# 1st of each quarter. Remove the ignore as soon as an upstream fix lands.
+
+[advisories]
+
+# RUSTSEC-2023-0071 — Marvin Attack: potential key recovery through timing
+# sidechannels in the `rsa` crate.
+#
+# Affected chain: tau-term → russh 0.60 → rsa 0.10.0-rc.17
+#                 tau-term → russh-keys 0.45 → ssh-key → rsa 0.9.10
+#
+# Why we cannot fix this:
+#   The `rsa` crate has no patched release as of 2026-04-09. The advisory
+#   has been open since 2023-11-22 with no upstream fix. russh depends on
+#   `rsa` for RSA private-key operations (sign/decrypt); we cannot substitute
+#   another crate without forking russh.
+#
+# Impact assessment:
+#   The Marvin Attack requires many precise timing measurements against a
+#   live TLS/SSH server performing RSA operations. TauTerm acts as an SSH
+#   *client*, not a server: it signs with the user's private key but does not
+#   decrypt RSA-encrypted data from the peer. The realistic attack surface in
+#   a client context is significantly reduced compared to a server scenario.
+#   We still treat this as medium severity and will upgrade as soon as a fix
+#   is available.
+#
+# Next review: 2026-07-01 — check russh changelog and rsa crate for a fix.
+ignore = ["RUSTSEC-2023-0071"]

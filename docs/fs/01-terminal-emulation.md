@@ -91,16 +91,18 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FS-VT-030 | TauTerm MUST support cursor shapes 0–6 via DECSCUSR (CSI Ps SP q): default, blinking block, steady block, blinking underline, steady underline, blinking bar, steady bar. | Must |
+| FS-VT-030 | TauTerm MUST support cursor shapes 0–6 via DECSCUSR (CSI Ps SP q): default (0), blinking block (1), steady block (2), blinking underline (3), steady underline (4), blinking bar (5), steady bar (6). DECSCUSR 0 MUST be treated as "blinking block" — it is the xterm default shape and does NOT restore user preferences. DECSCUSR emits a `cursor-style-changed` IPC event immediately (see architecture §4.3). | Must |
 | FS-VT-031 | Cursor visibility MUST be controllable via DECTCEM (CSI ?25h to show, CSI ?25l to hide). | Must |
+| FS-VT-031a | TauTerm MUST support DECSET/DECRST ?12 (ATT610 — cursor blink). `CSI ?12h` enables cursor blinking; `CSI ?12l` disables it. DECSET ?12 is independent of DECSCUSR: DECSCUSR encodes shape and per-shape blink preference; DECSET ?12 is a global blink on/off override. When DECSET ?12 is disabled, all cursor shapes render steady regardless of the DECSCUSR value. The DECSET ?12 state is propagated to the frontend via the `cursor.blink` field of `ScreenUpdateEvent`. | Must |
 | FS-VT-032 | Cursor blink rate MUST be configurable in user preferences. The default MUST be 533ms visible (on) / 266ms invisible (off) — an asymmetric 2:1 ratio. The user-configurable value controls the visible phase duration; the invisible phase is half that duration. | Must |
 | FS-VT-033 | DECSC and DECRC MUST save and restore cursor state per screen buffer, independently. | Must |
 | FS-VT-034 | When the terminal pane loses focus, the cursor MUST visually indicate the inactive state by rendering as a hollow (outline) rectangle regardless of the DECSCUSR shape that was active. Cursor blinking MUST be suspended while the pane is unfocused. When focus returns, the cursor MUST immediately resume its configured shape and blink state. A hidden cursor (DECTCEM off) MUST remain hidden regardless of focus state. | Must |
 | FS-VT-035 | The minimum terminal dimensions reported to the child process via `TIOCSWINSZ` MUST be 1 column by 1 line. TauTerm MUST NOT clamp or refuse to report sizes below a UI-imposed minimum to the PTY: the PTY always receives the true cell geometry. If the UI enforces a minimum pane size larger than 1×1 (e.g. 20 columns × 5 lines as defined in UXD), the PTY reports that enforced minimum rather than a size smaller than what is displayed. | Must |
 
 **Acceptance criteria:**
-- FS-VT-030: A script emitting each DECSCUSR value produces the corresponding cursor shape.
+- FS-VT-030: A script emitting each DECSCUSR value (0–6) produces the corresponding cursor shape. `printf '\033[0 q'` (DECSCUSR 0) renders a blinking block — not the user's preference shape.
 - FS-VT-031: `tput civis` hides the cursor; `tput cnorm` restores it.
+- FS-VT-031a: `printf '\033[?12l'` stops cursor blinking regardless of DECSCUSR shape; `printf '\033[?12h'` re-enables it.
 - FS-VT-032: Changing the blink rate in preferences visibly changes the cursor blink speed without restart.
 - FS-VT-033: In vim (alternate screen), saving/restoring the cursor does not affect the normal screen cursor position, and vice versa.
 - FS-VT-034: Clicking outside the terminal pane changes the cursor to a hollow rectangle and stops blinking; clicking back restores the blinking block (or the application-set shape). A pane with a hidden cursor (`tput civis`) does not reveal the cursor on focus loss.
@@ -257,7 +259,7 @@
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FS-SB-001 | Each pane MUST have its own scrollback buffer. | Must |
-| FS-SB-002 | The scrollback buffer size MUST be configurable by the user (number of lines). The default MUST be 10,000 lines. There is no artificially imposed maximum: the user may set any value, constrained only by available system memory. The preferences UI MUST display an estimated memory consumption for the configured value (e.g., "~200 MB per pane at 100,000 lines"), updated as the user adjusts the setting. | Must |
+| FS-SB-002 | The scrollback buffer size MUST be configurable by the user (number of lines). The default MUST be 10,000 lines. The valid range is **100 – 1,000,000 lines** (inclusive). Values below 100 MUST be clamped to 100; values above 1,000,000 MUST be clamped to 1,000,000. The upper bound exists to prevent unbounded memory allocation: at the architectural upper-bound of 5,500 bytes/line (see `docs/arch/07-screen-buffer-data-model.md` §14.2), 1,000,000 lines corresponds to approximately 5.5 GB per pane — a practical safety ceiling. The preferences UI MUST display an estimated memory consumption for the configured value (e.g., "~200 MB per pane at 100,000 lines"), updated as the user adjusts the setting. When the backend clamps the submitted value, the UI MUST display the effective (clamped) value, not the originally submitted value. | Must |
 | FS-SB-003 | The scrollback buffer MUST store text content AND cell attributes (colors, bold, italic, underline, etc.). | Must |
 | FS-SB-004 | Only lines scrolled off the top of a full-screen scroll region MUST enter the scrollback buffer. Lines scrolled out of a partial scroll region (DECSTBM-restricted) MUST NOT populate the scrollback. | Must |
 | FS-SB-005 | When the alternate screen buffer is active, the scrollback buffer MUST be frozen: no new lines added. Scrollback navigation SHOULD be disabled. | Must / Should |
@@ -270,7 +272,7 @@
 
 **Acceptance criteria:**
 - FS-SB-001: Two panes have independent scrollback histories.
-- FS-SB-002: The scrollback size preference field accepts any positive integer value. The preferences UI displays a real-time memory estimate that updates as the user types. Setting the value to 100,000 and running `seq 1 100001` causes the first line to be evicted.
+- FS-SB-002: The scrollback size preference field accepts integer values in the range [100, 1,000,000]. Submitting 50 causes the input to display 100 (clamped). Submitting 2,000,000 causes the input to display 1,000,000 (clamped). The preferences UI displays a real-time memory estimate that updates as the user types. Setting the value to 100,000 and running `seq 1 100001` causes the first line to be evicted.
 - FS-SB-003: Colored output in scrollback retains its colors when scrolled into view.
 - FS-SB-004: Running tmux (which uses a partial scroll region for the status bar), scrolling in the tmux pane does not add the tmux status bar to TauTerm's scrollback.
 - FS-SB-005: With vim open, scrolling in TauTerm does not navigate the scrollback.

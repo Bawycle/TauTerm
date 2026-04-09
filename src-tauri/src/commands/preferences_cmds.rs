@@ -53,9 +53,12 @@ pub async fn update_preferences(
     // Scrollback capacity is fixed at pane-creation time (ScreenBuffer is not
     // dynamically resizable in v1). Log an informational message so developers
     // and advanced users are aware.
-    if let Some(val) = new_scrollback {
+    // Note: log the effective (post-clamp) value from `updated`, not the raw
+    // value from the patch — they may differ when clamping occurred.
+    if new_scrollback.is_some() {
+        let effective = updated.terminal.scrollback_lines;
         tracing::info!(
-            "scrollback_lines preference updated to {val}; \
+            "scrollback_lines preference updated to {effective}; \
              applies to new panes — existing panes retain their current buffer size"
         );
     }

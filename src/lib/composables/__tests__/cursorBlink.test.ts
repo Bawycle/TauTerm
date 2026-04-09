@@ -15,6 +15,8 @@
  *   BLINK-003 — after OFF phase (266ms), cursor becomes visible again
  *   BLINK-004 — cycle repeats (second ON phase)
  *   BLINK-005 — setInterval is NOT used (only setTimeout)
+ *   BLINK-006 — active=false suspends the blink cycle (cursorVisible does not toggle)
+ *   BLINK-007 — restartCursorBlink() resets to visible and restarts the ON phase
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,6 +24,7 @@ import { mount, unmount, flushSync } from 'svelte';
 import * as tauriEvent from '@tauri-apps/api/event';
 import * as tauriCore from '@tauri-apps/api/core';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
+import TerminalPaneActiveHarness from './TerminalPaneActiveHarness.svelte';
 
 // ---------------------------------------------------------------------------
 // jsdom polyfills
@@ -75,6 +78,31 @@ async function mountPane(
   for (let i = 0; i < 20; i++) await Promise.resolve();
   flushSync();
   return { container, instance };
+}
+
+interface HarnessInstance {
+  setActive: (v: boolean) => void;
+}
+
+async function mountHarness(opts: {
+  active: boolean;
+  cursorBlinkMs?: number;
+}): Promise<{ container: HTMLElement; instance: ReturnType<typeof mount> & HarnessInstance }> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const instance = mount(TerminalPaneActiveHarness, {
+    target: container,
+    props: {
+      paneId: 'blink-harness-pane',
+      tabId: 'blink-harness-tab',
+      active: opts.active,
+      cursorBlinkMs: opts.cursorBlinkMs ?? 533,
+    },
+  });
+  instances.push(instance);
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  flushSync();
+  return { container, instance: instance as ReturnType<typeof mount> & HarnessInstance };
 }
 
 // ---------------------------------------------------------------------------
@@ -198,5 +226,79 @@ describe('BLINK-005: setInterval is NOT used for cursor blink', () => {
       (args) => args[1] === 533 || args[1] === 266,
     );
     expect(blinkRelatedCalls.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BLINK-006 — active=false suspends the blink cycle
+// ---------------------------------------------------------------------------
+
+describe('BLINK-006: active=false suspends the blink cycle', () => {
+  it('cursor does not toggle after active transitions from true to false', async () => {
+    vi.useFakeTimers();
+    const { container, instance } = await mountHarness({ active: true, cursorBlinkMs: 533 });
+
+    // Cursor is visible initially.
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Advance into the OFF phase — cursor should disappear.
+    vi.advanceTimersByTime(533);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
+
+    // Advance back into the ON phase — cursor should reappear.
+    vi.advanceTimersByTime(267);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Now disable the pane: active=false stops the cycle.
+    instance.setActive(false);
+    flushSync();
+
+    // Record visibility state immediately after deactivation.
+    // The $effect teardown resets cursorVisible=true when the cycle stops.
+    const visibleAfterDeactivation = container.querySelector('.terminal-pane__cursor') !== null;
+
+    // Advance one full ON + OFF cycle — visibility must not change.
+    vi.advanceTimersByTime(533 + 267);
+    flushSync();
+
+    const visibleAfterAdvance = container.querySelector('.terminal-pane__cursor') !== null;
+    expect(visibleAfterAdvance).toBe(visibleAfterDeactivation);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BLINK-007 — restartCursorBlink() resets to visible and restarts the ON phase
+// ---------------------------------------------------------------------------
+
+describe('BLINK-007: restartCursorBlink() resets cursor to visible and restarts the cycle', () => {
+  it('cursor is visible immediately after restart and re-enters the OFF phase after onMs', async () => {
+    vi.useFakeTimers();
+    const { container } = await mountPane(533);
+    flushSync();
+
+    // Step 1: advance past the ON phase so cursor is in the OFF phase (invisible).
+    vi.advanceTimersByTime(533);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
+
+    // Step 2: simulate a keydown — TerminalPane calls restartCursorBlink() internally
+    // by dispatching a keydown event on the viewport element.
+    const viewport = container.querySelector('.terminal-grid') as HTMLElement | null;
+    expect(viewport).not.toBeNull();
+    viewport!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }),
+    );
+    flushSync();
+
+    // Step 3: cursor must be immediately visible after keydown (restartCursorBlink).
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Step 4: advance exactly one ON phase — cursor must enter the OFF phase again.
+    vi.advanceTimersByTime(533);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
   });
 });

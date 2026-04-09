@@ -65,7 +65,9 @@
   /* Borders and dividers */
   --color-border: var(--color-neutral-700); /* #35312a */
   --color-border-subtle: var(--color-neutral-750); /* #2c2921 */
-  --color-border-overlay: var(--color-neutral-600); /* #4a4640 — floating surfaces: menus, modals, tooltips */
+  --color-border-overlay: var(
+    --color-neutral-600
+  ); /* #4a4640 — floating surfaces: menus, modals, tooltips */
   --color-divider: var(--color-neutral-700); /* #35312a — pane divider line */
   --color-divider-active: var(--color-blue-400); /* #4a92bf — divider on hover/drag */
 
@@ -170,7 +172,7 @@
   /* Cursor */
   --term-cursor-bg: var(--color-blue-300); /* #7ab3d3 — block cursor fill */
   --term-cursor-fg: var(--color-neutral-900); /* #16140f — char under cursor */
-  --term-cursor-unfocused: #7ab3d3; /* hollow outline when pane is unfocused */
+  --term-cursor-unfocused: var(--color-blue-300); /* hollow outline when pane is unfocused */
 
   /* Selection */
   --term-selection-bg: var(--color-blue-500); /* #2e6f9c */

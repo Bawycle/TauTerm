@@ -46,13 +46,7 @@ import { buildGridFromSnapshot, applyUpdates } from '$lib/terminal/screen.js';
 import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
 import { SelectionManager } from '$lib/terminal/selection.js';
 import { pasteToBytes } from '$lib/terminal/paste.js';
-import type {
-  PaneId,
-  CursorState,
-  BellType,
-  SearchMatch,
-  ScreenUpdateEvent,
-} from '$lib/ipc/types';
+import type { PaneId, CursorState, BellType, SearchMatch, ScreenUpdateEvent } from '$lib/ipc/types';
 import type { CellStyle } from '$lib/terminal/screen.js';
 import {
   defaultCell,
@@ -153,7 +147,9 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // -------------------------------------------------------------------------
 
   const currentCursorShape = $derived(cursorShape(cursor.shape));
-  const currentCursorBlinks = $derived(cursor.blink && cursorBlinks(cursor.shape));
+  const currentCursorBlinks = $derived(
+    props.active() && cursor.blink && cursorBlinks(cursor.shape),
+  );
 
   const cursorBlink = useCursorBlink({
     cursorBlinkMs: props.cursorBlinkMs,
@@ -907,6 +903,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
     // Methods
     sendBytes,
+    stopCursorBlink: cursorBlink.stopCursorBlink,
+    restartCursorBlink: cursorBlink.restartCursorBlink,
     pasteText,
     handleScrollToBottom,
     handleMousedown,

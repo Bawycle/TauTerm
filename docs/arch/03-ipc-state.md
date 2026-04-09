@@ -86,6 +86,8 @@ These commands do not follow the `TauTermError` error envelope — they return `
 | `credential-prompt` | `CredentialPromptEvent` | Backend needs credentials from user |
 | `host-key-prompt` | `HostKeyPromptEvent` | First connection or key change requiring user verification |
 | `notification-changed` | `NotificationChangedEvent` | Tab/pane activity notification added or cleared |
+| `cursor-style-changed` | `CursorStyleChangedEvent` | DECSCUSR (CSI Ps SP q) changed the cursor shape for a pane. Payload: `{ paneId, shape: u8 }` where `shape` is the raw DECSCUSR parameter 0–6. See FS-VT-030. Emitted immediately on DECSCUSR — does not wait for the next `screen-update` cycle. Not emitted for DECSET/DECRST ?12 (cursor blink mode), which is propagated via the `cursor.blink` field of `ScreenUpdateEvent`. |
+| `bell-triggered` | `BellTriggeredEvent` | Terminal produced a BEL character. Rate-limited to at most one event per 100 ms per pane (FS-VT-090). Payload: `{ paneId }`. |
 
 ### 4.4 Error Envelope
 

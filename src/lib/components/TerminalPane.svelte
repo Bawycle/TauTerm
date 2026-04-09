@@ -232,6 +232,7 @@
     const sequence = keyEventToVtSequence(event, tp.decckm, tp.deckpam);
     if (sequence !== null) {
       event.preventDefault();
+      tp.restartCursorBlink();
       tp.sendBytes(sequence);
     }
   }

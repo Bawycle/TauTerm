@@ -20,7 +20,7 @@ fn bench_write_char_throughput(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(data.len() as u64));
     group.bench_function("write_1mb_ascii", |b| {
         b.iter_batched(
-            || VtProcessor::new(220, 50, 1_000),
+            || VtProcessor::new(220, 50, 1_000, 0, false),
             |mut proc| {
                 black_box(proc.process(black_box(&data)));
             },
@@ -40,7 +40,7 @@ fn bench_scroll_throughput(c: &mut Criterion) {
     group.bench_function("scroll_up_1000x", |b| {
         b.iter_batched(
             || {
-                let mut proc = VtProcessor::new(80, 24, 1_000);
+                let mut proc = VtProcessor::new(80, 24, 1_000, 0, false);
                 for _ in 0..24 {
                     proc.process(&row);
                     proc.process(b"\r\n");
@@ -89,7 +89,7 @@ fn bench_partial_update_event(c: &mut Criterion) {
         .filter(|b| b.is_ascii_graphic())
         .take(220 * 50)
         .collect();
-    let mut proc = VtProcessor::new(220, 50, 1_000);
+    let mut proc = VtProcessor::new(220, 50, 1_000, 0, false);
     proc.process(&content);
 
     let mut group = c.benchmark_group("partial_update");

@@ -23,6 +23,6 @@ use tau_term_lib::vt::VtProcessor;
 
 fuzz_target!(|data: &[u8]| {
     // 80×24 terminal, 10 000 scrollback lines — matches typical E2E defaults.
-    let mut proc = VtProcessor::new(80, 24, 10_000);
+    let mut proc = VtProcessor::new(80, 24, 10_000, 0, false);
     proc.process(data);
 });

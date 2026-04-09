@@ -268,8 +268,10 @@
   "preferences_appearance_opacity_hint": "Transparence du fond du terminal. 1 = opaque, 0 = entièrement transparent. Appliqué immédiatement.",
 
   "preferences_terminal_cursor_style_hint": "Forme du curseur par défaut. Les applications terminal peuvent la remplacer via des séquences d'échappement.",
-  "preferences_terminal_cursor_blink_rate_hint": "Intervalle de clignotement en millisecondes (100–2000). Utilisez la valeur maximale pour désactiver le clignotement.",
+  "preferences_terminal_cursor_blink_rate_hint": "Intervalle de clignotement en millisecondes (0–5000). Mettez 0 pour désactiver entièrement le clignotement.",
+  "preferences_terminal_cursor_blink_range_error": "La valeur doit être comprise entre {min} et {max}.",
   "preferences_terminal_scrollback_hint": "Nombre de lignes conservées dans l'historique au-dessus de la zone visible. Appliqué aux nouveaux panneaux — les panneaux existants conservent leur tampon actuel.",
+  "preferences_terminal_scrollback_range_error": "La valeur doit être comprise entre {min} et {max}.",
   "preferences_terminal_bell_type_hint": "Action déclenchée quand un programme émet un bip terminal (\\a). Visuel fait clignoter brièvement la fenêtre. Sonore utilise le son système.",
   "preferences_terminal_word_delimiters_hint": "Caractères utilisés comme limites de mots lors d'un double-clic. Chaque caractère de ce champ est un séparateur.",
 

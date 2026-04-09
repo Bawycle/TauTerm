@@ -43,10 +43,22 @@
     onupdate?.({ appearance: { ...preferences.appearance, cursorStyle: val as CursorStyle } });
   }
 
+  const CURSOR_BLINK_MIN = 0;
+  const CURSOR_BLINK_MAX = 5000;
+
+  let cursorBlinkError = $state<string | undefined>(undefined);
+
   function handleCursorBlinkRateChange(val: string) {
     if (!preferences?.appearance) return;
     const n = parseInt(val, 10);
-    if (isNaN(n) || n < 100 || n > 2000) return;
+    if (isNaN(n) || n < CURSOR_BLINK_MIN || n > CURSOR_BLINK_MAX) {
+      cursorBlinkError = m.preferences_terminal_cursor_blink_range_error({
+        min: CURSOR_BLINK_MIN,
+        max: CURSOR_BLINK_MAX,
+      });
+      return;
+    }
+    cursorBlinkError = undefined;
     onupdate?.({ appearance: { ...preferences.appearance, cursorBlinkMs: n } });
   }
 
@@ -57,18 +69,35 @@
     onupdate?.({ terminal: { ...preferences.terminal, bellType: val as BellType } });
   }
 
+  const SCROLLBACK_MIN = 100;
+  const SCROLLBACK_MAX = 1_000_000;
+
+  let scrollbackError = $state<string | undefined>(undefined);
+
   function handleScrollbackChange(val: string) {
     if (!preferences?.terminal) return;
     const n = parseInt(val, 10);
-    if (!isNaN(n) && n > 0) {
-      onupdate?.({ terminal: { ...preferences.terminal, scrollbackLines: n } });
+    if (isNaN(n) || n < SCROLLBACK_MIN || n > SCROLLBACK_MAX) {
+      scrollbackError = m.preferences_terminal_scrollback_range_error({
+        min: SCROLLBACK_MIN,
+        max: SCROLLBACK_MAX,
+      });
+      return;
     }
+    scrollbackError = undefined;
+    onupdate?.({ terminal: { ...preferences.terminal, scrollbackLines: n } });
   }
 
   function handleWordDelimitersChange(val: string) {
     if (!preferences?.terminal) return;
     onupdate?.({ terminal: { ...preferences.terminal, wordDelimiters: val } });
   }
+
+  // 5 500 bytes/line is the architectural upper bound (docs/arch/07).
+  const scrollbackEstimateMb = $derived(
+    Math.round((((preferences?.terminal?.scrollbackLines ?? 10000) * 5500) / (1024 * 1024)) * 10) /
+      10,
+  );
 </script>
 
 <p
@@ -96,6 +125,7 @@
     type="number"
     value={String(preferences?.appearance?.cursorBlinkMs ?? 530)}
     helper={m.preferences_terminal_cursor_blink_rate_hint()}
+    error={cursorBlinkError}
     oninput={handleCursorBlinkRateChange}
   />
 
@@ -105,7 +135,8 @@
     type="number"
     value={String(preferences?.terminal?.scrollbackLines ?? 10000)}
     oninput={handleScrollbackChange}
-    helper={m.preferences_terminal_scrollback_hint()}
+    error={scrollbackError}
+    helper={m.preferences_terminal_scrollback_estimate({ mb: scrollbackEstimateMb })}
   />
 
   <Dropdown

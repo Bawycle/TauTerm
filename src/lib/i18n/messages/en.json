@@ -268,8 +268,10 @@
   "preferences_appearance_opacity_hint": "Terminal background transparency. 1 = opaque, 0 = fully transparent. Applies immediately.",
 
   "preferences_terminal_cursor_style_hint": "Default cursor shape. Terminal applications may override this with their own cursor style via escape sequences.",
-  "preferences_terminal_cursor_blink_rate_hint": "Blink interval in milliseconds (100–2000). Use the maximum value to effectively disable blinking.",
+  "preferences_terminal_cursor_blink_rate_hint": "Blink interval in milliseconds (0–5000). Set to 0 to disable blinking entirely.",
+  "preferences_terminal_cursor_blink_range_error": "Value must be between {min} and {max}.",
   "preferences_terminal_scrollback_hint": "Number of lines kept in history above the visible area. Applies to new terminal panes — existing panes keep their current buffer.",
+  "preferences_terminal_scrollback_range_error": "Value must be between {min} and {max}.",
   "preferences_terminal_bell_type_hint": "Action when a program outputs a terminal bell (\\a). Visual briefly flashes the terminal window. Audible uses the system sound.",
   "preferences_terminal_word_delimiters_hint": "Characters that act as word boundaries for double-click selection. Each character in this field is a separator.",
 

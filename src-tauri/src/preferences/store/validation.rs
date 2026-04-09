@@ -180,11 +180,35 @@ mod tests {
     }
 
     #[test]
+    fn scrollback_at_min_is_unchanged() {
+        let mut p = make_prefs();
+        p.terminal.scrollback_lines = 100;
+        validate_and_clamp(&mut p);
+        assert_eq!(p.terminal.scrollback_lines, 100);
+    }
+
+    #[test]
     fn scrollback_above_max_is_clamped() {
         let mut p = make_prefs();
         p.terminal.scrollback_lines = 2_000_000;
         validate_and_clamp(&mut p);
         assert_eq!(p.terminal.scrollback_lines, 1_000_000);
+    }
+
+    #[test]
+    fn scrollback_at_max_is_unchanged() {
+        let mut p = make_prefs();
+        p.terminal.scrollback_lines = 1_000_000;
+        validate_and_clamp(&mut p);
+        assert_eq!(p.terminal.scrollback_lines, 1_000_000);
+    }
+
+    #[test]
+    fn scrollback_within_range_is_unchanged() {
+        let mut p = make_prefs();
+        p.terminal.scrollback_lines = 10_000;
+        validate_and_clamp(&mut p);
+        assert_eq!(p.terminal.scrollback_lines, 10_000);
     }
 
     #[test]

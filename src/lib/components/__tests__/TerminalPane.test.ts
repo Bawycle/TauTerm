@@ -8,6 +8,8 @@
  *   TPSC-STRUCT-001 — TerminalPane mounts without errors
  *   TPSC-STRUCT-002 — viewport element has expected CSS class
  *   TPSC-STRUCT-003 — pane element has data-pane-id attribute
+ *   CURSOR-UNFOCUSED-001 — cursor carries --unfocused class when active=false
+ *   CURSOR-UNFOCUSED-002 — cursor does NOT carry --unfocused class when active=true
  *   SSH-OVERLAY-REACT-001 — connecting overlay renders when sshStates is set to 'connecting'
  *   SSH-OVERLAY-REACT-002 — connecting overlay renders when sshStates is set to 'authenticating'
  *   SSH-OVERLAY-REACT-003 — connecting overlay disappears when sshStates transitions to 'connected'
@@ -245,6 +247,37 @@ describe('F9-CSS-001: --strikethrough class uses ::after pseudo-element position
     const paneSource = fs.readFileSync(panePath, 'utf-8');
     expect(viewportSource).toContain('cell.strikethrough');
     expect(viewportSource + paneSource).toContain('terminal-pane__cell--strikethrough');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CURSOR-UNFOCUSED — .terminal-pane__cursor--unfocused class (TUITC-UX-053)
+//
+// The cursor element carries --unfocused when active=false, giving it a hollow
+// outline (via CSS token --term-cursor-unfocused). When active=true the class
+// must be absent.
+//
+// cursor.visible starts as true in the composable, so the cursor element is
+// present in the DOM on the initial render regardless of blink settings.
+// ---------------------------------------------------------------------------
+
+describe('CURSOR-UNFOCUSED-001: cursor has --unfocused class when active=false', () => {
+  it('renders .terminal-pane__cursor--unfocused when pane is not active', async () => {
+    const { container, instance } = await mountPane({ active: false });
+    instances.push(instance);
+    const cursorEl = container.querySelector('.terminal-pane__cursor');
+    expect(cursorEl).not.toBeNull();
+    expect(cursorEl!.classList.contains('terminal-pane__cursor--unfocused')).toBe(true);
+  });
+});
+
+describe('CURSOR-UNFOCUSED-002: cursor does NOT have --unfocused class when active=true', () => {
+  it('does not render .terminal-pane__cursor--unfocused when pane is active', async () => {
+    const { container, instance } = await mountPane({ active: true });
+    instances.push(instance);
+    const cursorEl = container.querySelector('.terminal-pane__cursor');
+    expect(cursorEl).not.toBeNull();
+    expect(cursorEl!.classList.contains('terminal-pane__cursor--unfocused')).toBe(false);
   });
 });
 

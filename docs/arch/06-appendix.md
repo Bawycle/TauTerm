@@ -16,7 +16,7 @@ Every `#[tauri::command]` that accepts user-provided data applies validation at 
 - **URI inputs** (hyperlink URIs): scheme whitelisted to `http`, `https`, `mailto`, `ssh`; `file` scheme only for local sessions; length ≤ 2048 bytes; no C0/C1 characters (FS-VT-073).
 - **Tab titles** (from OSC sequences via the VtProcessor): C0/C1 stripped, truncated to 256 characters (FS-VT-062).
 - **IPC sequence length**: OSC and DCS sequences are limited to 4096 bytes in the VtProcessor (FS-SEC-005).
-- **Preferences on load**: validated against a schema; out-of-range values replaced with defaults (FS-SEC-003). See [§7.6](04-runtime-platform.md#76-preferencesstore-load-strategy) for the load strategy.
+- **Preferences on load and on patch**: validated against a schema by `validate_and_clamp` (`preferences/store/validation.rs`); out-of-range values are silently replaced with in-range values (FS-SEC-003, FS-SB-002). The table of validated fields and their ranges is: `font_size` [6.0, 72.0], `cursor_blink_ms` [0, 5000], `opacity` [0.0, 1.0], `scrollback_lines` [100, 1,000,000], `line_height` (per-theme) [1.0, 2.0]. Clamping emits a `WARN` log entry (never a user-visible error). The `update_preferences` command returns the post-clamp `Preferences` — the frontend must use the returned value, not the submitted patch, as the authoritative new state. See [§7.6](04-runtime-platform.md#76-preferencesstore-load-strategy) for the load strategy.
 
 **`PreferencesStore` structure:** The `Preferences` struct (defined in `preferences/schema.rs`) owns the following top-level keys in `preferences.toml`:
 

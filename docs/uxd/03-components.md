@@ -210,7 +210,7 @@ The cursor style is determined by the running application via DECSCUSR (FS-VT-03
 
 **Blinking behavior:**
 - Blink is a hard toggle: the cursor is fully visible (`opacity: 1`) for `--term-blink-on-duration` (533ms), then fully invisible (`opacity: 0`) for `--term-blink-off-duration` (266ms). No fade transition. The abrupt toggle matches terminal convention and maximizes position legibility at peripheral vision.
-- The blink cycle resets (cursor immediately becomes visible) when: the pane gains focus, the cursor moves, or the user types. This ensures the cursor is always visible immediately after an action.
+- The blink cycle resets (cursor immediately becomes visible) when: the pane gains focus, or the user types a key that produces a VT sequence. Resetting on every cursor position change from PTY output is explicitly excluded: applications such as htop or vim continuously reposition the cursor during screen redraws, which would suppress blinking entirely during normal use. The visible-after-keystroke guarantee is sufficient for the UX goal.
 - When blinking is suspended (pane loses focus), the cursor transitions from its blinking state to the unfocused hollow outline without completing the current blink cycle.
 
 **Unfocused cursor:**
@@ -493,6 +493,27 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 **Helper text convention for preference controls:**
 
 Every preference control (text input, number input, dropdown, toggle) in the Preferences panel SHOULD carry a `helper` prop with a concise, user-facing description of what the field controls and any constraints the user needs to know (e.g., "Applies to new panes only"). Helper text is defined in the i18n catalogue and follows the key naming pattern `preferences_{section}_{field}_hint` (e.g., `preferences_terminal_scrollback_lines_hint`, `preferences_appearance_font_family_hint`). This ensures all descriptions are translatable and centrally maintainable. The `helper` prop on `TextInput` (§7.15) and `Dropdown` (§7.16) renders the text below the control and wires `aria-describedby` on the input/trigger element to the helper text container.
+
+**Validation pattern for numeric preference inputs:**
+
+Numeric fields in the Preferences panel (e.g., scrollback lines, cursor blink rate, font size) use the `error` prop of `TextInput` (§7.15) to surface out-of-range values. The following rules apply:
+
+- **Trigger:** Validation runs on every `oninput` event. Feedback is immediate — not deferred to blur or form submission.
+- **Non-numeric intermediate state:** If `parseInt` returns `NaN` (e.g., the field is empty, or contains a minus sign being typed), no error is shown and no patch is sent. The user is in the middle of entering a value; premature feedback would be disruptive.
+- **Out-of-range integer:** If the parsed integer is a valid number but outside the canonical range for the field, the `error` prop is set to an i18n-keyed message (pattern: `preferences_{section}_{field}_error_{bound}`, e.g., `preferences_terminal_scrollback_error_min`). No patch is sent to the backend.
+- **Valid integer:** The `error` prop is cleared and the patch is sent.
+- **Helper text during error state:** `TextInput` hides the `helper` text when `error` is set (see §7.15 — `{#if error} … {:else if helper}`). This is the correct behavior: helper text that depends on the current value (e.g., a memory estimate) is only meaningful when the value is valid.
+- **Local value state:** The component maintains a local `$state` variable for the raw field value, separate from the preference stored in the parent. This prevents the field from being reset to the last valid committed value while the user is mid-edit. The component displays the local raw value; the parent preference state only advances when a valid patch is sent.
+- **Backend clamping (FS-SEC-003):** The backend silently clamps numeric preferences to their valid range on file load. This applies only to the initial load — not to interactive editing. During editing, out-of-range values are rejected at the frontend with a visible error message before reaching the backend.
+
+**Canonical ranges for numeric preference fields (per FS-SEC-003):**
+
+| Field | Min | Max | i18n key pattern |
+|---|---|---|---|
+| `scrollbackLines` | 100 | 1 000 000 | `preferences_terminal_scrollback_error_min` / `_max` |
+| `cursorBlinkMs` | 0 | 5 000 | `preferences_terminal_cursor_blink_error_min` / `_max` |
+| `fontSize` | 6.0 | 72.0 | `preferences_appearance_font_size_error_min` / `_max` |
+| `opacity` | 0.0 | 1.0 | `preferences_appearance_opacity_error_min` / `_max` |
 
 **Keyboard section:**
 - List of configurable application shortcuts (FS-KBD-002).

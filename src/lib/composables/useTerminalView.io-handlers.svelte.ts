@@ -67,7 +67,16 @@ export function createIoHandlers(
   // Connection manager
   // -------------------------------------------------------------------------
 
-  async function handleConnectionSave(config: SshConnectionConfig, _password?: string) {
+  // SEC-CRED-004: The `password` parameter is accepted but intentionally not acted upon.
+  // The backend has a `CredentialManager::store_password` method (credentials.rs), but
+  // no Tauri IPC command currently exposes it. Wiring this requires:
+  //   1. A new `#[tauri::command] store_connection_password(connection_id, password)` in Rust.
+  //   2. A typed IPC wrapper in src/lib/ipc/commands.ts.
+  //   3. Calling it here after `saveConnection()` succeeds, using the returned `id`.
+  // The parameter is kept in the signature (not silently dropped) to preserve the calling
+  // contract with ConnectionManager, which already captures and passes the password.
+  // See TODO.md — SEC-CRED-004.
+  async function handleConnectionSave(config: SshConnectionConfig, password?: string) {
     try {
       const id: string = await saveConnection(config);
       const exists = s.savedConnections.some((c) => c.id === id);
@@ -76,9 +85,8 @@ export function createIoHandlers(
       } else {
         s.savedConnections = [...s.savedConnections, { ...config, id }];
       }
-      // TODO(SEC-CRED-004): store `_password` under real `id` via SecretService IPC
-      // once a `store_password(connectionId, password)` command is available.
-      // The password must never be stored under the placeholder '' sent for new connections.
+      // Password storage not yet implemented — see comment above.
+      void password;
     } catch {
       // Non-fatal
     }

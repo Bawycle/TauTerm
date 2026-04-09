@@ -153,6 +153,26 @@ Uses `tauri::test::mock_app`. Scenarios:
 
 These tests are **not** part of the default `cargo nextest run` gate. They are an optional step, run on-demand or in a dedicated CI job.
 
+#### Credential regression tests (no daemon required)
+
+`src-tauri/tests/credential_regression.rs` — covers 6 credential security scenarios without requiring a live Secret Service daemon or a real SSH server. Runs under `cargo nextest run --test credential_regression` in any standard CI environment.
+
+| Test ID       | FS reference | Scenario                                                  |
+|---------------|--------------|-----------------------------------------------------------|
+| SEC-CRED-001  | FS-CRED-001  | `SshConnectionConfig` serializes no password field        |
+| SEC-CRED-002  | FS-CRED-003  | `Credentials` implements `ZeroizeOnDrop` (compile-time)   |
+| SEC-CRED-003  | FS-CRED-004  | `Credentials` `Debug` impl redacts password value         |
+| SEC-CRED-004  | FS-CRED-002  | `SshConnectionConfig` holds identity path only, not key content |
+| SEC-CRED-005  | FS-CRED-005  | Unavailable store → `Err(Unavailable)`, no disk fallback  |
+| SEC-CRED-006  | FS-SSH-011   | `KnownHostsStore::lookup()` returns `Mismatch` on key change |
+
+### `credential_regression.rs` merge criteria
+
+`src-tauri/tests/credential_regression.rs` MUST pass via `cargo nextest run --test credential_regression` (no Podman, no live Secret Service daemon required) before any merge touching any of:
+- `src-tauri/src/credentials.rs`
+- `src-tauri/src/ssh/manager.rs`
+- `src-tauri/src/commands/ssh_prompt_cmds.rs`
+
 #### SSH integration tests (Podman container)
 
 `src-tauri/tests/ssh_integration.rs` — exercises `russh` auth functions (`authenticate_password`, `authenticate_pubkey`, `authenticate_keyboard_interactive`) and `KnownHostsStore` TOFU lookups against a real OpenSSH server (SSH-INT-001 to SSH-INT-012). These tests cannot run in a standard CI environment without a live sshd process.

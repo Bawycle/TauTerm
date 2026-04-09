@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Minimal explicit capability for the main window. Rationale and audit: docs/arch/capabilities.md. core:event:default: listen/unlisten for backend events. core:window:default: isFullscreen() query on mount. core:window:allow-close: onCloseRequested() interception. core:window:allow-destroy: programmatic destroy() on session end. opener:default: open_url command (http/https/mailto/tel only).",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:default",
+    "core:window:default",
     "core:window:allow-close",
     "core:window:allow-destroy",
     "opener:default"

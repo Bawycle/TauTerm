@@ -309,3 +309,83 @@ fn cuu_clamps_to_region_top_when_decom_on() {
         "CUU with DECOM on must clamp to scroll region top (row 4)"
     );
 }
+
+// FS-VT-058 — Phantom cell cursor normalization
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cup_on_phantom_normalizes_to_wide_base() {
+    // Wide char at col 0 puts phantom at col 1.
+    // CUP(row=1, col=2) → 0-indexed col 1 = phantom → must normalize to col 0.
+    let mut vt = make_vt(10, 5);
+    vt.process(b"\xe4\xb8\xad"); // write 中 (wide, 2 cells) at col 0
+    vt.process(b"\x1b[1;2H"); // CUP row 1, col 2 (1-based → col 1 0-based = phantom)
+    assert_eq!(vt.normal_cursor.col, 0, "cup must normalize to base cell");
+}
+
+#[test]
+fn cha_on_phantom_normalizes_to_wide_base() {
+    let mut vt = make_vt(10, 5);
+    vt.process(b"\xe4\xb8\xad"); // 中 at col 0; phantom at col 1
+    vt.process(b"\x1b[2G"); // CHA col 2 (1-based) = col 1 (phantom)
+    assert_eq!(vt.normal_cursor.col, 0, "cha must normalize to base cell");
+}
+
+#[test]
+fn hpa_on_phantom_normalizes_to_wide_base() {
+    let mut vt = make_vt(10, 5);
+    vt.process(b"\xe4\xb8\xad"); // 中 at col 0; phantom at col 1
+    vt.process(b"\x1b[2`"); // HPA col 2 (1-based) = col 1 (phantom)
+    assert_eq!(vt.normal_cursor.col, 0, "hpa must normalize to base cell");
+}
+
+#[test]
+fn vpa_normalizes_col_when_new_row_has_phantom_at_same_col() {
+    // Row 0: normal char at col 0. Row 1: wide char → phantom at col 1.
+    // Set cursor at col 1 on row 0 (normal cell). VPA to row 2 (1-based)
+    // where col 1 is phantom → cursor.col must become 0.
+    let mut vt = make_vt(10, 5);
+    vt.process(b"X"); // col 0 = normal 'X', cursor at col 1
+    vt.process(b"\x1b[2;1H"); // CUP row 2 (0-indexed row 1), col 1
+    vt.process(b"\xe4\xb8\xad"); // 中 at col 0, row 1; phantom at row 1, col 1
+    vt.process(b"\x1b[1;2H"); // CUP row 1, col 2 → col 1 on row 0 (no phantom there)
+    assert_eq!(vt.normal_cursor.col, 1); // sanity: col 1 is normal on row 0
+    vt.process(b"\x1b[2d"); // VPA row 2 (1-based) = row 1 (0-based) — col 1 is phantom here
+    assert_eq!(vt.normal_cursor.col, 0, "vpa must normalize col on new row");
+}
+
+#[test]
+fn decrc_normalizes_position_when_content_changed_after_save() {
+    // Save cursor at col 1 (normal cell on row 0).
+    // Then write wide char at col 0 → col 1 becomes phantom.
+    // DECRC restores to col 1 which is now phantom → must normalize to col 0.
+    let mut vt = make_vt(10, 5);
+    vt.process(b"X"); // write 'X' at col 0, cursor now at col 1 (normal)
+    vt.process(b"\x1b[s"); // DECSC (save cursor) at col 1
+    vt.process(b"\x1b[1;1H"); // CUP to col 1 (back to col 0)
+    vt.process(b"\xe4\xb8\xad"); // overwrite with 中 → col 0 = wide base, col 1 = phantom
+    vt.process(b"\x1b[u"); // DECRC (restore) → col 1 = phantom → must normalize
+    assert_eq!(
+        vt.normal_cursor.col, 0,
+        "decrc must normalize restored position"
+    );
+}
+
+#[test]
+fn dsr_cpr_reports_normalized_position() {
+    // Wide char at col 0; CUP to phantom col 1; CPR must report col 1 (1-based) = base cell.
+    let mut vt = make_vt(10, 5);
+    vt.process(b"\xe4\xb8\xad"); // 中 at col 0; phantom at col 1
+    vt.process(b"\x1b[1;2H"); // CUP row 1, col 2 (phantom at col 1 0-indexed)
+    // After fix, cursor.col should be 0 (normalized).
+    // Trigger DSR CPR:
+    vt.process(b"\x1b[6n");
+    // Collect CPR response:
+    let responses = vt.take_responses();
+    let response = responses.into_iter().flatten().collect::<Vec<u8>>();
+    // Expected: ESC[1;1R (row 1, col 1, both 1-based)
+    assert_eq!(
+        response, b"\x1b[1;1R",
+        "CPR must report normalized (base cell) position"
+    );
+}

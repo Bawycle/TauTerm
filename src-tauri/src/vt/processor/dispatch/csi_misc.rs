@@ -2,6 +2,8 @@
 
 use crate::vt::processor::VtProcessor;
 
+use super::helpers::normalize_phantom_col;
+
 /// ICH — Insert Character (CSI Ps @)
 pub(super) fn ich(p: &mut VtProcessor, n: u16) {
     let row = p.cursor_row();
@@ -44,6 +46,10 @@ pub(super) fn decrc(p: &mut VtProcessor) {
         p.modes.decawm = pos.decawm;
         p.modes.decom = pos.decom;
         *p.active_cursor_mut() = pos;
+        // FS-VT-058: normalize cursor away from phantom cells after restore.
+        let row = p.cursor_row();
+        let col = normalize_phantom_col(p, row, p.cursor_col());
+        p.active_cursor_mut().col = col;
         p.wrap_pending = false;
         p.pending_dirty.mark_cursor_moved();
     }
@@ -54,10 +60,11 @@ pub(super) fn dsr(p: &mut VtProcessor, param: u16) {
     match param {
         5 => p.pending_responses.push(b"\x1b[0n".to_vec()),
         6 => {
-            let row = p.cursor_row() + 1;
-            let col = p.cursor_col() + 1;
+            let row = p.cursor_row();
+            // FS-VT-058: report normalized position (defensive, setters already normalize).
+            let col = normalize_phantom_col(p, row, p.cursor_col());
             p.pending_responses
-                .push(format!("\x1b[{row};{col}R").into_bytes());
+                .push(format!("\x1b[{};{}R", row + 1, col + 1).into_bytes());
         }
         _ => {}
     }

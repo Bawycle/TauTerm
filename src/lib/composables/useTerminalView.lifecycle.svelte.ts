@@ -22,6 +22,7 @@ import {
   onSshStateChanged,
   onHostKeyPrompt,
   onCredentialPrompt,
+  onPassphrasePrompt,
   onNotificationChanged,
   onModeStateChanged,
   onFullscreenStateChanged,
@@ -35,6 +36,7 @@ import {
 import {
   setHostKeyPrompt,
   setCredentialPrompt,
+  setPassphrasePrompt,
   applySshStateChanged,
   setBracketedPaste,
 } from '$lib/state/ssh.svelte';
@@ -106,6 +108,7 @@ export async function setupViewListeners(
   unlistens.push(await onSessionStateChanged(applySessionDelta));
   unlistens.push(await onHostKeyPrompt(setHostKeyPrompt));
   unlistens.push(await onCredentialPrompt(setCredentialPrompt));
+  unlistens.push(await onPassphrasePrompt(setPassphrasePrompt));
   unlistens.push(
     await onSshStateChanged(async (ev) => {
       applySshStateChanged(ev);

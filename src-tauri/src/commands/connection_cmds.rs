@@ -3,7 +3,7 @@
 //! SSH connection config management Tauri commands.
 //!
 //! Commands: get_connections, save_connection, update_connection, delete_connection,
-//!           duplicate_connection.
+//!           duplicate_connection, store_connection_password.
 //!
 //! Connection configs are authoritative in `PreferencesStore` (§8.1).
 
@@ -12,6 +12,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tauri::State;
 
+use crate::credentials::CredentialManager;
 use crate::error::TauTermError;
 use crate::platform::validation::validate_ssh_identity_path;
 use crate::preferences::PreferencesStore;
@@ -34,6 +35,9 @@ const MAX_HOSTNAME_LEN: usize = 253;
 ///
 /// POSIX `LOGIN_NAME_MAX` is typically 255 on Linux.
 const MAX_USERNAME_LEN: usize = 255;
+
+/// Maximum accepted length for the `password` field (SEC-CRED-004).
+const MAX_PASSWORD_LEN: usize = 4096;
 
 #[tauri::command]
 pub async fn save_connection(
@@ -116,6 +120,60 @@ pub async fn delete_connection(
     })
 }
 
+/// SEC-CRED-004: Store a connection password in the OS keychain.
+///
+/// Called by the frontend after `save_connection` succeeds, when the user has
+/// entered a password in the connection form. The password is stored under the
+/// key `tauterm:ssh:{connection_id}:{username}` via the platform credential store.
+///
+/// Validation rejects empty IDs, empty passwords, and passwords exceeding
+/// `MAX_PASSWORD_LEN` bytes. Errors are non-fatal from the frontend's perspective
+/// (keychain daemon may be unavailable), but are reported as typed errors so the
+/// caller can decide.
+#[tauri::command]
+pub async fn store_connection_password(
+    connection_id: ConnectionId,
+    username: String,
+    password: String,
+    cred_manager: State<'_, Arc<CredentialManager>>,
+) -> Result<(), TauTermError> {
+    if connection_id.as_str().is_empty() {
+        return Err(TauTermError::new(
+            "VALIDATION_ERROR",
+            "connection_id must not be empty.",
+        ));
+    }
+    if password.is_empty() {
+        return Err(TauTermError::new(
+            "VALIDATION_ERROR",
+            "password must not be empty.",
+        ));
+    }
+    if password.len() > MAX_PASSWORD_LEN {
+        return Err(TauTermError::new(
+            "VALIDATION_ERROR",
+            "password exceeds maximum length.",
+        ));
+    }
+    // SEC-IPC-004: same limit as save_connection to prevent keychain key corruption.
+    if username.len() > MAX_USERNAME_LEN {
+        return Err(TauTermError::new(
+            "VALIDATION_ERROR",
+            "username exceeds maximum allowed length.",
+        ));
+    }
+    cred_manager
+        .store_password(connection_id.as_str(), &username, &password)
+        .await
+        .map_err(|e| {
+            TauTermError::with_detail(
+                "CREDENTIAL_ERROR",
+                "Failed to store password.",
+                e.to_string(),
+            )
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,6 +181,30 @@ mod tests {
     // -----------------------------------------------------------------------
     // Helpers — exercise validation logic without a live Tauri runtime.
     // -----------------------------------------------------------------------
+
+    /// Replicates the validation logic of `store_connection_password` so it can
+    /// be tested without a live Tauri runtime or a `State<_>` injection.
+    fn check_store_password(connection_id: &str, password: &str) -> Result<(), TauTermError> {
+        if connection_id.is_empty() {
+            return Err(TauTermError::new(
+                "VALIDATION_ERROR",
+                "connection_id must not be empty.",
+            ));
+        }
+        if password.is_empty() {
+            return Err(TauTermError::new(
+                "VALIDATION_ERROR",
+                "password must not be empty.",
+            ));
+        }
+        if password.len() > MAX_PASSWORD_LEN {
+            return Err(TauTermError::new(
+                "VALIDATION_ERROR",
+                "password exceeds maximum length.",
+            ));
+        }
+        Ok(())
+    }
 
     fn check_hostname(host: &str) -> Result<(), TauTermError> {
         if host.len() > MAX_HOSTNAME_LEN {
@@ -415,5 +497,37 @@ mod tests {
             all.iter().any(|c| c.id == copy.id),
             "Duplicate must be findable in the connections list"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-CRED-004 — store_connection_password validation
+    // -----------------------------------------------------------------------
+
+    /// SEC-CRED-004: empty connection_id must be rejected with VALIDATION_ERROR.
+    #[test]
+    fn store_connection_password_empty_id_rejected() {
+        let result = check_store_password("", "s3cr3t");
+        assert!(result.is_err(), "empty connection_id must be rejected");
+        assert_eq!(result.unwrap_err().code, "VALIDATION_ERROR");
+    }
+
+    /// SEC-CRED-004: empty password must be rejected with VALIDATION_ERROR.
+    #[test]
+    fn store_connection_password_empty_password_rejected() {
+        let result = check_store_password("conn-abc", "");
+        assert!(result.is_err(), "empty password must be rejected");
+        assert_eq!(result.unwrap_err().code, "VALIDATION_ERROR");
+    }
+
+    /// SEC-CRED-004: password exceeding MAX_PASSWORD_LEN (4097 chars) must be rejected.
+    #[test]
+    fn store_connection_password_over_limit_rejected() {
+        let long_password = "x".repeat(MAX_PASSWORD_LEN + 1);
+        let result = check_store_password("conn-abc", &long_password);
+        assert!(
+            result.is_err(),
+            "password > {MAX_PASSWORD_LEN} bytes must be rejected"
+        );
+        assert_eq!(result.unwrap_err().code, "VALIDATION_ERROR");
     }
 }

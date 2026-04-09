@@ -57,9 +57,16 @@ impl SshManager {
             TauTermSshHandler::new(pane_id.clone(), config, app.clone()).with_manager(self);
 
         // TCP connect + SSH handshake (check_server_key called inside).
-        let mut session = russh::client::connect(russh_config, addr.as_str(), handler)
-            .await
-            .map_err(|e| SshError::Connection(format!("TCP/SSH connect failed: {e}")))?;
+        // Wrapped in a 5-second timeout because russh 0.60.0 has no connect_timeout
+        // in client::Config. Without this, a DROPped port (firewall) blocks indefinitely
+        // and the E2E test never observes the Disconnected state.
+        let mut session = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            russh::client::connect(russh_config, addr.as_str(), handler),
+        )
+        .await
+        .map_err(|_| SshError::Connection("TCP connect timed out".to_string()))?
+        .map_err(|e| SshError::Connection(format!("TCP/SSH connect failed: {e}")))?;
 
         // Transition to Authenticating.
         if let Some(conn) = self.connections.get(&pane_id) {
@@ -78,6 +85,109 @@ impl SshManager {
             .as_ref()
             .map(|c| c.username.clone())
             .unwrap_or_else(|| config.username.clone());
+
+        // FS-SSH-019a: Resolve passphrase for encrypted identity files before SSH auth.
+        let resolved_passphrase: Option<zeroize::Zeroizing<String>> =
+            if let Some(ref key_path_str) = config.identity_file {
+                let key_path = std::path::Path::new(key_path_str);
+                if crate::ssh::auth::key_needs_passphrase(key_path) {
+                    const MAX_PASSPHRASE_ATTEMPTS: u32 = 3;
+                    const PASSPHRASE_PROMPT_TIMEOUT_SECS: u64 = 120;
+                    let key_label = key_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("private key")
+                        .to_string();
+
+                    let mut passphrase_attempt: u32 = 0;
+                    let mut resolved: Option<zeroize::Zeroizing<String>> = None;
+
+                    // 1. Try keychain first.
+                    if let Ok(Some(stored)) =
+                        self.credential_manager.get_passphrase(key_path_str).await
+                    {
+                        // Verify the stored passphrase actually decrypts the key.
+                        if russh::keys::load_secret_key(key_path, Some(stored.as_str())).is_ok() {
+                            resolved = Some(zeroize::Zeroizing::new(stored));
+                        }
+                    }
+
+                    // 2. If not resolved, prompt the user.
+                    while resolved.is_none() && passphrase_attempt < MAX_PASSPHRASE_ATTEMPTS {
+                        passphrase_attempt += 1;
+                        let (tx, rx) = tokio::sync::oneshot::channel::<super::PassphraseInput>();
+                        self.pending_passphrases
+                            .insert(pane_id.clone(), super::PendingPassphrase { sender: tx });
+                        crate::events::emit_passphrase_prompt(
+                            &app,
+                            crate::events::PassphrasePromptEvent {
+                                pane_id: pane_id.clone(),
+                                key_path_label: key_label.clone(),
+                                failed: passphrase_attempt > 1,
+                                is_keychain_available: self.credential_manager.is_available(),
+                            },
+                        );
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(PASSPHRASE_PROMPT_TIMEOUT_SECS),
+                            rx,
+                        )
+                        .await
+                        {
+                            Ok(Ok(input)) => {
+                                if russh::keys::load_secret_key(
+                                    key_path,
+                                    Some(input.passphrase.as_str()),
+                                )
+                                .is_ok()
+                                {
+                                    if input.save_in_keychain
+                                        && let Err(e) = self
+                                            .credential_manager
+                                            .store_passphrase(
+                                                key_path_str,
+                                                input.passphrase.as_str(),
+                                            )
+                                            .await
+                                    {
+                                        // SECURITY: `{e}` is a CredentialError from the
+                                        // platform store — it must not include the keychain
+                                        // key (which contains the identity file path).
+                                        // TauTerm's own code never embeds the key in `e`;
+                                        // the underlying secret-service error is opaque.
+                                        tracing::warn!("Failed to save passphrase to keychain: {e}");
+                                    }
+                                    resolved = Some(input.passphrase.clone());
+                                }
+                                // Wrong passphrase: loop to re-prompt.
+                            }
+                            Ok(Err(_)) => {
+                                // User cancelled (sender dropped).
+                                self.pending_passphrases.remove(&pane_id);
+                                return Err(SshError::Auth(
+                                    "passphrase prompt cancelled by user".to_string(),
+                                ));
+                            }
+                            Err(_) => {
+                                self.pending_passphrases.remove(&pane_id);
+                                return Err(SshError::Auth(
+                                    "passphrase prompt timed out".to_string(),
+                                ));
+                            }
+                        }
+                    }
+
+                    if resolved.is_none() {
+                        return Err(SshError::Auth(
+                            "Maximum passphrase attempts exceeded.".to_string(),
+                        ));
+                    }
+                    resolved
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
         // Authentication retry loop: try → on failure emit credential-prompt → wait → retry.
         // Max 3 attempts; 120 s timeout per prompt (FS-SSH-015/016/017).
@@ -100,6 +210,7 @@ impl SshManager {
                 &username,
                 config,
                 current_credentials.as_ref(),
+                resolved_passphrase.as_ref().map(|p| p.as_str()),
             )
             .await?;
             tracing::debug!(
@@ -307,16 +418,19 @@ impl SshManager {
     }
 
     /// Try authentication methods in order: pubkey → keyboard-interactive → password (FS-SSH-012).
+    ///
+    /// `passphrase` is forwarded to `authenticate_pubkey` for encrypted identity files (FS-SSH-019a).
     async fn try_authenticate<H: russh::client::Handler>(
         session: &mut russh::client::Handle<H>,
         username: &str,
         config: &SshConnectionConfig,
         credentials: Option<&Credentials>,
+        passphrase: Option<&str>,
     ) -> Result<bool, SshError> {
         // 1. Public key (if identity_file is configured).
         if let Some(ref key_path_str) = config.identity_file {
             let key_path = std::path::Path::new(key_path_str);
-            match authenticate_pubkey(session, username, key_path).await {
+            match authenticate_pubkey(session, username, key_path, passphrase).await {
                 Ok(true) => return Ok(true),
                 Ok(false) => {
                     tracing::debug!("Pubkey auth rejected for {username}@{}", config.host);

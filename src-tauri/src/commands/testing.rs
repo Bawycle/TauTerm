@@ -126,6 +126,45 @@ pub async fn inject_ssh_delay(delay_ms: u64) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// SSH synthetic disconnect injection
+// ---------------------------------------------------------------------------
+
+/// Force-emit a `Disconnected` state-changed event for a pane.
+///
+/// Used by `ssh-overlay-states.spec.ts` to make the connecting overlay
+/// disappear without depending on a real TCP connection failing.  The
+/// `connect_task` continues running in the background (we cannot cancel it
+/// after it has been spawned), but the frontend immediately sees `Disconnected`
+/// and removes the overlay.  Any subsequent `Disconnected` emitted by the
+/// connect_task when it eventually times out is a no-op (idempotent state).
+#[tauri::command]
+pub async fn inject_ssh_disconnect(
+    pane_id: crate::session::ids::PaneId,
+    ssh_manager: tauri::State<'_, std::sync::Arc<crate::ssh::SshManager>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
+    use crate::ssh::SshLifecycleState;
+
+    // Remove the connection entry and any pending prompts so the background
+    // connect_task's own cleanup (which also calls remove) becomes a safe no-op.
+    ssh_manager.purge_pane(&pane_id);
+    ssh_manager.pending_passphrases.remove(&pane_id);
+
+    emit_ssh_state_changed(
+        &app,
+        SshStateChangedEvent {
+            pane_id: pane_id.clone(),
+            state: SshLifecycleState::Disconnected {
+                reason: Some("E2E test synthetic disconnect".to_string()),
+            },
+            reason: Some("E2E test synthetic disconnect".to_string()),
+        },
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Credential-prompt injection
 // ---------------------------------------------------------------------------
 

@@ -15,6 +15,7 @@ import type {
   SshStateChangedEvent,
   HostKeyPromptEvent,
   CredentialPromptEvent,
+  PassphrasePromptEvent,
   NotificationChangedEvent,
   ModeStateChangedEvent,
   ScreenUpdateEvent,
@@ -52,6 +53,12 @@ export function onCredentialPrompt(
   handler: (event: CredentialPromptEvent) => void,
 ): Promise<() => void> {
   return listen<CredentialPromptEvent>('credential-prompt', (e) => handler(e.payload));
+}
+
+export function onPassphrasePrompt(
+  handler: (event: PassphrasePromptEvent) => void,
+): Promise<() => void> {
+  return listen<PassphrasePromptEvent>('passphrase-prompt', (e) => handler(e.payload));
 }
 
 // ---------------------------------------------------------------------------

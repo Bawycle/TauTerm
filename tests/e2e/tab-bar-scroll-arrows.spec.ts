@@ -126,10 +126,17 @@ async function openNewTab(expectedCount: number): Promise<void> {
 }
 
 /**
- * Close the currently active tab via Ctrl+Shift+W + dialog confirmation.
- * Mirrors the pattern from tab-lifecycle.spec.ts.
+ * Close the currently active tab via Ctrl+Shift+W.
+ *
+ * Handles both cases:
+ *   - PTY tabs: a confirmation dialog appears and must be confirmed.
+ *   - SSH tabs (no PTY process): the tab closes directly without a dialog.
  */
 async function closeActiveTab(): Promise<void> {
+  const tabsBefore = await browser.execute(
+    (): number => document.querySelectorAll('.tab-bar__tab').length,
+  );
+
   await browser.execute((): void => {
     const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
     const target = grid ?? document.body;
@@ -145,17 +152,23 @@ async function closeActiveTab(): Promise<void> {
     );
   });
 
-  // Dismiss the close-confirmation dialog (E2E build never emits processExited).
-  // Use data-testid to be locale-independent.
+  // Wait for either the confirmation dialog OR the tab to disappear directly.
   await browser.waitUntil(
     () =>
-      browser.execute((): boolean => {
-        return document.querySelector('[data-testid="close-confirm-action"]') !== null;
-      }),
-    { timeout: 3_000, timeoutMsg: 'Close confirmation dialog did not appear' },
+      browser.execute(
+        (before: number): boolean =>
+          document.querySelector('[data-testid="close-confirm-action"]') !== null ||
+          document.querySelectorAll('.tab-bar__tab').length < before,
+        tabsBefore,
+      ),
+    { timeout: 3_000, timeoutMsg: 'Tab did not close and no confirmation dialog appeared' },
   );
+
+  // Confirm via dialog if present.
   await browser.execute((): void => {
-    const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-action"]');
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[data-testid="close-confirm-action"]',
+    );
     btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });
 }

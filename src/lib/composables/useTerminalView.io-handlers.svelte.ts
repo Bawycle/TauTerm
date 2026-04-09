@@ -13,12 +13,14 @@ import {
   updatePreferences,
   getConnections,
   saveConnection,
+  storeConnectionPassword,
   deleteConnection,
   openSshConnection,
   closeSshConnection,
   acceptHostKey,
   rejectHostKey,
   provideCredentials,
+  providePassphrase,
   getClipboard,
   sendInput,
   searchPane,
@@ -30,6 +32,7 @@ import {
 import {
   clearHostKeyPrompt,
   clearCredentialPrompt,
+  clearPassphrasePrompt,
   getBracketedPaste,
 } from '$lib/state/ssh.svelte';
 import { preferences, setPreferences } from '$lib/state/preferences.svelte';
@@ -67,15 +70,6 @@ export function createIoHandlers(
   // Connection manager
   // -------------------------------------------------------------------------
 
-  // SEC-CRED-004: The `password` parameter is accepted but intentionally not acted upon.
-  // The backend has a `CredentialManager::store_password` method (credentials.rs), but
-  // no Tauri IPC command currently exposes it. Wiring this requires:
-  //   1. A new `#[tauri::command] store_connection_password(connection_id, password)` in Rust.
-  //   2. A typed IPC wrapper in src/lib/ipc/commands.ts.
-  //   3. Calling it here after `saveConnection()` succeeds, using the returned `id`.
-  // The parameter is kept in the signature (not silently dropped) to preserve the calling
-  // contract with ConnectionManager, which already captures and passes the password.
-  // See TODO.md — SEC-CRED-004.
   async function handleConnectionSave(config: SshConnectionConfig, password?: string) {
     try {
       const id: string = await saveConnection(config);
@@ -85,8 +79,13 @@ export function createIoHandlers(
       } else {
         s.savedConnections = [...s.savedConnections, { ...config, id }];
       }
-      // Password storage not yet implemented — see comment above.
-      void password;
+      // SEC-CRED-004: store the password in the OS keychain after saving the connection.
+      // Non-fatal: keychain daemon may be unavailable (headless server, no GNOME Keyring).
+      if (password) {
+        storeConnectionPassword(id, config.username, password).catch(() => {
+          // Non-fatal: keychain unavailable or keyring daemon not running.
+        });
+      }
     } catch {
       // Non-fatal
     }
@@ -191,6 +190,26 @@ export function createIoHandlers(
 
   async function handleCancelCredentials() {
     const prompt = clearCredentialPrompt();
+    if (!prompt) return;
+    try {
+      await closeSshConnection(prompt.paneId);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  async function handleProvidePassphrase(passphrase: string, saveInKeychain: boolean) {
+    const prompt = clearPassphrasePrompt();
+    if (!prompt) return;
+    try {
+      await providePassphrase(prompt.paneId, passphrase, saveInKeychain);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  async function handleCancelPassphrase() {
+    const prompt = clearPassphrasePrompt();
     if (!prompt) return;
     try {
       await closeSshConnection(prompt.paneId);
@@ -413,6 +432,8 @@ export function createIoHandlers(
     handleRejectHostKey,
     handleProvideCredentials,
     handleCancelCredentials,
+    handleProvidePassphrase,
+    handleCancelPassphrase,
     handleGlobalPaste,
     handleSearch,
     handleSearchNext,

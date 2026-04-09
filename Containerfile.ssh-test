@@ -83,6 +83,17 @@ RUN mkdir -p /root/.ssh-test-keys && \
 ENV TAUTERM_TEST_PUBKEY_PATH=/root/.ssh-test-keys/id_ed25519_test
 
 # ---------------------------------------------------------------------------
+# Passphrase-protected ED25519 key pair for FS-SSH-019a passphrase tests.
+# The private key is test-only and never used in production.
+# ---------------------------------------------------------------------------
+RUN ssh-keygen -t ed25519 \
+    -f /root/.ssh-test-keys/id_ed25519_passphrase \
+    -N "tauterm-key-passphrase" && \
+    cat /root/.ssh-test-keys/id_ed25519_passphrase.pub >> /home/tauterm/.ssh/authorized_keys
+ENV TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH=/root/.ssh-test-keys/id_ed25519_passphrase
+ENV TAUTERM_TEST_KEY_PASSPHRASE=tauterm-key-passphrase
+
+# ---------------------------------------------------------------------------
 # sshd configuration
 # ---------------------------------------------------------------------------
 RUN mkdir -p /var/run/sshd

@@ -146,6 +146,55 @@ mod linux {
     }
 
     // -----------------------------------------------------------------------
+    // SEC-CRED-INT-006: store_passphrase / get_passphrase round-trip (FS-SSH-019a)
+    // -----------------------------------------------------------------------
+
+    /// Store a passphrase for an encrypted private key, retrieve it, verify
+    /// equality, then overwrite to clean up. Ensures the key-passphrase keychain
+    /// path is distinct from the ssh-password path.
+    #[test]
+    fn store_passphrase_and_get_passphrase_round_trip() {
+        use tau_term_lib::credentials::CredentialManager;
+
+        let mgr = CredentialManager::new();
+        if !mgr.is_available() {
+            eprintln!("SKIP: Secret Service unavailable");
+            return;
+        }
+
+        const KEY_PATH: &str = "/root/.ssh-test-keys/id_ed25519_passphrase";
+        const PASSPHRASE: &str = "tauterm-key-passphrase-int-test";
+
+        // LinuxCredentialStore uses block_in_place internally, which requires the
+        // multi-thread runtime. Use new_multi_thread() to match production behaviour.
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("multi-thread runtime");
+
+        rt.block_on(async {
+            mgr.store_passphrase(KEY_PATH, PASSPHRASE)
+                .await
+                .expect("store_passphrase must succeed");
+
+            let retrieved = mgr
+                .get_passphrase(KEY_PATH)
+                .await
+                .expect("get_passphrase must succeed");
+
+            assert_eq!(
+                retrieved,
+                Some(PASSPHRASE.to_string()),
+                "SEC-CRED-INT-006: retrieved passphrase must match stored value"
+            );
+
+            // Cleanup: overwrite with empty string so the keychain entry does
+            // not linger after the test. Best-effort — ignore errors.
+            let _ = mgr.store_passphrase(KEY_PATH, "").await;
+        });
+    }
+
+    // -----------------------------------------------------------------------
     // SEC-CRED-INT-005: binary secret (null bytes + non-UTF-8 bytes) round-trip
     // -----------------------------------------------------------------------
 

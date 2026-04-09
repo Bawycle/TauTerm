@@ -30,35 +30,11 @@
   Les ligatures de polices (FiraCode, Cascadia Code) sont la demande la plus upvotée d'Alacritty (issue #50, 1031 👍, ouverte depuis 2017 — refusée pour raisons architecturales OpenGL). Dans TauTerm, le rendu passe par WebKitGTK : les ligatures pourraient être activées via CSS `font-feature-settings: "liga" 1; font-variant-ligatures: contextual`.
   **Blocage architectural probable :** le modèle span-par-cellule de TauTerm (chaque caractère dans un `<span>` individuel) brise le contexte de shaping CSS — le moteur de rendu n'a pas accès aux glyphes adjacents pour former les ligatures. CSS shaping context exige que les glyphes adjacents soient dans le même nœud texte. Ce n'est pas un problème CSS, c'est une contrainte de l'arbre DOM. Tabby et Hyper contournent ce blocage via `@xterm/addon-ligatures` (`tabby-terminal/src/frontends/xtermFrontend.ts`), qui utilise HarfBuzz compilé en WASM pour mesurer les glyphes en canvas — non transposable à un renderer DOM.
   Action : tester avec FiraCode et Cascadia Code dans le renderer actuel pour confirmer ou infirmer le blocage. Si bloqué, documenter explicitement et lier à P12a (dirty tracking avec regroupement des `<span>` de même style en texte contigu).
-
-- [ ] **Recherche — scroll-centering sur le match actif** (FS-SEARCH-006)
-  La navigation prev/next entre résultats (`handleSearchNext`/`handleSearchPrev` dans `src/lib/composables/useTerminalView.io-handlers.svelte.ts:229-236`) incrémente uniquement `searchCurrentIdx` sans appeler `scroll_pane`. Si le match actif est dans le scrollback hors de la fenêtre visible, le viewport ne bouge pas — l'utilisateur ne voit pas le résultat actif.
-  Actions requises :
-  - Frontend : après chaque `handleSearchNext`/`handleSearchPrev`, calculer l'offset viewport cible depuis `match.scrollbackRow` et `scrollbackLines`, puis appeler `scrollPane(paneId, targetOffset)`.
-  - Le calcul du match actif est déjà disponible dans `useTerminalPane.svelte.ts:222-233` (`activeSearchMatchSet`) — exposer ou dupliquer la logique de position dans le handler de navigation.
-
 ---
 
 ## P0 — Bloquants release
 
 ### Sécurité
-
-- [ ] **SSH — clés privées protégées par passphrase** (FS-SSH-019a)
-  `src-tauri/src/ssh/auth.rs:115` appelle `keys::load_secret_key(key_path, None)` — la passphrase est toujours `None`. Si la clé est chiffrée, l'authentification échoue silencieusement avec une erreur SSH sans prompt utilisateur.
-  Actions requises :
-  - Détecter l'erreur "clé chiffrée" retournée par `russh_keys::load_secret_key`.
-  - Émettre un événement IPC `passphrase-prompt` (discriminated payload : `{ pane_id, key_path_label }` — ne pas inclure le chemin complet).
-  - Ajouter un composant frontend de prompt de passphrase (analogue à `SshCredentialDialog`).
-  - Intégrer SecretService : lookup par `identity_file` comme scope key (FS-CRED-008) ; option "Sauvegarder" opt-in non cochée par défaut.
-  - Tests nextest : clé non chiffrée (chemin nominal), clé chiffrée avec bonne passphrase, mauvaise passphrase (retry), passphrase depuis keychain.
-
-- [ ] **SEC-CRED-004 — Stockage du mot de passe à la sauvegarde d'une connexion SSH**
-  `handleConnectionSave()` reçoit un mot de passe optionnel depuis `ConnectionManager` mais ne peut pas le stocker : aucune commande Tauri IPC n'expose `CredentialManager::store_password` (credentials.rs).
-  Travail nécessaire :
-  1. Ajouter `#[tauri::command] store_connection_password(connection_id: String, password: String)` côté Rust, en appelant `CredentialManager::store_password`.
-  2. Ajouter le wrapper typé correspondant dans `src/lib/ipc/commands.ts`.
-  3. Câbler l'appel dans `handleConnectionSave()` après que `saveConnection()` retourne le vrai `id` (ne jamais stocker le mot de passe sous l'`id` placeholder envoyé pour les nouvelles connexions).
-  Jusqu'à ce que ce soit fait, le mot de passe saisi dans le gestionnaire de connexions n'est pas persisté (pas de perte silencieuse — `void password` rend l'intention explicite dans le code).
 
 - [ ] **PTY — environnement hérité non filtré (fuite silencieuse de secrets)** *(sévérité haute)*
   `session/registry/tab_ops.rs` et `pane_ops.rs` construisent un `Vec<(&str, &str)>` de variables explicites, mais `portable-pty`'s `CommandBuilder::env()` **ajoute** à l'environnement hérité sans l'effacer. Toute variable présente dans l'environnement du processus TauTerm (`AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, `DATABASE_URL`, etc.) est transmise silencieusement au shell fils et à tous ses sous-processus.

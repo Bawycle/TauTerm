@@ -174,6 +174,7 @@ pub fn run() {
             commands::ssh_cmds::reconnect_ssh,
             // SSH prompt commands
             commands::ssh_prompt_cmds::provide_credentials,
+            commands::ssh_prompt_cmds::provide_passphrase,
             commands::ssh_prompt_cmds::accept_host_key,
             commands::ssh_prompt_cmds::reject_host_key,
             commands::ssh_prompt_cmds::dismiss_ssh_algorithm_warning,
@@ -182,6 +183,7 @@ pub fn run() {
             commands::connection_cmds::save_connection,
             commands::connection_cmds::delete_connection,
             commands::connection_cmds::duplicate_connection,
+            commands::connection_cmds::store_connection_password,
             // Preferences commands
             commands::preferences_cmds::get_preferences,
             commands::preferences_cmds::update_preferences,
@@ -202,6 +204,8 @@ pub fn run() {
             commands::testing::inject_ssh_failure,
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_ssh_delay,
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_ssh_disconnect,
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_credential_prompt,
         ])

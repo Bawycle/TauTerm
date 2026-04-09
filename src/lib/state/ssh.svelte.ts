@@ -17,6 +17,7 @@ import type {
   SshStateChangedEvent,
   HostKeyPromptEvent,
   CredentialPromptEvent,
+  PassphrasePromptEvent,
 } from '$lib/ipc/types';
 
 // ---------------------------------------------------------------------------
@@ -34,9 +35,11 @@ import type {
 const _ssh = $state<{
   hostKeyPrompt: HostKeyPromptEvent | null;
   credentialPrompt: CredentialPromptEvent | null;
+  passphrasePrompt: PassphrasePromptEvent | null;
 }>({
   hostKeyPrompt: null,
   credentialPrompt: null,
+  passphrasePrompt: null,
 });
 
 /**
@@ -67,6 +70,16 @@ export const hostKeyPrompt = {
 export const credentialPrompt = {
   get value(): CredentialPromptEvent | null {
     return _ssh.credentialPrompt;
+  },
+};
+
+/**
+ * Active passphrase prompt dialog, or null when none pending (FS-SSH-019a).
+ * Read-only export — mutate via setPassphrasePrompt / clearPassphrasePrompt.
+ */
+export const passphrasePrompt = {
+  get value(): PassphrasePromptEvent | null {
+    return _ssh.passphrasePrompt;
   },
 };
 
@@ -121,6 +134,23 @@ export function setCredentialPrompt(prompt: CredentialPromptEvent): void {
 export function clearCredentialPrompt(): CredentialPromptEvent | null {
   const prev = _ssh.credentialPrompt;
   _ssh.credentialPrompt = null;
+  return prev;
+}
+
+/**
+ * Set the active passphrase prompt (opens passphrase dialog).
+ */
+export function setPassphrasePrompt(prompt: PassphrasePromptEvent): void {
+  _ssh.passphrasePrompt = prompt;
+}
+
+/**
+ * Clear the passphrase prompt (dialog dismissed or submitted).
+ * Returns the prompt that was cleared (for use in IPC calls), or null.
+ */
+export function clearPassphrasePrompt(): PassphrasePromptEvent | null {
+  const prev = _ssh.passphrasePrompt;
+  _ssh.passphrasePrompt = null;
   return prev;
 }
 

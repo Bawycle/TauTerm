@@ -96,11 +96,37 @@ pub async fn authenticate_keyboard_interactive<H: russh::client::Handler>(
     Ok(false)
 }
 
+/// Returns `true` when the private key at `key_path` is encrypted and requires
+/// a passphrase to load (FS-SSH-019a).
+///
+/// Probes the key by attempting to load it without a passphrase. If the
+/// underlying error message indicates encryption (`"The key is encrypted"`),
+/// returns `true`; for all other outcomes (successful load, unreadable file,
+/// malformed key) returns `false`.
+///
+/// The probe always fails fast — `None` passphrase on an encrypted key is
+/// rejected immediately by the parser without any I/O after the initial file read.
+pub fn key_needs_passphrase(key_path: &Path) -> bool {
+    match keys::load_secret_key(key_path, None) {
+        // russh-keys 0.45 does not re-export the Error enum variants publicly,
+        // so we match on the Display string. The string "The key is encrypted"
+        // comes from `KeyError::KeyIsEncrypted` (russh_keys/src/lib.rs, `#[error]`
+        // attribute). If the crate ever changes this message, this detection will
+        // silently fail — auth will fall through to password/kbd-interactive rather
+        // than prompting for a passphrase. Track at: russh-keys changelog.
+        Err(e) => {
+            let msg = e.to_string();
+            msg.contains("The key is encrypted") || msg.contains("key is encrypted")
+        }
+        Ok(_) => false,
+    }
+}
+
 /// Authenticate with a public key loaded from `key_path`.
 ///
-/// The key file must be a PEM/OpenSSH private key. Passphrase-protected keys
-/// are not supported in v1 — `russh_keys::load_secret_key` is called with
-/// `None` passphrase. If the file requires a passphrase, this returns an error.
+/// The key file must be a PEM/OpenSSH private key. An optional `passphrase`
+/// may be provided for encrypted keys (FS-SSH-019a). Pass `None` for
+/// unencrypted keys.
 ///
 /// Returns `Ok(true)` on success, `Ok(false)` on rejection.
 ///
@@ -111,9 +137,9 @@ pub async fn authenticate_pubkey<H: russh::client::Handler>(
     handle: &mut Handle<H>,
     username: &str,
     key_path: &Path,
+    passphrase: Option<&str>,
 ) -> Result<bool, SshError> {
-    // Load the private key — no passphrase support in v1.
-    let key_pair = keys::load_secret_key(key_path, None)
+    let key_pair = keys::load_secret_key(key_path, passphrase)
         .map_err(|e| SshError::Auth(format!("failed to load private key: {e}")))?;
 
     // Choose the best RSA hash algorithm supported by the server.
@@ -152,6 +178,121 @@ mod tests {
         assert!(
             result.is_err(),
             "load_secret_key on nonexistent path must return an error"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // key_needs_passphrase — FS-SSH-019a unit tests
+    // -----------------------------------------------------------------------
+
+    /// key_needs_passphrase must return false for an unencrypted ED25519 key.
+    #[test]
+    fn key_needs_passphrase_returns_false_for_unencrypted_key() {
+        use std::process::Command;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key_path = dir.path().join("id_ed25519_plain");
+        let status = Command::new("ssh-keygen")
+            .args([
+                "-t",
+                "ed25519",
+                "-N",
+                "",
+                "-f",
+                key_path.to_str().expect("valid path"),
+            ])
+            .output()
+            .expect("ssh-keygen must be available");
+        assert!(
+            status.status.success(),
+            "ssh-keygen must succeed for unencrypted key generation"
+        );
+        assert!(
+            !super::key_needs_passphrase(&key_path),
+            "key_needs_passphrase must return false for an unencrypted key"
+        );
+    }
+
+    /// key_needs_passphrase must return true for a passphrase-protected ED25519 key.
+    #[test]
+    fn key_needs_passphrase_returns_true_for_encrypted_key() {
+        use std::process::Command;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key_path = dir.path().join("id_ed25519_enc");
+        let status = Command::new("ssh-keygen")
+            .args([
+                "-t",
+                "ed25519",
+                "-N",
+                "test-passphrase",
+                "-f",
+                key_path.to_str().expect("valid path"),
+            ])
+            .output()
+            .expect("ssh-keygen must be available");
+        assert!(
+            status.status.success(),
+            "ssh-keygen must succeed for encrypted key generation"
+        );
+        assert!(
+            super::key_needs_passphrase(&key_path),
+            "key_needs_passphrase must return true for an encrypted key"
+        );
+    }
+
+    /// Loading an encrypted key with the correct passphrase must succeed (FS-SSH-019a).
+    #[test]
+    fn authenticate_pubkey_with_correct_passphrase_loads_key() {
+        use std::process::Command;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key_path = dir.path().join("id_ed25519_enc");
+        let status = Command::new("ssh-keygen")
+            .args([
+                "-t",
+                "ed25519",
+                "-N",
+                "correct-passphrase",
+                "-f",
+                key_path.to_str().expect("valid path"),
+            ])
+            .output()
+            .expect("ssh-keygen must be available");
+        assert!(
+            status.status.success(),
+            "ssh-keygen must succeed for encrypted key generation"
+        );
+        let result = russh::keys::load_secret_key(&key_path, Some("correct-passphrase"));
+        assert!(
+            result.is_ok(),
+            "load_secret_key with correct passphrase must succeed; got: {:?}",
+            result.err()
+        );
+    }
+
+    /// Loading an encrypted key with a wrong passphrase must return Err (FS-SSH-019a).
+    #[test]
+    fn authenticate_pubkey_with_wrong_passphrase_returns_error() {
+        use std::process::Command;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key_path = dir.path().join("id_ed25519_enc");
+        let status = Command::new("ssh-keygen")
+            .args([
+                "-t",
+                "ed25519",
+                "-N",
+                "correct-passphrase",
+                "-f",
+                key_path.to_str().expect("valid path"),
+            ])
+            .output()
+            .expect("ssh-keygen must be available");
+        assert!(
+            status.status.success(),
+            "ssh-keygen must succeed for encrypted key generation"
+        );
+        let result = russh::keys::load_secret_key(&key_path, Some("wrong-passphrase"));
+        assert!(
+            result.is_err(),
+            "load_secret_key with wrong passphrase must return an error"
         );
     }
 

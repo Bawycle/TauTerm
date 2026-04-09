@@ -96,6 +96,14 @@ export const config: Options.Testrunner = {
         interval: 500,
       }
     );
+
+    // Reset locale to English so all specs see locale-independent strings.
+    await browser.execute((): void => {
+      (window as any).__TAURI_INTERNALS__.invoke('update_preferences', {
+        patch: { appearance: { language: 'en' } },
+      });
+    });
+    await browser.pause(200); // allow backend to persist + frontend to react
   },
 
   // Kill tauri-driver after the session to avoid zombie processes.

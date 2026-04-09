@@ -212,35 +212,39 @@ describe('TauTerm — Split-pane UI behavior', () => {
     await tauriFireAndForget('inject_pty_output', { paneId: paneIdA, data: bytesA });
     await tauriFireAndForget('inject_pty_output', { paneId: paneIdB, data: bytesB });
 
-    // Wait for marker A to appear somewhere in the terminal grid
+    // Wait for marker A to appear in any terminal grid
     await browser.waitUntil(
       () =>
         browser.execute((marker: string): boolean => {
-          const grid = document.querySelector('.terminal-grid');
-          return grid !== null && (grid.textContent ?? '').includes(marker);
+          return Array.from(document.querySelectorAll('.terminal-grid')).some(
+            (g) => (g.textContent ?? '').includes(marker),
+          );
         }, markerA),
       { timeout: 10_000, timeoutMsg: `Marker "${markerA}" did not appear within 10 s` },
     );
 
-    // Wait for marker B to appear somewhere in the terminal grid
+    // Wait for marker B to appear in any terminal grid
     await browser.waitUntil(
       () =>
         browser.execute((marker: string): boolean => {
-          const grid = document.querySelector('.terminal-grid');
-          return grid !== null && (grid.textContent ?? '').includes(marker);
+          return Array.from(document.querySelectorAll('.terminal-grid')).some(
+            (g) => (g.textContent ?? '').includes(marker),
+          );
         }, markerB),
       { timeout: 10_000, timeoutMsg: `Marker "${markerB}" did not appear within 10 s` },
     );
 
-    // Both markers are present → the two panes rendered independently
+    // Both markers present in their respective panes → panes are independent
     const bothPresent = await browser.execute(
-      (mA: string, mB: string): boolean => {
-        const grid = document.querySelector('.terminal-grid');
-        const text = grid?.textContent ?? '';
-        return text.includes(mA) && text.includes(mB);
+      (mA: string, mB: string, idA: string, idB: string): boolean => {
+        const ga = document.querySelector(`.terminal-pane[data-pane-id="${idA}"] .terminal-grid`);
+        const gb = document.querySelector(`.terminal-pane[data-pane-id="${idB}"] .terminal-grid`);
+        return (ga?.textContent ?? '').includes(mA) && (gb?.textContent ?? '').includes(mB);
       },
       markerA,
       markerB,
+      paneIdA,
+      paneIdB,
     );
     expect(bothPresent).toBe(true);
   });

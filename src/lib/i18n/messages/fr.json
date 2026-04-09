@@ -83,6 +83,7 @@
   "action_ok": "OK",
   "action_connect": "Se connecter",
   "action_cancel": "Annuler",
+  "action_unlock": "Déverrouiller",
   "action_save": "Enregistrer",
   "action_delete": "Supprimer",
   "action_confirm": "Confirmer",
@@ -187,6 +188,12 @@
   "ssh_credential_password_for": "Mot de passe pour {username}@{host} :",
   "ssh_credential_auth_failed": "Mot de passe incorrect, veuillez réessayer.",
   "ssh_credential_save_in_keychain": "Enregistrer le mot de passe dans le trousseau",
+
+  "ssh_passphrase_dialog_title": "Phrase secrète SSH",
+  "ssh_passphrase_intro": "Entrez la phrase secrète pour la clé {key}",
+  "ssh_passphrase_auth_failed": "Phrase secrète incorrecte. Veuillez réessayer.",
+  "ssh_passphrase_field_label": "Phrase secrète",
+  "ssh_passphrase_save_in_keychain": "Enregistrer la phrase secrète dans le trousseau",
 
   "tab_bar_tabs_aria_label": "Onglets du terminal",
   "tab_bar_ssh_badge_aria_label": "Session SSH",

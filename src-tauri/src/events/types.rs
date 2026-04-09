@@ -226,6 +226,20 @@ pub struct CredentialPromptEvent {
     pub is_keychain_available: bool,
 }
 
+/// Emitted when SSH pubkey auth requires a passphrase for an encrypted private key (FS-SSH-019a).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PassphrasePromptEvent {
+    pub pane_id: PaneId,
+    /// Filename of the private key — NEVER the full path (security: no usernames in logs).
+    pub key_path_label: String,
+    /// `true` when a previous passphrase attempt failed.
+    pub failed: bool,
+    /// `true` when the OS keychain is available so the frontend can offer a
+    /// "Save in keychain" checkbox (FS-CRED-007).
+    pub is_keychain_available: bool,
+}
+
 /// Emitted on first connection or when the host key has changed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

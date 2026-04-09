@@ -202,14 +202,14 @@ describe('TUITC-FN-004: cursorBlinks()', () => {
   // Parameterised coverage: all 7 DECSCUSR codes in a single table.
   // Codes 0, 1, 3, 5 are blinking; codes 2, 4, 6 are steady.
   it.each([
-    [0, true, 'default blinking block'],
-    [1, true, 'blinking block'],
-    [2, false, 'steady block'],
-    [3, true, 'blinking underline'],
-    [4, false, 'steady underline'],
-    [5, true, 'blinking bar'],
-    [6, false, 'steady bar'],
-  ] as const)('DECSCUSR code %i (%s) → blinks=%s', (code, expected) => {
+    [0, 'default blinking block', true],
+    [1, 'blinking block', true],
+    [2, 'steady block', false],
+    [3, 'blinking underline', true],
+    [4, 'steady underline', false],
+    [5, 'blinking bar', true],
+    [6, 'steady bar', false],
+  ] as const)('DECSCUSR code %i (%s) → blinks=%s', (code, _label, expected) => {
     expect(cursorBlinks(code)).toBe(expected);
   });
 });

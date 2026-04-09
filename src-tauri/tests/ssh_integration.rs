@@ -33,6 +33,9 @@
 //! | SSH-INT-010          | FS-CRED-006      | Non-regular-file identity_file is rejected |
 //! | SSH-INT-011          | FS-SSH-020       | keepalive constants match FS-SSH-020      |
 //! | SSH-INT-012          | FS-SSH-013       | PTY request negotiation succeeds          |
+//! | SSH-INT-014          | FS-SSH-019a      | key_needs_passphrase returns true for encrypted key |
+//! | SSH-INT-015          | FS-SSH-019a      | authenticate_pubkey with encrypted key + correct passphrase succeeds |
+//! | SSH-INT-016          | FS-SSH-019a      | authenticate_pubkey with encrypted key + wrong passphrase fails |
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -56,6 +59,12 @@ mod linux {
         password: String,
         pubkey_path: PathBuf,
         host_key_line: String,
+        /// Path to the passphrase-protected ED25519 key (FS-SSH-019a tests).
+        /// `None` when `TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH` is not set.
+        encrypted_pubkey_path: Option<PathBuf>,
+        /// Passphrase for the encrypted key above.
+        /// `None` when `TAUTERM_TEST_KEY_PASSPHRASE` is not set.
+        key_passphrase: Option<String>,
     }
 
     impl SshTestEnv {
@@ -77,6 +86,10 @@ mod linux {
             let pubkey_path = PathBuf::from(pubkey_path_str);
             let host_key_line = env("TAUTERM_SSH_TEST_HOST_KEY_LINE")?;
 
+            let encrypted_pubkey_path =
+                env("TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH").map(PathBuf::from);
+            let key_passphrase = env("TAUTERM_TEST_KEY_PASSPHRASE");
+
             Some(Self {
                 host,
                 port,
@@ -84,6 +97,8 @@ mod linux {
                 password,
                 pubkey_path,
                 host_key_line,
+                encrypted_pubkey_path,
+                key_passphrase,
             })
         }
 
@@ -232,7 +247,7 @@ mod linux {
             .await
             .expect("TCP/SSH connect must succeed");
 
-        let result = authenticate_pubkey(&mut session, &env.user, &env.pubkey_path)
+        let result = authenticate_pubkey(&mut session, &env.user, &env.pubkey_path, None)
             .await
             .expect("authenticate_pubkey must not return a transport error");
 
@@ -635,7 +650,7 @@ mod linux {
         // A path containing `../` that resolves to a non-key file.
         let traversal_path = Path::new("/tmp/../../etc/passwd");
 
-        let result = authenticate_pubkey(&mut session, &env.user, traversal_path).await;
+        let result = authenticate_pubkey(&mut session, &env.user, traversal_path, None).await;
 
         assert!(
             result.is_err(),
@@ -663,7 +678,7 @@ mod linux {
         // /tmp is a directory — definitely not a valid SSH private key.
         let dir_path = Path::new("/tmp");
 
-        let result = authenticate_pubkey(&mut session, &env.user, dir_path).await;
+        let result = authenticate_pubkey(&mut session, &env.user, dir_path, None).await;
 
         assert!(
             result.is_err(),
@@ -853,6 +868,113 @@ mod linux {
         );
 
         // Connection may be closed by server after auth failure — acceptable.
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
+    }
+
+    // -----------------------------------------------------------------------
+    // SSH-INT-014 — key_needs_passphrase returns true for encrypted key
+    //              (FS-SSH-019a)
+    // -----------------------------------------------------------------------
+
+    /// key_needs_passphrase must detect that the encrypted test key requires a
+    /// passphrase. Skipped when TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH is not set.
+    #[test]
+    fn ssh_int_014_key_needs_passphrase_returns_true_for_encrypted_key() {
+        let Some(env) = SshTestEnv::load() else {
+            eprintln!("SKIP: SSH test environment variables not set");
+            return;
+        };
+        let Some(ref key_path) = env.encrypted_pubkey_path else {
+            eprintln!("SKIP: TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH not set");
+            return;
+        };
+
+        assert!(
+            tau_term_lib::ssh::auth::key_needs_passphrase(key_path),
+            "SSH-INT-014: key_needs_passphrase must return true for an encrypted key (FS-SSH-019a)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SSH-INT-015 — authenticate_pubkey with encrypted key + correct passphrase
+    //              succeeds (FS-SSH-019a)
+    // -----------------------------------------------------------------------
+
+    /// Authenticating with the encrypted key and the correct passphrase must
+    /// return Ok(true). Skipped when encrypted key env vars are not set.
+    #[tokio::test]
+    async fn ssh_int_015_authenticate_pubkey_with_encrypted_key_and_correct_passphrase_succeeds() {
+        let Some(env) = SshTestEnv::load() else {
+            eprintln!("SKIP: SSH test environment variables not set");
+            return;
+        };
+        let (Some(ref key_path), Some(ref passphrase)) = (
+            env.encrypted_pubkey_path.as_ref(),
+            env.key_passphrase.as_ref(),
+        ) else {
+            eprintln!(
+                "SKIP: TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH or TAUTERM_TEST_KEY_PASSPHRASE not set"
+            );
+            return;
+        };
+
+        let mut session = connect_accept_all(&env)
+            .await
+            .expect("TCP/SSH connect must succeed");
+
+        let result =
+            authenticate_pubkey(&mut session, &env.user, key_path, Some(passphrase.as_str()))
+                .await
+                .expect("authenticate_pubkey must not return a transport error");
+
+        assert!(
+            result,
+            "SSH-INT-015: pubkey auth with encrypted key and correct passphrase must succeed (FS-SSH-019a)"
+        );
+
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "en")
+            .await;
+    }
+
+    // -----------------------------------------------------------------------
+    // SSH-INT-016 — authenticate_pubkey with encrypted key + wrong passphrase
+    //              fails (FS-SSH-019a)
+    // -----------------------------------------------------------------------
+
+    /// Providing the wrong passphrase must return Err — the key cannot be
+    /// decrypted and loading fails before any SSH protocol exchange.
+    /// Skipped when encrypted key env vars are not set.
+    #[tokio::test]
+    async fn ssh_int_016_authenticate_pubkey_with_encrypted_key_and_wrong_passphrase_fails() {
+        let Some(env) = SshTestEnv::load() else {
+            eprintln!("SKIP: SSH test environment variables not set");
+            return;
+        };
+        let Some(ref key_path) = env.encrypted_pubkey_path else {
+            eprintln!("SKIP: TAUTERM_TEST_ENCRYPTED_PUBKEY_PATH not set");
+            return;
+        };
+
+        let mut session = connect_accept_all(&env)
+            .await
+            .expect("TCP/SSH connect must succeed");
+
+        let result = authenticate_pubkey(
+            &mut session,
+            &env.user,
+            key_path,
+            Some("definitely-wrong-passphrase"),
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "SSH-INT-016: authenticate_pubkey with wrong passphrase must return Err (FS-SSH-019a)"
+        );
+
         let _ = session
             .disconnect(russh::Disconnect::ByApplication, "", "en")
             .await;

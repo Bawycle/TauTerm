@@ -202,4 +202,16 @@ impl SshManager {
     pub fn connection_count(&self) -> usize {
         self.connections.len()
     }
+
+    /// Remove all tracking state for a pane without waiting for the underlying
+    /// connection to close naturally.
+    ///
+    /// Used by `inject_ssh_disconnect` (e2e-testing only) to clean up before
+    /// emitting a synthetic `Disconnected` event.  Any background `connect_task`
+    /// that later calls `connections.remove` will silently find nothing to remove.
+    #[cfg(feature = "e2e-testing")]
+    pub fn purge_pane(&self, pane_id: &PaneId) {
+        self.connections.remove(pane_id);
+        self.pending_credentials.remove(pane_id);
+    }
 }

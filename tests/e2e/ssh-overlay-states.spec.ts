@@ -173,7 +173,7 @@ async function createOverlayTestConnection(): Promise<void> {
 
   await typeIntoInput("cm-label", "E2E Overlay Test");
   await typeIntoInput("cm-host", "127.0.0.1");
-  await typeIntoInput("cm-port", "9999");
+  await typeIntoInput("cm-port", "1");
   await typeIntoInput("cm-username", "e2e-overlay-user");
 
   // Switch to password auth to avoid identity_file path validation.
@@ -284,29 +284,68 @@ describe("TauTerm — SSH connecting overlay (UXD §7.5.2, FS-SSH-015)", () => {
   /**
    * TEST-SSH-OVERLAY-002: .ssh-connecting-overlay disappears after connection ends.
    *
-   * Continues from TEST-SSH-OVERLAY-001: the 2-second delay expires, then
-   * `connect_task` tries TCP connect to 127.0.0.1:9999 (ECONNREFUSED) and
-   * the backend emits `Disconnected`.  The overlay must be removed from the DOM.
+   * Continues from TEST-SSH-OVERLAY-001 (overlay is visible, 2-second delay still
+   * in progress or just expired).  We synthetic-disconnect the pane via
+   * `inject_ssh_disconnect`, which directly emits a `Disconnected` state event
+   * without depending on TCP failure — decoupling the test from network conditions
+   * (port 1 may or may not be listening in the CI/E2E environment).
    */
   it("removes .ssh-connecting-overlay once the connection attempt ends", async () => {
-    // Wait for overlay to disappear: delay (2 s) + TCP failure + event round-trip.
-    // Generous 8-second timeout covers slow CI environments.
+    // Extract the pane ID from the overlay's ancestor .terminal-pane element.
+    const paneId = await browser.execute(function (): string | null {
+      const overlay = document.querySelector(".ssh-connecting-overlay");
+      if (!overlay) return null;
+      const pane = overlay.closest<HTMLElement>(".terminal-pane");
+      return pane?.dataset.paneId ?? null;
+    });
+
+    if (paneId) {
+      // Force an immediate Disconnected state event — no network required.
+      await tauriInvoke<void>("inject_ssh_disconnect", { paneId });
+    }
+
+    // Overlay must disappear within 2 s of the injected Disconnected event.
     await browser.waitUntil(
       () =>
         browser.execute(function (): boolean {
           return document.querySelector(".ssh-connecting-overlay") === null;
         }),
       {
-        timeout: 8_000,
+        timeout: 2_000,
         timeoutMsg:
-          ".ssh-connecting-overlay was still present 8 s after opening SSH connection — " +
+          ".ssh-connecting-overlay was still present after inject_ssh_disconnect — " +
           "overlay may not react to Disconnected state",
       },
     );
   });
 
   after(async () => {
-    // Best-effort: close the ConnectionManager and any SSH tabs opened by this suite.
+    // Best-effort: close the SSH tab opened by this suite, then close the ConnectionManager.
+    try {
+      // Close SSH tab opened by this suite (no confirmation dialog for SSH tabs).
+      const tabCount = await browser.execute(
+        (): number => document.querySelectorAll('.tab-bar__tab').length,
+      );
+      if (tabCount > 1) {
+        await browser.execute((): void => {
+          (document.querySelector('.terminal-grid') as HTMLElement | null)
+            ?.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'W', code: 'KeyW', ctrlKey: true, shiftKey: true,
+              bubbles: true, cancelable: true,
+            }));
+        });
+        await browser.waitUntil(
+          async () =>
+            (await browser.execute(
+              (): number => document.querySelectorAll('.tab-bar__tab').length,
+            )) < tabCount,
+          { timeout: 3_000, timeoutMsg: 'SSH tab did not close' },
+        );
+      }
+    } catch {
+      // ignore
+    }
+
     try {
       await browser.execute(function () {
         const closeBtn = document.querySelector<HTMLButtonElement>(

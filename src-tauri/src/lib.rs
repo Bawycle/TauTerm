@@ -205,6 +205,8 @@ pub fn run() {
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_ssh_delay,
             #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_ssh_disconnect,
+            #[cfg(feature = "e2e-testing")]
             commands::testing::inject_credential_prompt,
         ])
         .run(tauri::generate_context!())

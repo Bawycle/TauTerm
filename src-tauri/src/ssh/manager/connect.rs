@@ -57,9 +57,16 @@ impl SshManager {
             TauTermSshHandler::new(pane_id.clone(), config, app.clone()).with_manager(self);
 
         // TCP connect + SSH handshake (check_server_key called inside).
-        let mut session = russh::client::connect(russh_config, addr.as_str(), handler)
-            .await
-            .map_err(|e| SshError::Connection(format!("TCP/SSH connect failed: {e}")))?;
+        // Wrapped in a 5-second timeout because russh 0.60.0 has no connect_timeout
+        // in client::Config. Without this, a DROPped port (firewall) blocks indefinitely
+        // and the E2E test never observes the Disconnected state.
+        let mut session = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            russh::client::connect(russh_config, addr.as_str(), handler),
+        )
+        .await
+        .map_err(|_| SshError::Connection("TCP connect timed out".to_string()))?
+        .map_err(|e| SshError::Connection(format!("TCP/SSH connect failed: {e}")))?;
 
         // Transition to Authenticating.
         if let Some(conn) = self.connections.get(&pane_id) {

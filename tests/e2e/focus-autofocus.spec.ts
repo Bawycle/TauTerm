@@ -99,13 +99,19 @@ async function countTabs(): Promise<number> {
 }
 
 /**
- * Close all tabs except the first one, using the close-tab shortcut + dialog
- * dismissal pattern established in tab-lifecycle.spec.ts.
+ * Close the active tab via Ctrl+Shift+W, handling both possible outcomes:
  *
- * Dispatches Ctrl+Shift+W via DOM event (more reliable than browser.keys on
- * WebKitGTK) and confirms the "Close anyway" dialog when present.
+ *   1. Shell idle (InjectablePtySession with has_foreground_process = false):
+ *      the tab closes immediately with no dialog.
+ *   2. Active foreground process: a confirmation dialog appears; we confirm it.
+ *
+ * Waits up to 3 s for either the dialog to appear OR the tab count to
+ * decrease, then confirms the dialog if it is present.  This makes the helper
+ * resilient to both E2E configurations without assuming which one is active.
  */
 async function closeTabViaKeyboard(): Promise<void> {
+  const tabCountBefore = await countTabs();
+
   await browser.execute((): void => {
     const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
     const target = grid ?? document.body;
@@ -121,16 +127,20 @@ async function closeTabViaKeyboard(): Promise<void> {
     );
   });
 
-  // Dismiss the close-confirmation dialog if it appears (E2E build never
-  // emits processExited, so the dialog always shows for active sessions).
-  // Use data-testid to be locale-independent.
+  // Wait for either the confirmation dialog to appear (foreground process
+  // present) or the tab count to decrease (shell idle, direct close).
   await browser.waitUntil(
-    () =>
-      browser.execute((): boolean => {
+    async () => {
+      const dialogPresent = await browser.execute((): boolean => {
         return document.querySelector('[data-testid="close-confirm-action"]') !== null;
-      }),
-    { timeout: 3_000, timeoutMsg: 'Close confirmation dialog did not appear' },
+      });
+      if (dialogPresent) return true;
+      return (await countTabs()) < tabCountBefore;
+    },
+    { timeout: 3_000, timeoutMsg: 'Tab did not close and no confirmation dialog appeared' },
   );
+
+  // If a dialog appeared, confirm it.
   await browser.execute((): void => {
     const btn = document.querySelector<HTMLButtonElement>('[data-testid="close-confirm-action"]');
     btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));

@@ -38,6 +38,56 @@ import { Selectors } from './helpers/selectors';
 // ---------------------------------------------------------------------------
 
 /**
+ * Invoke a Tauri IPC command and await its result.
+ *
+ * Stores the resolved value in `window.__e2e_invoke_result` then polls until
+ * it appears — workaround for `browser.executeAsync` unreliability with
+ * tauri-driver / WebKitGTK.
+ */
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  await browser.execute(function () {
+    (window as unknown as Record<string, unknown>).__e2e_invoke_result = undefined;
+  });
+
+  await browser.execute(
+    function (cmdArg: string, argsArg: Record<string, unknown> | undefined) {
+      (window as unknown as {
+        __TAURI_INTERNALS__: { invoke: (c: string, a?: unknown) => Promise<unknown> };
+      }).__TAURI_INTERNALS__
+        .invoke(cmdArg, argsArg)
+        .then(function (r: unknown) {
+          (window as unknown as Record<string, unknown>).__e2e_invoke_result =
+            r ?? '__e2e_null__';
+        })
+        .catch(function () {
+          (window as unknown as Record<string, unknown>).__e2e_invoke_result = '__e2e_error__';
+        });
+    },
+    cmd,
+    args,
+  );
+
+  await browser.waitUntil(
+    () =>
+      browser.execute(function (): boolean {
+        return (window as unknown as Record<string, unknown>).__e2e_invoke_result !== undefined;
+      }),
+    { timeout: 5_000, timeoutMsg: `tauriInvoke("${cmd}") did not resolve within 5 s` },
+  );
+
+  const raw = await browser.execute(function (): unknown {
+    const v = (window as unknown as Record<string, unknown>).__e2e_invoke_result;
+    delete (window as unknown as Record<string, unknown>).__e2e_invoke_result;
+    return v;
+  });
+
+  if (raw === '__e2e_error__') {
+    throw new Error(`tauriInvoke("${cmd}") rejected`);
+  }
+  return (raw === '__e2e_null__' ? null : raw) as T;
+}
+
+/**
  * Fire a Tauri IPC command without waiting for the return value.
  * See pty-roundtrip.spec.ts for detailed rationale.
  */
@@ -117,7 +167,7 @@ async function typeInSearchInput(text: string): Promise<void> {
     } else {
       input.value = textArg;
     }
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
   }, text);
 }
 
@@ -141,10 +191,16 @@ async function getActivePaneId(): Promise<string | null> {
   });
 }
 
-/** Seed known text into the active pane via inject_pty_output. */
+/** Seed known text into the active pane via inject_pty_output (fire-and-forget). */
 async function seedPaneContent(paneId: string, content: string): Promise<void> {
   const bytes = [...new TextEncoder().encode(content)];
   await tauriFireAndForget('inject_pty_output', { paneId, data: bytes });
+}
+
+/** Seed known text into the active pane via inject_pty_output (awaited, throws on error). */
+async function seedPaneContentAwaited(paneId: string, content: string): Promise<void> {
+  const bytes = [...new TextEncoder().encode(content)];
+  await tauriInvoke<void>('inject_pty_output', { paneId, data: bytes });
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +283,7 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
     const searchToken = 'e2e-search-token-xyz';
     await seedPaneContent(paneId!, searchToken + '\r\n');
 
-    // Wait for the content to render in the grid
+    // Wait for the content to render in the grid (confirms VT parser processed it)
     await browser.waitUntil(
       () =>
         browser.execute((token: string): boolean => {
@@ -236,6 +292,11 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
         }, searchToken),
       { timeout: 10_000, timeoutMsg: `Seeded token "${searchToken}" did not render within 10 s` },
     );
+
+    // search_pane searches the scrollback ring buffer, not the visible screen.
+    // Inject newlines to scroll the token off the visible area into scrollback.
+    await seedPaneContent(paneId!, '\r\n'.repeat(50));
+    await browser.pause(300);
 
     // Ensure search overlay is open
     if (!(await isSearchOverlayOpen())) {
@@ -310,13 +371,32 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
    * match count's current index increments.
    */
   it('TEST-SEARCH-E2E-005: Next button advances the active match index', async () => {
+    // Close the search overlay first to start from a known state.
+    // Previous tests may have left it open with a stale query.
+    if (await isSearchOverlayOpen()) {
+      await browser.execute((): void => {
+        const input = document.querySelector<HTMLInputElement>(
+          '.search-overlay input[type="text"]',
+        );
+        if (input) {
+          input.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+          );
+        }
+      });
+      await browser.waitUntil(async () => !(await isSearchOverlayOpen()), {
+        timeout: 3_000,
+        timeoutMsg: 'Search overlay did not close before test 005',
+      });
+    }
+
     // Ensure search overlay is open with a seeded pane containing matches
     const paneId = await getActivePaneId();
     expect(paneId).toBeTruthy();
 
-    // Seed content if needed and ensure overlay is open
+    // Seed content via awaited invoke so errors surface instead of timing out.
     const searchToken = 'e2e-nav-token';
-    await seedPaneContent(paneId!, `${searchToken}\r\n${searchToken}\r\n`);
+    await seedPaneContentAwaited(paneId!, `${searchToken}\r\n${searchToken}\r\n`);
 
     await browser.waitUntil(
       () =>
@@ -326,6 +406,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
         }, searchToken),
       { timeout: 10_000, timeoutMsg: `Nav token "${searchToken}" did not render` },
     );
+
+    // Push token into scrollback so search_pane can find it
+    await seedPaneContentAwaited(paneId!, '\r\n'.repeat(50));
+    await browser.pause(300);
 
     if (!(await isSearchOverlayOpen())) {
       await $(Selectors.terminalGrid).click();

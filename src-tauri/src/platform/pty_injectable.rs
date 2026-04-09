@@ -18,6 +18,8 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 use tokio::sync::mpsc;
 
+use libc;
+
 use crate::error::PtyError;
 use crate::platform::{PtyBackend, PtySession};
 use crate::session::ids::PaneId;
@@ -191,6 +193,21 @@ impl PtySession for InjectablePtySession {
         // `InjectableRegistry::remove`. Dropping `self` here drops `self.tx`
         // and `self.reader`; the Arc refcount on the reader may still be held
         // by the read task, which is correct and mirrors `LinuxPtySession`.
+    }
+
+    fn shell_pid(&self) -> Option<u32> {
+        // Return a sentinel PID so has_foreground_process can evaluate properly.
+        // A shell PID of 0 with foreground_pgid also 0 means "idle shell, no
+        // foreground process" — consistent with how the real PTY backend behaves
+        // when a shell is waiting at its prompt.
+        Some(0)
+    }
+
+    fn foreground_pgid(&self) -> Result<libc::pid_t, PtyError> {
+        // Same as shell_pid sentinel → idle (no foreground process beyond the shell).
+        // This makes has_foreground_process return false, so close-pane fires directly
+        // without a confirmation dialog — the correct behavior for an idle E2E pane.
+        Ok(0)
     }
 
     #[cfg(feature = "e2e-testing")]

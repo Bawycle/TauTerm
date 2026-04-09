@@ -57,7 +57,7 @@ pub async fn update_preferences(
     // value from the patch — they may differ when clamping occurred.
     if new_scrollback.is_some() {
         let effective = updated.terminal.scrollback_lines;
-        tracing::info!(
+        tracing::debug!(
             "scrollback_lines preference updated to {effective}; \
              applies to new panes — existing panes retain their current buffer size"
         );

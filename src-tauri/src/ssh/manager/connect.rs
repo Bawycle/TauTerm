@@ -149,7 +149,7 @@ impl SshManager {
             let (tx, rx) = tokio::sync::oneshot::channel::<super::Credentials>();
             self.pending_credentials
                 .insert(pane_id.clone(), super::PendingCredentials { sender: tx });
-            tracing::info!(
+            tracing::debug!(
                 pane_id = %pane_id,
                 attempt,
                 "connect_task: emitting credential-prompt event"
@@ -173,17 +173,17 @@ impl SshManager {
             .await
             {
                 Ok(Ok(creds)) => {
-                    tracing::info!(pane_id = %pane_id, "connect_task: auth input received from user prompt");
+                    tracing::debug!(pane_id = %pane_id, "connect_task: auth input received from user prompt");
                     current_credentials = Some(creds);
                 }
                 Ok(Err(_)) => {
                     // Sender dropped — user cancelled the dialog.
-                    tracing::info!(pane_id = %pane_id, "connect_task: credential prompt cancelled (sender dropped)");
+                    tracing::warn!(pane_id = %pane_id, "connect_task: credential prompt cancelled (sender dropped)");
                     return Err(SshError::Auth("cancelled by user".to_string()));
                 }
                 Err(_) => {
                     // Timeout expired without a response.
-                    tracing::info!(pane_id = %pane_id, "connect_task: credential prompt timed out");
+                    tracing::warn!(pane_id = %pane_id, "connect_task: credential prompt timed out");
                     self.pending_credentials.remove(&pane_id);
                     return Err(SshError::Auth("credential prompt timed out".to_string()));
                 }

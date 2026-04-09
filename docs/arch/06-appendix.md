@@ -118,3 +118,4 @@ See ADR-0005. The PAL stubs are in `platform/pty_macos.rs`, `platform/credential
 | [ADR-0013](adr/ADR-0013-i18n-paraglide-js.md) | i18n library: Paraglide JS (Inlang) | Accepted |
 | [ADR-0014](adr/ADR-0014-appimage-tauri-bundler.md) | AppImage distribution via Tauri bundler | Accepted |
 | [ADR-0017](adr/ADR-0017-scrollback-memory-estimate-formula.md) | Scrollback memory estimate: 5,500 bytes/line upper-bound formula | Accepted |
+| [ADR-0018](adr/ADR-0018-logging-filter-per-build-profile.md) | Logging filter strategy per build profile (debug vs. release defaults) | Accepted |

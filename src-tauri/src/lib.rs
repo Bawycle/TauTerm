@@ -46,10 +46,18 @@ use crate::ssh::SshManager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize tracing subscriber for logging.
+    // Default filter: in dev builds, DEBUG+ on the TauTerm crate and WARN on
+    // all dependencies; in release builds, WARN+ only.  `RUST_LOG` always
+    // takes precedence (try_from_default_env succeeds when RUST_LOG is set).
+    let default_filter = if cfg!(debug_assertions) {
+        "tau_term_lib=debug,warn"
+    } else {
+        "warn"
+    };
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_filter)),
         )
         .init();
 

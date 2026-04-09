@@ -2,7 +2,7 @@
 
 # TauTerm — Architecture Index
 
-> **Version:** 1.7.0
+> **Version:** 1.8.0
 > **Status:** Living document — update when architectural decisions change
 > **Author:** Software Architect — TauTerm team
 
@@ -21,6 +21,7 @@ The architecture documentation has been split into focused files. See below for 
 | [05-frontend.md](05-frontend.md) | §11 Frontend Architecture (module map, TerminalPane component split, keyboard shortcut interception) |
 | [06-appendix.md](06-appendix.md) | §8 Security Architecture (IPC boundary validation, PTY isolation, SSH security, CSP, terminal injection prevention) + §12 Future Extensibility (session persistence, plugin system, cloud sync, Kitty protocol, Windows/macOS port) + §13 ADR Index |
 | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) | §14 Screen Buffer Data Model (cell layout, scrollback memory formula, soft/hard wrap representation, minimum terminal size constraint) |
+| [08-logging.md](08-logging.md) | §15 Logging and Observability Strategy (instrumentation library, semantic levels, default filter by build profile, level classification of call sites, security constraints, performance) |
 
 Testing strategy is in a separate document: [../testing/TESTING.md](../testing/TESTING.md).
 
@@ -87,6 +88,12 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | `get_scrollback_line` API change (expose `soft_wrapped`) | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.3.1 |
 | Minimum terminal size (20×5), enforcement layer | [07-screen-buffer-data-model.md](07-screen-buffer-data-model.md) §14.4 |
 | Testing strategy (pyramid, unit, integration, VT conformance, E2E, security) | [../testing/TESTING.md](../testing/TESTING.md) |
+| Logging/tracing library and level convention | [08-logging.md](08-logging.md) §15.1–15.2 |
+| Default filter by build profile (`debug_assertions`) | [08-logging.md](08-logging.md) §15.3 |
+| Level audit of existing `tracing!` call sites | [08-logging.md](08-logging.md) §15.4 |
+| Security constraints on log content (no credentials, no full paths) | [08-logging.md](08-logging.md) §15.5 |
+| Performance constraints on hot-path logging | [08-logging.md](08-logging.md) §15.6 |
+| Structured logging for security events (M2 roadmap) | [08-logging.md](08-logging.md) §15.7 |
 
 ---
 

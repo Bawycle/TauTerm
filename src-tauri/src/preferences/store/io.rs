@@ -51,7 +51,7 @@ pub(super) fn load_from_disk(path: &PathBuf) -> Preferences {
             }
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            tracing::info!("No preferences file found, using defaults.");
+            tracing::debug!("No preferences file found, using defaults.");
             None
         }
         Err(e) => {

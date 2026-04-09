@@ -19,6 +19,7 @@ pub const EVENT_SCREEN_UPDATE: &str = "screen-update";
 pub const EVENT_MODE_STATE_CHANGED: &str = "mode-state-changed";
 pub const EVENT_SCROLL_POSITION_CHANGED: &str = "scroll-position-changed";
 pub const EVENT_CREDENTIAL_PROMPT: &str = "credential-prompt";
+pub const EVENT_PASSPHRASE_PROMPT: &str = "passphrase-prompt";
 pub const EVENT_HOST_KEY_PROMPT: &str = "host-key-prompt";
 pub const EVENT_NOTIFICATION_CHANGED: &str = "notification-changed";
 pub const EVENT_CURSOR_STYLE_CHANGED: &str = "cursor-style-changed";
@@ -67,6 +68,13 @@ pub fn emit_scroll_position_changed(app: &AppHandle, event: ScrollPositionChange
 pub fn emit_credential_prompt(app: &AppHandle, event: CredentialPromptEvent) {
     if let Err(e) = app.emit(EVENT_CREDENTIAL_PROMPT, event) {
         tracing::error!("Failed to emit credential-prompt: {e}");
+    }
+}
+
+/// Emit a passphrase prompt event (SSH pubkey auth — encrypted private key, FS-SSH-019a).
+pub fn emit_passphrase_prompt(app: &AppHandle, event: PassphrasePromptEvent) {
+    if let Err(e) = app.emit(EVENT_PASSPHRASE_PROMPT, event) {
+        tracing::error!("Failed to emit passphrase-prompt: {e}");
     }
 }
 

@@ -335,6 +335,21 @@ export interface CredentialPromptEvent {
 }
 
 /**
+ * Emitted when SSH pubkey auth needs a passphrase for an encrypted private key (FS-SSH-019a).
+ *
+ * Mirrors Rust PassphrasePromptEvent.
+ */
+export interface PassphrasePromptEvent {
+  paneId: PaneId;
+  /** Filename only — never the full path. */
+  keyPathLabel: string;
+  /** `true` when a previous attempt failed — frontend shows an error indicator. */
+  failed: boolean;
+  /** `true` when the OS keychain is available — frontend shows "Save in keychain" checkbox. */
+  isKeychainAvailable: boolean;
+}
+
+/**
  * Emitted on first connection or when the host key has changed.
  *
  * Mirrors Rust HostKeyPromptEvent.

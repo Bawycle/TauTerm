@@ -21,6 +21,11 @@ fn credential_key(connection_id: &str, username: &str) -> String {
     format!("tauterm:ssh:{connection_id}:{username}")
 }
 
+/// Key format: `tauterm:key-passphrase:{identity_file_path}` (FS-SSH-019a).
+fn passphrase_key(identity_file_path: &str) -> String {
+    format!("tauterm:key-passphrase:{identity_file_path}")
+}
+
 /// Public credential manager — wraps the platform credential store.
 pub struct CredentialManager {
     store: Box<dyn CredentialStore>,
@@ -81,6 +86,38 @@ impl CredentialManager {
         }
     }
 
+    /// Store a passphrase for an encrypted SSH private key (FS-SSH-019a).
+    ///
+    /// Keyed as `tauterm:key-passphrase:{identity_file_path}`. Never logs the value.
+    pub async fn store_passphrase(
+        &self,
+        identity_file_path: &str,
+        passphrase: &str,
+    ) -> Result<(), CredentialError> {
+        let key = passphrase_key(identity_file_path);
+        self.store.store(&key, passphrase.as_bytes())
+    }
+
+    /// Retrieve a stored passphrase for an encrypted SSH private key (FS-SSH-019a).
+    ///
+    /// Returns `None` if no passphrase has been stored for this key path.
+    pub async fn get_passphrase(
+        &self,
+        identity_file_path: &str,
+    ) -> Result<Option<String>, CredentialError> {
+        let key = passphrase_key(identity_file_path);
+        let bytes = self.store.get(&key)?;
+        match bytes {
+            None => Ok(None),
+            Some(b) => {
+                let s = String::from_utf8(b).map_err(|e| {
+                    CredentialError::Io(format!("Stored passphrase is not valid UTF-8: {e}"))
+                })?;
+                Ok(Some(s))
+            }
+        }
+    }
+
     /// Delete stored credentials for a connection.
     pub async fn delete_password(
         &self,
@@ -103,6 +140,13 @@ mod tests {
     fn credential_key_format() {
         let key = credential_key("conn-abc", "alice");
         assert_eq!(key, "tauterm:ssh:conn-abc:alice");
+    }
+
+    /// passphrase_key must produce the expected format (FS-SSH-019a).
+    #[test]
+    fn passphrase_key_format() {
+        let key = passphrase_key("/home/user/.ssh/id_ed25519");
+        assert_eq!(key, "tauterm:key-passphrase:/home/user/.ssh/id_ed25519");
     }
 
     /// CredentialManager::new() must not panic — platform store construction is
@@ -167,6 +211,26 @@ mod tests {
         CredentialManager {
             store: Box::new(MockCredentialStore::new()),
         }
+    }
+
+    /// CRED-MOCK-000: store_passphrase → get_passphrase round-trip returns same value (FS-SSH-019a).
+    #[tokio::test]
+    async fn credential_manager_store_retrieve_passphrase_roundtrip() {
+        let mgr = mock_manager();
+        mgr.store_passphrase("/home/user/.ssh/id_ed25519", "my-secret-passphrase")
+            .await
+            .expect("store_passphrase must succeed");
+
+        let result = mgr
+            .get_passphrase("/home/user/.ssh/id_ed25519")
+            .await
+            .expect("get_passphrase must succeed");
+
+        assert_eq!(
+            result,
+            Some("my-secret-passphrase".to_string()),
+            "Retrieved passphrase must match stored value"
+        );
     }
 
     /// CRED-MOCK-001: store_password → get_password round-trip returns same value.

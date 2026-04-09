@@ -68,12 +68,31 @@ pub struct PendingHostKey {
     pub is_mismatch: bool,
 }
 
+/// Pending passphrase request — a oneshot sender parked while waiting for
+/// the user to respond to a `passphrase-prompt` event (FS-SSH-019a).
+pub struct PendingPassphrase {
+    pub sender: oneshot::Sender<PassphraseInput>,
+}
+
+/// User-supplied passphrase response for an encrypted SSH private key (FS-SSH-019a).
+///
+/// The `passphrase` field is `Zeroizing<String>`, which implements `Drop` and
+/// zeroes the underlying string bytes when the value is dropped. This provides
+/// the memory-safety guarantee without preventing ownership transfer of the struct.
+pub struct PassphraseInput {
+    pub passphrase: zeroize::Zeroizing<String>,
+    pub save_in_keychain: bool,
+}
+
 /// Manages all live SSH sessions.
 pub struct SshManager {
     pub(super) connections: DashMap<PaneId, SshConnection>,
     /// Pending credential prompts indexed by pane ID.
     /// Inserted when the connect task needs user input; removed when satisfied or timed out.
     pub(super) pending_credentials: DashMap<PaneId, PendingCredentials>,
+    /// Pending passphrase prompts for encrypted private keys (FS-SSH-019a).
+    /// Inserted when the connect task needs a passphrase; removed when satisfied or timed out.
+    pub pending_passphrases: DashMap<PaneId, PendingPassphrase>,
     /// Pending host key verifications awaiting user acceptance/rejection.
     pub pending_host_keys: DashMap<PaneId, PendingHostKey>,
     /// Credential manager for OS keychain access (store/retrieve passwords).

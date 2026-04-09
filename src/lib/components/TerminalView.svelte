@@ -22,6 +22,7 @@
   import PreferencesPanel from './PreferencesPanel.svelte';
   import SshHostKeyDialog from './SshHostKeyDialog.svelte';
   import SshCredentialDialog from './SshCredentialDialog.svelte';
+  import SshPassphraseDialog from './SshPassphraseDialog.svelte';
   import ConnectionManager from './ConnectionManager.svelte';
   import FullscreenExitBadge from './FullscreenExitBadge.svelte';
   import Dialog from '$lib/ui/Dialog.svelte';
@@ -29,7 +30,7 @@
   import { Network, MousePointerClick, Maximize2, Minimize2 } from 'lucide-svelte';
   import { useTerminalView } from '$lib/composables/useTerminalView.svelte';
   import { sessionState, getActiveTab, getActivePanes } from '$lib/state/session.svelte';
-  import { hostKeyPrompt, credentialPrompt } from '$lib/state/ssh.svelte';
+  import { hostKeyPrompt, credentialPrompt, passphrasePrompt } from '$lib/state/ssh.svelte';
   import { terminatedPanes } from '$lib/state/notifications.svelte';
   import { preferences } from '$lib/state/preferences.svelte';
   import { fullscreenState } from '$lib/state/fullscreen.svelte';
@@ -313,6 +314,17 @@
     onsubmit={tv.handleProvideCredentials}
     oncancel={tv.handleCancelCredentials}
     onclose={tv.handleCancelCredentials}
+  />
+
+  <!-- SSH passphrase prompt dialog (FS-SSH-019a) -->
+  <SshPassphraseDialog
+    open={passphrasePrompt.value !== null}
+    keyPathLabel={passphrasePrompt.value?.keyPathLabel ?? ''}
+    failed={passphrasePrompt.value?.failed ?? false}
+    isKeychainAvailable={passphrasePrompt.value?.isKeychainAvailable ?? false}
+    onsubmit={tv.handleProvidePassphrase}
+    oncancel={tv.handleCancelPassphrase}
+    onclose={tv.handleCancelPassphrase}
   />
 
   <!-- FS-PTY-008: Close confirmation dialog — DIV-UXD-012: initial focus on Cancel -->

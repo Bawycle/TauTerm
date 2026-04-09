@@ -13,12 +13,13 @@
 use std::sync::Arc;
 
 use tauri::State;
+use zeroize::Zeroizing;
 
 use crate::error::TauTermError;
 use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
 use crate::session::ids::PaneId;
 use crate::ssh::known_hosts::KnownHostsStore;
-use crate::ssh::manager::Credentials;
+use crate::ssh::manager::{Credentials, PassphraseInput};
 use crate::ssh::{SshLifecycleState, SshManager};
 
 #[tauri::command]
@@ -130,6 +131,35 @@ pub async fn reject_host_key(
         },
     );
 
+    Ok(())
+}
+
+/// Provide a passphrase for an encrypted SSH private key (FS-SSH-019a).
+///
+/// Called by the frontend in response to a `passphrase-prompt` event.
+/// The passphrase is forwarded to the connect task via the oneshot channel
+/// stored in `SshManager::pending_passphrases`.
+#[tauri::command]
+pub async fn provide_passphrase(
+    pane_id: PaneId,
+    passphrase: String,
+    save_in_keychain: bool,
+    ssh_manager: State<'_, Arc<SshManager>>,
+) -> Result<(), TauTermError> {
+    let entry = ssh_manager
+        .pending_passphrases
+        .remove(&pane_id)
+        .ok_or_else(|| {
+            TauTermError::new(
+                "PANE_NOT_FOUND",
+                "No pending passphrase prompt for this pane.",
+            )
+        })?;
+    // Ignore send errors — the connect task may have timed out or been cancelled.
+    let _ = entry.1.sender.send(PassphraseInput {
+        passphrase: Zeroizing::new(passphrase),
+        save_in_keychain,
+    });
     Ok(())
 }
 

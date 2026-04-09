@@ -23,7 +23,7 @@
  * Props are passed in at call time so the composable can filter events by paneId.
  */
 
-import { onMount, onDestroy } from 'svelte';
+import { onMount, onDestroy, untrack } from 'svelte';
 import {
   onScreenUpdate,
   onScrollPositionChanged,
@@ -231,6 +231,23 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       set.add(screenRow * cols + c);
     }
     return set;
+  });
+
+  // FS-SEARCH-006: scroll to center the active search match in the viewport.
+  $effect(() => {
+    const idx = props.activeSearchMatchIndex();
+    const matches = props.searchMatches();
+    if (idx <= 0 || matches.length === 0) return;
+    const match = matches[idx - 1];
+    if (!match) return;
+    // Read layout values without tracking as reactive deps to avoid feedback loop.
+    // Guard: scrollbackLines=0 means the snapshot hasn't arrived yet — skip to
+    // avoid a spurious scroll-to-bottom before the pane is fully initialized.
+    const lines = untrack(() => scrollbackLines);
+    if (lines === 0) return;
+    const centerRow = Math.floor(untrack(() => rows) / 2);
+    const targetOffset = lines - match.scrollbackRow + centerRow;
+    scrollToOffset(targetOffset);
   });
 
   // -------------------------------------------------------------------------

@@ -83,6 +83,7 @@
   "action_ok": "OK",
   "action_connect": "Connect",
   "action_cancel": "Cancel",
+  "action_unlock": "Unlock",
   "action_save": "Save",
   "action_delete": "Delete",
   "action_confirm": "Confirm",
@@ -187,6 +188,12 @@
   "ssh_credential_password_for": "Password for {username}@{host}:",
   "ssh_credential_auth_failed": "Incorrect password, please try again.",
   "ssh_credential_save_in_keychain": "Save password in keychain",
+
+  "ssh_passphrase_dialog_title": "SSH Key Passphrase",
+  "ssh_passphrase_intro": "Enter passphrase for key {key}",
+  "ssh_passphrase_auth_failed": "Incorrect passphrase. Please try again.",
+  "ssh_passphrase_field_label": "Passphrase",
+  "ssh_passphrase_save_in_keychain": "Save passphrase in keychain",
 
   "tab_bar_tabs_aria_label": "Terminal tabs",
   "tab_bar_ssh_badge_aria_label": "SSH session",

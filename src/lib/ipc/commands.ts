@@ -145,6 +145,14 @@ export function provideCredentials(paneId: PaneId, credentials: Credentials): Pr
   return invoke('provide_credentials', { paneId, credentials });
 }
 
+export function providePassphrase(
+  paneId: PaneId,
+  passphrase: string,
+  saveInKeychain: boolean,
+): Promise<void> {
+  return invoke('provide_passphrase', { paneId, passphrase, saveInKeychain });
+}
+
 export function dismissSshAlgorithmWarning(paneId: PaneId): Promise<void> {
   return invoke('dismiss_ssh_algorithm_warning', { paneId });
 }
@@ -167,6 +175,14 @@ export function deleteConnection(connectionId: string): Promise<void> {
 
 export function duplicateConnection(id: string): Promise<SshConnectionConfig> {
   return invoke<SshConnectionConfig>('duplicate_connection', { id });
+}
+
+export function storeConnectionPassword(
+  connectionId: string,
+  username: string,
+  password: string,
+): Promise<void> {
+  return invoke('store_connection_password', { connectionId, username, password });
 }
 
 // ---------------------------------------------------------------------------

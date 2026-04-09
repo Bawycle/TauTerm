@@ -145,7 +145,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   3. Add a tmux scenario in `docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md`.
 
 - [ ] **Pixel dimensions null in SSH `pty-req` and local PTY open** `[Score: 9 | R:1, S:1, U:1, E:3]` (FS-SSH-013)
-  `connect.rs` and `pty_linux/backend.rs` pass `pixel_width: 0, pixel_height: 0`. FS-SSH-013 requires `xpixel`/`ypixel` to be transmitted. Needed for applications that compute font sizes or use pixel dimensions (future graphics protocols over SSH).
+  `connect.rs` and `pty_linux/backend.rs` pass `pixel_width: 0, pixel_height: 0`. FS-SSH-013 requires `xpixel`/`ypixel` to be transmitted. Needed for applications that compute font sizes or use pixel dimensions.
   Action: the frontend must compute and transmit `cell_pixel_width × cell_pixel_height` to the backend on open and resize. The backend propagates in `TIOCSWINSZ` (local) and `window-change` (SSH).
 
 ### Architecture — Documented Debt
@@ -272,6 +272,21 @@ These two optimizations were explicitly descoped from the initial performance ca
   1. **Phase 1 (passive OSC 8)**: parse OSC 8 in `osc.rs` → store URI in `Cell` → expose via IPC → display decorated underline on frontend with Ctrl+click.
   2. **Phase 2 (active hints)**: DOM overlay generated on demand by regex scan of visible buffer → short labels → configurable action.
   Actions required: specify in FS + UXD, implement in two phases.
+
+- [ ] **[v1.1] OSC 1337 — inline images (iTerm2 Inline Images Protocol)** `[Score: 9 | R:1, S:1, U:2, E:2]`
+  Absent from `docs/UR.md` and `docs/fs/`. Enables image display in the terminal: used by file managers (`yazi`, `ranger`), Python/Julia plotting tools, and `chafa`. Unlike sixel or TGP, OSC 1337 is well-suited to TauTerm's WebView architecture — the rendering side is trivial (the browser handles PNG/JPEG/GIF natively), the complexity lies in the parser and cell positioning.
+  **Protocol**: `ESC ] 1337 ; File=[params]:[base64data] BEL/ST`. Key params: `inline=1` (display vs. download), `width`/`height` (chars, pixels, or percent), `preserveAspectRatio`, `doNotMoveCursor`. Supported formats: PNG, JPEG, GIF, WebP.
+  **WezTerm reference** (MIT — compatible with MPL-2.0):
+  - Parser: `wezterm-escape-parser/src/osc.rs` — `ITermFileData::parse()`, `ITermProprietary` enum, `ITermDimension`. Clean, well-tested API. The crate is published separately (`wezterm-escape-parser 0.1.0`) — TauTerm can depend on it directly or adapt the parsing logic.
+  - Cell assignment: `term/src/terminalstate/iterm.rs` (`set_image()`) + `term/src/terminalstate/image.rs` (`assign_image_to_cells()`) — not reusable as-is (coupled to WezTerm's GPU renderer and `ImageCell` model), but the UV-coordinate-per-cell approach is the right reference for TauTerm's overlay model.
+  **TauTerm implementation** (simpler than native terminals):
+  1. Parse OSC 1337 in `src-tauri/src/vt/osc.rs` → decode base64 → emit a `inline-image` Tauri event with decoded bytes, MIME type, cell dimensions, cursor position, and `do_not_move_cursor` flag. Validate size before decoding (cap at 100 MB, following WezTerm).
+  2. Frontend: position an `<img>` element as an overlay over the terminal grid at the anchor cell. The image scrolls with the terminal content (`position: absolute` relative to the scrollback container). Cells occupied by the image are marked as reserved.
+  **Implementation caveats**:
+  - OSC 1337 can arrive as multi-chunk `put()` calls — accumulate in `Vec<u8>` before decoding (do not decode prematurely).
+  - `inline=0` means download, not display — define TauTerm behavior upfront.
+  - Large images sent via IPC as raw `Vec<u8>` may be costly — consider storing in backend and exposing via Tauri asset protocol with a key.
+  Actions required: specify in `docs/UR.md` + `docs/fs/`, implement parser in `osc.rs`, add `inline-image` Tauri event, implement frontend overlay renderer.
 
 - [ ] **[v1.1] Session persistence — restore tabs on relaunch** `[Score: 9 | R:1, S:1, U:3, E:1]`
   Absent from `docs/UR.md`. Daily pain point for Alex (4 tabs: frontend, backend, logs, git) and Jordan (10+ SSH sessions). Highly upvoted on Hyper (#311) and expected behavior in Tabby ("Tabby remembers your tabs").

@@ -154,12 +154,13 @@ fn snake_to_camel_single_char() {
 // -----------------------------------------------------------------------
 
 fn make_connection(label: &str) -> crate::ssh::SshConnectionConfig {
+    use crate::preferences::types::{SshHost, SshLabel, SshUsername};
     crate::ssh::SshConnectionConfig {
         id: crate::session::ids::ConnectionId::new(),
-        label: label.to_string(),
-        host: "example.com".to_string(),
+        label: SshLabel::try_from(label.to_string()).unwrap(),
+        host: SshHost::try_from("example.com".to_string()).unwrap(),
         port: 22,
-        username: "alice".to_string(),
+        username: SshUsername::try_from("alice".to_string()).unwrap(),
         identity_file: None,
         allow_osc52_write: false,
         keepalive_interval_secs: None,

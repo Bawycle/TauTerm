@@ -240,11 +240,16 @@ fn load_or_default_does_not_panic_on_deeply_nested_json() {
 
 #[test]
 fn load_or_default_does_not_panic_on_very_long_string_value() {
-    // A 10 kB font name — valid JSON, unusual value.
+    // A 10 kB font name — valid JSON but exceeds FontFamily's 256-byte limit.
+    // FontFamily::try_from rejects it at deserialization time, so the field
+    // falls back to its default value ("monospace").
     let long_name: String = "A".repeat(10_000);
     let json = format!(r#"{{"appearance":{{"fontFamily":"{}"}}}}"#, long_name);
     let prefs = load_prefs_from_bytes(json.as_bytes());
-    assert_eq!(prefs.appearance.font_family, long_name);
+    assert_eq!(
+        prefs.appearance.font_family, "monospace",
+        "oversized fontFamily must fall back to default at deserialization"
+    );
 }
 
 // ---------------------------------------------------------------------------

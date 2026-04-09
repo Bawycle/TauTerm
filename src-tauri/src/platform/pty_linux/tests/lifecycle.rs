@@ -251,7 +251,7 @@ fn fpl_exit_001_returns_none_while_running() {
 /// After the PTY reader reaches EOF the child process may still be in
 /// zombie state for a brief moment — poll with backoff to avoid flakiness.
 fn wait_for_exit(
-    session: &Box<dyn PtySession>,
+    session: &dyn PtySession,
     reader: std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Read + Send>>>,
     deadline: std::time::Instant,
 ) -> Option<Option<i32>> {
@@ -296,7 +296,7 @@ fn fpl_exit_002_returns_exit_code_zero_after_clean_exit() {
     let reader = session.reader_handle().expect("must have reader");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
 
-    let code = wait_for_exit(&session, reader, deadline);
+    let code = wait_for_exit(session.as_ref(), reader, deadline);
     assert_eq!(
         code,
         Some(Some(0)),
@@ -320,7 +320,7 @@ fn fpl_exit_003_returns_nonzero_exit_code() {
     let reader = session.reader_handle().expect("must have reader");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
 
-    let code = wait_for_exit(&session, reader, deadline);
+    let code = wait_for_exit(session.as_ref(), reader, deadline);
     assert!(
         matches!(code, Some(Some(c)) if c != 0),
         "FPL-EXIT-003: try_wait_exit_code must return Some(Some(non-zero)) after exit 1; got: {code:?}"

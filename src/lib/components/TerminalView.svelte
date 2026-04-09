@@ -180,48 +180,51 @@
 
   <!-- Pane area: render the full split-tree layout for the active tab -->
   <!-- FS-UX-002: contextmenu bubbles up from TerminalPane to dismiss the first-launch hint -->
-  <div
-    class="terminal-view__pane-area"
-    role="region"
-    oncontextmenu={tv.handleContextMenuHintDismiss}
-  >
+  <div class="terminal-view__pane-area" role="none" oncontextmenu={tv.handleContextMenuHintDismiss}>
     {#key sessionState.activeTabId}
       {#if activeTab && activePanes.length > 0}
-        <SplitPane
-          node={activeTab.layout}
-          tabId={activeTab.id}
-          activePaneId={activeTab.activePaneId}
-          {terminatedPanes}
-          wordDelimiters={preferences.value?.terminal.wordDelimiters}
-          confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}
-          cursorBlinkMs={preferences.value?.appearance.cursorBlinkMs}
-          bellType={preferences.value?.terminal.bellType}
-          fontFamily={preferences.value?.appearance.fontFamily}
-          fontSize={preferences.value?.appearance.fontSize}
-          lineHeight={tv.activeThemeLineHeight}
-          searchMatches={tv.searchMatches}
-          activeSearchMatchIndex={tv.searchCurrentIdx}
-          canClosePane={activePanes.length > 1}
-          onpaneclick={async (paneId) => {
-            try {
-              await setActivePane(paneId);
-            } catch {
-              /* non-fatal */
-            }
-          }}
-          onclosepane={tv.handlePaneClose}
-          onsearch={() => {
-            tv.searchOpen = true;
-          }}
-          onsplith={() => tv.handleSplitPane('horizontal')}
-          onsplitv={() => tv.handleSplitPane('vertical')}
-          ondisableConfirmMultilinePaste={() =>
-            tv.handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
-          ondimensionschange={(paneId, c, r) => tv.handleDimensionsChange(paneId, c, r)}
-          onviewportactive={(el) => {
-            tv.activeViewportEl = el;
-          }}
-        />
+        <div
+          id="tab-panel-{activeTab.id}"
+          role="tabpanel"
+          aria-labelledby="tab-{activeTab.id}"
+          class="terminal-view__tab-panel"
+        >
+          <SplitPane
+            node={activeTab.layout}
+            tabId={activeTab.id}
+            activePaneId={activeTab.activePaneId}
+            {terminatedPanes}
+            wordDelimiters={preferences.value?.terminal.wordDelimiters}
+            confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}
+            cursorBlinkMs={preferences.value?.appearance.cursorBlinkMs}
+            bellType={preferences.value?.terminal.bellType}
+            fontFamily={preferences.value?.appearance.fontFamily}
+            fontSize={preferences.value?.appearance.fontSize}
+            lineHeight={tv.activeThemeLineHeight}
+            searchMatches={tv.searchMatches}
+            activeSearchMatchIndex={tv.searchCurrentIdx}
+            canClosePane={activePanes.length > 1}
+            onpaneclick={async (paneId) => {
+              try {
+                await setActivePane(paneId);
+              } catch {
+                /* non-fatal */
+              }
+            }}
+            onclosepane={tv.handlePaneClose}
+            onsearch={() => {
+              tv.searchOpen = true;
+            }}
+            onsplith={() => tv.handleSplitPane('horizontal')}
+            onsplitv={() => tv.handleSplitPane('vertical')}
+            ondisableConfirmMultilinePaste={() =>
+              tv.handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
+            ondimensionschange={(paneId, c, r) => tv.handleDimensionsChange(paneId, c, r)}
+            onviewportactive={(el) => {
+              tv.activeViewportEl = el;
+            }}
+          />
+        </div>
       {:else}
         <div class="terminal-view__empty">
           <p>{m.terminal_view_empty()}</p>
@@ -552,6 +555,12 @@
       var(--term-bg) calc(var(--terminal-opacity, 1) * 100%),
       transparent
     );
+  }
+
+  .terminal-view__tab-panel {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
   }
 
   .terminal-view__search-container {

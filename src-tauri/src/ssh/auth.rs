@@ -332,12 +332,13 @@ mod tests {
         use crate::session::ids::ConnectionId;
         use crate::ssh::SshConnectionConfig;
 
+        use crate::preferences::types::{SshHost, SshLabel, SshUsername};
         let config = SshConnectionConfig {
             id: ConnectionId::new(),
-            label: "test".to_string(),
-            host: "host".to_string(),
+            label: SshLabel::try_from("test".to_string()).unwrap(),
+            host: SshHost::try_from("host".to_string()).unwrap(),
             port: 22,
-            username: "user".to_string(),
+            username: SshUsername::try_from("user".to_string()).unwrap(),
             identity_file: Some("/home/user/.ssh/id_ed25519".to_string()),
             allow_osc52_write: false,
             keepalive_interval_secs: None,
@@ -383,16 +384,17 @@ mod tests {
     /// all auth branches are skipped and authentication fails.
     #[test]
     fn auth_order_all_methods_skipped_when_no_key_and_no_credentials() {
+        use crate::preferences::types::{SshHost, SshLabel, SshUsername};
         use crate::session::ids::ConnectionId;
         use crate::ssh::SshConnectionConfig;
         use crate::ssh::manager::Credentials;
 
         let config = SshConnectionConfig {
             id: ConnectionId::new(),
-            label: "test".to_string(),
-            host: "host".to_string(),
+            label: SshLabel::try_from("test".to_string()).unwrap(),
+            host: SshHost::try_from("host".to_string()).unwrap(),
             port: 22,
-            username: "user".to_string(),
+            username: SshUsername::try_from("user".to_string()).unwrap(),
             identity_file: None,
             allow_osc52_write: false,
             keepalive_interval_secs: None,

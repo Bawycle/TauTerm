@@ -29,12 +29,13 @@ fn cred_reg_001_ssh_connection_config_has_no_password_in_serde() {
     use tau_term_lib::session::ids::ConnectionId;
     use tau_term_lib::ssh::SshConnectionConfig;
 
+    use tau_term_lib::preferences::types::{SshHost, SshLabel, SshUsername};
     let config = SshConnectionConfig {
         id: ConnectionId::new(),
-        label: "test-server".to_string(),
-        host: "192.0.2.1".to_string(),
+        label: SshLabel::try_from("test-server".to_string()).unwrap(),
+        host: SshHost::try_from("192.0.2.1".to_string()).unwrap(),
         port: 22,
-        username: "alice".to_string(),
+        username: SshUsername::try_from("alice".to_string()).unwrap(),
         identity_file: None,
         allow_osc52_write: false,
         keepalive_interval_secs: None,

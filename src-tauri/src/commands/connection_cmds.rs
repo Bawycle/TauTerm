@@ -26,37 +26,34 @@ pub async fn get_connections(
     Ok(prefs.read().get().connections)
 }
 
-/// Maximum accepted length for the `hostname` field (SEC-IPC-004).
-///
-/// DNS maximum hostname length per RFC 1035 §2.3.4: 253 characters.
-const MAX_HOSTNAME_LEN: usize = 253;
-
 /// Maximum accepted length for the `username` field (SEC-IPC-004).
 ///
 /// POSIX `LOGIN_NAME_MAX` is typically 255 on Linux.
+/// Still used by `store_connection_password` which takes a raw `String` username
+/// (not a `SshUsername` newtype) because the keychain API is not coupled to the
+/// connection config schema.
 const MAX_USERNAME_LEN: usize = 255;
 
 /// Maximum accepted length for the `password` field (SEC-CRED-004).
 const MAX_PASSWORD_LEN: usize = 4096;
+
+/// Maximum accepted length for the `hostname` field (SEC-IPC-004).
+///
+/// DNS maximum hostname length per RFC 1035 §2.3.4: 253 characters.
+/// Kept for test helpers below — hostname validation is handled by `SshHost::try_from`
+/// at deserialization time in production paths.
+#[cfg(test)]
+const MAX_HOSTNAME_LEN: usize = 253;
 
 #[tauri::command]
 pub async fn save_connection(
     config: SshConnectionConfig,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<ConnectionId, TauTermError> {
-    // SEC-IPC-004: reject oversized hostname / username.
-    if config.host.len() > MAX_HOSTNAME_LEN {
-        return Err(TauTermError::new(
-            "VALIDATION_ERROR",
-            "hostname exceeds maximum allowed length (253 characters).",
-        ));
-    }
-    if config.username.len() > MAX_USERNAME_LEN {
-        return Err(TauTermError::new(
-            "VALIDATION_ERROR",
-            "username exceeds maximum allowed length (255 characters).",
-        ));
-    }
+    // SEC-IPC-004: hostname and username length / format are validated upstream by
+    // SshHost::try_from and SshUsername::try_from at serde deserialization time —
+    // serde rejects invalid payloads before this handler is called. The manual
+    // length checks that were here are therefore redundant and have been removed.
     if let Some(ref path) = config.identity_file {
         // SEC-PATH-005: use the strict validator (file must exist and be inside ~/.ssh/).
         validate_ssh_identity_path(path)?;
@@ -256,12 +253,13 @@ mod tests {
     }
 
     fn make_connection_config(label: &str) -> crate::ssh::SshConnectionConfig {
+        use crate::preferences::types::{SshHost, SshLabel, SshUsername};
         crate::ssh::SshConnectionConfig {
             id: ConnectionId::new(),
-            label: label.to_string(),
-            host: "example.com".to_string(),
+            label: SshLabel::try_from(label.to_string()).unwrap(),
+            host: SshHost::try_from("example.com".to_string()).unwrap(),
             port: 22,
-            username: "alice".to_string(),
+            username: SshUsername::try_from("alice".to_string()).unwrap(),
             identity_file: None,
             allow_osc52_write: false,
             keepalive_interval_secs: None,
@@ -367,7 +365,6 @@ mod tests {
         config.id = crate::session::ids::ConnectionId(String::new()); // simulate frontend empty id
 
         // Replicate the command-handler logic (ID assignment) directly:
-        let mut config = config;
         if config.id.as_str().is_empty() {
             config.id = crate::session::ids::ConnectionId::new();
         }

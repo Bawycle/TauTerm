@@ -51,14 +51,38 @@ impl SessionRegistry {
 
     /// Push a new `allow_osc52_write` flag to every active pane's `VtProcessor`.
     ///
+    /// Panes marked with `osc52_overridden = true` (SSH panes whose per-connection
+    /// policy was applied via `apply_pane_osc52_override`) are skipped — their
+    /// policy must not be reset by a global preference change (arch §8.2).
+    ///
     /// No event is emitted: this is a behavioural gate, not a visual change the
     /// frontend needs to react to immediately.
     pub fn propagate_osc52_allow(&self, allow: bool) {
         let inner = self.inner.read();
         for entry in inner.tabs.values() {
             for pane in entry.panes.values() {
+                if pane.osc52_overridden {
+                    continue; // SSH pane with per-connection override — do not touch
+                }
                 pane.vt.write().allow_osc52_write = allow;
             }
+        }
+    }
+
+    /// Apply the per-connection OSC 52 write policy for an SSH pane and mark it as
+    /// overridden so `propagate_osc52_allow` will not reset it (arch §8.2).
+    ///
+    /// Must be called from `open_ssh_connection_impl` after the VT is created,
+    /// before `open_connection` is called.
+    pub fn apply_pane_osc52_override(&self, pane_id: &crate::session::ids::PaneId, allow: bool) {
+        let mut inner = self.inner.write();
+        if let Some(pane) = inner
+            .tabs
+            .values_mut()
+            .find_map(|e| e.panes.get_mut(pane_id))
+        {
+            pane.vt.write().allow_osc52_write = allow;
+            pane.osc52_overridden = true;
         }
     }
 }

@@ -150,3 +150,56 @@ describe('TBTC-CTX-002: TabBar mounts without Tooltip.Provider (no Tooltip.Root)
     }).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// C1-A11Y-DOM — aria-controls and id attributes on rendered tab elements
+// (WCAG 4.1.2 — Name, Role, Value)
+// ---------------------------------------------------------------------------
+
+describe('C1-A11Y-DOM: tab element carries correct id and aria-controls', () => {
+  it('rendered tab[role=tab] has id="tab-{tabId}"', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const tab = makeTab({ id: 'test-tab-42' });
+    const instance = mount(TabBarWithProvider, {
+      target: container,
+      props: {
+        tabs: [tab],
+        activeTabId: 'test-tab-42',
+        onTabClick: () => {},
+        onTabClose: () => {},
+        onNewTab: () => {},
+      },
+    });
+    instances.push(instance);
+    flushSync();
+
+    const tabEl = container.querySelector('[role="tab"]');
+    expect(tabEl).not.toBeNull();
+    expect(tabEl!.getAttribute('id')).toBe('tab-test-tab-42');
+  });
+
+  it('rendered tab[role=tab] has aria-controls="tab-panel-{tabId}"', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const tab = makeTab({ id: 'test-tab-42' });
+    const instance = mount(TabBarWithProvider, {
+      target: container,
+      props: {
+        tabs: [tab],
+        activeTabId: 'test-tab-42',
+        onTabClick: () => {},
+        onTabClose: () => {},
+        onNewTab: () => {},
+      },
+    });
+    instances.push(instance);
+    flushSync();
+
+    const tabEl = container.querySelector('[role="tab"]');
+    expect(tabEl).not.toBeNull();
+    expect(tabEl!.getAttribute('aria-controls')).toBe('tab-panel-test-tab-42');
+  });
+});

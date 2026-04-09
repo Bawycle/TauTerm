@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::language::Language;
+use crate::preferences::types::{FontFamily, ThemeName};
 
 // ---------------------------------------------------------------------------
 // Cursor style
@@ -56,13 +57,13 @@ pub enum BellType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppearancePrefs {
-    pub font_family: String,
+    pub font_family: FontFamily,
     pub font_size: f32,
     pub cursor_style: CursorStyle,
     /// Cursor blink period in milliseconds (FS-VT-032). Default: 530ms.
     pub cursor_blink_ms: u32,
     /// Name of the active theme.
-    pub theme_name: String,
+    pub theme_name: ThemeName,
     /// Background opacity (0.0–1.0).
     pub opacity: f32,
     /// UI language (FS-I18N-006: enum, not free String).
@@ -81,11 +82,11 @@ pub struct AppearancePrefs {
 impl Default for AppearancePrefs {
     fn default() -> Self {
         Self {
-            font_family: "monospace".to_string(),
+            font_family: FontFamily::monospace(),
             font_size: 14.0,
             cursor_style: CursorStyle::default(),
             cursor_blink_ms: 530,
-            theme_name: "umbra".to_string(),
+            theme_name: ThemeName::umbra(),
             opacity: 1.0,
             language: Language::default(),
             context_menu_hint_shown: false,

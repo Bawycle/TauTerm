@@ -94,7 +94,7 @@ impl SshManager {
         let username = credentials
             .as_ref()
             .map(|c| c.username.clone())
-            .unwrap_or_else(|| config.username.clone());
+            .unwrap_or_else(|| config.username.to_string());
 
         // FS-SSH-019a: Resolve passphrase for encrypted identity files before SSH auth.
         let resolved_passphrase: Option<zeroize::Zeroizing<String>> =
@@ -281,7 +281,7 @@ impl SshManager {
                 &app,
                 crate::events::CredentialPromptEvent {
                     pane_id: pane_id.clone(),
-                    host: config.host.clone(),
+                    host: config.host.to_string(),
                     username: username.clone(),
                     prompt: None,
                     failed: attempt > 1,

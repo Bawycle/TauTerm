@@ -17,6 +17,7 @@ pub use manager::{Credentials, SshManager};
 
 use serde::{Deserialize, Serialize};
 
+use crate::preferences::types::{SshHost, SshLabel, SshUsername};
 use crate::session::ids::ConnectionId;
 
 /// Saved SSH connection configuration (persisted in preferences.json).
@@ -24,10 +25,10 @@ use crate::session::ids::ConnectionId;
 #[serde(rename_all = "camelCase")]
 pub struct SshConnectionConfig {
     pub id: ConnectionId,
-    pub label: String,
-    pub host: String,
+    pub label: SshLabel,
+    pub host: SshHost,
     pub port: u16,
-    pub username: String,
+    pub username: SshUsername,
     /// Path to a private key file. Validated for path traversal (§8.1).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity_file: Option<String>,

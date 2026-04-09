@@ -910,7 +910,7 @@ mod linux {
             eprintln!("SKIP: SSH test environment variables not set");
             return;
         };
-        let (Some(ref key_path), Some(ref passphrase)) = (
+        let (Some(key_path), Some(passphrase)) = (
             env.encrypted_pubkey_path.as_ref(),
             env.key_passphrase.as_ref(),
         ) else {

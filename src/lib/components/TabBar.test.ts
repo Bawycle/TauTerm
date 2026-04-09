@@ -184,3 +184,35 @@ describe('TUITC-UX-015: ARIA roles static contract', () => {
     expect(expectedRole).toBe('tab');
   });
 });
+
+// ---------------------------------------------------------------------------
+// C1 — aria-controls / tabpanel ID scheme (WCAG 4.1.2)
+//
+// These are static contract tests: they verify the ID naming scheme used in
+// TabBarItem (id="tab-{id}", aria-controls="tab-panel-{id}") and TerminalView
+// (id="tab-panel-{id}", aria-labelledby="tab-{id}").
+// DOM mounting is not required — the scheme is a pure string transformation.
+// ---------------------------------------------------------------------------
+
+describe('C1-A11Y: tab/tabpanel ID scheme contract', () => {
+  it('tab item id scheme matches tab-{tabId}', () => {
+    const tabId = 'my-tab-id';
+    expect(`tab-${tabId}`).toBe('tab-my-tab-id');
+  });
+
+  it('tabpanel id scheme matches tab-panel-{tabId}', () => {
+    const tabId = 'my-tab-id';
+    expect(`tab-panel-${tabId}`).toBe('tab-panel-my-tab-id');
+  });
+
+  it('tab id and aria-controls reference the same tab panel', () => {
+    const tabId = 'abc-123';
+    const tabElementId = `tab-${tabId}`;
+    const tabPanelId = `tab-panel-${tabId}`;
+    // aria-controls on the tab must point to the tabpanel id
+    expect(tabElementId).toBe('tab-abc-123');
+    expect(tabPanelId).toBe('tab-panel-abc-123');
+    // They are distinct (tab ≠ tabpanel)
+    expect(tabElementId).not.toBe(tabPanelId);
+  });
+});

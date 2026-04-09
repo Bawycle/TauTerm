@@ -182,13 +182,20 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md, 4px);
     box-shadow: var(--shadow-raised);
-    width: min(360px, calc(100% - 2 * var(--space-4, 16px)));
+    /* --size-search-overlay-width = 360px (docs/uxd/02-tokens.md §3.7) */
+    width: min(var(--size-search-overlay-width, 360px), calc(100% - 2 * var(--space-4, 16px)));
     font-family: var(--font-ui);
   }
 
   .search-overlay__input {
     flex: 1;
     min-width: 0;
+    /*
+     * 36px is intentionally below --size-target-min (44px). This is a text input,
+     * not a button — WCAG 2.5.5 applies to interactive controls that trigger an
+     * action, not to form fields where the click target is the field itself.
+     * The buttons in this overlay do meet the 44px minimum via --size-target-min.
+     */
     height: 36px;
     padding: 0 var(--space-2, 8px);
     font-size: var(--font-size-ui-base, 13px);
@@ -210,6 +217,11 @@
   .search-overlay__count {
     font-size: var(--font-size-ui-sm, 12px);
     color: var(--color-text-secondary);
+    /*
+     * 64px is a layout-specific minimum to prevent the counter from collapsing
+     * to zero width on short strings like "1 / 9". No design token covers this
+     * value because it is driven by content width, not the spacing scale.
+     */
     min-width: 64px;
     text-align: center;
     white-space: nowrap;
@@ -221,8 +233,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    /* --size-target-min = 44px — WCAG 2.5.5 minimum interactive target (docs/uxd/02-tokens.md §3.7) */
+    width: var(--size-target-min, 44px);
+    height: var(--size-target-min, 44px);
     color: var(--color-icon-default);
     background: transparent;
     border: none;

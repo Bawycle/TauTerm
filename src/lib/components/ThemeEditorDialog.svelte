@@ -24,6 +24,22 @@
   import { contrastRatio, WCAG_AA_THRESHOLD } from '$lib/utils/contrast';
   import { isBuiltInTheme } from '$lib/theming/built-in-themes';
 
+  // ---------------------------------------------------------------------------
+  // Umbra baseline values used as placeholder hints in color inputs.
+  //
+  // These are intentionally hardcoded to the Umbra theme defaults — they are
+  // *example text* shown inside HTML placeholder attributes, not live CSS token
+  // references. Placeholder text cannot consume CSS custom properties, and the
+  // values must remain stable even when a different theme is active (they show
+  // the user what a valid Umbra-style value looks like). They must stay in sync
+  // with the Umbra token definitions in docs/uxd/02-tokens.md §3.4.
+  // ---------------------------------------------------------------------------
+  const UMBRA_FG = '#ccc7bc'; // --color-neutral-300 / --term-fg
+  const UMBRA_BG = '#16140f'; // --color-neutral-900 / --term-bg
+  const UMBRA_CURSOR = '#7ab3d3'; // --color-blue-300  / --term-cursor-bg
+  const UMBRA_SELECTION = '#2e6f9c'; // --color-blue-500  / --term-selection-bg
+  const UMBRA_LINE_HEIGHT = '1.2'; // --line-height-terminal
+
   interface Props {
     editingTheme: UserTheme;
     isNewTheme: boolean;
@@ -131,7 +147,7 @@
     <TextInput
       id="theme-fg"
       label={m.theme_foreground_label()}
-      placeholder="#ccc7bc"
+      placeholder={UMBRA_FG}
       helper={m.theme_color_hex_hint()}
       value={editingTheme.foreground}
       oninput={(val) => onupdate({ ...editingTheme, foreground: val })}
@@ -140,7 +156,7 @@
     <TextInput
       id="theme-bg"
       label={m.theme_background_label()}
-      placeholder="#16140f"
+      placeholder={UMBRA_BG}
       helper={m.theme_color_hex_hint()}
       value={editingTheme.background}
       oninput={(val) => onupdate({ ...editingTheme, background: val })}
@@ -149,7 +165,7 @@
     <TextInput
       id="theme-cursor"
       label={m.theme_cursor_color_label()}
-      placeholder="#7ab3d3"
+      placeholder={UMBRA_CURSOR}
       helper={m.theme_color_hex_hint()}
       value={editingTheme.cursorColor}
       oninput={(val) => onupdate({ ...editingTheme, cursorColor: val })}
@@ -158,7 +174,7 @@
     <TextInput
       id="theme-selection"
       label={m.theme_selection_bg_label()}
-      placeholder="#2e6f9c"
+      placeholder={UMBRA_SELECTION}
       helper={m.theme_color_hex_hint()}
       value={editingTheme.selectionBg}
       oninput={(val) => onupdate({ ...editingTheme, selectionBg: val })}
@@ -179,7 +195,7 @@
         max="2.0"
         step="0.1"
         value={editingTheme.lineHeight ?? ''}
-        placeholder="1.2"
+        placeholder={UMBRA_LINE_HEIGHT}
         class="min-h-[44px] px-3 rounded-(--radius-sm) border border-(--color-border)
                bg-(--color-bg-input) text-(--color-text-primary) text-(--font-size-ui-base)
                focus:outline-2 focus:outline-(--color-focus-ring)"

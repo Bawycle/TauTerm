@@ -188,15 +188,15 @@ describe('SSH-AUTH-004: CredentialPromptEvent field contract', () => {
 
 describe('SSH-RECON-001/004: reconnect availability by state', () => {
   /**
-   * Helper that determines whether the reconnect action should be shown
-   * given a lifecycle state. This is the logic that must be implemented
-   * in the frontend component.
+   * Helper that mirrors the reconnect-button visibility logic implemented in
+   * TerminalPaneBanners.svelte — the button is rendered inside the block:
+   *   {#if sshState?.type === 'disconnected'}
    *
-   * FAIL until the component implements this logic.
+   * This helper is kept here so the unit tests can assert the state-machine
+   * contract (SSH-RECON-001/004) without mounting a full component tree.
+   * The component and this helper must stay in sync.
    */
   function shouldShowReconnect(state: SshLifecycleState): boolean {
-    // TODO: this logic must be implemented in the component.
-    // Stub returns false always — tests will fail until implemented.
     return state.type === 'disconnected';
   }
 

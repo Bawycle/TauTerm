@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+#
+# pre-push (git hook)
+#
+# Runs the verification suite before every push.
+# By default uses --fast (skips containers, E2E, audit) to keep the push loop
+# short. Set FULL_CHECK=1 to run the complete suite.
+#
+# Installation (from project root):
+#   ./scripts/check-all.sh --install-hooks
+#   # or manually:
+#   ln -sf ../../scripts/pre-push .git/hooks/pre-push
+#
+# Usage:
+#   git push                    # fast checks only
+#   FULL_CHECK=1 git push       # complete suite (containers + E2E + audit)
+
+set -euo pipefail
+
+# Resolve the real path of this script regardless of whether it is called
+# directly (scripts/pre-push) or via the .git/hooks/pre-push symlink.
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPTS_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+CHECK_ALL="$SCRIPTS_DIR/check-all.sh"
+
+# Only run checks when pushing to master or dev.
+# The pre-push hook receives lines: <local_ref> <local_sha> <remote_ref> <remote_sha>
+PROTECTED_BRANCHES="master dev"
+RUN_CHECKS=0
+while read -r _local_ref _local_sha _remote_ref _remote_sha; do
+    BRANCH="${_remote_ref##refs/heads/}"
+    for PROTECTED in $PROTECTED_BRANCHES; do
+        if [ "$BRANCH" = "$PROTECTED" ]; then
+            RUN_CHECKS=1
+            break 2
+        fi
+    done
+done
+if [ "$RUN_CHECKS" = "0" ]; then
+    exit 0
+fi
+
+if [ "${FULL_CHECK:-0}" = "1" ]; then
+    echo "[pre-push] Running full check suite (FULL_CHECK=1)..."
+    "$CHECK_ALL"
+else
+    echo "[pre-push] Running fast checks (FULL_CHECK=1 for complete suite)..."
+    "$CHECK_ALL" --fast
+fi

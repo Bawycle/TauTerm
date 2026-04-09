@@ -152,6 +152,7 @@
              bg-(--color-bg-raised) border border-(--color-border-overlay) rounded-(--radius-md)
              shadow-(--shadow-overlay) flex flex-col overflow-hidden"
       aria-modal="true"
+      preventScroll={false}
       onCloseAutoFocus={(e) => {
         e.preventDefault();
         onCloseAutoFocus?.(e);

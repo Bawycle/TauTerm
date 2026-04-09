@@ -74,7 +74,7 @@
         class="fixed inset-0 z-(--z-modal-backdrop) bg-(--color-bg-overlay)/60"
       />
 
-      <AlertDialog.Content class={contentClass} aria-modal="true" onOpenAutoFocus={onopenautoFocus}>
+      <AlertDialog.Content class={contentClass} aria-modal="true" preventScroll={false} onOpenAutoFocus={onopenautoFocus}>
         <!-- Header: title + close button -->
         <div class="flex items-start justify-between mb-3">
           <AlertDialog.Title
@@ -118,7 +118,7 @@
     <Dialog.Portal>
       <Dialog.Overlay class="fixed inset-0 z-(--z-modal-backdrop) bg-(--color-bg-overlay)/60" />
 
-      <Dialog.Content class={contentClass} aria-modal="true" onOpenAutoFocus={onopenautoFocus}>
+      <Dialog.Content class={contentClass} aria-modal="true" preventScroll={false} onOpenAutoFocus={onopenautoFocus}>
         <!-- Header: title + close button -->
         <div class="flex items-start justify-between mb-3">
           <Dialog.Title

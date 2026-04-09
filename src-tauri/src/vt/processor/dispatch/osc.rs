@@ -9,11 +9,22 @@ use crate::vt::processor::VtProcessor;
 /// Matches xterm's default. Excess pushes are silently ignored.
 pub(super) const TITLE_STACK_MAX: usize = 16;
 
+/// Maximum total byte length of an OSC sequence payload (all fields combined,
+/// including separator bytes). Sequences exceeding this limit are silently
+/// dropped to prevent memory exhaustion (FS-SEC-005 / GAP-009).
+///
+/// Note: `vte` 0.15 with the `std` feature (the default) uses an unbounded
+/// `Vec<u8>` for the OSC raw buffer and imposes **no** size limit before
+/// dispatching to `osc_dispatch`. The 1024-byte constant in the `vte` source
+/// only applies when `no_std` is active. This guard is therefore the sole
+/// enforcement point for the 4 096-byte limit required by FS-SEC-005.
+const OSC_PAYLOAD_MAX: usize = 4096;
+
 pub(super) fn handle_osc(p: &mut VtProcessor, params: &[&[u8]]) {
-    // Guard: silently ignore oversized OSC sequences to prevent DoS.
+    // Guard: silently ignore oversized OSC sequences to prevent DoS (FS-SEC-005).
     // total_len accounts for each field plus one byte per separator.
     let total_len: usize = params.iter().map(|p| p.len() + 1).sum::<usize>();
-    if total_len > 8192 {
+    if total_len > OSC_PAYLOAD_MAX {
         return;
     }
     match parse_osc(params) {

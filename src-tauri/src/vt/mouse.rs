@@ -67,12 +67,21 @@ impl MouseEvent {
     }
 
     /// SGR encoding: `ESC [ < cb ; cx ; cy M|m`
+    ///
+    /// # Invariant
+    /// The result is always valid UTF-8: `format!` on integer fields (`u8`, `u32`)
+    /// and ASCII byte literals cast to `char` (`b'M'`/`b'm'`) produce only ASCII
+    /// codepoints, which are a strict subset of valid UTF-8.
     fn encode_sgr(&self, cb: u8) -> Vec<u8> {
         let trailer = if self.is_press { b'M' } else { b'm' };
         format!("\x1b[<{};{};{}{}", cb, self.col, self.row, trailer as char).into_bytes()
     }
 
     /// URXVT encoding: `ESC [ cb+32 ; cx ; cy M`
+    ///
+    /// # Invariant
+    /// The result is always valid UTF-8: `format!` on integer fields produces only
+    /// ASCII codepoints, which are a strict subset of valid UTF-8.
     fn encode_urxvt(&self, cb: u8) -> Vec<u8> {
         format!("\x1b[{};{};{}M", cb as u32 + 32, self.col, self.row).into_bytes()
     }
@@ -121,8 +130,10 @@ mod tests {
     #[test]
     fn sgr_encoding_left_press_correct() {
         let ev = left_press(10, 5);
-        let bytes = ev.encode(MouseEncoding::Sgr);
-        let s = String::from_utf8(bytes).expect("valid utf8");
+        // SAFETY (UTF-8): encode_sgr produces ASCII-only bytes via format! on integer
+        // fields and ASCII byte literals; ASCII is always valid UTF-8.
+        let s = String::from_utf8(ev.encode(MouseEncoding::Sgr))
+            .expect("encode_sgr always produces valid UTF-8 (ASCII-only)");
         // ESC [ < 0 ; 10 ; 5 M
         assert_eq!(s, "\x1b[<0;10;5M");
     }
@@ -139,8 +150,9 @@ mod tests {
             ctrl: false,
             is_motion: false,
         };
-        let bytes = ev.encode(MouseEncoding::Sgr);
-        let s = String::from_utf8(bytes).expect("valid utf8");
+        // SAFETY (UTF-8): encode_sgr produces ASCII-only bytes; ASCII is always valid UTF-8.
+        let s = String::from_utf8(ev.encode(MouseEncoding::Sgr))
+            .expect("encode_sgr always produces valid UTF-8 (ASCII-only)");
         assert!(s.ends_with('m'), "release must use lowercase 'm'");
     }
 
@@ -157,8 +169,10 @@ mod tests {
     #[test]
     fn urxvt_encoding_correct_format() {
         let ev = left_press(10, 5);
-        let bytes = ev.encode(MouseEncoding::Urxvt);
-        let s = String::from_utf8(bytes).expect("valid utf8");
+        // SAFETY (UTF-8): encode_urxvt produces ASCII-only bytes via format! on integer
+        // fields; ASCII is always valid UTF-8.
+        let s = String::from_utf8(ev.encode(MouseEncoding::Urxvt))
+            .expect("encode_urxvt always produces valid UTF-8 (ASCII-only)");
         // ESC [ 32 ; 10 ; 5 M  (cb=0, 0+32=32)
         assert_eq!(s, "\x1b[32;10;5M");
     }
@@ -175,8 +189,9 @@ mod tests {
             ctrl: false,
             is_motion: false,
         };
-        let bytes = ev.encode(MouseEncoding::Sgr);
-        let s = String::from_utf8(bytes).expect("valid utf8");
+        // SAFETY (UTF-8): encode_sgr produces ASCII-only bytes; ASCII is always valid UTF-8.
+        let s = String::from_utf8(ev.encode(MouseEncoding::Sgr))
+            .expect("encode_sgr always produces valid UTF-8 (ASCII-only)");
         // cb = 0 | 4 (shift) = 4
         assert!(
             s.contains("<4;"),

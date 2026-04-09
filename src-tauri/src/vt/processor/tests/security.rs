@@ -179,11 +179,14 @@ mod security_tests {
     }
 
     // -----------------------------------------------------------------------
-    // sec_osc_oversized_ignored — D1 (P1) guard: OSC total_len > 8192
+    // FS-SEC-005 / GAP-009 — OSC payload limit (4096 bytes, enforced in handle_osc)
     // -----------------------------------------------------------------------
 
-    /// D1: OSC sequence whose total field length exceeds 8192 bytes must be
-    /// silently dropped — the terminal title must remain unchanged.
+    /// FS-SEC-005: OSC sequence whose total field length exceeds 4096 bytes must
+    /// be silently dropped — the terminal title must remain unchanged.
+    ///
+    /// Note: `vte` 0.15 with `std` features (the default) does NOT impose this
+    /// limit; enforcement is solely in `handle_osc` via `OSC_PAYLOAD_MAX`.
     #[test]
     fn sec_osc_oversized_ignored() {
         let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
@@ -191,10 +194,10 @@ mod security_tests {
         vt.process(b"\x1b]0;initial\x07");
         assert_eq!(vt.title, "initial");
 
-        // Build an OSC 0 sequence whose payload field alone is > 8192 bytes.
-        // total_len = len("0") + 1 + len(payload) + 1 > 8192
-        // So payload must be >= 8191 bytes.
-        let big_payload: Vec<u8> = b"A".repeat(8200);
+        // Build an OSC 0 sequence whose payload field alone exceeds 4096 bytes.
+        // total_len = len("0") + 1 + len(payload) + 1 > 4096
+        // So a payload of 4096 bytes is sufficient to trigger the guard.
+        let big_payload: Vec<u8> = b"A".repeat(4096);
         let mut seq = b"\x1b]0;".to_vec();
         seq.extend_from_slice(&big_payload);
         seq.push(b'\x07'); // BEL terminator
@@ -204,7 +207,25 @@ mod security_tests {
         // The oversized sequence must be silently ignored — title unchanged.
         assert_eq!(
             vt.title, "initial",
-            "Oversized OSC sequence must not change the title (D1 guard)"
+            "Oversized OSC sequence must not change the title (FS-SEC-005 / GAP-009)"
+        );
+    }
+
+    /// FS-SEC-005: OSC payload of exactly 4095 bytes must be processed normally.
+    #[test]
+    fn sec_osc_below_limit_is_processed() {
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
+        // A title of 4092 'A's: total_len = 1 ("0") + 1 (sep) + 4092 + 1 = 4095 ≤ 4096.
+        let payload: Vec<u8> = b"A".repeat(4092);
+        let mut seq = b"\x1b]0;".to_vec();
+        seq.extend_from_slice(&payload);
+        seq.push(b'\x07');
+        vt.process(&seq);
+        // parse_osc truncates title to 256 chars; key point is the sequence was
+        // NOT dropped by the size guard.
+        assert!(
+            !vt.title.is_empty(),
+            "OSC payload below 4096-byte limit must not be dropped by the size guard (FS-SEC-005)"
         );
     }
 

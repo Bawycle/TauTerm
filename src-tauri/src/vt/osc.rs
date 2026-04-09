@@ -367,8 +367,9 @@ mod security_tests {
 
     /// SEC-OSC-003: A 1-MB base64 payload in an OSC 52 write sequence.
     /// parse_osc receives raw bytes — the 4096-byte sequence limit is enforced
-    /// upstream by the vte crate / VtProcessor. At the parse_osc level this
-    /// should still decode or truncate without OOM or panic.
+    /// upstream by `handle_osc` in the dispatch layer (FS-SEC-005 / GAP-009).
+    /// The `vte` crate itself imposes no limit in `std` mode. At the parse_osc
+    /// level this test verifies no panic or OOM occurs when the guard is bypassed.
     #[test]
     fn sec_osc_003_osc52_large_payload_no_panic() {
         // 1 MB of valid base64 'A' characters (not a valid base64 multiple of 4
@@ -413,8 +414,10 @@ mod security_tests {
     // -----------------------------------------------------------------------
 
     /// SEC-PTY-003: parse_osc with a 10 000-byte OSC 0 title payload.
-    /// The vte crate enforces the 4096-byte limit before dispatch; this test
-    /// verifies parse_osc itself does not panic when given a large payload.
+    /// The 4096-byte limit is enforced by `handle_osc` in the dispatch layer
+    /// (FS-SEC-005 / GAP-009) — not by the `vte` crate, which imposes no size
+    /// limit in `std` mode. This test verifies that `parse_osc` itself does not
+    /// panic when directly given a large payload (i.e., the dispatch guard bypassed).
     #[test]
     fn sec_pty_003_large_osc_title_payload_no_panic() {
         let large_title = b"A".repeat(10_000);

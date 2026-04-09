@@ -220,245 +220,247 @@
     </div>
   {/if}
 
-  {#if !showForm}
-    <!-- Connection list view -->
-    <div class="connection-manager__actions">
-      <Button variant="primary" onclick={openNewForm}>
-        <Plus size={16} aria-hidden="true" />
-        {m.connection_new()}
-      </Button>
-    </div>
+  <div class="connection-manager__body">
+    {#if !showForm}
+      <!-- Connection list view -->
+      <div class="connection-manager__actions">
+        <Button variant="primary" onclick={openNewForm}>
+          <Plus size={16} aria-hidden="true" />
+          {m.connection_new()}
+        </Button>
+      </div>
 
-    {#if connections.length === 0}
-      <p class="text-(--font-size-ui-base) text-(--color-text-secondary) px-1 mt-4">
-        {m.connection_empty_state()}
-      </p>
-    {:else}
-      <div class="connection-manager__list" role="list">
-        {#each [...groupedConnections] as [group, items] (group)}
-          <!-- Group heading -->
-          <button
-            class="connection-manager__group-heading"
-            onclick={() => toggleGroup(group)}
-            aria-expanded={!collapsedGroups.has(group)}
-          >
-            <span>{group}</span>
-            <ChevronDown
-              size={14}
-              aria-hidden="true"
-              class="transition-transform duration-150"
-              style={collapsedGroups.has(group) ? 'transform: rotate(-90deg)' : ''}
-            />
-          </button>
+      {#if connections.length === 0}
+        <p class="text-(--font-size-ui-base) text-(--color-text-secondary) px-1 mt-4">
+          {m.connection_empty_state()}
+        </p>
+      {:else}
+        <div class="connection-manager__list" role="list">
+          {#each [...groupedConnections] as [group, items] (group)}
+            <!-- Group heading -->
+            <button
+              class="connection-manager__group-heading"
+              onclick={() => toggleGroup(group)}
+              aria-expanded={!collapsedGroups.has(group)}
+            >
+              <span>{group}</span>
+              <ChevronDown
+                size={14}
+                aria-hidden="true"
+                class="transition-transform duration-150"
+                style={collapsedGroups.has(group) ? 'transform: rotate(-90deg)' : ''}
+              />
+            </button>
 
-          {#if !collapsedGroups.has(group)}
-            {#each items as conn (conn.id)}
-              <div class="connection-manager__item" role="listitem">
-                <!-- Left: icon + labels -->
-                <div class="connection-manager__item-info">
-                  <span class="connection-manager__item-icon"
-                    ><Server size={16} aria-hidden="true" /></span
+            {#if !collapsedGroups.has(group)}
+              {#each items as conn (conn.id)}
+                <div class="connection-manager__item" role="listitem">
+                  <!-- Left: icon + labels -->
+                  <div class="connection-manager__item-info">
+                    <span class="connection-manager__item-icon"
+                      ><Server size={16} aria-hidden="true" /></span
+                    >
+                    <div>
+                      <p class="connection-manager__item-primary">
+                        {conn.label || `${conn.host}:${conn.port}`}
+                      </p>
+                      <p class="connection-manager__item-secondary">
+                        {conn.username}@{conn.host}
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Right: action buttons (visible on hover via CSS, always accessible) -->
+                  <div
+                    class="connection-manager__item-actions"
+                    role="group"
+                    aria-label={m.connection_actions_aria_label()}
                   >
-                  <div>
-                    <p class="connection-manager__item-primary">
-                      {conn.label || `${conn.host}:${conn.port}`}
-                    </p>
-                    <p class="connection-manager__item-secondary">
-                      {conn.username}@{conn.host}
-                    </p>
+                    <button
+                      class="connection-manager__action-btn"
+                      onclick={() => onopen?.({ connectionId: conn.id, target: 'tab' })}
+                      aria-label={m.action_open_in_new_tab()}
+                      title={m.action_open_in_new_tab()}
+                    >
+                      <ExternalLink size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      class="connection-manager__action-btn"
+                      onclick={() => onopen?.({ connectionId: conn.id, target: 'pane' })}
+                      aria-label={m.action_open_in_pane()}
+                      title={m.action_open_in_pane()}
+                    >
+                      <SplitSquareVertical size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      class="connection-manager__action-btn"
+                      onclick={() => openEditForm(conn)}
+                      aria-label={m.connection_edit()}
+                      title={m.connection_edit()}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      class="connection-manager__action-btn"
+                      onclick={() => handleDuplicate(conn)}
+                      aria-label={m.connection_duplicate()}
+                      title={m.connection_duplicate()}
+                    >
+                      <Copy size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      class="connection-manager__action-btn connection-manager__action-btn--delete"
+                      onclick={() => handleDelete(conn.id)}
+                      aria-label={m.connection_delete()}
+                      title={m.connection_delete()}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
+              {/each}
+            {/if}
+          {/each}
+        </div>
+      {/if}
+    {:else}
+      <!-- Edit form view -->
+      <div
+        class="connection-manager__form"
+        role="form"
+        aria-label={editingId ? m.connection_edit() : m.connection_new()}
+      >
+        <h3 class="connection-manager__form-title">
+          {editingId ? m.connection_edit_title() : m.connection_new()}
+        </h3>
+        <div class="space-y-3">
+          <TextInput
+            id="cm-label"
+            label={m.connection_field_label()}
+            value={formLabel}
+            oninput={(v) => {
+              formLabel = v;
+            }}
+          />
+          <TextInput
+            id="cm-group"
+            label={m.connection_field_group()}
+            value={formGroup}
+            oninput={(v) => {
+              formGroup = v;
+            }}
+          />
+          <TextInput
+            id="cm-host"
+            label={m.connection_field_host()}
+            value={formHost}
+            oninput={(v) => {
+              formHost = v;
+            }}
+          />
+          <TextInput
+            id="cm-port"
+            label={m.connection_field_port()}
+            type="number"
+            value={formPort}
+            oninput={(v) => {
+              formPort = v;
+            }}
+          />
+          <TextInput
+            id="cm-username"
+            label={m.connection_field_user()}
+            value={formUsername}
+            oninput={(v) => {
+              formUsername = v;
+            }}
+          />
 
-                <!-- Right: action buttons (visible on hover via CSS, always accessible) -->
-                <div
-                  class="connection-manager__item-actions"
-                  role="group"
-                  aria-label={m.connection_actions_aria_label()}
-                >
-                  <button
-                    class="connection-manager__action-btn"
-                    onclick={() => onopen?.({ connectionId: conn.id, target: 'tab' })}
-                    aria-label={m.action_open_in_new_tab()}
-                    title={m.action_open_in_new_tab()}
-                  >
-                    <ExternalLink size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    class="connection-manager__action-btn"
-                    onclick={() => onopen?.({ connectionId: conn.id, target: 'pane' })}
-                    aria-label={m.action_open_in_pane()}
-                    title={m.action_open_in_pane()}
-                  >
-                    <SplitSquareVertical size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    class="connection-manager__action-btn"
-                    onclick={() => openEditForm(conn)}
-                    aria-label={m.connection_edit()}
-                    title={m.connection_edit()}
-                  >
-                    <Pencil size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    class="connection-manager__action-btn"
-                    onclick={() => handleDuplicate(conn)}
-                    aria-label={m.connection_duplicate()}
-                    title={m.connection_duplicate()}
-                  >
-                    <Copy size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    class="connection-manager__action-btn connection-manager__action-btn--delete"
-                    onclick={() => handleDelete(conn.id)}
-                    aria-label={m.connection_delete()}
-                    title={m.connection_delete()}
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-            {/each}
-          {/if}
-        {/each}
-      </div>
-    {/if}
-  {:else}
-    <!-- Edit form view -->
-    <div
-      class="connection-manager__form"
-      role="form"
-      aria-label={editingId ? m.connection_edit() : m.connection_new()}
-    >
-      <h3 class="connection-manager__form-title">
-        {editingId ? m.connection_edit_title() : m.connection_new()}
-      </h3>
-      <div class="space-y-3">
-        <TextInput
-          id="cm-label"
-          label={m.connection_field_label()}
-          value={formLabel}
-          oninput={(v) => {
-            formLabel = v;
-          }}
-        />
-        <TextInput
-          id="cm-group"
-          label={m.connection_field_group()}
-          value={formGroup}
-          oninput={(v) => {
-            formGroup = v;
-          }}
-        />
-        <TextInput
-          id="cm-host"
-          label={m.connection_field_host()}
-          value={formHost}
-          oninput={(v) => {
-            formHost = v;
-          }}
-        />
-        <TextInput
-          id="cm-port"
-          label={m.connection_field_port()}
-          type="number"
-          value={formPort}
-          oninput={(v) => {
-            formPort = v;
-          }}
-        />
-        <TextInput
-          id="cm-username"
-          label={m.connection_field_user()}
-          value={formUsername}
-          oninput={(v) => {
-            formUsername = v;
-          }}
-        />
-
-        <!-- Auth method -->
-        <div>
-          <p class="text-(--font-size-ui-sm) font-medium text-(--color-text-secondary) mb-2">
-            {m.connection_field_auth_method()}
-          </p>
-          <div class="flex gap-4">
-            <label
-              class="flex items-center gap-2 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer"
-            >
-              <input
-                type="radio"
-                name="cm-auth-method"
-                value="identity"
-                checked={formAuthMethod === 'identity'}
-                onchange={() => {
-                  formAuthMethod = 'identity';
-                }}
-              />
-              {m.connection_auth_identity_file()}
-            </label>
-            <label
-              class="flex items-center gap-2 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer"
-            >
-              <input
-                type="radio"
-                name="cm-auth-method"
-                value="password"
-                checked={formAuthMethod === 'password'}
-                onchange={() => {
-                  formAuthMethod = 'password';
-                }}
-              />
-              {m.connection_auth_password()}
-            </label>
+          <!-- Auth method -->
+          <div>
+            <p class="text-(--font-size-ui-sm) font-medium text-(--color-text-secondary) mb-2">
+              {m.connection_field_auth_method()}
+            </p>
+            <div class="flex gap-4">
+              <label
+                class="flex items-center gap-2 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  name="cm-auth-method"
+                  value="identity"
+                  checked={formAuthMethod === 'identity'}
+                  onchange={() => {
+                    formAuthMethod = 'identity';
+                  }}
+                />
+                {m.connection_auth_identity_file()}
+              </label>
+              <label
+                class="flex items-center gap-2 text-(--font-size-ui-base) text-(--color-text-primary) cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  name="cm-auth-method"
+                  value="password"
+                  checked={formAuthMethod === 'password'}
+                  onchange={() => {
+                    formAuthMethod = 'password';
+                  }}
+                />
+                {m.connection_auth_password()}
+              </label>
+            </div>
           </div>
+
+          {#if formAuthMethod === 'identity'}
+            <TextInput
+              id="cm-identity-file"
+              label={m.connection_field_identity()}
+              value={formIdentityFile}
+              oninput={(v) => {
+                formIdentityFile = v;
+              }}
+            />
+          {:else}
+            <!-- Password field — type="password" ensures masking (SEC-UI-002) -->
+            <TextInput
+              id="cm-password"
+              label={m.connection_field_password()}
+              type="password"
+              value={formPassword}
+              oninput={(v) => {
+                formPassword = v;
+              }}
+            />
+          {/if}
+
+          <Toggle
+            label={m.connection_osc52_label()}
+            checked={formAllowOsc52}
+            onchange={(v) => {
+              formAllowOsc52 = v;
+            }}
+          />
         </div>
 
-        {#if formAuthMethod === 'identity'}
-          <TextInput
-            id="cm-identity-file"
-            label={m.connection_field_identity()}
-            value={formIdentityFile}
-            oninput={(v) => {
-              formIdentityFile = v;
-            }}
-          />
-        {:else}
-          <!-- Password field — type="password" ensures masking (SEC-UI-002) -->
-          <TextInput
-            id="cm-password"
-            label={m.connection_field_password()}
-            type="password"
-            value={formPassword}
-            oninput={(v) => {
-              formPassword = v;
-            }}
-          />
-        {/if}
-
-        <Toggle
-          label={m.connection_osc52_label()}
-          checked={formAllowOsc52}
-          onchange={(v) => {
-            formAllowOsc52 = v;
-          }}
-        />
+        <div class="flex gap-2 mt-6">
+          <Button variant="primary" onclick={handleSave}>
+            {#if editingId}
+              <Check size={16} aria-hidden="true" />
+              {m.connection_action_save_changes()}
+            {:else}
+              <Plus size={16} aria-hidden="true" />
+              {m.connection_action_add()}
+            {/if}
+          </Button>
+          <Button variant="ghost" onclick={handleCancel}>
+            {m.action_cancel()}
+          </Button>
+        </div>
       </div>
-
-      <div class="flex gap-2 mt-6">
-        <Button variant="primary" onclick={handleSave}>
-          {#if editingId}
-            <Check size={16} aria-hidden="true" />
-            {m.connection_action_save_changes()}
-          {:else}
-            <Plus size={16} aria-hidden="true" />
-            {m.connection_action_add()}
-          {/if}
-        </Button>
-        <Button variant="ghost" onclick={handleCancel}>
-          {m.action_cancel()}
-        </Button>
-      </div>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -469,7 +471,7 @@
     bottom: var(--size-status-bar-height, 28px);
     width: 400px;
     background-color: var(--color-bg-raised);
-    border-left: 1px solid var(--color-border);
+    border-left: 1px solid var(--color-border-overlay);
     box-shadow: var(--shadow-overlay);
     z-index: var(--z-overlay, 40);
     display: flex;
@@ -484,6 +486,14 @@
     padding: var(--space-4, 16px);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+  }
+
+  .connection-manager__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 var(--space-4);
+    display: flex;
+    flex-direction: column;
   }
 
   .connection-manager__actions {
@@ -598,6 +608,8 @@
   }
 
   .connection-manager__form {
+    flex: 1;
+    overflow-y: auto;
     padding: var(--space-4, 16px) 0;
   }
 

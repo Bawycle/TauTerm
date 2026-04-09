@@ -548,13 +548,13 @@ The Connection Manager is accessible as a standalone right-side slide-in panel (
 - **Left border:** 1px solid `--color-border-overlay` (`#4a4640`).
 - **Shadow:** `--shadow-overlay`.
 - **Z-index:** `--z-overlay` (40).
-- **Internal padding:** `--space-4` (16px).
+- **Internal padding:** `--space-4` (16px) on all four sides for all content regions (header, list, form). The header has its own `padding: --space-4` and a bottom border; the content area below it also uses `padding: 0 --space-4` horizontally so items are never flush against the panel edge.
 
 #### 7.7.2 Header
 
 - **Title:** "Connections" at Heading level.
 - **Close button:** Lucide `X`, top-right.
-- **"New Connection" button:** Below title. Primary button variant, full width. Lucide `Plus` icon.
+- **"New Connection" button:** Rendered below the header, inside the scrollable content area. Primary button variant, full width. Lucide `Plus` icon.
 
 #### 7.7.3 Connection List
 
@@ -597,6 +597,12 @@ Each action button: `--size-target-min` (44px) hit area, `--size-icon-sm` (14px)
 
 Displayed inline within the connection manager when creating or editing a connection (replaces the list temporarily, or as a slide-in sub-panel).
 
+**Layout in standalone mode:**
+- The form replaces the list view entirely inside the slide-in panel.
+- The form container takes `flex: 1` and `overflow-y: auto` so it scrolls independently when its content exceeds the available panel height. This ensures the action buttons at the bottom are always reachable without resizing the window.
+- Padding: `--space-4` (16px) on all sides (matching the panel's internal padding spec in §7.7.1).
+- The form title ("New Connection" / "Edit Connection") is rendered at the top of the scrollable area, not as a fixed header.
+
 **Fields (FS-SSH-030):**
 - Label (optional): text input (§7.15).
 - Group (optional): text input with autocomplete from existing group names. As the user types, a dropdown of matching existing group names appears below the field (§7.16 dropdown styling). The user may select an existing group or type a new group name.
@@ -608,7 +614,7 @@ Displayed inline within the connection manager when creating or editing a connec
   - If password: password input (stored securely per FS-CRED-001, never displayed in preferences file).
 - OSC 52 write toggle: toggle (§7.16) with label "Allow clipboard write from remote" and description "When enabled, the remote server can set your clipboard content."
 
-**Action buttons:** "Save" (primary), "Cancel" (ghost).
+**Action buttons:** "Save" (primary), "Cancel" (ghost). Placed at the bottom of the scrollable form with `--space-6` (24px) top margin separating them from the last field.
 
 ### 7.8 Context Menu
 

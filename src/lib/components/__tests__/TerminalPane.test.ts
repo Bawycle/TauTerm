@@ -119,6 +119,24 @@ describe('TPSC-STRUCT-003: pane element has data-pane-id attribute', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// C1-REGRESSION: TerminalPane keeps role="region" + aria-label (WCAG 1.3.6)
+//
+// TerminalPane must retain role="region" with an aria-label — it is a named
+// landmark representing a pane in a split layout.  Only the pane-area wrapper
+// in TerminalView lost its unnamed role="region"; this is a distinct element.
+// This test prevents accidental removal during future refactors.
+// ---------------------------------------------------------------------------
+
+describe('C1-REGRESSION: TerminalPane retains role="region" landmark', () => {
+  it('pane root element has role="region"', async () => {
+    const { container, instance } = await mountPane();
+    instances.push(instance);
+    const region = container.querySelector('[role="region"]');
+    expect(region).not.toBeNull();
+  });
+});
+
 describe('TPSC-FN-001: ScrollToBottomButton absent at initial render (scrollOffset=0)', () => {
   it('does not render .scroll-to-bottom-btn on initial mount', async () => {
     const { container, instance } = await mountPane();

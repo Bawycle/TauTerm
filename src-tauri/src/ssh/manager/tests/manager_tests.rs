@@ -1,18 +1,81 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use std::sync::Mutex;
+
+use crate::credentials::CredentialManager;
+use crate::error::CredentialError;
+use crate::platform::CredentialStore;
 use crate::session::ids::{ConnectionId, PaneId};
 use crate::ssh::connection::SshConnection;
 use crate::ssh::{SshConnectionConfig, SshLifecycleState};
 
 use super::super::SshManager;
 
+// ---------------------------------------------------------------------------
+// Mock credential store for reconnect tests
+// ---------------------------------------------------------------------------
+
+struct MockCredentialStore {
+    available: bool,
+    data: Mutex<std::collections::HashMap<String, Vec<u8>>>,
+}
+
+impl MockCredentialStore {
+    fn new_with_password(key: &str, password: &str) -> Self {
+        let mut map = std::collections::HashMap::new();
+        map.insert(key.to_string(), password.as_bytes().to_vec());
+        Self {
+            available: true,
+            data: Mutex::new(map),
+        }
+    }
+
+    fn unavailable() -> Self {
+        Self {
+            available: false,
+            data: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            available: true,
+            data: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+}
+
+impl CredentialStore for MockCredentialStore {
+    fn is_available(&self) -> bool {
+        self.available
+    }
+
+    fn store(&self, key: &str, secret: &[u8]) -> Result<(), CredentialError> {
+        self.data
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), secret.to_vec());
+        Ok(())
+    }
+
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>, CredentialError> {
+        Ok(self.data.lock().unwrap().get(key).cloned())
+    }
+
+    fn delete(&self, key: &str) -> Result<(), CredentialError> {
+        self.data.lock().unwrap().remove(key);
+        Ok(())
+    }
+}
+
 fn make_config(host: &str) -> SshConnectionConfig {
+    use crate::preferences::types::{SshHost, SshLabel, SshUsername};
     SshConnectionConfig {
         id: ConnectionId::new(),
-        label: "test".to_string(),
-        host: host.to_string(),
+        label: SshLabel::try_from("test".to_string()).unwrap(),
+        host: SshHost::try_from(host.to_string()).unwrap(),
         port: 22,
-        username: "user".to_string(),
+        username: SshUsername::try_from("user".to_string()).unwrap(),
         identity_file: None,
         allow_osc52_write: false,
         keepalive_interval_secs: None,
@@ -128,5 +191,92 @@ async fn ssh_manager_duplicate_pane_detected_via_map() {
     assert!(
         manager.connections.contains_key(&pane_id),
         "Duplicate detection: map must report pane as present"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A3 — resolve_reconnect_credentials tests
+// ---------------------------------------------------------------------------
+
+/// When the keychain is available and contains a password for the connection,
+/// `resolve_reconnect_credentials` must return `Some(Credentials)` with the
+/// correct username and password.
+#[tokio::test]
+async fn resolve_reconnect_credentials_returns_creds_from_keychain() {
+    use std::sync::Arc;
+
+    let config = make_config("example.com");
+    // Build the keychain key expected by credential_key(): "tauterm:ssh:{id}:{username}"
+    let key = format!("tauterm:ssh:{}:user", config.id);
+    let store = MockCredentialStore::new_with_password(&key, "s3cr3t");
+    let manager = Arc::new(SshManager {
+        connections: dashmap::DashMap::new(),
+        pending_credentials: dashmap::DashMap::new(),
+        pending_passphrases: dashmap::DashMap::new(),
+        pending_host_keys: dashmap::DashMap::new(),
+        credential_manager: Arc::new(CredentialManager::new_with_store(Box::new(store))),
+    });
+
+    let result = manager.resolve_reconnect_credentials(&config).await;
+
+    assert!(
+        result.is_some(),
+        "must return Some when keychain has a password"
+    );
+    let creds = result.unwrap();
+    assert_eq!(creds.username, "user");
+    assert_eq!(creds.password.as_deref(), Some("s3cr3t"));
+    assert!(
+        !creds.save_in_keychain,
+        "save_in_keychain must be false on reconnect"
+    );
+}
+
+/// When the credential store reports `is_available() = false`,
+/// `resolve_reconnect_credentials` must return `None` immediately without
+/// attempting a keychain lookup.
+#[tokio::test]
+async fn resolve_reconnect_credentials_returns_none_when_store_unavailable() {
+    use std::sync::Arc;
+
+    let config = make_config("example.com");
+    let store = MockCredentialStore::unavailable();
+    let manager = Arc::new(SshManager {
+        connections: dashmap::DashMap::new(),
+        pending_credentials: dashmap::DashMap::new(),
+        pending_passphrases: dashmap::DashMap::new(),
+        pending_host_keys: dashmap::DashMap::new(),
+        credential_manager: Arc::new(CredentialManager::new_with_store(Box::new(store))),
+    });
+
+    let result = manager.resolve_reconnect_credentials(&config).await;
+
+    assert!(
+        result.is_none(),
+        "must return None when credential store is unavailable"
+    );
+}
+
+/// When the credential store is available but contains no password for the
+/// connection, `resolve_reconnect_credentials` must return `None`.
+#[tokio::test]
+async fn resolve_reconnect_credentials_returns_none_when_no_password_stored() {
+    use std::sync::Arc;
+
+    let config = make_config("example.com");
+    let store = MockCredentialStore::empty();
+    let manager = Arc::new(SshManager {
+        connections: dashmap::DashMap::new(),
+        pending_credentials: dashmap::DashMap::new(),
+        pending_passphrases: dashmap::DashMap::new(),
+        pending_host_keys: dashmap::DashMap::new(),
+        credential_manager: Arc::new(CredentialManager::new_with_store(Box::new(store))),
+    });
+
+    let result = manager.resolve_reconnect_credentials(&config).await;
+
+    assert!(
+        result.is_none(),
+        "must return None when no password is stored for this connection"
     );
 }

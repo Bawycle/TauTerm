@@ -14,7 +14,6 @@ use tauri::State;
 
 use crate::credentials::CredentialManager;
 use crate::error::TauTermError;
-use crate::platform::validation::validate_ssh_identity_path;
 use crate::preferences::PreferencesStore;
 use crate::session::ids::ConnectionId;
 use crate::ssh::SshConnectionConfig;
@@ -26,41 +25,40 @@ pub async fn get_connections(
     Ok(prefs.read().get().connections)
 }
 
-/// Maximum accepted length for the `hostname` field (SEC-IPC-004).
-///
-/// DNS maximum hostname length per RFC 1035 §2.3.4: 253 characters.
-const MAX_HOSTNAME_LEN: usize = 253;
-
 /// Maximum accepted length for the `username` field (SEC-IPC-004).
 ///
 /// POSIX `LOGIN_NAME_MAX` is typically 255 on Linux.
+/// Still used by `store_connection_password` which takes a raw `String` username
+/// (not a `SshUsername` newtype) because the keychain API is not coupled to the
+/// connection config schema.
 const MAX_USERNAME_LEN: usize = 255;
 
 /// Maximum accepted length for the `password` field (SEC-CRED-004).
 const MAX_PASSWORD_LEN: usize = 4096;
+
+/// Maximum accepted length for the `hostname` field (SEC-IPC-004).
+///
+/// DNS maximum hostname length per RFC 1035 §2.3.4: 253 characters.
+/// Kept for test helpers below — hostname validation is handled by `SshHost::try_from`
+/// at deserialization time in production paths.
+#[cfg(test)]
+const MAX_HOSTNAME_LEN: usize = 253;
 
 #[tauri::command]
 pub async fn save_connection(
     config: SshConnectionConfig,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<ConnectionId, TauTermError> {
-    // SEC-IPC-004: reject oversized hostname / username.
-    if config.host.len() > MAX_HOSTNAME_LEN {
-        return Err(TauTermError::new(
-            "VALIDATION_ERROR",
-            "hostname exceeds maximum allowed length (253 characters).",
-        ));
-    }
-    if config.username.len() > MAX_USERNAME_LEN {
-        return Err(TauTermError::new(
-            "VALIDATION_ERROR",
-            "username exceeds maximum allowed length (255 characters).",
-        ));
-    }
-    if let Some(ref path) = config.identity_file {
-        // SEC-PATH-005: use the strict validator (file must exist and be inside ~/.ssh/).
-        validate_ssh_identity_path(path)?;
-    }
+    // SEC-IPC-004: hostname and username length / format are validated upstream by
+    // SshHost::try_from and SshUsername::try_from at serde deserialization time —
+    // serde rejects invalid payloads before this handler is called. The manual
+    // length checks that were here are therefore redundant and have been removed.
+    //
+    // SEC-PATH-005: Structural validation (absolute, no traversal, no control chars, ≤4096 bytes)
+    // is enforced by SshIdentityPath::try_from at IPC deserialization time.
+    // File existence and ~/.ssh/ boundary are checked at connection time in
+    // lifecycle.rs::open_connection_inner. No existence check here — user must
+    // be able to save a config before the key file exists on disk.
     // If the frontend sends an empty ID (new connection form), assign a fresh ID
     // here so that two consecutive "new connection" saves do not collide on the
     // empty-string key inside the store.
@@ -256,12 +254,13 @@ mod tests {
     }
 
     fn make_connection_config(label: &str) -> crate::ssh::SshConnectionConfig {
+        use crate::preferences::types::{SshHost, SshLabel, SshUsername};
         crate::ssh::SshConnectionConfig {
             id: ConnectionId::new(),
-            label: label.to_string(),
-            host: "example.com".to_string(),
+            label: SshLabel::try_from(label.to_string()).unwrap(),
+            host: SshHost::try_from("example.com".to_string()).unwrap(),
             port: 22,
-            username: "alice".to_string(),
+            username: SshUsername::try_from("alice".to_string()).unwrap(),
             identity_file: None,
             allow_osc52_write: false,
             keepalive_interval_secs: None,
@@ -322,36 +321,30 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // validate_ssh_identity_path via save_connection (SEC-PATH-005)
+    // SshIdentityPath structural validation at serde time (SEC-PATH-005)
     //
-    // The light validate_identity_file_path has been removed. All identity path
-    // validation now goes through validate_ssh_identity_path (platform::validation),
-    // which requires the file to exist and be within ~/.ssh/. The comprehensive
-    // test suite for that function lives in platform/validation.rs.
-    //
-    // We test here only that the connection_cmds save path calls the strict validator:
-    // a non-existent path must be rejected at save time.
+    // Structural checks (absolute path, no traversal, no control chars, ≤4096 bytes)
+    // are now enforced by SshIdentityPath::try_from at IPC deserialization time.
+    // File existence and ~/.ssh/ boundary remain checked at connection time in
+    // lifecycle.rs::open_connection_inner.
     // -----------------------------------------------------------------------
 
     #[test]
-    fn sec_path_005_nonexistent_identity_file_rejected_at_save_time() {
-        let result =
-            validate_ssh_identity_path("/home/nobody_tauterm_test/.ssh/does_not_exist_key");
+    fn sec_path_005_traversal_identity_path_rejected_at_serde() {
+        use crate::preferences::types::SshIdentityPath;
         assert!(
-            result.is_err(),
-            "SEC-PATH-005: nonexistent identity file must be rejected by the strict validator"
+            SshIdentityPath::try_from("/home/user/../.ssh/id_rsa".to_string()).is_err(),
+            "SEC-PATH-005: path with '..' traversal must be rejected by SshIdentityPath::try_from"
         );
-        assert_eq!(result.unwrap_err().code, "INVALID_SSH_IDENTITY_PATH");
     }
 
     #[test]
-    fn sec_path_005_relative_identity_path_rejected_at_save_time() {
-        let result = validate_ssh_identity_path("relative/path");
+    fn sec_path_005_relative_identity_path_rejected_at_serde() {
+        use crate::preferences::types::SshIdentityPath;
         assert!(
-            result.is_err(),
-            "SEC-PATH-005: relative identity file path must be rejected"
+            SshIdentityPath::try_from("relative/path".to_string()).is_err(),
+            "SEC-PATH-005: relative identity file path must be rejected by SshIdentityPath::try_from"
         );
-        assert_eq!(result.unwrap_err().code, "INVALID_SSH_IDENTITY_PATH");
     }
 
     // -----------------------------------------------------------------------
@@ -367,7 +360,6 @@ mod tests {
         config.id = crate::session::ids::ConnectionId(String::new()); // simulate frontend empty id
 
         // Replicate the command-handler logic (ID assignment) directly:
-        let mut config = config;
         if config.id.as_str().is_empty() {
             config.id = crate::session::ids::ConnectionId::new();
         }

@@ -40,55 +40,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## High Priority — Must Land in v1 (score 13–16)
 
-### Security — Capability & Credential Coverage
-
-### SSH
-
-- [ ] **SSH reconnect — missing credential re-injection** `[Score: 15 | R:2, S:2, U:3, E:2]` (FS-SSH-040, FS-SSH-041)
-  The reconnection architecture is in place (button in `TerminalPaneBanners.svelte`, `handleReconnect`, `reconnect_ssh` command). However, `SshManager::reconnect()` returns `Ok(())` without re-injecting credentials (stub documented in the security protocol). For password-auth connections, reconnection is a decoy.
-  Actions required:
-  1. Implement re-injection in `SshManager::reconnect()`: lookup keychain by (host, port, username), or trigger `credential-prompt` if unavailable (FS-CRED-007).
-  2. Coordinate with SSH stub completion (`auth.rs`, `credentials_linux.rs`).
-  3. Add a nextest test: reconnection of a password-auth session with mock credential store.
-
-- [ ] **SSH terminal modes RFC 4254 §8 — missing on-the-wire validation** `[Score: 14 | R:2, S:2, U:2, E:2]`
-  The terminal modes (`TERMINAL_MODES` in `ssh/manager.rs`) are correctly defined in intent, but no test verifies that `russh` actually encodes the RFC 4254 opcodes (VINTR=1, VQUIT=2, … ECHO=53) rather than the POSIX `termios.h` constants. A mismatch would cause incorrect signals on the remote server (Ctrl+C not killing the process, etc.).
-  Action: add an integration test capturing the SSH frame and verifying the opcodes encoded in the `pty-req`, or inspect the `russh` source to confirm the mapping.
-
-### PTY Robustness
-
-- [ ] **PTY teardown — end-to-end test `close_pane` → `ProcessExited`** `[Score: 14 | R:2, S:2, U:1, E:3]` (FS-PTY-lifecycle)
-  The teardown sequence (Drop-cascade → SIGHUP → `ProcessExited` event) is implemented but not covered end-to-end. No nextest test verifies that after `close_pane`, the `ProcessExited` event is emitted with the correct `pane_id` before the registry entry is destroyed.
-  Action: add an integration test that spawns a real PTY session, calls `close_pane`, and verifies receipt of `ProcessExited`.
-
-- [ ] **PTY EIO — verify behavior on read error** `[Score: 15 | R:2, S:2, U:2, E:3]` *(robustness)*
-  On Linux, `read()` returns `EIO` when the master side of the PTY is read after the child process dies. The correct response is to cleanly terminate the read loop and emit `ProcessExited`. An immediate `break` on any `io::Error` (a common but incorrect pattern) can mask transient errors and prematurely terminate the session.
-  **Alacritty reference** (`alacritty_terminal/src/tty/unix.rs`, `alacritty_terminal/src/event_loop.rs`, `alacritty_terminal/src/tty/mod.rs`): treats `EIO` as a normal end-of-process signal (not an error) — `continue` on transient errors, `break` only on `EIO` and explicit close. To verify in `src-tauri/src/platform/pty_linux/backend.rs`: does the PTY read loop distinguish `EIO` from other errors?
-  Action: inspect the PTY read loop, ensure `EIO` → `ProcessExited` (not `SessionError`) and that transient errors (`EINTR`, `EAGAIN`) do not terminate the loop.
-
-### Accessibility
-
-- [ ] **Accessibility — missing `aria-controls` and `role="tabpanel"` on the tab bar** `[Score: 15 | R:2, S:2, U:2, E:3]` (WCAG 4.1.2)
-  Specified in `docs/uxd/05-accessibility.md §11.3` but not implemented. `TabBarItem.svelte` has `role="tab"` + `aria-selected` but is missing `aria-controls={panelId}`. No `role="tabpanel"` + `aria-labelledby` exists in `TerminalPane.svelte` or the pane container.
-  Actions required: add `aria-controls` on each tab item + `role="tabpanel"` + `aria-labelledby` on the corresponding pane container.
-
-- [ ] **Accessibility — missing `:focus-visible` on search input** `[Score: 13 | R:2, S:1, U:2, E:3]` (WCAG 2.4.7)
-  `SearchOverlay.svelte`: the main input has `outline: none` with no `:focus-visible` substitute. A keyboard user has no visible focus indicator on this input.
-  Action: add `:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -1px; }`.
-
-### Security — IPC
-
-- [ ] **Parse Don't Validate — unvalidated text fields at the IPC boundary** `[Score: 13 | R:2, S:2, U:1, E:2]` (SEC-IPC-005)
-  Numeric and enum fields are validated at the boundary (`validate_and_clamp`). Free-text fields are not: `font_family`, `theme_name`, `word_delimiters`, `SshConnectionConfig.host`, `SshConnectionConfig.label` accept arbitrary values including control characters and empty strings.
-  **Alacritty reference** (`alacritty/src/config/bindings.rs`, `alacritty/src/config/ui_config.rs`, derive macro in `alacritty_config_derive/src/lib.rs`): pattern `RawBinding` → newtypes with `impl TryFrom<String>` performing validation at construction, decorated `#[serde(try_from = "String")]`. Deserialization produces either a valid type or a serde error.
-  Action: add validated newtypes (`SshHost`, `FontFamily`) in `preferences/types.rs` with `TryFrom<String>` + `#[serde(try_from = "String")]`. Minimum checks: max length, absence of control characters, non-empty. Prioritize `SshConnectionConfig.host` (moderate risk: feeds SSH logic).
-
-### Security — Tests
-
-- [ ] **OSC52 — test of per-connection SSH flag vs. global flag** `[Score: 13 | R:1, S:3, U:1, E:3]`
-  The `allow_osc52_write` flag exists at two levels (global `TerminalPrefs` and per-connection `SshConnectionConfig`). The override logic is documented in `docs/arch/06-appendix.md §8.2` but covered by no test. A regression in `propagate_osc52_allow()` would make the per-connection flag inoperative.
-  Action: add two nextest tests: (1) SSH connection with `allow_osc52_write: true` and global `false` → write allowed; (2) inverse.
-
 ### Distribution
 
 - [ ] **Distribution — GPG signing + SHA256SUMS** `[Score: 13 | R:2, S:2, U:1, E:2]` (FS-DIST-006)

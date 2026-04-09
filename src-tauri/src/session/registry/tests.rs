@@ -355,12 +355,255 @@ fn ssh_close_001_get_tab_pane_ids_split_tab_returns_all_panes() {
     );
 
     let mut ids = inner_get_tab_pane_ids(&inner, &tab_id);
-    ids.sort_by(|a, b| a.to_string().cmp(&b.to_string())); // stabilise order
+    ids.sort_by_key(|a| a.to_string()); // stabilise order
     let mut expected = vec![pane_a, pane_b];
-    expected.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    expected.sort_by_key(|a| a.to_string());
 
     assert_eq!(
         ids, expected,
         "split tab must yield both pane IDs so both SSH connections are closed"
+    );
+}
+
+// -----------------------------------------------------------------------
+// OSC52 propagation tests (osc52_prop_001 – osc52_prop_005)
+//
+// These tests verify the invariants of `propagate_osc52_allow` and
+// `apply_pane_osc52_override` at the `RegistryInner` level, operating
+// directly on `TabEntry.panes` to avoid the `AppHandle` requirement.
+//
+// The logic is replicated inline (mirrors what the real methods do),
+// so these tests verify the contract rather than the method call itself.
+// This matches the approach used for `extract_termination_info` above.
+// -----------------------------------------------------------------------
+
+/// Replicates the logic of `propagate_osc52_allow` on a `RegistryInner`.
+fn inner_propagate_osc52_allow(inner: &RegistryInner, allow: bool) {
+    for entry in inner.tabs.values() {
+        for pane in entry.panes.values() {
+            if pane.osc52_overridden {
+                continue;
+            }
+            pane.vt.write().allow_osc52_write = allow;
+        }
+    }
+}
+
+/// Replicates the logic of `apply_pane_osc52_override` on a `RegistryInner`.
+fn inner_apply_pane_osc52_override(
+    inner: &mut RegistryInner,
+    pane_id: &crate::session::ids::PaneId,
+    allow: bool,
+) {
+    if let Some(pane) = inner
+        .tabs
+        .values_mut()
+        .find_map(|e| e.panes.get_mut(pane_id))
+    {
+        pane.vt.write().allow_osc52_write = allow;
+        pane.osc52_overridden = true;
+    }
+}
+
+/// Build a `RegistryInner` containing a single tab with one pane.
+/// Returns (inner, tab_id, pane_id).
+fn make_registry_with_one_pane() -> (
+    RegistryInner,
+    crate::session::ids::TabId,
+    crate::session::ids::PaneId,
+) {
+    let tab_id = crate::session::ids::TabId::new();
+    let pane_id = crate::session::ids::PaneId::new();
+
+    let tab_state = make_leaf_tab_state(&tab_id, &pane_id);
+    let pane_session = make_pane_session(&pane_id);
+
+    let mut panes = HashMap::new();
+    panes.insert(pane_id.clone(), pane_session);
+
+    let mut inner = RegistryInner::new();
+    inner.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            state: tab_state,
+            panes,
+        },
+    );
+
+    (inner, tab_id, pane_id)
+}
+
+/// Helper: read `allow_osc52_write` from a pane in `RegistryInner`.
+fn read_osc52_allow(inner: &RegistryInner, pane_id: &crate::session::ids::PaneId) -> bool {
+    inner
+        .tabs
+        .values()
+        .find_map(|e| e.panes.get(pane_id))
+        .map(|p| p.vt.read().allow_osc52_write)
+        .expect("pane not found in registry")
+}
+
+/// Helper: read `osc52_overridden` from a pane in `RegistryInner`.
+fn read_osc52_overridden(inner: &RegistryInner, pane_id: &crate::session::ids::PaneId) -> bool {
+    inner
+        .tabs
+        .values()
+        .find_map(|e| e.panes.get(pane_id))
+        .map(|p| p.osc52_overridden)
+        .expect("pane not found in registry")
+}
+
+/// osc52_prop_001: Global propagation must NOT overwrite an SSH pane that has
+/// `osc52_overridden = true`.
+#[test]
+fn osc52_prop_001_global_change_does_not_affect_ssh_pane_with_override() {
+    let (mut inner, _, pane_id) = make_registry_with_one_pane();
+
+    // Simulate an SSH override: policy = allow, pane is marked as overridden.
+    inner_apply_pane_osc52_override(&mut inner, &pane_id, true);
+    assert!(read_osc52_allow(&inner, &pane_id));
+    assert!(read_osc52_overridden(&inner, &pane_id));
+
+    // Global preference changes to false — must not touch the overridden pane.
+    inner_propagate_osc52_allow(&inner, false);
+
+    assert!(
+        read_osc52_allow(&inner, &pane_id),
+        "osc52_overridden pane must keep allow=true after propagate_osc52_allow(false)"
+    );
+}
+
+/// osc52_prop_002: Global propagation DOES update a local pane
+/// (`osc52_overridden = false`).
+#[test]
+fn osc52_prop_002_global_change_does_affect_local_pane() {
+    let (inner, _, pane_id) = make_registry_with_one_pane();
+
+    // Initial state: allow=false (default from make_pane_session), not overridden.
+    assert!(!read_osc52_allow(&inner, &pane_id));
+    assert!(!read_osc52_overridden(&inner, &pane_id));
+
+    inner_propagate_osc52_allow(&inner, true);
+
+    assert!(
+        read_osc52_allow(&inner, &pane_id),
+        "local pane (not overridden) must have allow=true after propagate_osc52_allow(true)"
+    );
+}
+
+/// osc52_prop_003: `apply_pane_osc52_override(true)` on a pane whose VT has
+/// `allow=false` sets `allow=true` and marks `osc52_overridden=true`.
+#[test]
+fn osc52_prop_003_ssh_conn_allow_true_global_false() {
+    let (mut inner, _, pane_id) = make_registry_with_one_pane();
+
+    // Starting state: allow=false (global default).
+    assert!(!read_osc52_allow(&inner, &pane_id));
+
+    inner_apply_pane_osc52_override(&mut inner, &pane_id, true);
+
+    assert!(
+        read_osc52_allow(&inner, &pane_id),
+        "apply_pane_osc52_override(true) must set allow_osc52_write=true"
+    );
+    assert!(
+        read_osc52_overridden(&inner, &pane_id),
+        "apply_pane_osc52_override must set osc52_overridden=true"
+    );
+}
+
+/// osc52_prop_004: `apply_pane_osc52_override(false)` on a pane with global
+/// `allow=true` sets `allow=false`, marks override, and a subsequent global
+/// propagation does NOT reset it back to true.
+#[test]
+fn osc52_prop_004_ssh_conn_allow_false_global_true_survives_propagation() {
+    let (mut inner, _, pane_id) = make_registry_with_one_pane();
+
+    // Start with global allow=true.
+    inner_propagate_osc52_allow(&inner, true);
+    assert!(read_osc52_allow(&inner, &pane_id));
+
+    // SSH override: this pane must have allow=false.
+    inner_apply_pane_osc52_override(&mut inner, &pane_id, false);
+    assert!(
+        !read_osc52_allow(&inner, &pane_id),
+        "apply_pane_osc52_override(false) must set allow_osc52_write=false"
+    );
+    assert!(
+        read_osc52_overridden(&inner, &pane_id),
+        "osc52_overridden must be true after apply_pane_osc52_override"
+    );
+
+    // Global preference changes back to true — must not affect overridden pane.
+    inner_propagate_osc52_allow(&inner, true);
+    assert!(
+        !read_osc52_allow(&inner, &pane_id),
+        "overridden pane must remain allow=false after propagate_osc52_allow(true)"
+    );
+}
+
+/// osc52_prop_005: Mixed panes in the same tab — local pane is affected by
+/// propagation while the SSH pane with override is not.
+#[test]
+fn osc52_prop_005_mixed_panes_local_affected_ssh_not() {
+    let tab_id = crate::session::ids::TabId::new();
+    let pane_local = crate::session::ids::PaneId::new();
+    let pane_ssh = crate::session::ids::PaneId::new();
+
+    let state_local = make_pane_session(&pane_local).to_state();
+    let state_ssh = make_pane_session(&pane_ssh).to_state();
+
+    let tab_state = crate::session::tab::TabState {
+        id: tab_id.clone(),
+        label: None,
+        active_pane_id: pane_local.clone(),
+        order: 0,
+        layout: crate::session::tab::PaneNode::Split {
+            direction: crate::session::tab::SplitDirection::Horizontal,
+            ratio: 0.5,
+            first: Box::new(crate::session::tab::PaneNode::Leaf {
+                pane_id: pane_local.clone(),
+                state: state_local,
+            }),
+            second: Box::new(crate::session::tab::PaneNode::Leaf {
+                pane_id: pane_ssh.clone(),
+                state: state_ssh,
+            }),
+        },
+    };
+
+    let session_local = make_pane_session(&pane_local);
+    // local: osc52_overridden=false, allow=false (default)
+    assert!(!session_local.osc52_overridden);
+
+    let mut session_ssh = make_pane_session(&pane_ssh);
+    // SSH: manually set override and allow=true
+    session_ssh.vt.write().allow_osc52_write = true;
+    session_ssh.osc52_overridden = true;
+
+    let mut panes = HashMap::new();
+    panes.insert(pane_local.clone(), session_local);
+    panes.insert(pane_ssh.clone(), session_ssh);
+
+    let mut inner = RegistryInner::new();
+    inner.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            state: tab_state,
+            panes,
+        },
+    );
+
+    // propagate_osc52_allow(false): local must become false (already false),
+    // ssh must stay true.
+    inner_propagate_osc52_allow(&inner, false);
+
+    assert!(
+        !read_osc52_allow(&inner, &pane_local),
+        "local pane must have allow=false after propagate_osc52_allow(false)"
+    );
+    assert!(
+        read_osc52_allow(&inner, &pane_ssh),
+        "SSH pane with override must keep allow=true after propagate_osc52_allow(false)"
     );
 }

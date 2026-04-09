@@ -210,8 +210,9 @@
     color: var(--color-text-tertiary);
   }
 
-  .search-overlay__input:focus {
-    border-color: var(--color-focus-ring);
+  .search-overlay__input:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -1px;
   }
 
   .search-overlay__count {

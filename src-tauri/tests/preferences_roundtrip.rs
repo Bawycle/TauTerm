@@ -106,17 +106,18 @@ fn pref_roundtrip_default_json_values_are_identical() {
 #[test]
 fn pref_roundtrip_non_default_values_preserved() {
     let mut prefs = Preferences::default();
-    prefs.appearance.font_family = "JetBrains Mono".to_string();
+    use tau_term_lib::preferences::types::{FontFamily, ThemeName, WordDelimiters};
+    prefs.appearance.font_family = FontFamily::try_from("JetBrains Mono".to_string()).unwrap();
     prefs.appearance.font_size = 18.5;
     prefs.appearance.cursor_style = CursorStyle::Bar;
     prefs.appearance.cursor_blink_ms = 800;
-    prefs.appearance.theme_name = "nord".to_string();
+    prefs.appearance.theme_name = ThemeName::try_from("nord".to_string()).unwrap();
     prefs.appearance.opacity = 0.85;
     prefs.appearance.language = Language::Fr;
     prefs.appearance.context_menu_hint_shown = true;
     prefs.terminal.scrollback_lines = 5_000;
     prefs.terminal.allow_osc52_write = true;
-    prefs.terminal.word_delimiters = " |,".to_string();
+    prefs.terminal.word_delimiters = WordDelimiters::try_from(" |,".to_string()).unwrap();
     prefs.terminal.bell_type = BellType::Audio;
     prefs.terminal.confirm_multiline_paste = false;
 

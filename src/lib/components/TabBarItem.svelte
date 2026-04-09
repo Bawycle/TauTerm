@@ -93,8 +93,10 @@
   class="tab-bar__tab"
   class:tab-bar__tab--active={isActive}
   class:tab-bar__tab--dragging={isDragging}
+  id="tab-{tab.id}"
   role="tab"
   aria-selected={isActive}
+  aria-controls="tab-panel-{tab.id}"
   tabindex={isActive ? 0 : -1}
   data-tab-id={tab.id}
   data-tab-index={index}
@@ -172,13 +174,6 @@
       onclick={(e) => {
         e.stopPropagation();
         onTabClose(tab.id);
-      }}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          onTabClose(tab.id);
-        }
       }}
     >
       <X size={14} aria-hidden="true" />

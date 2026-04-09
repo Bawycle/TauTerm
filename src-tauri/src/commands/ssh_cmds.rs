@@ -49,9 +49,9 @@ async fn open_ssh_connection_impl(
             .await
         {
             Ok(Some(password)) => Some(Credentials {
-                username: config.username.clone(),
+                username: config.username.to_string(),
                 password: Some(password),
-                private_key_path: config.identity_file.clone(),
+                private_key_path: config.identity_file.as_deref().map(str::to_owned),
                 save_in_keychain: false,
             }),
             Ok(None) => None,
@@ -69,6 +69,10 @@ async fn open_ssh_connection_impl(
     let (cols, rows) = registry
         .get_pane_dims(&pane_id)
         .map_err(TauTermError::from)?;
+
+    // Apply per-connection OSC 52 write policy — overrides the global preference
+    // for this SSH pane and protects it from future propagate_osc52_allow calls (arch §8.2).
+    registry.apply_pane_osc52_override(&pane_id, config.allow_osc52_write);
 
     // Path validation is performed inside SshManager::open_connection (FINDING-004).
     ssh_manager

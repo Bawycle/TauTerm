@@ -233,7 +233,12 @@ fn ich_pref_001b_patch_font_family_leaves_other_fields_intact() {
 
     let patch = PreferencesPatch {
         appearance: Some(AppearancePatch {
-            font_family: Some("JetBrains Mono".to_string()),
+            font_family: Some(
+                tau_term_lib::preferences::types::FontFamily::try_from(
+                    "JetBrains Mono".to_string(),
+                )
+                .unwrap(),
+            ),
             ..Default::default()
         }),
         ..Default::default()
@@ -273,7 +278,10 @@ fn ich_pref_001d_patch_terminal_scrollback() {
         terminal: Some(TerminalPatch {
             scrollback_lines: Some(5_000),
             allow_osc52_write: Some(true),
-            word_delimiters: Some(" ".to_string()),
+            word_delimiters: Some(
+                tau_term_lib::preferences::types::WordDelimiters::try_from(" ".to_string())
+                    .unwrap(),
+            ),
             bell_type: Some(BellType::None),
             confirm_multiline_paste: Some(false),
         }),

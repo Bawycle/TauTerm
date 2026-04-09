@@ -81,8 +81,20 @@ pub fn spawn_pty_read_task(
                         break;
                     }
                     Ok(n) => n,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                        // EINTR — interrupted by signal delivery, retry immediately.
+                        continue;
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // EAGAIN/EWOULDBLOCK — should not occur on a blocking PTY fd, but
+                        // defensive: yield to avoid busy-spinning and retry.
+                        std::thread::yield_now();
+                        continue;
+                    }
                     Err(e) => {
-                        tracing::error!("PTY read error on pane {pane_id_r}: {e}");
+                        // EIO (process exited, master fd dead) or other fatal read error.
+                        // Treat as end-of-session — the emit task will fire ProcessExited.
+                        tracing::debug!("PTY read ended on pane {pane_id_r}: {e}");
                         break;
                     }
                 }

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::preferences::types::SshIdentityPath;
+
 use super::super::Credentials;
 
 // -----------------------------------------------------------------------
@@ -72,13 +74,16 @@ fn sec_cred_004_ssh_connection_config_no_password_in_json() {
     use crate::session::ids::ConnectionId;
     use crate::ssh::SshConnectionConfig;
 
+    use crate::preferences::types::{SshHost, SshLabel, SshUsername};
     let config = SshConnectionConfig {
         id: ConnectionId::new(),
-        label: "My Server".to_string(),
-        host: "example.com".to_string(),
+        label: SshLabel::try_from("My Server".to_string()).unwrap(),
+        host: SshHost::try_from("example.com".to_string()).unwrap(),
         port: 22,
-        username: "alice".to_string(),
-        identity_file: Some("/home/alice/.ssh/id_ed25519".to_string()),
+        username: SshUsername::try_from("alice".to_string()).unwrap(),
+        identity_file: Some(
+            SshIdentityPath::try_from("/home/alice/.ssh/id_ed25519".to_string()).unwrap(),
+        ),
         allow_osc52_write: false,
         keepalive_interval_secs: None,
         keepalive_max_failures: None,
@@ -105,12 +110,13 @@ fn sec_cred_004_ssh_connection_config_identity_file_skipped_when_none() {
     use crate::session::ids::ConnectionId;
     use crate::ssh::SshConnectionConfig;
 
+    use crate::preferences::types::{SshHost, SshLabel, SshUsername};
     let config = SshConnectionConfig {
         id: ConnectionId::new(),
-        label: "Password server".to_string(),
-        host: "example.com".to_string(),
+        label: SshLabel::try_from("Password server".to_string()).unwrap(),
+        host: SshHost::try_from("example.com".to_string()).unwrap(),
         port: 22,
-        username: "bob".to_string(),
+        username: SshUsername::try_from("bob".to_string()).unwrap(),
         identity_file: None,
         allow_osc52_write: false,
         keepalive_interval_secs: None,

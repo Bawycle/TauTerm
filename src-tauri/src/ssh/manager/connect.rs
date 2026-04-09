@@ -94,12 +94,12 @@ impl SshManager {
         let username = credentials
             .as_ref()
             .map(|c| c.username.clone())
-            .unwrap_or_else(|| config.username.clone());
+            .unwrap_or_else(|| config.username.to_string());
 
         // FS-SSH-019a: Resolve passphrase for encrypted identity files before SSH auth.
         let resolved_passphrase: Option<zeroize::Zeroizing<String>> =
-            if let Some(ref key_path_str) = config.identity_file {
-                let key_path = std::path::Path::new(key_path_str);
+            if let Some(ref key_path_ref) = config.identity_file {
+                let key_path = key_path_ref.as_path();
                 if crate::ssh::auth::key_needs_passphrase(key_path) {
                     const MAX_PASSPHRASE_ATTEMPTS: u32 = 3;
                     const PASSPHRASE_PROMPT_TIMEOUT_SECS: u64 = 120;
@@ -114,7 +114,7 @@ impl SshManager {
 
                     // 1. Try keychain first.
                     if let Ok(Some(stored)) =
-                        self.credential_manager.get_passphrase(key_path_str).await
+                        self.credential_manager.get_passphrase(key_path_ref).await
                     {
                         // Verify the stored passphrase actually decrypts the key.
                         if russh::keys::load_secret_key(key_path, Some(stored.as_str())).is_ok() {
@@ -154,7 +154,7 @@ impl SshManager {
                                         && let Err(e) = self
                                             .credential_manager
                                             .store_passphrase(
-                                                key_path_str,
+                                                key_path_ref,
                                                 input.passphrase.as_str(),
                                             )
                                             .await
@@ -281,7 +281,7 @@ impl SshManager {
                 &app,
                 crate::events::CredentialPromptEvent {
                     pane_id: pane_id.clone(),
-                    host: config.host.clone(),
+                    host: config.host.to_string(),
                     username: username.clone(),
                     prompt: None,
                     failed: attempt > 1,
@@ -440,8 +440,8 @@ impl SshManager {
         passphrase: Option<&str>,
     ) -> Result<bool, SshError> {
         // 1. Public key (if identity_file is configured).
-        if let Some(ref key_path_str) = config.identity_file {
-            let key_path = std::path::Path::new(key_path_str);
+        if let Some(ref key_path_ref) = config.identity_file {
+            let key_path = key_path_ref.as_path();
             match authenticate_pubkey(session, username, key_path, passphrase).await {
                 Ok(true) => return Ok(true),
                 Ok(false) => {

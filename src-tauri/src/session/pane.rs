@@ -54,6 +54,10 @@ pub struct PaneSession {
     pub ssh_task: Option<SshTaskHandle>,
     /// Current scroll offset in scrollback lines (0 = bottom/live view, positive = scrolled up).
     pub scroll_offset: i64,
+    /// When `true`, this pane's OSC 52 write policy was set from a per-connection
+    /// `SshConnectionConfig.allow_osc52_write` override and must not be overwritten
+    /// by global preference propagation (arch §8.2).
+    pub osc52_overridden: bool,
 }
 
 impl PaneSession {
@@ -91,6 +95,7 @@ impl PaneSession {
             ssh_channel: None,
             ssh_task: None,
             scroll_offset: 0,
+            osc52_overridden: false,
             id,
         }
     }

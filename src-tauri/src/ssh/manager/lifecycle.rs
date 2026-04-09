@@ -85,8 +85,11 @@ impl SshManager {
         }
 
         // Validate the identity file path before any network activity.
-        if let Some(ref key_path_str) = config.identity_file {
-            crate::platform::validation::validate_ssh_identity_path(key_path_str)
+        // SEC-PATH-005: structural checks (absolute, no traversal, no control chars, ≤4096 bytes)
+        // are already enforced by SshIdentityPath::try_from at IPC deserialization time.
+        // validate_ssh_identity_path adds the runtime checks: file existence and ~/.ssh/ boundary.
+        if let Some(ref key_path) = config.identity_file {
+            crate::platform::validation::validate_ssh_identity_path(key_path)
                 .map_err(|e| SshError::Auth(format!("invalid identity file path: {e}")))?;
         }
 
@@ -152,16 +155,46 @@ impl SshManager {
         Ok(())
     }
 
+    /// Look up credentials for a reconnect attempt from the OS keychain.
+    ///
+    /// Returns `None` if the keychain is unavailable or if no password is stored
+    /// for this connection — `open_connection_inner` will then emit a
+    /// `credential-prompt` event and wait for the user to supply credentials.
+    ///
+    /// This method is `pub(super)` to allow unit testing without a live Tauri
+    /// runtime (see `tests/manager_tests.rs`).
+    pub(super) async fn resolve_reconnect_credentials(
+        &self,
+        config: &SshConnectionConfig,
+    ) -> Option<Credentials> {
+        if !self.credential_manager.is_available() {
+            return None;
+        }
+        match self
+            .credential_manager
+            .get_password(&config.id.to_string(), &config.username)
+            .await
+        {
+            Ok(Some(password)) => Some(Credentials {
+                username: config.username.to_string(),
+                password: Some(password),
+                private_key_path: config.identity_file.as_deref().map(str::to_owned),
+                save_in_keychain: false,
+            }),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!("Keychain lookup on reconnect failed: {e}");
+                None
+            }
+        }
+    }
+
     /// Reconnect a disconnected SSH session (FS-SSH-040).
     ///
     /// Retrieves the saved config from the existing connection entry, removes it,
-    /// and re-inserts it in `Connecting` state so the next `open_connection` call
-    /// will succeed. The caller (command handler) must then call `open_connection`
-    /// with fresh credentials retrieved from the OS keychain (SEC-SSH-CH-007 —
-    /// no credential caching in memory).
-    ///
-    /// Returns the config that should be passed to the subsequent `open_connection`
-    /// call.
+    /// and re-inserts it in `Connecting` state. Credentials are resolved from the
+    /// OS keychain via `resolve_reconnect_credentials` so the user is not prompted
+    /// again if a password was previously stored (SEC-SSH-CH-007).
     pub async fn reconnect(
         self: &Arc<Self>,
         pane_id: PaneId,
@@ -185,12 +218,23 @@ impl SshManager {
         // Also discard any stale pending host key for this pane.
         self.pending_host_keys.remove(&pane_id);
 
-        // Re-open the connection. Credentials are None — the connect task will
-        // prompt the user via the credential-prompt event if needed.
+        // Attempt to resolve credentials from the keychain. If unavailable or no
+        // password stored, `connect_task` will emit a `credential-prompt` event.
         // `is_reconnect = true` causes a `ssh-reconnected` separator event to be
         // emitted once the new session reaches Connected state (FS-SSH-042).
-        self.open_connection_inner(pane_id, &config, None, app, vt, cols, rows, registry, true)
-            .await
+        let credentials = self.resolve_reconnect_credentials(&config).await;
+        self.open_connection_inner(
+            pane_id,
+            &config,
+            credentials,
+            app,
+            vt,
+            cols,
+            rows,
+            registry,
+            true,
+        )
+        .await
     }
 
     /// Get the current lifecycle state of an SSH session.

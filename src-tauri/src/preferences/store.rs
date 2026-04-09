@@ -263,7 +263,9 @@ impl PreferencesStore {
         };
         let mut copy = source.clone();
         copy.id = crate::session::ids::ConnectionId::new();
-        copy.label = format!("{} (copy)", source.label);
+        copy.label =
+            crate::preferences::types::SshLabel::try_from(format!("{} (copy)", source.label))
+                .unwrap_or_else(|_| source.label.clone());
         prefs.connections.push(copy.clone());
         let updated = prefs.clone();
         drop(prefs);

@@ -5,6 +5,10 @@
 //! Called after load and after patch application to ensure no out-of-range
 //! values reach the in-memory store or the disk. All clamped values are
 //! logged with `tracing::warn!` so operators can detect corrupted files.
+//!
+//! String fields are validated at serde deserialization time via TryFrom<String>
+//! newtypes in preferences::types. validate_and_clamp() handles only numeric
+//! range clamping.
 
 use crate::preferences::schema::Preferences;
 

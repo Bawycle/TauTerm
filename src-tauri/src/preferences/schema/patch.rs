@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::appearance::{BellType, CursorStyle};
 use super::language::Language;
+use crate::preferences::types::{FontFamily, ThemeName, WordDelimiters};
 
 /// Partial update for appearance preferences — only the fields provided are changed.
 ///
@@ -15,11 +16,11 @@ use super::language::Language;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppearancePatch {
-    pub font_family: Option<String>,
+    pub font_family: Option<FontFamily>,
     pub font_size: Option<f32>,
     pub cursor_style: Option<CursorStyle>,
     pub cursor_blink_ms: Option<u32>,
-    pub theme_name: Option<String>,
+    pub theme_name: Option<ThemeName>,
     pub opacity: Option<f32>,
     pub language: Option<Language>,
     pub context_menu_hint_shown: Option<bool>,
@@ -35,7 +36,7 @@ pub struct AppearancePatch {
 pub struct TerminalPatch {
     pub scrollback_lines: Option<usize>,
     pub allow_osc52_write: Option<bool>,
-    pub word_delimiters: Option<String>,
+    pub word_delimiters: Option<WordDelimiters>,
     pub bell_type: Option<BellType>,
     pub confirm_multiline_paste: Option<bool>,
 }

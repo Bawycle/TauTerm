@@ -235,6 +235,38 @@ describe('UITCP-SO-A11Y-004: nav buttons have 44px hit area (CSS class)', () => 
 });
 
 // ---------------------------------------------------------------------------
+// Accessibility — C2: :focus-visible keyboard indicator (WCAG 2.4.7)
+// ---------------------------------------------------------------------------
+
+describe('C2-A11Y: search input uses :focus-visible for keyboard focus indicator', () => {
+  /**
+   * CSS :focus-visible behaviour cannot be evaluated in jsdom (no style cascade).
+   * This test documents the accessibility intent and verifies the input exists
+   * with the correct class, ensuring no regression removes the styled element.
+   *
+   * The rule `.search-overlay__input:focus-visible` in SearchOverlay.svelte
+   * provides a 2px outline via --color-focus-ring when keyboard-navigated,
+   * while suppressing the outline for mouse interactions (outline: none on base).
+   * This satisfies WCAG 2.4.7 (Focus Visible) without penalising pointer users.
+   */
+  it('search input carries search-overlay__input class (focus-visible rule target)', () => {
+    const { container, instance } = mountOverlay({});
+    instances.push(instance);
+    const input = container.querySelector('.search-overlay__input');
+    expect(input).not.toBeNull();
+  });
+
+  it('search input does not have outline style hardcoded as attribute', () => {
+    // Inline outline:none must not be present — styling is handled by the stylesheet.
+    const { container, instance } = mountOverlay({});
+    instances.push(instance);
+    const input = container.querySelector('.search-overlay__input') as HTMLElement | null;
+    expect(input).not.toBeNull();
+    expect(input!.style.outline).toBeFalsy();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Security
 // ---------------------------------------------------------------------------
 

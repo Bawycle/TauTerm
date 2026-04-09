@@ -132,7 +132,7 @@ impl TauTermSshHandler {
         Self {
             pane_id,
             connection_id: config.id.clone(),
-            host: config.host.clone(),
+            host: config.host.to_string(),
             app,
             known_hosts_path: None,
             manager: None,
@@ -419,12 +419,13 @@ mod tests {
     }
 
     fn make_config() -> SshConnectionConfig {
+        use crate::preferences::types::{SshHost, SshLabel, SshUsername};
         SshConnectionConfig {
             id: ConnectionId::new(),
-            label: "test-server".to_string(),
-            host: "192.168.1.1".to_string(),
+            label: SshLabel::try_from("test-server".to_string()).unwrap(),
+            host: SshHost::try_from("192.168.1.1".to_string()).unwrap(),
             port: 22,
-            username: "admin".to_string(),
+            username: SshUsername::try_from("admin".to_string()).unwrap(),
             identity_file: None,
             allow_osc52_write: false,
             keepalive_interval_secs: None,

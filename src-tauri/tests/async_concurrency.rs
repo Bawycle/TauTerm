@@ -414,11 +414,8 @@ fn async_pty_005_channel_close_causes_final_flush() {
         // Task 2 pattern: receive until channel closes, accumulate, then flush.
         let accumulator = tokio::spawn(async move {
             let mut sum = 0u32;
-            loop {
-                match rx.recv().await {
-                    Some(v) => sum += v,
-                    None => break, // channel closed — flush and exit
-                }
+            while let Some(v) = rx.recv().await {
+                sum += v;
             }
             sum
         });
@@ -624,6 +621,148 @@ fn async_resize_001_many_resizes_then_drop_no_deadlock() {
 
         // If we're here, no deadlock or panic occurred.
         // The counter value is non-deterministic depending on timing.
+    });
+}
+
+// ---------------------------------------------------------------------------
+// TEST-ASYNC-BOUNDED-001 — bounded channel applies back-pressure
+//
+// Verifies that a bounded mpsc channel blocks the sender when full, and
+// unblocks when the receiver consumes a message. Also verifies that send
+// returns Err when the receiver is dropped.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// TEST-ASYNC-PTY-008 — EINTR: read loop retries on Interrupted
+// TEST-ASYNC-PTY-009 — WouldBlock: read loop retries on WouldBlock
+//
+// These tests exercise the retry logic introduced in B1 without a real PTY.
+// The loop logic is replicated inline (same structure as spawn_pty_read_task)
+// using a controlled reader that returns transient errors before EOF.
+// ---------------------------------------------------------------------------
+
+/// A `Read` implementation that returns a configurable error for the first N
+/// calls, then returns EOF.
+struct TransientErrorReader {
+    error_kind: std::io::ErrorKind,
+    remaining_errors: std::sync::atomic::AtomicUsize,
+}
+
+impl TransientErrorReader {
+    fn new(error_kind: std::io::ErrorKind, count: usize) -> Self {
+        Self {
+            error_kind,
+            remaining_errors: std::sync::atomic::AtomicUsize::new(count),
+        }
+    }
+}
+
+impl std::io::Read for TransientErrorReader {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        let remaining = self
+            .remaining_errors
+            .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        if remaining > 0 {
+            Err(std::io::Error::new(self.error_kind, "transient"))
+        } else {
+            Ok(0) // EOF
+        }
+    }
+}
+
+/// Run the B1 retry loop logic with a given reader, returning the number of
+/// `read()` calls made before the loop exits.
+///
+/// Mirrors the structure of `spawn_pty_read_task`'s inner loop:
+/// - `Interrupted` → `continue`
+/// - `WouldBlock` → `yield_now` + `continue`
+/// - fatal error or EOF → `break`
+fn run_retry_loop(reader: &mut dyn std::io::Read) -> usize {
+    let mut buf = vec![0u8; 4096];
+    let mut call_count = 0usize;
+
+    loop {
+        call_count += 1;
+        match reader.read(&mut buf) {
+            Ok(0) => break,  // EOF
+            Ok(_n) => break, // data received — not expected in these tests
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                continue;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::yield_now();
+                continue;
+            }
+            Err(_) => break, // fatal
+        }
+    }
+
+    call_count
+}
+
+/// TEST-ASYNC-PTY-008: EINTR causes the read loop to retry.
+///
+/// The reader returns `Interrupted` twice then EOF on the 3rd call.
+/// The loop must call `read()` exactly 3 times (retry on each EINTR,
+/// then exit on EOF).
+#[test]
+fn async_pty_008_eintr_reader_retries() {
+    let mut reader = TransientErrorReader::new(std::io::ErrorKind::Interrupted, 2);
+    let calls = run_retry_loop(&mut reader);
+    assert_eq!(
+        calls, 3,
+        "read() must be called 3 times: 2 EINTR retries + 1 EOF (got {calls})"
+    );
+}
+
+/// TEST-ASYNC-PTY-009: WouldBlock causes the read loop to retry.
+///
+/// Same contract as TEST-ASYNC-PTY-008 but with `WouldBlock` (EAGAIN).
+#[test]
+fn async_pty_009_would_block_reader_retries() {
+    let mut reader = TransientErrorReader::new(std::io::ErrorKind::WouldBlock, 2);
+    let calls = run_retry_loop(&mut reader);
+    assert_eq!(
+        calls, 3,
+        "read() must be called 3 times: 2 WouldBlock retries + 1 EOF (got {calls})"
+    );
+}
+
+/// TEST-ASYNC-PTY-010: drop PtyTaskHandle cancels both read and emit tasks.
+///
+/// Constructs a `PtyTaskHandle` from two real `AbortHandle`s (each backed by
+/// a long-lived Tokio task), drops the handle, and asserts that both tasks
+/// were cancelled.
+#[test]
+fn async_pty_010_drop_pty_task_handle_cancels_both_tasks() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build runtime");
+
+    rt.block_on(async {
+        // Spawn two long-running tasks.
+        let read_jh = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let emit_jh = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+
+        let handle = PtyTaskHandle::new(read_jh.abort_handle(), emit_jh.abort_handle());
+        drop(handle); // must abort both tasks
+
+        let read_result = read_jh.await;
+        let emit_result = emit_jh.await;
+
+        assert!(
+            read_result.is_err() && read_result.unwrap_err().is_cancelled(),
+            "read task must be cancelled after PtyTaskHandle drop"
+        );
+        assert!(
+            emit_result.is_err() && emit_result.unwrap_err().is_cancelled(),
+            "emit task must be cancelled after PtyTaskHandle drop"
+        );
     });
 }
 

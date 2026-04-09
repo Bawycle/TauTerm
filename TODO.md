@@ -7,34 +7,9 @@
 - [ ] **Distribution — signing GPG + SHA256SUMS** (FS-DIST-006)
   Aucun script de signing dans la CI/CD. Implémenter dans le pipeline de release : génération de `SHA256SUMS`, signature GPG, publication des artefacts signés.
 
-- [ ] **Recherche — scroll-centering sur le match actif** (FS-SEARCH-006)
-  La navigation prev/next entre résultats (`handleSearchNext`/`handleSearchPrev` dans `src/lib/composables/useTerminalView.io-handlers.svelte.ts:229-236`) incrémente uniquement `searchCurrentIdx` sans appeler `scroll_pane`. Si le match actif est dans le scrollback hors de la fenêtre visible, le viewport ne bouge pas — l'utilisateur ne voit pas le résultat actif.
-  Actions requises :
-  - Frontend : après chaque `handleSearchNext`/`handleSearchPrev`, calculer l'offset viewport cible depuis `match.scrollbackRow` et `scrollbackLines`, puis appeler `scrollPane(paneId, targetOffset)`.
-  - Le calcul du match actif est déjà disponible dans `useTerminalPane.svelte.ts:222-233` (`activeSearchMatchSet`) — exposer ou dupliquer la logique de position dans le handler de navigation.
-
 ---
 
 ## P0 — Bloquants release
-
-### Sécurité
-
-- [ ] **SSH — clés privées protégées par passphrase** (FS-SSH-019a)
-  `src-tauri/src/ssh/auth.rs:115` appelle `keys::load_secret_key(key_path, None)` — la passphrase est toujours `None`. Si la clé est chiffrée, l'authentification échoue silencieusement avec une erreur SSH sans prompt utilisateur.
-  Actions requises :
-  - Détecter l'erreur "clé chiffrée" retournée par `russh_keys::load_secret_key`.
-  - Émettre un événement IPC `passphrase-prompt` (discriminated payload : `{ pane_id, key_path_label }` — ne pas inclure le chemin complet).
-  - Ajouter un composant frontend de prompt de passphrase (analogue à `SshCredentialDialog`).
-  - Intégrer SecretService : lookup par `identity_file` comme scope key (FS-CRED-008) ; option "Sauvegarder" opt-in non cochée par défaut.
-  - Tests nextest : clé non chiffrée (chemin nominal), clé chiffrée avec bonne passphrase, mauvaise passphrase (retry), passphrase depuis keychain.
-
-- [ ] **SEC-CRED-004 — Stockage du mot de passe à la sauvegarde d'une connexion SSH**
-  `handleConnectionSave()` reçoit un mot de passe optionnel depuis `ConnectionManager` mais ne peut pas le stocker : aucune commande Tauri IPC n'expose `CredentialManager::store_password` (credentials.rs).
-  Travail nécessaire :
-  1. Ajouter `#[tauri::command] store_connection_password(connection_id: String, password: String)` côté Rust, en appelant `CredentialManager::store_password`.
-  2. Ajouter le wrapper typé correspondant dans `src/lib/ipc/commands.ts`.
-  3. Câbler l'appel dans `handleConnectionSave()` après que `saveConnection()` retourne le vrai `id` (ne jamais stocker le mot de passe sous l'`id` placeholder envoyé pour les nouvelles connexions).
-  Jusqu'à ce que ce soit fait, le mot de passe saisi dans le gestionnaire de connexions n'est pas persisté (pas de perte silencieuse — `void password` rend l'intention explicite dans le code).
 
 ### Tests et CI
 

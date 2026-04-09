@@ -151,3 +151,43 @@ fn fpl_s_009_env_term_program_version_is_set() {
         "FPL-S-009: TERM_PROGRAM_VERSION={version} must appear in child process output"
     );
 }
+
+/// FPL-S-010: Variables absent from the explicit allowlist MUST NOT appear
+/// in the child process environment after spawn (FS-PTY-011, L3).
+///
+/// Strategy: plant a unique canary variable in TauTerm's process environment,
+/// spawn a shell that dumps all env vars, assert the canary is absent.
+/// nextest runs each test in its own process, so set_var is safe here.
+#[test]
+fn fpl_s_010_unlisted_env_var_not_present_in_child() {
+    let canary_key = format!("TAUTERM_SECRET_CANARY_{}", std::process::id());
+    let canary_value = format!("TAUTERM_CANARY_VALUE_{}", std::process::id());
+    // SAFETY: nextest runs each test in its own process — no concurrent threads
+    // read or write the process environment at this point.
+    unsafe { std::env::set_var(&canary_key, &canary_value) };
+
+    let session = open_linux_session_with_env(
+        80,
+        24,
+        "/bin/sh",
+        &["-c", "printenv; echo ENV_DUMP_DONE; exit"],
+        &[
+            ("TERM", "xterm-256color"),
+            ("COLORTERM", "truecolor"),
+            ("LINES", "24"),
+            ("COLUMNS", "80"),
+            ("TERM_PROGRAM", "TauTerm"),
+        ],
+    );
+    let reader = session.reader_handle().expect("must have reader");
+    let output = read_until_timeout(reader, "ENV_DUMP_DONE", std::time::Duration::from_secs(5));
+    // SAFETY: same process-isolation guarantee as above.
+    unsafe { std::env::remove_var(&canary_key) };
+
+    let output =
+        output.expect("FPL-S-010: shell must complete printenv and print ENV_DUMP_DONE within 5s");
+    assert!(
+        !output.contains(&canary_value),
+        "FPL-S-010: canary '{canary_key}' MUST NOT appear in child env — env_clear() policy broken"
+    );
+}

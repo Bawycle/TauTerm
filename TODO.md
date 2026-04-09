@@ -29,24 +29,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Critical — Release Blockers (score 17–21)
 
-### Security
-
-- [ ] **PTY — unfiltered inherited environment (silent secret leak)** `[Score: 19 | R:3, S:3, U:2, E:2]` *(severity: high)*
-  `session/registry/tab_ops.rs` and `pane_ops.rs` build an explicit `Vec<(&str, &str)>` of env vars, but `portable-pty`'s `CommandBuilder::env()` **appends** to the inherited environment without clearing it. Any variable present in TauTerm's own process environment (`AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, `DATABASE_URL`, etc.) is silently forwarded to the child shell and all its subprocesses.
-  **Note:** Alacritty has the same gap (`env_clear()` not called). This is a common shortcoming — TauTerm has the opportunity to be more secure than existing references on this point.
-  Actions required:
-  1. Call `cmd.env_clear()` before `cmd.env(key, val)` calls in `LinuxPtyBackend::open_session()` — verify that `portable-pty::CommandBuilder` exposes `env_clear()`.
-  2. Explicitly define `LANG`, `SHELL`, `HOME`, `USER`, `LOGNAME`, `PATH` (currently implicitly inherited, missing vs. FS-PTY-011).
-  3. Add a nextest test verifying that a variable absent from the explicit allowlist is not present in the child shell's environment after spawn.
-  4. Document the allowlist in FS-PTY-011.
-
-
-- [ ] **SSH — invariant test "authentication never before host key validation"** `[Score: 18 | R:3, S:3, U:1, E:2]` *(lesson from CVE-2024-48460 Tabby)*
-  The invariant is architecturally guaranteed by `russh` (the `check_server_key` callback blocks `connect()`) but is attested by no test. If `russh` changed its behavior, the regression would be invisible.
-  Actions required:
-  1. Add an integration test (mock SSH server) simulating a server with an `Unknown` host key: verify that `try_authenticate` is never called.
-  2. Add a `// SECURITY:` comment in `connect.rs` documenting this invariant.
-
 ### Tests & CI
 
 - [ ] **Set up CI pipeline — GitHub Actions** `[Score: 17 | R:3, S:2, U:2, E:2]`

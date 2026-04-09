@@ -6039,6 +6039,7 @@ dependencies = [
  "notify-rust",
  "parking_lot",
  "portable-pty",
+ "rand 0.10.0",
  "regex",
  "russh",
  "russh-keys",

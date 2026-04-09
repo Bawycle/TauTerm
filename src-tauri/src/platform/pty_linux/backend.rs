@@ -49,6 +49,37 @@ impl PtyBackend for LinuxPtyBackend {
         for arg in args {
             cmd.arg(arg);
         }
+
+        // SECURITY: env_clear() erases the parent process environment snapshot
+        // that portable-pty pre-populates in CommandBuilder::new(). Without this,
+        // secrets present in TauTerm's process env (AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN,
+        // LD_PRELOAD, etc.) are silently forwarded to every child process (FS-PTY-011/L3).
+        cmd.env_clear();
+
+        // Inject system-identity vars required by FS-PTY-011 that callers don't supply.
+        // Read from TauTerm's process env; apply safe defaults when absent.
+        let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".to_string());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
+        let user = std::env::var("USER").unwrap_or_default();
+        let logname = std::env::var("LOGNAME").unwrap_or_default();
+        let path =
+            std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".to_string());
+
+        cmd.env("LANG", &lang);
+        cmd.env("SHELL", &shell);
+        cmd.env("HOME", &home);
+        if !user.is_empty() {
+            cmd.env("USER", &user);
+        }
+        if !logname.is_empty() {
+            cmd.env("LOGNAME", &logname);
+        }
+        cmd.env("PATH", &path);
+
+        // Caller-supplied allowlist (TERM, COLORTERM, LINES, COLUMNS, TERM_PROGRAM,
+        // TERM_PROGRAM_VERSION, DISPLAY, WAYLAND_DISPLAY, DBUS_SESSION_BUS_ADDRESS).
+        // Caller values take precedence — they overwrite any base var above if present.
         for (key, val) in env {
             cmd.env(key, val);
         }

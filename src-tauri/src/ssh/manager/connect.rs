@@ -56,10 +56,20 @@ impl SshManager {
         let handler =
             TauTermSshHandler::new(pane_id.clone(), config, app.clone()).with_manager(self);
 
-        // TCP connect + SSH handshake (check_server_key called inside).
-        // Wrapped in a 5-second timeout because russh 0.60.0 has no connect_timeout
-        // in client::Config. Without this, a DROPped port (firewall) blocks indefinitely
-        // and the E2E test never observes the Disconnected state.
+        // SECURITY: russh::client::connect() calls TauTermSshHandler::check_server_key()
+        // during SSH key-exchange, before returning the Handle. If check_server_key returns
+        // Ok(false) — which TauTermSshHandler does for Unknown and Mismatch host keys —
+        // russh aborts the handshake with Error::UnknownKey and connect() returns Err.
+        // The Handle<TauTermSshHandler> is therefore ONLY obtained when the host key is
+        // trusted. Auth methods (authenticate_password, authenticate_publickey, etc.) can
+        // only be called on a Handle, making it architecturally impossible to attempt auth
+        // before host key validation passes.
+        //
+        // Regression test: src/ssh/manager/tests/host_key_sequencing.rs
+        // (SEC-HOSTKEY-SEQ-001, SEC-HOSTKEY-SEQ-002)
+        //
+        // Wrapped in a 5-second timeout because russh 0.60.0 has no connect_timeout in
+        // client::Config. Without this, a DROPped port (firewall) blocks indefinitely.
         let mut session = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             russh::client::connect(russh_config, addr.as_str(), handler),
@@ -154,7 +164,9 @@ impl SshManager {
                                         // key (which contains the identity file path).
                                         // TauTerm's own code never embeds the key in `e`;
                                         // the underlying secret-service error is opaque.
-                                        tracing::warn!("Failed to save passphrase to keychain: {e}");
+                                        tracing::warn!(
+                                            "Failed to save passphrase to keychain: {e}"
+                                        );
                                     }
                                     resolved = Some(input.passphrase.clone());
                                 }

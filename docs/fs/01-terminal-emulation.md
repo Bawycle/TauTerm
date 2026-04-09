@@ -237,7 +237,7 @@
 | FS-PTY-008 | If a non-shell foreground process is running (i.e., the foreground process group of the PTY is not the shell itself) when the user attempts to close a tab, a pane, or the application window, a confirmation dialog MUST be displayed. A pane with only an idle shell at the prompt MUST NOT trigger a confirmation dialog. When closing the window, the dialog MUST indicate how many tabs/panes have active non-shell processes. | Must |
 | FS-PTY-009 | Pane resize MUST trigger `ioctl(TIOCSWINSZ)` and deliver SIGWINCH to the foreground process group. The resize MUST include pixel dimensions (xpixel, ypixel). | Must |
 | FS-PTY-010 | Resize events SHOULD be debounced (≤ 100ms, typically 50ms). The final size MUST always be sent. | Should |
-| FS-PTY-011 | The following environment variables MUST be set in the child process: `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` (UTF-8 locale — inherited or fallback), `LINES`, `COLUMNS`, `SHELL`, `HOME`, `USER`, `LOGNAME`, `PATH`, `TERM_PROGRAM=TauTerm`, `TERM_PROGRAM_VERSION=<version>`. | Must |
+| FS-PTY-011 | The child process environment MUST be constructed from an explicit allowlist only. Variables not on the allowlist MUST NOT be present in the child environment regardless of whether they appear in TauTerm's own process environment. `LD_PRELOAD`, `LD_LIBRARY_PATH`, and any credential or token variables MUST NOT be inherited. The allowlist comprises exactly: `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` (inherited from TauTerm's process env; fallback: `en_US.UTF-8`), `LINES`, `COLUMNS`, `SHELL` (inherited; fallback: `/bin/sh`), `HOME` (inherited; fallback: `/`), `USER` (inherited; omitted if absent), `LOGNAME` (inherited; omitted if absent), `PATH` (inherited; fallback: `/usr/local/bin:/usr/bin:/bin`), `TERM_PROGRAM=TauTerm`, `TERM_PROGRAM_VERSION=<version>`, plus the display vars from FS-PTY-012 when present. | Must |
 | FS-PTY-012 | The environment variables `DISPLAY`, `WAYLAND_DISPLAY`, and `DBUS_SESSION_BUS_ADDRESS` MUST be inherited from the parent environment when present. | Must |
 | FS-PTY-013 | The initial tab MUST launch a login shell. Subsequent tabs and panes MUST launch interactive non-login shells. | Must |
 | FS-PTY-014 | If `$SHELL` is invalid or unset, TauTerm MUST fall back to `/bin/sh`. | Must |
@@ -248,7 +248,7 @@
 - FS-PTY-006: A pane terminated with a non-zero exit code shows "Close" and "Restart" actions.
 - FS-PTY-008: Running `sleep 3600` then pressing the close-tab shortcut shows a confirmation dialog. Pressing the close-tab shortcut on a pane with only an idle shell prompt does NOT show a confirmation dialog.
 - FS-PTY-009: Resizing a pane while vim is open causes vim to redraw at the new size.
-- FS-PTY-011: `echo $TERM_PROGRAM` outputs `TauTerm`.
+- FS-PTY-011: `echo $TERM_PROGRAM` outputs `TauTerm`. A synthetic variable set in TauTerm's process env but absent from the allowlist does NOT appear in `printenv` output in a child shell.
 - FS-PTY-013: The initial tab sources `~/.bash_profile` (login shell); a second tab does not.
 - FS-PTY-014: Setting `SHELL=/nonexistent` before launch results in a `/bin/sh` session.
 

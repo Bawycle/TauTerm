@@ -99,6 +99,8 @@ tempfile = "3"
 serial_test = "3"
 # Micro-benchmarking framework
 criterion = { version = "0.8", features = ["html_reports"] }
+# Random number generation — explicit dev-dep for test code (already a transitive dep of russh)
+rand = { version = "0.10", features = ["thread_rng"] }
 
 [[bench]]
 name = "vt_throughput"

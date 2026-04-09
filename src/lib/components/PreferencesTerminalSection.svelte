@@ -36,13 +36,6 @@
     { value: 'both', label: m.preferences_bell_type_both() },
   ]);
 
-  /** Memory estimate: ~5 500 bytes per line per pane (upper bound per arch/07). */
-  const scrollbackEstimateMb = $derived(
-    preferences?.terminal?.scrollbackLines
-      ? Math.round(((preferences.terminal.scrollbackLines * 5500) / (1024 * 1024)) * 10) / 10
-      : 0,
-  );
-
   function handleCursorStyleChange(val: string) {
     if (!preferences?.appearance) return;
     const allowed: CursorStyle[] = ['block', 'underline', 'bar'];
@@ -92,6 +85,7 @@
     label={m.preferences_terminal_cursor_style()}
     options={cursorShapeOptions}
     value={preferences?.appearance?.cursorStyle ?? 'block'}
+    helper={m.preferences_terminal_cursor_style_hint()}
     onchange={handleCursorStyleChange}
   />
 
@@ -101,6 +95,7 @@
     label={m.preferences_terminal_cursor_blink_rate()}
     type="number"
     value={String(preferences?.appearance?.cursorBlinkMs ?? 530)}
+    helper={m.preferences_terminal_cursor_blink_rate_hint()}
     oninput={handleCursorBlinkRateChange}
   />
 
@@ -110,7 +105,7 @@
     type="number"
     value={String(preferences?.terminal?.scrollbackLines ?? 10000)}
     oninput={handleScrollbackChange}
-    helper={m.preferences_terminal_scrollback_estimate({ mb: scrollbackEstimateMb })}
+    helper={m.preferences_terminal_scrollback_hint()}
   />
 
   <Dropdown
@@ -118,6 +113,7 @@
     label={m.preferences_terminal_bell_type()}
     options={bellTypeOptions}
     value={preferences?.terminal?.bellType ?? 'visual'}
+    helper={m.preferences_terminal_bell_type_hint()}
     onchange={handleBellTypeChange}
   />
 
@@ -125,6 +121,7 @@
     id="pref-word-delimiters"
     label={m.preferences_terminal_word_delimiters()}
     value={preferences?.terminal?.wordDelimiters ?? ' ,.;:{}[]()"`|\\/'}
+    helper={m.preferences_terminal_word_delimiters_hint()}
     oninput={handleWordDelimitersChange}
   />
 </div>

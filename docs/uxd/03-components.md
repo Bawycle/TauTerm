@@ -490,16 +490,22 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 
 #### 7.6.3 Preference Sections (FS-PREF-004)
 
+**Helper text convention for preference controls:**
+
+Every preference control (text input, number input, dropdown, toggle) in the Preferences panel SHOULD carry a `helper` prop with a concise, user-facing description of what the field controls and any constraints the user needs to know (e.g., "Applies to new panes only"). Helper text is defined in the i18n catalogue and follows the key naming pattern `preferences_{section}_{field}_hint` (e.g., `preferences_terminal_scrollback_lines_hint`, `preferences_appearance_font_family_hint`). This ensures all descriptions are translatable and centrally maintainable. The `helper` prop on `TextInput` (§7.15) and `Dropdown` (§7.16) renders the text below the control and wires `aria-describedby` on the input/trigger element to the helper text container.
+
 **Keyboard section:**
 - List of configurable application shortcuts (FS-KBD-002).
 - Each row: action label (Body level) + keyboard shortcut recorder (§7.17).
+- An instruction paragraph above the shortcut list (body text, `--color-text-secondary`) describes how to record a new shortcut (click the field, press the desired key combination).
 - Section heading: "KEYBOARD" in Caption level.
 
 **Appearance section:**
-- Theme quick-select dropdown (§7.16) — this is a shortcut for switching the active theme. The full theme management surface (create, edit, duplicate, delete) is in the Themes section below.
-- Font family input (text input with monospace preview).
-- Font size input (number input, range 8-32).
-- **Language subsection** — see below.
+- Theme quick-select dropdown (§7.16) — this is a shortcut for switching the active theme. The full theme management surface (create, edit, duplicate, delete) is in the Themes section below. Carry a `helper` describing the theme's scope (applies immediately, affects all terminal windows).
+- Font family input (text input with monospace preview). Carry a `helper` noting that any monospace font installed on the system can be used.
+- Font size input (number input, range 8-32). Carry a `helper` noting the valid range.
+- Opacity input. Carry a `helper` clarifying that it controls terminal background transparency only — text and UI chrome are not affected.
+- **Language subsection** — see below. The language dropdown carries a `helper` noting that the change applies immediately without restart.
 - Section heading: "APPEARANCE" in Caption level.
 
 > **Design note — line height:** Line height is a per-theme property (`UserTheme.line_height`, range 1.0–2.0), configured in the Theme Editor (§7.20). It is not a global Appearance preference. Rationale: line height is intrinsically tied to the theme's font choice — a condensed font may require a different line height than a tall one. A global line-height preference would create an override-layering conflict with the per-theme value. The i18n key `preferences_appearance_line_height` belongs in the Theme Editor context.
@@ -514,11 +520,11 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - **Placement rationale:** Language is a display preference — it controls how the UI appears to the user, analogous to font and theme. Placing it within Appearance ensures it is visible immediately when a user opens Preferences without scrolling past multiple sections. This directly addresses discoverability for Sam (UR §2.3 — occasional user, not expected to know the settings structure).
 
 **Terminal Behavior section:**
-- Cursor shape selector (dropdown: Block, Underline, Bar).
-- Cursor blink rate (number input, ms — visible phase duration, default 533). The invisible phase is computed as half the visible phase (2:1 on/off ratio per FS-VT-032).
-- Scrollback buffer size (number input, lines, default 10000) with real-time memory estimate below the field (FS-SB-002). Estimate format: "~{N} MB per pane" in `--font-size-ui-sm`, `--color-text-secondary`.
-- Bell notification type (dropdown: Visual, Audible, Disabled).
-- Word delimiter set (text input, monospace font).
+- Cursor shape selector (dropdown: Block, Underline, Bar). Carry a `helper` noting that this sets the default shape; terminal applications can override it via escape sequences, and it is restored after a terminal reset.
+- Cursor blink rate (number input, ms — visible phase duration, default 533). The invisible phase is computed as half the visible phase (2:1 on/off ratio per FS-VT-032). Carry a `helper` noting the unit (milliseconds, visible phase duration).
+- Scrollback buffer size (number input, lines, default 10000) with real-time memory estimate below the field (FS-SB-002). Estimate format: "~{N} MB per pane" in `--font-size-ui-sm`, `--color-text-secondary`. Carry a `helper` explicitly stating that the setting **applies to new panes only** — existing pane buffers are not resized (this is an architectural constraint of the ScreenBuffer design; see FS-PREF behavioral constraints table).
+- Bell notification type (dropdown: Visual, Audible, Disabled). Carry a `helper` describing each option briefly.
+- Word delimiter set (text input, monospace font). Carry a `helper` explaining that these characters act as word boundaries during double-click selection.
 - Section heading: "TERMINAL BEHAVIOR" in Caption level.
 
 **Connections section:**
@@ -529,6 +535,7 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 - Section heading: "CONNECTIONS" in Caption level.
 
 **Themes section:**
+- A description paragraph at the top of the section (body text, `--color-text-secondary`) briefly explains what themes control (terminal colors, background, cursor, ANSI palette) and how to create or customize them. This orients users who land here without prior context.
 - The **Appearance section** provides a quick-select dropdown to switch the active theme. The **Themes section** is the full management surface: creating, editing, duplicating, and deleting themes. The active theme can be changed from either location.
 - Theme list with active indicator.
 - "Create Theme" button (primary variant).
@@ -948,6 +955,16 @@ All button variants share: `--radius-sm` (4px), `--font-size-ui-base` (13px), `-
 
 #### Dropdown / Select
 
+**Props:**
+
+| Prop | Type | Description |
+|---|---|---|
+| `value` | `string` | Currently selected option value. |
+| `options` | `{ value: string; label: string }[]` | Available options. |
+| `label` | `string` | Visible label rendered above the trigger. |
+| `helper` | `string \| undefined` | Optional descriptive text rendered below the trigger field. Follows the same pattern as `TextInput.helper` (§7.15): same typographic style (`--font-size-ui-sm`, `--color-text-secondary`), same `aria-describedby` wiring between the trigger element and the helper text container. |
+| `disabled` | `boolean` | Disables the control. |
+
 **Closed state:** Identical to text input (§7.15) with a Lucide `ChevronDown` icon (`--size-icon-sm`, `--color-icon-default`) right-aligned inside the field.
 
 **Open state:**
@@ -1046,8 +1063,8 @@ The theme editor is displayed within the Preferences panel Themes section (§7.6
 #### 7.20.1 Layout
 
 - **Position:** Inline within the Preferences panel section content area (right side).
-- **Header:** Theme name input (text input, §7.15, required) + "Back to themes" link/button (ghost, Lucide `ChevronLeft` + "Themes").
-- **Scrollable body:** All token fields organized into sections.
+- **Header:** Theme name input (text input, §7.15, required) + "Back to themes" link/button (ghost, Lucide `ChevronLeft` + "Themes"). The name input carries a `helper` noting that the name must be unique and is used to identify the theme in the theme list. i18n key: `preferences_themes_editor_name_hint`.
+- **Scrollable body:** All token fields organized into sections. Each token section heading carries a brief descriptive sentence in body text (`--color-text-secondary`) explaining what that group of tokens controls. Color picker fields carry a `helper` (i18n key pattern: `preferences_themes_editor_{token_name}_hint`) describing what the color affects (e.g., "Used for all terminal text that does not have an explicit SGR foreground color set.").
 - **Footer:** "Save" (primary button) + "Cancel" (ghost button), right-aligned, sticky at the bottom of the scrollable area.
 
 #### 7.20.2 Token Field Sections

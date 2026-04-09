@@ -258,5 +258,26 @@
   "paste_confirm_dont_ask": "Don't ask again",
 
   "status_bar_settings": "Open settings",
-  "status_bar_dimensions_aria": "{cols} columns, {rows} rows"
+  "status_bar_dimensions_aria": "{cols} columns, {rows} rows",
+
+  "preferences_appearance_opacity": "Opacity (0–1)",
+  "preferences_appearance_font_family_hint": "Any monospace font installed on your system. Example: JetBrains Mono, Fira Code. Falls back to the system monospace font if not found.",
+  "preferences_appearance_font_size_hint": "Terminal font size in pixels. Applies immediately.",
+  "preferences_appearance_theme_hint": "Terminal color palette. Custom themes can be created in the Themes section.",
+  "preferences_appearance_language_hint": "Interface language. Takes effect immediately.",
+  "preferences_appearance_opacity_hint": "Terminal background transparency. 1 = opaque, 0 = fully transparent. Applies immediately.",
+
+  "preferences_terminal_cursor_style_hint": "Default cursor shape. Terminal applications may override this with their own cursor style via escape sequences.",
+  "preferences_terminal_cursor_blink_rate_hint": "Blink interval in milliseconds (100–2000). Use the maximum value to effectively disable blinking.",
+  "preferences_terminal_scrollback_hint": "Number of lines kept in history above the visible area. Applies to new terminal panes — existing panes keep their current buffer.",
+  "preferences_terminal_bell_type_hint": "Action when a program outputs a terminal bell (\\a). Visual briefly flashes the terminal window. Audible uses the system sound.",
+  "preferences_terminal_word_delimiters_hint": "Characters that act as word boundaries for double-click selection. Each character in this field is a separator.",
+
+  "preferences_keyboard_instructions": "Click a shortcut field and press a key combination to record a new binding. Conflicts are shown inline. Leave a field empty to disable that shortcut.",
+
+  "preferences_themes_instructions": "Create and edit custom terminal themes. Click Activate to apply a theme. Built-in themes cannot be edited — duplicate them to create a variant.",
+
+  "theme_name_hint": "Unique name shown in the theme list and the Appearance dropdown.",
+  "theme_palette_hint": "The 16 standard ANSI colors. Colors 0–7 are the normal variants; 8–15 are the bright variants. Most CLI applications use these for syntax highlighting.",
+  "theme_color_hex_hint": "Hex color code, e.g. #1a1a2e"
 }

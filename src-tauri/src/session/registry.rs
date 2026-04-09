@@ -33,6 +33,7 @@ use crate::session::{
 
 mod layout;
 mod pane_ops;
+mod pane_prefs;
 mod pane_state;
 mod pty_helpers;
 mod shell;

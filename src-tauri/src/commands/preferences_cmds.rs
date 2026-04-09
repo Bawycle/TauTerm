@@ -7,10 +7,11 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
-use crate::preferences::{Preferences, PreferencesPatch, PreferencesStore, UserTheme};
+use crate::preferences::{CursorStyle, Preferences, PreferencesPatch, PreferencesStore, UserTheme};
+use crate::session::SessionRegistry;
 
 #[tauri::command]
 pub async fn get_preferences(
@@ -21,10 +22,45 @@ pub async fn get_preferences(
 
 #[tauri::command]
 pub async fn update_preferences(
+    app: AppHandle,
     patch: PreferencesPatch,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
+    registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<Preferences, TauTermError> {
-    prefs.read().apply_patch(patch).map_err(TauTermError::from)
+    // Capture which live-propagatable fields were present in the patch before
+    // consuming it (apply_patch takes ownership).
+    let new_cursor_style: Option<CursorStyle> =
+        patch.appearance.as_ref().and_then(|a| a.cursor_style);
+    let new_osc52: Option<bool> = patch.terminal.as_ref().and_then(|t| t.allow_osc52_write);
+    let new_scrollback: Option<usize> = patch.terminal.as_ref().and_then(|t| t.scrollback_lines);
+
+    let updated = prefs
+        .read()
+        .apply_patch(patch)
+        .map_err(TauTermError::from)?;
+
+    // Propagate cursor shape to all existing panes so running sessions see the
+    // change immediately. Applications can still override per-pane via DECSCUSR.
+    if let Some(style) = new_cursor_style {
+        registry.propagate_cursor_shape(&app, style.to_decscusr());
+    }
+
+    // Propagate OSC 52 write gate to all existing panes.
+    if let Some(allow) = new_osc52 {
+        registry.propagate_osc52_allow(allow);
+    }
+
+    // Scrollback capacity is fixed at pane-creation time (ScreenBuffer is not
+    // dynamically resizable in v1). Log an informational message so developers
+    // and advanced users are aware.
+    if let Some(val) = new_scrollback {
+        tracing::info!(
+            "scrollback_lines preference updated to {val}; \
+             applies to new panes — existing panes retain their current buffer size"
+        );
+    }
+
+    Ok(updated)
 }
 
 #[tauri::command]

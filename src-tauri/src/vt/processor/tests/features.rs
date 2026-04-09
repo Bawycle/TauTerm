@@ -8,7 +8,7 @@ use super::helpers::*;
 
 #[test]
 fn scrollback_limit_from_constructor_is_respected() {
-    let mut vt = crate::vt::VtProcessor::new(5, 1, 3);
+    let mut vt = crate::vt::VtProcessor::new(5, 1, 3, 0, false);
     // Scroll 5 lines into scrollback — only 3 should be retained.
     for _ in 0..5 {
         vt.process(b"A\r\n");
@@ -28,7 +28,7 @@ fn scrollback_limit_from_constructor_is_respected() {
 #[test]
 fn r5_get_scrollback_line_hard_newline_soft_wrapped_false() {
     // 5-column terminal, 1 visible row → first LF pushes row 0 to scrollback.
-    let mut vt = crate::vt::VtProcessor::new(5, 1, 100);
+    let mut vt = crate::vt::VtProcessor::new(5, 1, 100, 0, false);
     // Write text then a hard LF — the current row is pushed to scrollback.
     vt.process(b"ABC\r\n");
     let sb = vt
@@ -45,7 +45,7 @@ fn r5_get_scrollback_line_hard_newline_soft_wrapped_false() {
 fn r5_get_scrollback_line_soft_wrap_soft_wrapped_true() {
     // 3-column terminal, 1 visible row.
     // Writing 4 chars forces auto-wrap + scroll → scrollback entry is soft-wrapped.
-    let mut vt = crate::vt::VtProcessor::new(3, 1, 100);
+    let mut vt = crate::vt::VtProcessor::new(3, 1, 100, 0, false);
     // Writing 4 printable chars on a 3-wide terminal:
     //   - chars 1-3 fill row 0, set wrap_pending on char 3.
     //   - char 4 triggers delayed wrap → row 0 scrolls into scrollback (soft_wrapped=true).
@@ -62,7 +62,7 @@ fn r5_get_scrollback_line_soft_wrap_soft_wrapped_true() {
 /// R5-cells: the cells returned by get_scrollback_line match the written content.
 #[test]
 fn r5_get_scrollback_line_cells_content() {
-    let mut vt = crate::vt::VtProcessor::new(5, 1, 100);
+    let mut vt = crate::vt::VtProcessor::new(5, 1, 100, 0, false);
     vt.process(b"Hi\r\n");
     let sb = vt
         .get_scrollback_line(0)
@@ -74,7 +74,7 @@ fn r5_get_scrollback_line_cells_content() {
 /// R5-oob: get_scrollback_line past the end returns None.
 #[test]
 fn r5_get_scrollback_line_out_of_bounds_returns_none() {
-    let vt = crate::vt::VtProcessor::new(80, 24, 1000);
+    let vt = crate::vt::VtProcessor::new(80, 24, 1000, 0, false);
     assert!(
         vt.get_scrollback_line(0).is_none(),
         "empty scrollback: get_scrollback_line(0) must return None"

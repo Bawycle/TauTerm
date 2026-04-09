@@ -53,6 +53,14 @@
       onupdate?.({ appearance: { ...preferences.appearance, language: val } });
     }
   }
+
+  function handleOpacityChange(val: string) {
+    if (!preferences?.appearance) return;
+    const n = parseFloat(val);
+    if (isNaN(n)) return;
+    const clamped = Math.max(0, Math.min(1, Math.round(n * 100) / 100));
+    onupdate?.({ appearance: { ...preferences.appearance, opacity: clamped } });
+  }
 </script>
 
 <p
@@ -67,6 +75,7 @@
     id="pref-font-family"
     label={m.preferences_appearance_font_family()}
     value={preferences?.appearance?.fontFamily ?? ''}
+    helper={m.preferences_appearance_font_family_hint()}
     oninput={handleFontFamilyChange}
   />
 
@@ -75,6 +84,7 @@
     label={m.preferences_appearance_font_size_range()}
     type="number"
     value={String(preferences?.appearance?.fontSize ?? 13)}
+    helper={m.preferences_appearance_font_size_hint()}
     oninput={handleFontSizeChange}
   />
 
@@ -89,6 +99,7 @@
       ...themes.map((t) => ({ value: t.name, label: t.name })),
     ]}
     value={preferences?.appearance?.themeName ?? 'umbra'}
+    helper={m.preferences_appearance_theme_hint()}
     onchange={handleThemeChange}
   />
 
@@ -97,6 +108,16 @@
     label={m.preferences_appearance_language()}
     options={languageOptions}
     value={preferences?.appearance?.language ?? 'en'}
+    helper={m.preferences_appearance_language_hint()}
     onchange={handleLanguageChange}
+  />
+
+  <TextInput
+    id="pref-opacity"
+    label={m.preferences_appearance_opacity()}
+    type="number"
+    value={String(preferences?.appearance?.opacity ?? 1)}
+    helper={m.preferences_appearance_opacity_hint()}
+    oninput={handleOpacityChange}
   />
 </div>

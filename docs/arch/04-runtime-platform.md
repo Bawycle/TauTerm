@@ -164,6 +164,21 @@ tauri::Builder::default()
 
 This strategy satisfies [§9.1](02-backend-modules.md#91-rust-backend) (no `unwrap()` on filesystem data) and prevents application startup failure due to preference corruption (FS-SEC-003).
 
+### 7.7 Preference Propagation Model
+
+When `update_preferences` is called, the new `Preferences` value is persisted and the command returns the full updated struct to the frontend. Propagation to existing sessions is field-dependent:
+
+| Category | Propagation mechanism |
+|---|---|
+| Font (`fontFamily`, `fontSize`) and `opacity` | Handled entirely on the frontend via CSS variable updates. The backend is not involved. |
+| `themeName`, `language`, `wordDelimiters`, `bellType`, `confirmMultilinePaste`, `keyboard.bindings` | Frontend-side: reactive state derived from the returned `Preferences` value takes effect on the next relevant event (render, keydown, paste, BEL). |
+| `cursorStyle` | Backend propagates to all currently open sessions via `SessionRegistry::set_cursor_style_all()` (or equivalent), called from the `update_preferences` command handler after persisting the change. On the frontend, the cursor shape token updates immediately. DECSCUSR overrides from terminal applications remain in effect until a terminal reset, at which point the shape reverts to the preference value. |
+| `allowOsc52Write` | Backend propagates to all currently open sessions via `SessionRegistry::set_osc52_write_all()` (or equivalent), called from the `update_preferences` command handler. Takes effect for the next OSC 52 write sequence received by any session. |
+| `scrollbackLines` | **Not propagated to existing sessions.** The `ScreenBuffer` capacity (scrollback line count) is fixed at construction time. Changing this preference only affects panes opened after the change. This is a known architectural constraint — the ScreenBuffer is not designed to support runtime capacity changes. The UI must communicate this constraint to the user (see FS-PREF behavioral constraints table and §7.6.3 of the UXD). |
+| `fullscreen` | Tracks the last fullscreen state for restoration at next launch. The live window state is managed by the OS window manager; `update_preferences` does not trigger a window state change. |
+
+**Design rule:** the `update_preferences` command handler is the only place where preference persistence and session propagation are coupled. Individual Tauri commands must not write to `PreferencesStore` directly — all preference mutations flow through `update_preferences` (or the theme/connection sub-commands for those specific sub-keys).
+
 ---
 
 ## 10. Build Architecture

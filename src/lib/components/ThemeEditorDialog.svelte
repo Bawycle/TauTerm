@@ -122,6 +122,8 @@
     <TextInput
       id="theme-name"
       label={m.theme_name_label()}
+      placeholder={m.theme_name_placeholder()}
+      helper={m.theme_name_hint()}
       value={editingTheme.name}
       oninput={(val) => onupdate({ ...editingTheme, name: val })}
     />
@@ -129,6 +131,8 @@
     <TextInput
       id="theme-fg"
       label={m.theme_foreground_label()}
+      placeholder="#ccc7bc"
+      helper={m.theme_color_hex_hint()}
       value={editingTheme.foreground}
       oninput={(val) => onupdate({ ...editingTheme, foreground: val })}
     />
@@ -136,6 +140,8 @@
     <TextInput
       id="theme-bg"
       label={m.theme_background_label()}
+      placeholder="#16140f"
+      helper={m.theme_color_hex_hint()}
       value={editingTheme.background}
       oninput={(val) => onupdate({ ...editingTheme, background: val })}
     />
@@ -143,6 +149,8 @@
     <TextInput
       id="theme-cursor"
       label={m.theme_cursor_color_label()}
+      placeholder="#7ab3d3"
+      helper={m.theme_color_hex_hint()}
       value={editingTheme.cursorColor}
       oninput={(val) => onupdate({ ...editingTheme, cursorColor: val })}
     />
@@ -150,6 +158,8 @@
     <TextInput
       id="theme-selection"
       label={m.theme_selection_bg_label()}
+      placeholder="#2e6f9c"
+      helper={m.theme_color_hex_hint()}
       value={editingTheme.selectionBg}
       oninput={(val) => onupdate({ ...editingTheme, selectionBg: val })}
     />
@@ -185,6 +195,9 @@
       >
     </div>
 
+    <p class="text-(--font-size-ui-sm) text-(--color-text-secondary)">
+      {m.theme_palette_hint()}
+    </p>
     <ThemePaletteEditor palette={editingTheme.palette} onpalettechange={handlePaletteColorChange} />
 
     <!-- Contrast advisory (UXD §7.20.4) -->

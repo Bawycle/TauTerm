@@ -61,9 +61,28 @@ impl PaneSession {
     ///
     /// `scrollback_lines` is the maximum scrollback capacity for this pane,
     /// read from `preferences.terminal.scrollback_lines` at creation time (FS-SB-002).
-    pub fn new(id: PaneId, cols: u16, rows: u16, scrollback_lines: usize) -> Self {
+    ///
+    /// `initial_cursor_shape` is the DECSCUSR-encoded initial cursor shape (0–6),
+    /// derived from `preferences.appearance.cursor_style`. Applications can override
+    /// this at any time via DECSCUSR — this only sets the *starting* value.
+    ///
+    /// `allow_osc52_write` is read from `preferences.terminal.allow_osc52_write`.
+    pub fn new(
+        id: PaneId,
+        cols: u16,
+        rows: u16,
+        scrollback_lines: usize,
+        initial_cursor_shape: u8,
+        allow_osc52_write: bool,
+    ) -> Self {
         Self {
-            vt: Arc::new(RwLock::new(VtProcessor::new(cols, rows, scrollback_lines))),
+            vt: Arc::new(RwLock::new(VtProcessor::new(
+                cols,
+                rows,
+                scrollback_lines,
+                initial_cursor_shape,
+                allow_osc52_write,
+            ))),
             lifecycle: PaneLifecycleState::Spawning,
             title: None,
             ssh_state: None,

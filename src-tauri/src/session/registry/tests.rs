@@ -229,7 +229,7 @@ fn termination_info_non_terminated_state_returns_none() {
 
 /// Build a minimal `PaneSession` for use in registry inner state fixtures.
 fn make_pane_session(pane_id: &crate::session::ids::PaneId) -> PaneSession {
-    PaneSession::new(pane_id.clone(), 80, 24, 1000)
+    PaneSession::new(pane_id.clone(), 80, 24, 1000, 0, false)
 }
 
 /// Build a minimal `TabState` wrapping a single leaf pane.

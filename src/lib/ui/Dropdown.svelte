@@ -31,10 +31,21 @@
     disabled?: boolean;
     label?: string;
     id?: string;
+    /** Helper text shown below the trigger. Hidden when not provided. */
+    helper?: string;
     onchange?: (value: string) => void;
   }
 
-  const { options, value, placeholder, disabled = false, label, id, onchange }: Props = $props();
+  const {
+    options,
+    value,
+    placeholder,
+    disabled = false,
+    label,
+    id,
+    helper,
+    onchange,
+  }: Props = $props();
 
   // Stable per-instance fallback ID computed once at instantiation.
   // Used when the caller does not pass `id`, so label-for always points to a valid element.
@@ -52,6 +63,8 @@
   const triggerTextClass = $derived(
     value ? 'text-(--color-text-primary)' : 'text-(--color-text-tertiary)',
   );
+
+  const describedBy = $derived(helper ? `${uid}-helper` : undefined);
 </script>
 
 <div class="flex flex-col">
@@ -67,6 +80,7 @@
   <Select.Root type="single" {value} onValueChange={(v) => onchange?.(v)} {disabled}>
     <Select.Trigger
       id={uid}
+      aria-describedby={describedBy}
       class="relative w-full h-[44px] px-3 pr-9 text-(--font-size-ui-base) bg-(--color-bg-input) border border-(--color-border) rounded-(--radius-sm) flex items-center text-left cursor-pointer disabled:cursor-not-allowed disabled:border-(--color-border-subtle) disabled:text-(--color-text-tertiary) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) transition-[background-color,color,border-color] duration-(--duration-fast) ease-out {triggerTextClass}"
     >
       {#snippet child({ props })}
@@ -97,4 +111,10 @@
       </Select.Content>
     </Select.Portal>
   </Select.Root>
+
+  {#if helper}
+    <p id="{uid}-helper" class="text-(--font-size-ui-sm) text-(--color-text-secondary) mt-1">
+      {helper}
+    </p>
+  {/if}
 </div>

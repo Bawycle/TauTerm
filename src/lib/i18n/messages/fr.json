@@ -258,5 +258,26 @@
   "paste_confirm_dont_ask": "Ne plus demander",
 
   "status_bar_settings": "Ouvrir les paramètres",
-  "status_bar_dimensions_aria": "{cols} colonnes, {rows} lignes"
+  "status_bar_dimensions_aria": "{cols} colonnes, {rows} lignes",
+
+  "preferences_appearance_opacity": "Opacité (0–1)",
+  "preferences_appearance_font_family_hint": "Toute police monospace installée sur le système. Exemple : JetBrains Mono, Fira Code. Retour à la police monospace système si introuvable.",
+  "preferences_appearance_font_size_hint": "Taille de la police du terminal en pixels. Appliqué immédiatement.",
+  "preferences_appearance_theme_hint": "Palette de couleurs du terminal. Les thèmes personnalisés se créent dans la section Thèmes.",
+  "preferences_appearance_language_hint": "Langue de l'interface. Appliqué immédiatement.",
+  "preferences_appearance_opacity_hint": "Transparence du fond du terminal. 1 = opaque, 0 = entièrement transparent. Appliqué immédiatement.",
+
+  "preferences_terminal_cursor_style_hint": "Forme du curseur par défaut. Les applications terminal peuvent la remplacer via des séquences d'échappement.",
+  "preferences_terminal_cursor_blink_rate_hint": "Intervalle de clignotement en millisecondes (100–2000). Utilisez la valeur maximale pour désactiver le clignotement.",
+  "preferences_terminal_scrollback_hint": "Nombre de lignes conservées dans l'historique au-dessus de la zone visible. Appliqué aux nouveaux panneaux — les panneaux existants conservent leur tampon actuel.",
+  "preferences_terminal_bell_type_hint": "Action déclenchée quand un programme émet un bip terminal (\\a). Visuel fait clignoter brièvement la fenêtre. Sonore utilise le son système.",
+  "preferences_terminal_word_delimiters_hint": "Caractères utilisés comme limites de mots lors d'un double-clic. Chaque caractère de ce champ est un séparateur.",
+
+  "preferences_keyboard_instructions": "Cliquez sur un champ de raccourci et appuyez sur une combinaison de touches pour enregistrer. Les conflits sont signalés en ligne. Laissez un champ vide pour désactiver ce raccourci.",
+
+  "preferences_themes_instructions": "Créez et modifiez des thèmes de terminal personnalisés. Cliquez sur Activer pour appliquer un thème. Les thèmes intégrés ne sont pas modifiables — dupliquez-les pour créer une variante.",
+
+  "theme_name_hint": "Nom unique affiché dans la liste des thèmes et dans le menu déroulant Apparence.",
+  "theme_palette_hint": "Les 16 couleurs ANSI standard. Les couleurs 0–7 sont les variantes normales ; 8–15 sont les variantes vives. La plupart des applications CLI les utilisent pour la coloration syntaxique.",
+  "theme_color_hex_hint": "Code couleur hexadécimal, ex. #1a1a2e"
 }

@@ -18,7 +18,7 @@ use tau_term_lib::vt::VtProcessor;
 /// `CSI 5n` must enqueue `\x1b[0n` (terminal ready).
 #[test]
 fn test_device_status_ready() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\x1b[5n");
     let responses = vt.take_responses();
     assert_eq!(
@@ -35,7 +35,7 @@ fn test_device_status_ready() {
 /// `CSI 6n` must enqueue `\x1b[row;colR` with 1-based cursor position.
 #[test]
 fn test_dsr_cursor_position_at_home() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     // Cursor starts at (0, 0) — expect `\x1b[1;1R`.
     vt.process(b"\x1b[6n");
     let responses = vt.take_responses();
@@ -53,7 +53,7 @@ fn test_dsr_cursor_position_at_home() {
 /// `CSI 6n` after a `CUP` move must report the updated 1-based position.
 #[test]
 fn test_dsr_cursor_position_after_cup() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     // Move cursor to row 6, col 11 (1-based) via CUP — 0-based: (5, 10).
     vt.process(b"\x1b[6;11H");
     vt.process(b"\x1b[6n");
@@ -76,7 +76,7 @@ fn test_dsr_cursor_position_after_cup() {
 /// `CSI c` (parameter omitted, defaults to 0) must enqueue `\x1b[?1;2c`.
 #[test]
 fn test_da_primary_attributes_no_param() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\x1b[c");
     let responses = vt.take_responses();
     assert_eq!(
@@ -93,7 +93,7 @@ fn test_da_primary_attributes_no_param() {
 /// `CSI 0c` (explicit parameter 0) must also enqueue `\x1b[?1;2c`.
 #[test]
 fn test_da_primary_attributes_explicit_zero() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\x1b[0c");
     let responses = vt.take_responses();
     assert_eq!(
@@ -110,7 +110,7 @@ fn test_da_primary_attributes_explicit_zero() {
 /// Non-zero `CSI Nc` (Secondary DA request) must be silently ignored.
 #[test]
 fn test_da_nonzero_param_ignored() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\x1b[1c");
     let responses = vt.take_responses();
     assert!(
@@ -127,7 +127,7 @@ fn test_da_nonzero_param_ignored() {
 /// return an empty Vec (responses are consumed, not cloned).
 #[test]
 fn test_responses_cleared_after_take() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\x1b[5n");
     let first = vt.take_responses();
     assert_eq!(first.len(), 1, "first take must return the response");
@@ -141,7 +141,7 @@ fn test_responses_cleared_after_take() {
 /// Multiple requests in one `process()` call must each enqueue a response.
 #[test]
 fn test_multiple_responses_in_one_process_call() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     // Three requests back-to-back in a single byte slice.
     vt.process(b"\x1b[5n\x1b[c\x1b[6n");
     let responses = vt.take_responses();

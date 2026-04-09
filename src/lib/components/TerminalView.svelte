@@ -195,6 +195,8 @@
           confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}
           cursorBlinkMs={preferences.value?.appearance.cursorBlinkMs}
           bellType={preferences.value?.terminal.bellType}
+          fontFamily={preferences.value?.appearance.fontFamily}
+          fontSize={preferences.value?.appearance.fontSize}
           lineHeight={tv.activeThemeLineHeight}
           searchMatches={tv.searchMatches}
           activeSearchMatchIndex={tv.searchCurrentIdx}
@@ -533,7 +535,11 @@
     flex: 1;
     overflow: hidden;
     position: relative;
-    background-color: var(--term-bg);
+    background-color: color-mix(
+      in srgb,
+      var(--term-bg) calc(var(--terminal-opacity, 1) * 100%),
+      transparent
+    );
   }
 
   .terminal-view__search-container {

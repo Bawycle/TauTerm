@@ -42,6 +42,10 @@
     cursorBlinkMs?: number;
     /** Bell type — forwarded to TerminalPane (FS-VT-090/093). */
     bellType?: BellType;
+    /** Terminal font family (FS-THEME-006) — forwarded to TerminalPane. */
+    fontFamily?: string;
+    /** Terminal font size in pixels (FS-THEME-007) — forwarded to TerminalPane. */
+    fontSize?: number;
     /** Terminal line height multiplier (FS-THEME-010) — forwarded to TerminalPane. */
     lineHeight?: number;
     /**
@@ -77,6 +81,8 @@
     lineHeight,
     searchMatches = [],
     activeSearchMatchIndex = 0,
+    fontFamily,
+    fontSize,
     onpaneclick,
     onclosepane,
     onsearch,
@@ -165,6 +171,8 @@
       {confirmMultilinePaste}
       {cursorBlinkMs}
       {bellType}
+      {fontFamily}
+      {fontSize}
       {lineHeight}
       searchMatches={node.paneId === activePaneId ? searchMatches : []}
       activeSearchMatchIndex={node.paneId === activePaneId ? activeSearchMatchIndex : 0}
@@ -206,6 +214,8 @@
         {confirmMultilinePaste}
         {cursorBlinkMs}
         {bellType}
+        {fontFamily}
+        {fontSize}
         {lineHeight}
         {searchMatches}
         {activeSearchMatchIndex}
@@ -255,6 +265,8 @@
         {ondimensionschange}
         {cursorBlinkMs}
         {bellType}
+        {fontFamily}
+        {fontSize}
         {lineHeight}
         {searchMatches}
         {activeSearchMatchIndex}

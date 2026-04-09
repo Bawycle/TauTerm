@@ -68,9 +68,16 @@ impl SessionRegistry {
             .open_session(config.cols, config.rows, &shell_path, args, &env)
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
 
-        // Read scrollback limit from preferences before acquiring the registry lock
+        // Read pane-creation preferences before acquiring the registry lock
         // so we don't hold two locks simultaneously (FS-SB-002).
-        let scrollback_lines = self.prefs.read().get().terminal.scrollback_lines;
+        let (scrollback_lines, initial_cursor_shape, allow_osc52_write) = {
+            let prefs = self.prefs.read().get();
+            (
+                prefs.terminal.scrollback_lines,
+                prefs.appearance.cursor_style.to_decscusr(),
+                prefs.terminal.allow_osc52_write,
+            )
+        };
 
         // --- Build pane and tab state ---
         let mut inner = self.inner.write();
@@ -80,8 +87,14 @@ impl SessionRegistry {
         let order = inner.next_order;
         inner.next_order += 1;
 
-        let mut pane =
-            PaneSession::new(pane_id.clone(), config.cols, config.rows, scrollback_lines);
+        let mut pane = PaneSession::new(
+            pane_id.clone(),
+            config.cols,
+            config.rows,
+            scrollback_lines,
+            initial_cursor_shape,
+            allow_osc52_write,
+        );
         pane.lifecycle = PaneLifecycleState::Running;
 
         // --- Start PTY read task ---

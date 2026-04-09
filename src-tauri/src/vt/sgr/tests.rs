@@ -7,7 +7,7 @@ use crate::vt::{
 
 /// Create a standard 80×24 VtProcessor.
 fn make_vt() -> VtProcessor {
-    VtProcessor::new(80, 24, 1_000)
+    VtProcessor::new(80, 24, 1_000, 0, false)
 }
 
 /// Write a CSI SGR sequence followed by a printable character, then return

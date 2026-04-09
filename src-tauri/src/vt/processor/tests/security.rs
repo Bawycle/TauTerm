@@ -11,7 +11,7 @@ mod security_tests {
     /// SEC-PTY-001: CSI 21t must not trigger any title injection into PTY input.
     #[test]
     fn sec_pty_001_csi_21t_title_readback_discarded() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // Set a title. Note: the `vte` parser splits the OSC payload on each ';',
         // so "injected;ls -la" is delivered as params[1]="injected", params[2]="ls -la".
         // With the new params-based API, only params[1] is used as the title.
@@ -26,7 +26,7 @@ mod security_tests {
     /// SEC-PTY-001: CSI 21t after a title containing a shell injection payload.
     #[test]
     fn sec_pty_001_csi_21t_after_shell_injection_title_no_effect() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         let _dirty = vt.process(b"\x1b]0;$(id)\x07\x1b[21t");
         // No panic, no crash, no observable injection.
     }
@@ -38,7 +38,7 @@ mod security_tests {
     /// SEC-PTY-002: OSC 10;? (foreground color query) must be silently discarded.
     #[test]
     fn sec_pty_002_osc_color_query_no_response() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // OSC 10 ; ? BEL
         let _dirty = vt.process(b"\x1b]10;?\x07");
         // No panic. VtProcessor has no response buffer — confirms no echo-back.
@@ -47,7 +47,7 @@ mod security_tests {
     /// SEC-PTY-002: DECRQSS (ESC P $ q ... ESC \) must be silently discarded.
     #[test]
     fn sec_pty_002_decrqss_ignored() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // DECRQSS sequence: ESC P $ q " p ESC \
         let _dirty = vt.process(b"\x1bP$q\"p\x1b\\");
         // No panic, no observable response.
@@ -56,7 +56,7 @@ mod security_tests {
     /// SEC-PTY-002: CSI ? 1 $ p (DECRPM) must be silently discarded.
     #[test]
     fn sec_pty_002_decrpm_mode_query_ignored() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         let _dirty = vt.process(b"\x1b[?1$p");
         // No panic, no mode response injected.
     }
@@ -68,7 +68,7 @@ mod security_tests {
     /// SEC-PTY-003: Large OSC 0 title payload must be processed without panic.
     #[test]
     fn sec_pty_003_large_osc_title_no_panic() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         let mut seq = b"\x1b]0;".to_vec();
         seq.extend(b"A".repeat(10_000));
         seq.push(b'\x07');
@@ -88,7 +88,7 @@ mod security_tests {
     /// SEC-PTY-004: DCS sequence with 10 000-byte payload must not panic.
     #[test]
     fn sec_pty_004_large_dcs_payload_no_panic() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         let mut seq = b"\x1bP".to_vec();
         seq.extend(b"B".repeat(10_000));
         seq.extend(b"\x1b\\"); // DCS string terminator (ST)
@@ -107,7 +107,7 @@ mod security_tests {
     #[test]
     fn sec_pty_007_invalid_utf8_replaced_with_replacement_char() {
         use crate::vt::screen_buffer::SnapshotCell;
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // 0xC0 0xAF is an overlong encoding of U+002F ('/'). It is invalid UTF-8.
         let _dirty = vt.process(b"\xC0\xAF");
         let snapshot = vt.get_snapshot();
@@ -135,7 +135,7 @@ mod security_tests {
     /// Prevents DoS via unbounded memory allocation (CVE-2022-24130 pattern).
     #[test]
     fn sec_pty_008_title_stack_bounded() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // Set a known initial title.
         vt.process(b"\x1b]0;base\x07");
         // Push 1000 titles — must silently cap at TITLE_STACK_MAX (16).
@@ -168,7 +168,7 @@ mod security_tests {
     /// SEC-PTY-009: OSC 23 (PopTitle) on empty stack must not panic.
     #[test]
     fn sec_pty_009_title_stack_pop_on_empty_no_panic() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // Pop without any prior push — must not panic.
         for _ in 0..10 {
             vt.process(b"\x1b]23;\x07");
@@ -186,7 +186,7 @@ mod security_tests {
     /// silently dropped — the terminal title must remain unchanged.
     #[test]
     fn sec_osc_oversized_ignored() {
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // Set a known initial title.
         vt.process(b"\x1b]0;initial\x07");
         assert_eq!(vt.title, "initial");
@@ -212,7 +212,7 @@ mod security_tests {
     #[test]
     fn sec_pty_007_valid_chars_unaffected_by_invalid_utf8() {
         use crate::vt::screen_buffer::SnapshotCell;
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         // "ok" + invalid bytes + "!"
         let _dirty = vt.process(b"ok\xC0\xAF!");
         let snapshot = vt.get_snapshot();

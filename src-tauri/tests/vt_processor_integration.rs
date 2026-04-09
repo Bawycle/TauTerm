@@ -22,7 +22,7 @@ use tau_term_lib::vt::VtProcessor;
 /// the rest in chunk 2. The parser must reassemble across the boundary.
 #[test]
 fn multi_chunk_csi_split_across_reads() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     // Write "AB" so we have visible content.
     vt.process(b"AB");
@@ -50,7 +50,7 @@ fn multi_chunk_csi_split_across_reads() {
 /// A multi-byte OSC title sequence split at the OSC terminator (BEL).
 #[test]
 fn multi_chunk_osc_title_split_before_terminator() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     // OSC 0 ; "Hello" without the BEL terminator.
     vt.process(b"\x1b]0;Hello");
@@ -68,7 +68,7 @@ fn multi_chunk_osc_title_split_before_terminator() {
 /// ESC [ 1 ; in chunk 1, 3 m in chunk 2 → bold + italic.
 #[test]
 fn multi_chunk_sgr_split_inside_params() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     vt.process(b"\x1b[1;");
     vt.process(b"3m");
@@ -91,7 +91,7 @@ fn multi_chunk_sgr_split_inside_params() {
 fn large_block_no_truncation_plain_text() {
     // 80 cols × 24 rows = 1920 cells — enough rows to hold 5000 chars with wrapping.
     // Use a very large terminal to avoid scrollback truncation of visible content.
-    let mut vt = VtProcessor::new(200, 100, 50_000);
+    let mut vt = VtProcessor::new(200, 100, 50_000, 0, false);
 
     let input: Vec<u8> = b"A".repeat(5_000);
     vt.process(&input);
@@ -109,7 +109,7 @@ fn large_block_no_truncation_plain_text() {
 /// The parser must not drop or corrupt the interleaved sequences.
 #[test]
 fn large_block_with_interspersed_csi_sequences() {
-    let mut vt = VtProcessor::new(80, 60, 10_000);
+    let mut vt = VtProcessor::new(80, 60, 10_000, 0, false);
 
     // Build: 50 repetitions of "hello\r\n" (~350 bytes total) followed by a
     // single CUP sequence, then 5000 'B' bytes.
@@ -137,7 +137,7 @@ fn large_block_with_interspersed_csi_sequences() {
 /// Grid dimensions must reflect the new size; cursors must be clamped.
 #[test]
 fn resize_mid_stream_updates_dimensions() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     // Write a character at the bottom-right corner.
     // CUP 24;80 (1-based) → row 23, col 79 (0-based).
@@ -168,7 +168,7 @@ fn resize_mid_stream_updates_dimensions() {
 /// Content written before resize must not be corrupted after resize.
 #[test]
 fn resize_mid_stream_preserves_content() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     // Write "Hi" at (0,0).
     vt.process(b"Hi");
@@ -187,7 +187,7 @@ fn resize_mid_stream_preserves_content() {
 /// Resize to a larger terminal — grid expands without panic.
 #[test]
 fn resize_mid_stream_expand() {
-    let mut vt = VtProcessor::new(40, 12, 1_000);
+    let mut vt = VtProcessor::new(40, 12, 1_000, 0, false);
 
     vt.process(b"expand");
 
@@ -203,7 +203,7 @@ fn resize_mid_stream_expand() {
 /// Multiple sequential resizes must not panic or corrupt state.
 #[test]
 fn resize_mid_stream_multiple_sequential() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"A");
     vt.resize(40, 12);
     vt.process(b"B");
@@ -224,7 +224,7 @@ fn resize_mid_stream_multiple_sequential() {
 /// A single character write must mark exactly that row dirty.
 #[test]
 fn dirty_region_single_char_marks_row() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     let dirty = vt.process(b"X");
     assert!(
         dirty.rows.contains(0u16) || dirty.is_full_redraw,
@@ -235,7 +235,7 @@ fn dirty_region_single_char_marks_row() {
 /// Alternate screen switch must produce a full-redraw dirty region.
 #[test]
 fn dirty_region_alt_screen_switch_marks_full_redraw() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     // Enter alternate screen (DECSET 1049).
     let dirty = vt.process(b"\x1b[?1049h");
     assert!(
@@ -254,7 +254,7 @@ fn dirty_region_alt_screen_switch_marks_full_redraw() {
 /// Two sequences processed in one `process()` call produce a merged dirty region.
 #[test]
 fn dirty_region_two_rows_written_both_dirty() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     // Write to row 0, then move to row 1 and write there — all in one process call.
     let dirty = vt.process(b"Row0\r\nRow1");
     // Row 0 and row 1 must both be in the dirty set (or full redraw).
@@ -271,7 +271,7 @@ fn dirty_region_two_rows_written_both_dirty() {
 /// CUP (CSI row ; col H) positions the cursor correctly.
 #[test]
 fn cursor_cup_positions_correctly() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     // CUP 3;5 → 0-based row 2, col 4.
     vt.process(b"\x1b[3;5H");
     let snap = vt.get_snapshot();
@@ -282,7 +282,7 @@ fn cursor_cup_positions_correctly() {
 /// CUF (cursor forward) advances the cursor column.
 #[test]
 fn cursor_cuf_advances_column() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\x1b[5C"); // Move right 5.
     let snap = vt.get_snapshot();
     assert_eq!(snap.cursor_col, 5);
@@ -291,7 +291,7 @@ fn cursor_cuf_advances_column() {
 /// CR (0x0D) returns cursor to column 0.
 #[test]
 fn cr_returns_to_column_zero() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"ABCDE\r");
     let snap = vt.get_snapshot();
     assert_eq!(snap.cursor_col, 0, "CR must move cursor to column 0");
@@ -300,7 +300,7 @@ fn cr_returns_to_column_zero() {
 /// LF (0x0A) advances the cursor row by one.
 #[test]
 fn lf_advances_row() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.process(b"\n");
     let snap = vt.get_snapshot();
     assert_eq!(snap.cursor_row, 1, "LF must advance cursor to row 1");
@@ -317,7 +317,7 @@ fn lf_advances_row() {
 /// equivalent to the full-snapshot path for every dirty row.
 #[test]
 fn partial_snapshot_parity_with_full_snapshot() {
-    let mut proc = tau_term_lib::vt::VtProcessor::new(80, 24, 1_000);
+    let mut proc = tau_term_lib::vt::VtProcessor::new(80, 24, 1_000, 0, false);
 
     // Row 0: colored text (bold red foreground).
     proc.process(b"\x1b[1;31mHello\x1b[0m");
@@ -392,7 +392,7 @@ fn partial_snapshot_parity_with_full_snapshot() {
 /// Lines scrolled off the top must enter the scrollback ring.
 #[test]
 fn scrollback_accumulates_on_scroll() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     // Fill all 24 rows with labelled lines and then push one more to force scroll.
     // Use "Row NN\r\n" — 25 lines causes at least one scroll event.

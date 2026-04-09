@@ -10,7 +10,7 @@ use crate::vt::VtProcessor;
 /// but the second process() must see a clean dirty region.
 #[test]
 fn full_redraw_does_not_leak_after_resize_and_process() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
 
     // Simulate initial shell output (prompt).
     let _ = vt.process(b"user@host:~$ ");
@@ -43,7 +43,7 @@ fn full_redraw_does_not_leak_after_resize_and_process() {
 /// The first drains full_redraw, the second must be clean.
 #[test]
 fn full_redraw_drains_on_first_process_after_resize() {
-    let mut vt = VtProcessor::new(80, 24, 1_000);
+    let mut vt = VtProcessor::new(80, 24, 1_000, 0, false);
     vt.resize(100, 30);
 
     let dirty1 = vt.process(b"x");

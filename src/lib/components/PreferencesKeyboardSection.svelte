@@ -32,6 +32,9 @@
 >
   {m.preferences_section_keyboard()}
 </p>
+<p class="text-(--font-size-ui-sm) text-(--color-text-secondary) mb-4">
+  {m.preferences_keyboard_instructions()}
+</p>
 <div class="space-y-1">
   {#each shortcutActions as action (action.id)}
     <div class="flex items-center justify-between h-[44px]">

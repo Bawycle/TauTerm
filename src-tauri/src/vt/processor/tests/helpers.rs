@@ -3,7 +3,7 @@
 use crate::vt::VtProcessor;
 
 pub fn make_vt(cols: u16, rows: u16) -> VtProcessor {
-    VtProcessor::new(cols, rows, 10_000)
+    VtProcessor::new(cols, rows, 10_000, 0, false)
 }
 
 pub fn grapheme_at(vt: &VtProcessor, row: u16, col: u16) -> String {

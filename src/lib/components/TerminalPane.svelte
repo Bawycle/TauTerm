@@ -296,7 +296,11 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background-color: var(--term-bg);
+    background-color: color-mix(
+      in srgb,
+      var(--term-bg) calc(var(--terminal-opacity, 1) * 100%),
+      transparent
+    );
     border: 2px solid var(--color-pane-border-inactive);
   }
 
@@ -314,7 +318,11 @@
     font-size: var(--font-size-terminal);
     line-height: var(--line-height-terminal);
     color: var(--term-fg);
-    background-color: var(--term-bg);
+    background-color: color-mix(
+      in srgb,
+      var(--term-bg) calc(var(--terminal-opacity, 1) * 100%),
+      transparent
+    );
     white-space: pre;
     outline: none;
     cursor: text;

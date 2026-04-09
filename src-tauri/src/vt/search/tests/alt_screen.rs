@@ -20,7 +20,7 @@ use super::super::api::SearchQuery;
 fn test_vt_022_search_on_alternate_screen_returns_zero_results() {
     use crate::vt::processor::VtProcessor;
 
-    let mut vt = VtProcessor::new(80, 24, 1000);
+    let mut vt = VtProcessor::new(80, 24, 1000, 0, false);
 
     // Write some text to the normal screen and scroll it into the scrollback
     // by filling more lines than the visible rows (25 > 24).

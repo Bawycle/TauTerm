@@ -188,7 +188,20 @@ impl VtProcessor {
     /// Create a new `VtProcessor` with explicit scrollback capacity (FS-SB-002).
     ///
     /// `scrollback_lines` is clamped to `MAX_SCROLLBACK_LINES` inside `ScreenBuffer::new`.
-    pub fn new(cols: u16, rows: u16, scrollback_lines: usize) -> Self {
+    ///
+    /// `initial_cursor_shape` sets the starting cursor shape (DECSCUSR encoding, 0–6)
+    /// before any application sends DECSCUSR. Applications can still override this via
+    /// DECSCUSR at any time — that is correct VT behaviour. Pass `0` for the hardcoded
+    /// default (blinking block).
+    ///
+    /// `allow_osc52_write` gates OSC 52 clipboard write forwarding (FS-VT-075).
+    pub fn new(
+        cols: u16,
+        rows: u16,
+        scrollback_lines: usize,
+        initial_cursor_shape: u8,
+        allow_osc52_write: bool,
+    ) -> Self {
         Self {
             parser: Parser::new(),
             normal: ScreenBuffer::new(cols, rows, scrollback_lines),
@@ -209,14 +222,14 @@ impl VtProcessor {
             mode_changed: false,
             title_changed: false,
             wrap_pending: false,
-            cursor_shape: 0,
+            cursor_shape: initial_cursor_shape,
             cursor_shape_changed: false,
             cursor_blink: false,
             bell_pending: false,
             last_bell_instant: None,
             current_hyperlink: None,
             current_hyperlink_id: None,
-            allow_osc52_write: false,
+            allow_osc52_write,
             pending_osc52_write: None,
             pending_ri: None,
             pending_emoji: None,

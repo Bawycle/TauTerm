@@ -65,6 +65,7 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | Notification PAL (D-Bus, no-op fallback) | [04-runtime-platform.md](04-runtime-platform.md) §7.4 |
 | PAL injection at startup (`lib.rs`) | [04-runtime-platform.md](04-runtime-platform.md) §7.5 |
 | PreferencesStore load strategy (TOML, JSON migration, fallback) | [04-runtime-platform.md](04-runtime-platform.md) §7.6 |
+| Preference propagation model (per-field: CSS vars, session propagation, scrollbackLines constraint) | [04-runtime-platform.md](04-runtime-platform.md) §7.7 |
 | Build pipeline (Vite + Cargo) | [04-runtime-platform.md](04-runtime-platform.md) §10.1 |
 | i18n (Paraglide JS, locale files, `Language` enum) | [04-runtime-platform.md](04-runtime-platform.md) §10.5 |
 | AppImage distribution (Tauri bundler, multi-arch CI) | [04-runtime-platform.md](04-runtime-platform.md) §10.6 |

@@ -189,10 +189,13 @@
 </script>
 
 <p
-  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-heading) uppercase mb-4"
+  class="text-(--font-size-ui-xs) font-semibold text-(--color-text-heading) uppercase mb-2"
   style="letter-spacing: var(--letter-spacing-label)"
 >
   {m.preferences_section_themes()}
+</p>
+<p class="text-(--font-size-ui-sm) text-(--color-text-secondary) mb-4">
+  {m.preferences_themes_instructions()}
 </p>
 
 {#if themeError}

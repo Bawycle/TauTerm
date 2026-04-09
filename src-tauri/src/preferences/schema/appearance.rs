@@ -17,6 +17,23 @@ pub enum CursorStyle {
     Bar,
 }
 
+impl CursorStyle {
+    /// Convert to a DECSCUSR parameter value (steady variant; blinking controlled
+    /// separately by `cursor_blink_ms`).
+    ///
+    /// Mapping:
+    /// - `Block`     → 2 (steady block)
+    /// - `Underline` → 4 (steady underline)
+    /// - `Bar`       → 6 (steady bar)
+    pub fn to_decscusr(self) -> u8 {
+        match self {
+            CursorStyle::Block => 2,
+            CursorStyle::Underline => 4,
+            CursorStyle::Bar => 6,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Bell type
 // ---------------------------------------------------------------------------

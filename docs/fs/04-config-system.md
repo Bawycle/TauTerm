@@ -50,6 +50,28 @@
 | FS-PREF-005 | The preferences UI MUST be accessible via a keyboard shortcut (default: Ctrl+,) and via a visible UI control. | Must |
 | FS-PREF-006 | The following settings MUST be configurable: scrollback buffer size (with real-time memory estimate display per FS-SB-002), cursor blink rate, cursor shape, bell notification type, word delimiter set, font family, font size. | Must |
 
+**Preference field behavioral constraints:**
+
+The table below documents, for each configurable field, when its effect takes place and any architectural constraints that constrain that behavior. These are design-time commitments; implementation must conform to them.
+
+| Field | Effect timing | Behavioral notes |
+|---|---|---|
+| `fontFamily` | Immediate | Applied via CSS variable update in the frontend. No backend involvement. |
+| `fontSize` | Immediate | Applied via CSS variable update in the frontend. No backend involvement. |
+| `themeName` | Immediate | Active theme tokens are reloaded in the frontend on change. |
+| `opacity` | Immediate | Controls **terminal background transparency only** — text, UI chrome, and the window frame remain fully opaque. Applied via CSS variable update in the frontend. |
+| `language` | Immediate | All visible UI strings switch locale without page reload or restart. The frontend reacts to the new `Language` enum value returned by `update_preferences`. |
+| `cursorStyle` | Immediate | Sets the **default** cursor shape. Terminal applications may override it at any time via DECSCUSR escape sequences (e.g., `ESC [ 1 q` for blinking block, `ESC [ 5 q` for blinking bar). On a terminal hard reset, the shape reverts to the preference value. The preference is propagated to all currently open sessions at the time of the change. |
+| `cursorBlinkMs` | Immediate | Applied to all currently open sessions at the time of the change. |
+| `allowOsc52Write` | Immediate | Propagated to all currently open sessions at the time of the change via `SessionRegistry`. |
+| `wordDelimiters` | Immediate | Takes effect on the next double-click selection. |
+| `bellType` | Immediate | Takes effect on the next BEL character received. |
+| `confirmMultilinePaste` | Immediate | Takes effect on the next paste operation. |
+| `keyboard.bindings` | Immediate | Takes effect on the next keydown event. |
+| `scrollbackLines` | New panes only | The scrollback buffer capacity is fixed at pane construction. Changing this preference does **not** resize existing pane buffers. This is a known architectural constraint of the `ScreenBuffer` design, not a deficiency. The UI MUST display a note to the user that the setting applies to new panes only. |
+| `fullscreen` | Startup only | The preference value records whether the window should open in full-screen mode. It is restored at next application launch. It does not control the live window state directly — the live state is managed by the OS window manager. |
+| `contextMenuHintShown` | Internal latch | One-shot flag. Once set to `true`, it is never reset to `false` by any user action. It is not exposed as an editable preference in the UI. |
+
 **Acceptance criteria:**
 - FS-PREF-001: Changing a preference, quitting, and relaunching TauTerm shows the preference retained.
 - FS-PREF-002: All configurable settings are accessible from the preferences UI.

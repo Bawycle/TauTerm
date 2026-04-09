@@ -97,10 +97,24 @@ impl SessionRegistry {
             .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
 
         let new_pane_id = PaneId::new();
-        // Read scrollback limit from preferences (FS-SB-002).
+        // Read pane-creation preferences (FS-SB-002).
         // Prefs lock is not held across the pty_backend call above.
-        let scrollback_lines = self.prefs.read().get().terminal.scrollback_lines;
-        let mut new_pane = PaneSession::new(new_pane_id.clone(), cols, rows, scrollback_lines);
+        let (scrollback_lines, initial_cursor_shape, allow_osc52_write) = {
+            let prefs = self.prefs.read().get();
+            (
+                prefs.terminal.scrollback_lines,
+                prefs.appearance.cursor_style.to_decscusr(),
+                prefs.terminal.allow_osc52_write,
+            )
+        };
+        let mut new_pane = PaneSession::new(
+            new_pane_id.clone(),
+            cols,
+            rows,
+            scrollback_lines,
+            initial_cursor_shape,
+            allow_osc52_write,
+        );
         new_pane.lifecycle = PaneLifecycleState::Running;
 
         let reader_handle = get_reader_handle(&*pty_box);

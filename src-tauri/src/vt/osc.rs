@@ -262,7 +262,7 @@ mod security_tests {
         // ESC ] 52 ; c ; ? BEL
         let seq = b"\x1b]52;c;\x07";
         // VtProcessor — no panic, title unchanged, no clipboard write triggered.
-        let mut vt = VtProcessor::new(80, 24, 10_000);
+        let mut vt = VtProcessor::new(80, 24, 10_000, 0, false);
         let _dirty = vt.process(seq);
         // If we get here without panic, the sequence was silently consumed.
         // There is no observable side-effect to assert beyond "no crash and no

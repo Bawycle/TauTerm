@@ -3,7 +3,7 @@
 use crate::vt::VtProcessor;
 
 fn make_vt(cols: u16, rows: u16) -> VtProcessor {
-    VtProcessor::new(cols, rows, 10_000)
+    VtProcessor::new(cols, rows, 10_000, 0, false)
 }
 
 #[test]

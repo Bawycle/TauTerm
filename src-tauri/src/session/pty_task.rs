@@ -150,7 +150,7 @@ mod tests {
     use crate::vt::{DirtyRegion, VtProcessor};
 
     fn make_vt(cols: u16, rows: u16) -> Arc<RwLock<VtProcessor>> {
-        Arc::new(RwLock::new(VtProcessor::new(cols, rows, 1_000)))
+        Arc::new(RwLock::new(VtProcessor::new(cols, rows, 1_000, 0, false)))
     }
 
     fn full_redraw_dirty() -> DirtyRegion {
@@ -284,7 +284,9 @@ mod tests {
         rows: u16,
         scrollback: usize,
     ) -> Arc<RwLock<VtProcessor>> {
-        Arc::new(RwLock::new(VtProcessor::new(cols, rows, scrollback)))
+        Arc::new(RwLock::new(VtProcessor::new(
+            cols, rows, scrollback, 0, false,
+        )))
     }
 
     /// Push lines into the VT. Each call writes `line\r\n` so the terminal

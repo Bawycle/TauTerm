@@ -90,10 +90,7 @@ describe('TEST-FOCUS-006: ScrollToBottomButton prevents focus steal on mousedown
     // component template with the correct preventDefault call pattern.
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/ScrollToBottomButton.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/ScrollToBottomButton.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
     expect(source).toContain('onmousedown');
     expect(source).toContain('preventDefault');
@@ -116,10 +113,7 @@ describe('TEST-FOCUS-009: TerminalView SSH button prevents focus steal on moused
   it('TerminalView.svelte SSH toggle button has onmousedown + preventDefault (static check)', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/TerminalView.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalView.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
     // Locate the SSH button block by its unique class
@@ -145,10 +139,7 @@ describe('TEST-FOCUS-010: TerminalView fullscreen button prevents focus steal on
   it('TerminalView.svelte fullscreen toggle button has onmousedown + preventDefault (static check)', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/TerminalView.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalView.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
     // Locate the fullscreen button by its unique data-testid attribute
@@ -189,9 +180,7 @@ describe('TEST-FOCUS-011: TabBarScroll left arrow prevents focus steal on moused
     instances.push(instance);
     flushSync();
 
-    const btn = container.querySelector(
-      '.tab-bar__scroll-arrow--left',
-    ) as HTMLElement | null;
+    const btn = container.querySelector('.tab-bar__scroll-arrow--left') as HTMLElement | null;
     expect(btn).not.toBeNull();
 
     const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
@@ -229,9 +218,7 @@ describe('TEST-FOCUS-012: TabBarScroll right arrow prevents focus steal on mouse
     instances.push(instance);
     flushSync();
 
-    const btn = container.querySelector(
-      '.tab-bar__scroll-arrow--right',
-    ) as HTMLElement | null;
+    const btn = container.querySelector('.tab-bar__scroll-arrow--right') as HTMLElement | null;
     expect(btn).not.toBeNull();
 
     const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });

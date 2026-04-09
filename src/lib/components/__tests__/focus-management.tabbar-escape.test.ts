@@ -93,8 +93,9 @@ describe('TEST-FOCUS-013: TabBar Escape key on tab invokes onEscapeTabBar', () =
 
     // Find a tab element to dispatch the Escape keydown on.
     // Tab items have role="tab" or data-tab-id per TabBar's template.
-    const tabEl = container.querySelector<HTMLElement>('[data-tab-id="tab-1"]')
-      ?? container.querySelector<HTMLElement>('[role="tab"]');
+    const tabEl =
+      container.querySelector<HTMLElement>('[data-tab-id="tab-1"]') ??
+      container.querySelector<HTMLElement>('[role="tab"]');
 
     if (!tabEl) {
       // Tab element not rendered — JSDOM limitation. Fall back to pure-logic check below.
@@ -156,8 +157,9 @@ describe('TEST-FOCUS-014: TabBar Escape during rename does NOT invoke onEscapeTa
     flushSync();
 
     // Dispatch Escape on the tab element — the rename guard must block onEscapeTabBar.
-    const tabEl = container.querySelector<HTMLElement>('[data-tab-id="tab-1"]')
-      ?? container.querySelector<HTMLElement>('[role="tab"]');
+    const tabEl =
+      container.querySelector<HTMLElement>('[data-tab-id="tab-1"]') ??
+      container.querySelector<HTMLElement>('[role="tab"]');
 
     if (!tabEl) {
       // Tab element not rendered in JSDOM — see FOCUS-013 note.
@@ -191,7 +193,10 @@ describe('TEST-FOCUS-013/014 [logic]: handleTabKeydown Escape — pure logic con
     getRenamingTabId: () => string | null,
     onEscapeTabBar: (() => void) | undefined,
   ) {
-    return function handleTabKeydown(event: { key: string; preventDefault: () => void }, tabId: string) {
+    return function handleTabKeydown(
+      event: { key: string; preventDefault: () => void },
+      tabId: string,
+    ) {
       // Mirror the guard at TabBar.svelte line 258
       if (getRenamingTabId() === tabId) return;
 

@@ -79,7 +79,9 @@
       {/if}
 
       <div class="ssh-passphrase-dialog__field">
-        <label class="ssh-passphrase-dialog__label" for="ssh-passphrase-input">{m.ssh_passphrase_field_label()}</label>
+        <label class="ssh-passphrase-dialog__label" for="ssh-passphrase-input"
+          >{m.ssh_passphrase_field_label()}</label
+        >
         <!-- svelte-ignore a11y_autofocus -->
         <input
           id="ssh-passphrase-input"
@@ -104,7 +106,9 @@
 
   {#snippet footer()}
     <Button variant="ghost" onclick={handleCancel}>{m.action_cancel()}</Button>
-    <Button variant="primary" onclick={handleSubmit} disabled={!passphrase}>{m.action_unlock()}</Button>
+    <Button variant="primary" onclick={handleSubmit} disabled={!passphrase}
+      >{m.action_unlock()}</Button
+    >
   {/snippet}
 </Dialog>
 

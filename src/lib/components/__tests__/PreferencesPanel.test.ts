@@ -220,7 +220,7 @@ describe('UITCP-PREF-FN-005b: scrollback memory estimate uses 5 500 bytes/line',
     // Verify the formula directly: 10 000 lines * 5 500 bytes/line / (1024 * 1024) ≈ 52.5 MB.
     // Using 200 bytes/line (wrong coefficient) would yield ~1.9 MB.
     const lines = 10000;
-    const estimate = Math.round((lines * 5500) / (1024 * 1024) * 10) / 10;
+    const estimate = Math.round(((lines * 5500) / (1024 * 1024)) * 10) / 10;
     expect(estimate).toBeGreaterThan(50);
     expect(estimate).toBeLessThan(55);
   });

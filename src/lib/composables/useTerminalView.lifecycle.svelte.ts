@@ -13,10 +13,7 @@
  */
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import {
-  getConnections,
-  hasForegroundProcess,
-} from '$lib/ipc/commands';
+import { getConnections, hasForegroundProcess } from '$lib/ipc/commands';
 import {
   onSessionStateChanged,
   onSshStateChanged,

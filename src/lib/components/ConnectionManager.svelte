@@ -171,8 +171,7 @@
     // Pass password to parent so it can store it via SecretService (SEC-CRED-004)
     // after the backend returns the real ConnectionId. The parent must NOT store
     // it under config.id (which may be '' for new connections).
-    const password =
-      formAuthMethod === 'password' && formPassword ? formPassword : undefined;
+    const password = formAuthMethod === 'password' && formPassword ? formPassword : undefined;
     onsave?.(config, password);
     // Clear password from component state immediately (SEC-UI-002)
     formPassword = '';

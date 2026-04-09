@@ -36,7 +36,14 @@ describe('TEST-FOCUS-017: Tab bar printable key triggers onEscapeTabBar', () => 
     onEscapeTabBar: (() => void) | undefined,
   ) {
     return function handleTabKeydown(
-      event: { key: string; isComposing?: boolean; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean; preventDefault: () => void },
+      event: {
+        key: string;
+        isComposing?: boolean;
+        ctrlKey?: boolean;
+        altKey?: boolean;
+        metaKey?: boolean;
+        preventDefault: () => void;
+      },
       tabId: string,
     ) {
       if (getRenamingTabId() === tabId) return;
@@ -52,7 +59,13 @@ describe('TEST-FOCUS-017: Tab bar printable key triggers onEscapeTabBar', () => 
       } else if (event.key === 'Escape') {
         event.preventDefault();
         onEscapeTabBar?.();
-      } else if (!event.isComposing && !event.ctrlKey && !event.altKey && !event.metaKey && event.key.length === 1) {
+      } else if (
+        !event.isComposing &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        event.key.length === 1
+      ) {
         onEscapeTabBar?.();
       }
     };

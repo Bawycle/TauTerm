@@ -9,16 +9,9 @@
  */
 
 import { onMount, onDestroy } from 'svelte';
-import {
-  getSessionState,
-  getPreferences,
-} from '$lib/ipc/commands';
-import {
-  setInitialSession,
-} from '$lib/state/session.svelte';
-import {
-  setPreferences, setPreferencesFallback, preferences,
-} from '$lib/state/preferences.svelte';
+import { getSessionState, getPreferences } from '$lib/ipc/commands';
+import { setInitialSession } from '$lib/state/session.svelte';
+import { setPreferences, setPreferencesFallback, preferences } from '$lib/state/preferences.svelte';
 import { fullscreenState } from '$lib/state/fullscreen.svelte';
 import { setupViewListeners } from './useTerminalView.lifecycle.svelte';
 import type { SshConnectionConfig, PaneId } from '$lib/ipc/types';

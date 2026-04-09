@@ -33,10 +33,7 @@ describe('TEST-FOCUS-015: SSH panel onclose restores focus to activeViewportEl',
   it('TerminalView.svelte ConnectionManager onclose contains activeViewportEl focus call (static check)', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/TerminalView.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalView.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
     // Find the ConnectionManager onclose block
@@ -91,10 +88,7 @@ describe('TEST-FOCUS-016: Fullscreen state-change handler restores focus to acti
   it('TerminalView.svelte fullscreen button onclick does NOT inline focus (delegated to event handler)', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/TerminalView.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalView.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
     // The fullscreen button onclick must stay simple (not async, no inline focus call)
@@ -129,10 +123,7 @@ describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-resto
   it('PreferencesPanel.svelte Dialog.Content has onCloseAutoFocus with preventDefault (critical fix)', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/PreferencesPanel.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/PreferencesPanel.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
     // This is the exact prop that prevents Bits UI FocusScope from returning
@@ -144,10 +135,7 @@ describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-resto
   it('TerminalView.svelte onCloseAutoFocus prop restores focus to activeViewportEl', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.resolve(
-      process.cwd(),
-      'src/lib/components/TerminalView.svelte',
-    );
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalView.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
     // The focus restoration is in onCloseAutoFocus, not onclose, because

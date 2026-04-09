@@ -167,7 +167,13 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       onEscapeTabBar?.();
-    } else if (!event.isComposing && !event.ctrlKey && !event.altKey && !event.metaKey && event.key.length === 1) {
+    } else if (
+      !event.isComposing &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      event.key.length === 1
+    ) {
       // Printable character: return focus to terminal so the keystroke lands there.
       // The key itself is intentionally NOT forwarded — focus change alone is sufficient
       // (the user will retype). This mirrors GNOME Terminal / iTerm2 behaviour: the

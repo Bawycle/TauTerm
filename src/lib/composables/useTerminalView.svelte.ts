@@ -23,7 +23,12 @@ import {
   getActivePanes,
   collectLeafPanes,
 } from '$lib/state/session.svelte';
-import { sshStates, hostKeyPrompt, credentialPrompt, passphrasePrompt } from '$lib/state/ssh.svelte';
+import {
+  sshStates,
+  hostKeyPrompt,
+  credentialPrompt,
+  passphrasePrompt,
+} from '$lib/state/ssh.svelte';
 import { tabNotifications, terminatedPanes } from '$lib/state/notifications.svelte';
 import { preferences } from '$lib/state/preferences.svelte';
 import { fullscreenState, setFullscreen } from '$lib/state/fullscreen.svelte';

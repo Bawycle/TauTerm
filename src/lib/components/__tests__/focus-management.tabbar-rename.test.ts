@@ -111,7 +111,11 @@ describe('TEST-FOCUS-007: TabBar confirmRename invokes onRenameComplete', () => 
     }
 
     // Simulate pressing Enter to confirm
-    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
     input.dispatchEvent(enterEvent);
 
     // Drain the async confirmRename (calls invoke then sets state)
@@ -158,7 +162,11 @@ describe('TEST-FOCUS-008: TabBar cancelRename invokes onRenameComplete', () => {
       return;
     }
 
-    const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    const escapeEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
     input.dispatchEvent(escapeEvent);
     flushSync();
 

@@ -31,10 +31,7 @@ afterEach(() => {
 //   4. Otherwise → call activeViewportEl.focus({ preventScroll: true }).
 // ---------------------------------------------------------------------------
 
-function onFocusIn(
-  e: { target: EventTarget | null },
-  activeViewportEl: HTMLElement | null,
-): void {
+function onFocusIn(e: { target: EventTarget | null }, activeViewportEl: HTMLElement | null): void {
   if (e.target !== document.body) return;
   if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
   const el = activeViewportEl;

@@ -128,7 +128,9 @@
 
   {#snippet footer()}
     <Button variant="ghost" onclick={handleCancel}>{m.action_cancel()}</Button>
-    <Button variant="primary" onclick={handleSubmit} disabled={!password}>{m.action_connect()}</Button>
+    <Button variant="primary" onclick={handleSubmit} disabled={!password}
+      >{m.action_connect()}</Button
+    >
   {/snippet}
 </Dialog>
 

@@ -13,7 +13,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import * as tauriCore from '@tauri-apps/api/core';
 import * as tauriEvent from '@tauri-apps/api/event';
-import { resetMockWindow } from '../../../__mocks__/tauri-window';
+import { mockAppWindow, resetMockWindow } from '../../../__mocks__/tauri-window';
 import TerminalViewWithProvider from './TerminalViewWithProvider.svelte';
 import { makeTab, makePaneState } from './fixtures';
 
@@ -118,7 +118,7 @@ describe('FS-TAB-010: OS window title follows "{tab-title} — TauTerm"', () => 
     instances.push(mount(TerminalViewWithProvider, { target: container }));
     await settle();
 
-    expect(document.title).toBe('vim \u2014 TauTerm');
+    expect(mockAppWindow.title).toBe('vim \u2014 TauTerm');
   });
 
   it('falls back to "Terminal — TauTerm" when processTitle is empty', async () => {
@@ -132,7 +132,7 @@ describe('FS-TAB-010: OS window title follows "{tab-title} — TauTerm"', () => 
     instances.push(mount(TerminalViewWithProvider, { target: container }));
     await settle();
 
-    expect(document.title).toBe('Terminal \u2014 TauTerm');
+    expect(mockAppWindow.title).toBe('Terminal \u2014 TauTerm');
   });
 
   it('user label wins over processTitle', async () => {
@@ -155,6 +155,6 @@ describe('FS-TAB-010: OS window title follows "{tab-title} — TauTerm"', () => 
     instances.push(mount(TerminalViewWithProvider, { target: container }));
     await settle();
 
-    expect(document.title).toBe('my-server \u2014 TauTerm');
+    expect(mockAppWindow.title).toBe('my-server \u2014 TauTerm');
   });
 });

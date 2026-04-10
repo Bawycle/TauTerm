@@ -37,6 +37,7 @@
   import { setActivePane } from '$lib/ipc/commands';
   import * as m from '$lib/paraglide/messages';
   import { resolveTabTitle } from '$lib/utils/tab-title';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
 
   const tv = useTerminalView();
 
@@ -58,7 +59,7 @@
   $effect(() => {
     const tab = getActiveTab();
     const title = tab ? (resolveTabTitle(tab) ?? m.pane_title_fallback()) : m.pane_title_fallback();
-    document.title = `${title} \u2014 TauTerm`;
+    getCurrentWindow().setTitle(`${title} \u2014 TauTerm`);
   });
 
   // Derived from shared session state
@@ -232,6 +233,7 @@
             ondisableConfirmMultilinePaste={() =>
               tv.handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
             ondimensionschange={(paneId, c, r) => tv.handleDimensionsChange(paneId, c, r)}
+            onrenamepane={tv.handlePaneRename}
             onviewportactive={(el) => {
               tv.activeViewportEl = el;
             }}

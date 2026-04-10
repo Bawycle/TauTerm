@@ -15,7 +15,7 @@
 #
 # The entrypoint starts sshd, then runs the Rust integration tests.
 
-FROM docker.io/library/rust:1.86-slim-bookworm
+FROM docker.io/library/rust:1.94.1-slim-bookworm
 
 # System dependencies:
 #   - build-essential, pkg-config: base compilation toolchain

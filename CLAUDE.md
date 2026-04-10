@@ -21,6 +21,15 @@ La plateforme cible, pour cette première version, est Linux (x86_64). ARM64 (aa
 
 ## Commands
 
+### Full verification suite (local CI equivalent)
+
+```bash
+./scripts/check-all.sh           # fmt + lint + unit tests + containers + audit + E2E
+./scripts/check-all.sh --fast    # fmt + lint + unit tests only (skip containers, audit, E2E)
+```
+
+Run before pushing. Mirrors what CI does. See `scripts/check-all.sh --help` for all options.
+
 ### Development
 
 ```bash

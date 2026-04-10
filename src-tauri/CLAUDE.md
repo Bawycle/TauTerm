@@ -22,6 +22,7 @@ Rust backend for TauTerm. PTY management, VT parser, screen buffer, Tauri comman
 ## Constraints
 
 - Rust edition: **2024** — prefer its idioms (precise capturing, `impl Trait` in closures, etc.)
+- When bumping `rust-toolchain.toml` channel version, verify that a matching `rust:<version>-slim-bookworm` image exists on Docker Hub **before** editing — both `Containerfile.ssh-test` and `Containerfile.keyring-test` must be updated in the same commit.
 - Tests: `cargo nextest run` exclusively — not `cargo test`
 - Lint: `cargo clippy -- -D warnings` must pass clean
 - Keep IPC commands serializable with `serde` — no raw pointers or OS handles across the boundary

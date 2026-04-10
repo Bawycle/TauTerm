@@ -8,7 +8,7 @@
 # Build:  podman build -t tauterm-keyring-test -f Containerfile.keyring-test .
 # Run:    podman run --rm --security-opt label=disable tauterm-keyring-test
 
-FROM docker.io/library/rust:1.86-slim-bookworm
+FROM docker.io/library/rust:1.94.1-slim-bookworm
 
 # System dependencies:
 #   - build-essential, pkg-config: base compilation toolchain

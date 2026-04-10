@@ -191,7 +191,7 @@
       ondimensionschange={(c, r) => ondimensionschange?.(node.paneId, c, r)}
       {onviewportactive}
       showTitleBar={canClosePane && showPaneTitleBar}
-      paneTitle={node.state.processTitle.length > 0 ? node.state.processTitle : undefined}
+      paneTitle={node.state.processTitle || undefined}
     />
   </div>
 {:else}

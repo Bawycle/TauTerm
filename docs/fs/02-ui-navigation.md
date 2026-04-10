@@ -18,6 +18,7 @@
 | FS-TAB-007 | When a non-active tab produces output or a process terminates within it, the tab MUST display a visual activity notification without switching focus. | Must |
 | FS-TAB-008 | Closing the last tab MUST close the application window. | Must |
 | FS-TAB-009 | When a new tab is created while the tab bar is in overflow (horizontal scroll) mode, the tab bar MUST automatically scroll to make the newly created tab fully visible, without requiring any manual scroll action from the user. | Must |
+| FS-TAB-010 | The OS window title MUST follow the format `{tab-title} — TauTerm`, where `{tab-title}` is the resolved title of the currently active tab (same priority chain as FS-TAB-006). When no title is available, the fallback MUST be `Terminal — TauTerm`. The window title MUST update on every active tab change and on every active pane change within the current tab. The window title MUST NOT be configurable in v1. | Should |
 
 **Acceptance criteria:**
 - FS-TAB-001: Opening 10 tabs results in 10 independent terminal sessions.
@@ -29,6 +30,7 @@
   > **Note — title resolution priority (highest first):** (1) user-defined label, (2) OSC 0/2 title set by the running process, (3) basename of the OSC 7 CWD (FS-VT-064), (4) foreground process name from `/proc/{pgid}/comm`, (5) empty string.
 - FS-TAB-007: Output produced in a background tab causes a visible indicator on that tab's header.
 - FS-TAB-009: With enough tabs open to trigger the scroll arrows, pressing Ctrl+Shift+T creates a new tab and the tab bar scrolls so that the new tab is fully visible without any user scroll action.
+- FS-TAB-010: With an active shell running `vim`, the OS window title reads "vim — TauTerm". Switching to a tab running `htop` changes the title to "htop — TauTerm". With no process title available, the title reads "Terminal — TauTerm".
 
 ---
 

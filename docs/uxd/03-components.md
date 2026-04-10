@@ -168,6 +168,30 @@ When the active tab contains two or more panes, a Lucide `LayoutPanelLeft` icon 
 
 The reduced opacity (0.5) is intentional: the icon's function is to signal a structural fact (multi-pane layout), not to carry semantic urgency. It should be visible without drawing the eye. The icon must never appear on tabs with a single pane.
 
+#### 7.1.10 OS Window Title (FS-TAB-010)
+
+The application window title (displayed by the OS window manager, taskbar, and Alt+Tab switcher) follows the format:
+
+```
+{tab-title} — TauTerm
+```
+
+**Composition rules:**
+
+- **`{tab-title}`**: the resolved title of the active tab, using the same priority chain as FS-TAB-006 and §7.1.9. Since the tab title already follows the active pane (§7.1.9), the window title inherently reflects the active pane — no separate resolution is needed.
+- **Separator**: em dash ` — ` (U+2014, with a space on each side). Chosen over hyphen-minus to avoid ambiguity with Unix path separators and to match the Linux desktop convention (GNOME, KDE).
+- **Suffix**: `TauTerm` — always present, always last. Enables identification in Alt+Tab and taskbar when multiple windows are open.
+- **Fallback**: when `{tab-title}` resolves to null or empty string, use `Terminal — TauTerm`.
+
+**Update triggers:**
+- Active tab changes.
+- Active pane changes within the current tab (tab-title updates, so window title follows).
+- Active pane's process title changes (same reactive chain).
+
+**Not configurable in v1.** Custom window title patterns (e.g. `%T - %a`) produce broken configurations disproportionate to their benefit. If a use case emerges from personas, add an optional format token in Appearance preferences in v1.1.
+
+**Rationale for context-first ordering:** Window managers truncate titles from the right when screen space is insufficient. Placing `{tab-title}` first ensures the contextual information (`vim`, `user@server`, `~/projects`) survives truncation. `TauTerm` is recoverable from the window icon; the active context is not.
+
 ### 7.2 Pane Divider
 
 - **Orientation:** Vertical (for left/right split) or horizontal (for top/bottom split).

@@ -36,6 +36,7 @@
   import { fullscreenState } from '$lib/state/fullscreen.svelte';
   import { setActivePane } from '$lib/ipc/commands';
   import * as m from '$lib/paraglide/messages';
+  import { resolveTabTitle } from '$lib/utils/tab-title';
 
   const tv = useTerminalView();
 
@@ -50,6 +51,15 @@
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const fadeDurationHint = _reducedMotion ? 0 : 300;
   const fadeDurationShort = _reducedMotion ? 0 : 200;
+
+  // OS window title: "{tab-title} — TauTerm" (FS-TAB-010, UXD §7.1.10)
+  // Reactive: updates on active tab change and active pane change (tab-title
+  // already derives from activePaneId, so no separate pane dependency needed).
+  $effect(() => {
+    const tab = getActiveTab();
+    const title = tab ? (resolveTabTitle(tab) ?? m.pane_title_fallback()) : m.pane_title_fallback();
+    document.title = `${title} \u2014 TauTerm`;
+  });
 
   // Derived from shared session state
   const activeTab = $derived(getActiveTab());

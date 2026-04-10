@@ -106,3 +106,7 @@ rand = { version = "0.10", features = ["thread_rng"] }
 name = "vt_throughput"
 harness = false
 
+[[bench]]
+name = "ipc_throughput"
+harness = false
+

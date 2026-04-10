@@ -55,31 +55,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
-### Performance — Benchmarking Blindspots
-
-The only existing bench (`src-tauri/benches/vt_throughput.rs`) covers only the VT parser on ASCII and a few `DirtyRows` primitives. The entire downstream pipeline and the latency dimension are blind.
-
-**Throughput axis**
-
-- [ ] **Realistic VT content** `[Score: 8 | R:1, S:1, U:2, E:1]` — Add benchmarks on CSI, SGR, OSC sequences, cursor movement, wide chars (typical content: `htop`, `vim`, `ls --color`). A regression in CSI dispatch is currently undetectable.
-- [ ] **Unicode/emoji hot path** `[Score: 8 | R:1, S:1, U:2, E:1]` — Benchmark `write_char()` on wide codepoints and Regional Indicators (U+1F1E6–), which activate `pending_ri`/`pending_emoji` and `CompactStr` allocations. Zero current coverage.
-- [ ] **Scrollback eviction** `[Score: 8 | R:1, S:1, U:2, E:1]` — Benchmark `scroll_up` with `scrollback.len() >= scrollback_limit` to measure the cost of `pop_front()` + evicted `Vec<Cell>` deallocation on the hot path.
-- [ ] **`build_screen_update_event` full redraw** `[Score: 8 | R:1, S:1, U:2, E:1]` — The most vulnerable point: ~11,000 `String` allocations per event on a 220×50 viewport (`.to_string()` per cell). Triggered on every resize, clear-screen, alt-screen toggle, first display. No existing bench.
-- [ ] **JSON serialization of IPC payload** `[Score: 8 | R:1, S:1, U:2, E:1]` — The `ScreenUpdateEvent → serde_json` payload reaches 500 KB–1 MB on full redraw. Benchmark `serde_json::to_string()` on these structures to quantify cost and evaluate impact of a more compact codec.
-- [ ] **`ProcessOutput::merge()` in burst** `[Score: 8 | R:1, S:1, U:2, E:1]` — Benchmark repeated coalescence of `DirtyRegion` over 50+ messages in a 12 ms debounce window, not a single isolated mark+iterate.
-
-**Latency axis**
-
-- [ ] **Full process→emit cycle** `[Score: 8 | R:1, S:1, U:2, E:1]` — Benchmark the path `process() → take_dirty() → build_screen_update_event()` in isolation to measure the Rust-side share of the 12 ms budget. The only measurement enabling a realistic budget and detecting latency regressions.
-- [ ] **`build_scrolled_viewport_event`** `[Score: 8 | R:1, S:1, U:2, E:1]` — Benchmark the composite viewport reconstruction scrollback + live screen (more expensive than a full redraw). A regression here manifests directly as choppy scrolling.
-- [ ] **RwLock Task1/Task2 contention** `[Score: 8 | R:1, S:1, U:2, E:1]` — Task1 acquires `vt.write()` per PTY chunk, Task2 acquires `vt.read()`. Benchmark average acquisition time under simulated concurrent load.
-- [ ] **Hot path partial update allocations** `[Score: 8 | R:1, S:1, U:2, E:1]` — Benchmark the partial `build_screen_update_event` path including the 220 `String::to_string()` per dirty line, under `vt.read()`, on the async Tokio thread.
-
-**Cross-terminal comparison**
-
-- [ ] **vtebench script** `[Score: 7 | R:1, S:1, U:1, E:2]` ([alacritty/vtebench](https://github.com/alacritty/vtebench))
-  Write a `scripts/bench-vtebench.sh` script that: clones/installs vtebench if absent or detects an existing binary in `$PATH`; launches TauTerm headless or in an Xvfb; runs the standard vtebench suite against TauTerm; produces a comparative report (JSON or Markdown) with date and git commit; documents covered bench cases and the comparison methodology with other terminals (Alacritty, foot).
-
 ### Performance — Architectural Optimizations
 
 These two optimizations were explicitly descoped from the initial performance campaign. The `write_1mb_ascii` benchmark establishes the current baseline at **~19.6 MiB/s** — compare after each change.

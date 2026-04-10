@@ -54,6 +54,8 @@ pub(crate) struct ProcessOutput {
     pub new_cursor_shape: Option<u8>,
     pub bell: bool,
     pub osc52: Option<String>,
+    /// New CWD from OSC 7, if changed since last cycle.
+    pub new_cwd: Option<String>,
 }
 
 impl ProcessOutput {
@@ -76,6 +78,9 @@ impl ProcessOutput {
         if other.osc52.is_some() {
             self.osc52 = other.osc52;
         }
+        if other.new_cwd.is_some() {
+            self.new_cwd = other.new_cwd;
+        }
     }
 
     fn is_empty(&self) -> bool {
@@ -85,6 +90,7 @@ impl ProcessOutput {
             && self.new_cursor_shape.is_none()
             && !self.bell
             && self.osc52.is_none()
+            && self.new_cwd.is_none()
     }
 }
 

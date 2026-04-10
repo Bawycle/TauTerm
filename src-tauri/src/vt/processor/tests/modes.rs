@@ -366,3 +366,205 @@ fn r1_decom_reset_on_alt_screen_entry() {
         "entering alt screen must reset DECOM to false"
     );
 }
+
+// ---------------------------------------------------------------------------
+// VT-3 / VT-4 — Mouse mode activation/deactivation and round-trip encoding
+// FS-VT-080, FS-VT-081, FS-VT-082, FS-VT-083
+// ---------------------------------------------------------------------------
+
+/// TEST-VT-024 (partial) — mode 1002 (ButtonEvent) activates and deactivates.
+#[test]
+fn mouse_mode_1002_activate_and_deactivate() {
+    use crate::vt::modes::MouseReportingMode;
+    let mut vt = make_vt(80, 24);
+    assert_eq!(vt.modes.mouse_reporting, MouseReportingMode::None);
+
+    vt.process(b"\x1b[?1002h");
+    assert_eq!(
+        vt.modes.mouse_reporting,
+        MouseReportingMode::ButtonEvent,
+        "mode 1002h must activate ButtonEvent"
+    );
+
+    vt.process(b"\x1b[?1002l");
+    assert_eq!(
+        vt.modes.mouse_reporting,
+        MouseReportingMode::None,
+        "mode 1002l must reset to None"
+    );
+}
+
+/// TEST-VT-024 (partial) — mode 1003 (AnyEvent) activates and deactivates.
+#[test]
+fn mouse_mode_1003_activate_and_deactivate() {
+    use crate::vt::modes::MouseReportingMode;
+    let mut vt = make_vt(80, 24);
+
+    vt.process(b"\x1b[?1003h");
+    assert_eq!(
+        vt.modes.mouse_reporting,
+        MouseReportingMode::AnyEvent,
+        "mode 1003h must activate AnyEvent"
+    );
+
+    vt.process(b"\x1b[?1003l");
+    assert_eq!(
+        vt.modes.mouse_reporting,
+        MouseReportingMode::None,
+        "mode 1003l must reset to None"
+    );
+}
+
+/// TEST-VT-024 (partial) — mode 1006 (SGR encoding) activates and deactivates.
+#[test]
+fn mouse_encoding_1006_sgr_activate_and_deactivate() {
+    use crate::vt::modes::MouseEncoding;
+    let mut vt = make_vt(80, 24);
+    assert_eq!(vt.modes.mouse_encoding, MouseEncoding::X10);
+
+    vt.process(b"\x1b[?1006h");
+    assert_eq!(
+        vt.modes.mouse_encoding,
+        MouseEncoding::Sgr,
+        "mode 1006h must activate SGR encoding"
+    );
+
+    vt.process(b"\x1b[?1006l");
+    assert_eq!(
+        vt.modes.mouse_encoding,
+        MouseEncoding::X10,
+        "mode 1006l must reset encoding to X10"
+    );
+}
+
+/// TEST-VT-024 (partial) — mode 1015 (URXVT encoding) activates and deactivates.
+#[test]
+fn mouse_encoding_1015_urxvt_activate_and_deactivate() {
+    use crate::vt::modes::MouseEncoding;
+    let mut vt = make_vt(80, 24);
+
+    vt.process(b"\x1b[?1015h");
+    assert_eq!(
+        vt.modes.mouse_encoding,
+        MouseEncoding::Urxvt,
+        "mode 1015h must activate URXVT encoding"
+    );
+
+    vt.process(b"\x1b[?1015l");
+    assert_eq!(
+        vt.modes.mouse_encoding,
+        MouseEncoding::X10,
+        "mode 1015l must reset encoding to X10"
+    );
+}
+
+/// TEST-VT-025 (partial) — mode 1000 + 1006: reporting mode and encoding are independent.
+#[test]
+fn mouse_mode_interaction_1000_then_1006() {
+    use crate::vt::modes::{MouseEncoding, MouseReportingMode};
+    let mut vt = make_vt(80, 24);
+
+    vt.process(b"\x1b[?1000h");
+    assert_eq!(
+        vt.modes.mouse_reporting,
+        MouseReportingMode::Normal,
+        "mode 1000h must activate Normal reporting"
+    );
+
+    vt.process(b"\x1b[?1006h");
+    assert_eq!(
+        vt.modes.mouse_encoding,
+        MouseEncoding::Sgr,
+        "mode 1006h must activate SGR encoding"
+    );
+    // Reporting mode must remain unchanged after switching encoding.
+    assert_eq!(
+        vt.modes.mouse_reporting,
+        MouseReportingMode::Normal,
+        "mouse_reporting must stay Normal after activating SGR encoding"
+    );
+}
+
+/// TEST-VT-024 round-trip — ButtonEvent + SGR: left press and release.
+#[test]
+fn mouse_round_trip_button_event_sgr() {
+    use crate::vt::modes::MouseEncoding;
+    let mut vt = make_vt(80, 24);
+
+    // Activate ButtonEvent (1002) and SGR encoding (1006).
+    vt.process(b"\x1b[?1002h");
+    vt.process(b"\x1b[?1006h");
+
+    // Left button press at col=10, row=5, no modifiers.
+    let press = crate::vt::mouse::MouseEvent {
+        col: 10,
+        row: 5,
+        button: 0,
+        is_press: true,
+        shift: false,
+        alt: false,
+        ctrl: false,
+        is_motion: false,
+    };
+    // SAFETY (UTF-8): encode_sgr produces ASCII-only bytes via format! on integer
+    // fields and ASCII byte literals; ASCII is always valid UTF-8.
+    let encoded_press = String::from_utf8(press.encode(vt.modes.mouse_encoding))
+        .expect("SGR encoding produces valid UTF-8");
+    assert_eq!(
+        encoded_press, "\x1b[<0;10;5M",
+        "left press at (10,5) must encode as ESC[<0;10;5M"
+    );
+
+    // Left button release at col=10, row=5.
+    let release = crate::vt::mouse::MouseEvent {
+        is_press: false,
+        ..press
+    };
+    // SAFETY (UTF-8): encode_sgr produces ASCII-only bytes via format! on integer
+    // fields and ASCII byte literals; ASCII is always valid UTF-8.
+    let encoded_release = String::from_utf8(release.encode(vt.modes.mouse_encoding))
+        .expect("SGR encoding produces valid UTF-8");
+    assert_eq!(
+        encoded_release, "\x1b[<0;10;5m",
+        "left release at (10,5) must encode as ESC[<0;10;5m (lowercase m)"
+    );
+
+    // Verify mode is active.
+    assert_eq!(
+        vt.modes.mouse_encoding,
+        MouseEncoding::Sgr,
+        "SGR encoding must remain active throughout"
+    );
+}
+
+/// TEST-VT-024 round-trip — AnyEvent + SGR: motion event carries bit 32.
+#[test]
+fn mouse_round_trip_any_event_sgr() {
+    let mut vt = make_vt(80, 24);
+
+    // Activate AnyEvent (1003) and SGR encoding (1006).
+    vt.process(b"\x1b[?1003h");
+    vt.process(b"\x1b[?1006h");
+
+    // Motion event at col=20, row=10: no button pressed, is_motion=true.
+    // button=0 (left button bits) with is_motion=true: cb = 0 | 32 = 32.
+    let motion = crate::vt::mouse::MouseEvent {
+        col: 20,
+        row: 10,
+        button: 0,
+        is_press: true, // motion events use 'M' trailer in SGR
+        shift: false,
+        alt: false,
+        ctrl: false,
+        is_motion: true, // sets bit 32 in the control byte
+    };
+    // SAFETY (UTF-8): encode_sgr produces ASCII-only bytes via format! on integer
+    // fields and ASCII byte literals; ASCII is always valid UTF-8.
+    let encoded = String::from_utf8(motion.encode(vt.modes.mouse_encoding))
+        .expect("SGR encoding produces valid UTF-8");
+    // button=0 → button_bits=0, motion bit=32 → cb = 0|32 = 32
+    assert_eq!(
+        encoded, "\x1b[<32;20;10M",
+        "motion event at (20,10) must encode cb=32 (button_bits=0 | motion=32)"
+    );
+}

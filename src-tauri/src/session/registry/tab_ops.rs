@@ -65,7 +65,16 @@ impl SessionRegistry {
         // --- Spawn the PTY session via the platform backend ---
         let pty_box: Box<dyn PtySession> = self
             .pty_backend
-            .open_session(config.cols, config.rows, &shell_path, args, &env)
+            .open_session(
+                config.cols,
+                config.rows,
+                config.pixel_width,
+                config.pixel_height,
+                &shell_path,
+                args,
+                &env,
+                None,
+            )
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
 
         // Read pane-creation preferences before acquiring the registry lock
@@ -232,7 +241,73 @@ impl SessionRegistry {
         Ok(inner.tabs[&tab_id].state.clone())
     }
 
+    /// Resolve the effective display title for a pane using the priority chain:
+    ///
+    /// 1. `pane.title` (OSC 0/2) — set by the shell/app
+    /// 2. CWD basename from OSC 7 (`pane.cwd`)
+    /// 3. Foreground process name from `/proc/{pgid}/comm`
+    ///
+    /// Note: the user-defined tab label (`TabState.label`) is handled by the
+    /// frontend and overrides all of the above at display time. It is NOT folded
+    /// into this resolution to preserve the separation between user labels and
+    /// auto-detected titles.
+    ///
+    /// Returns `None` when no title can be determined.
+    fn resolve_effective_title(pane: &crate::session::pane::PaneSession) -> Option<String> {
+        // Priority 1: OSC 0/2 title set by the shell or running application.
+        if let Some(ref t) = pane.title
+            && !t.is_empty()
+        {
+            return Some(t.clone());
+        }
+        // Priority 2: CWD basename from OSC 7.
+        if let Some(ref cwd) = pane.cwd
+            && let Some(name) = std::path::Path::new(cwd)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_owned())
+            && !name.is_empty()
+        {
+            return Some(name);
+        }
+        // Priority 3: foreground process name via /proc/{pgid}/comm.
+        if let Some(ref pty) = pane.pty_session
+            && let Some(name) = pty.foreground_process_name()
+            && !name.is_empty()
+        {
+            return Some(name);
+        }
+        None
+    }
+
+    /// Update the stored CWD for a pane (called from PTY read task on OSC 7 change).
+    ///
+    /// Applies the title resolution chain after updating the CWD so the layout
+    /// tree reflects the best available title at all times.
+    ///
+    /// Returns the updated `TabState` if the pane is found, `None` otherwise.
+    pub fn update_pane_cwd(&self, pane_id: &PaneId, cwd: String) -> Option<TabState> {
+        let mut inner = self.inner.write();
+        let (tab_id, entry) = inner
+            .tabs
+            .iter_mut()
+            .find(|(_, e)| e.panes.contains_key(pane_id))
+            .map(|(id, e)| (id.clone(), e))?;
+        if let Some(pane) = entry.panes.get_mut(pane_id) {
+            pane.cwd = Some(cwd);
+            // Re-resolve the effective display title after the CWD update.
+            if let Some(display_title) = Self::resolve_effective_title(pane) {
+                update_pane_title_in_tree(&mut entry.state.layout, pane_id, &display_title);
+            }
+        }
+        let _ = tab_id;
+        Some(entry.state.clone())
+    }
+
     /// Update the stored title for a pane (called from PTY/SSH read tasks on OSC title change).
+    ///
+    /// Applies the title resolution chain (OSC title → CWD basename → process name)
+    /// so the layout tree always shows the best available title.
     ///
     /// Returns the updated `TabState` if the pane is found, `None` otherwise.
     pub fn update_pane_title(&self, pane_id: &PaneId, title: String) -> Option<TabState> {
@@ -243,13 +318,19 @@ impl SessionRegistry {
             .find(|(_, e)| e.panes.contains_key(pane_id))
             .map(|(id, e)| (id.clone(), e))?;
 
-        // Update the pane's stored title.
+        // Update the pane's stored OSC title.
         if let Some(pane) = entry.panes.get_mut(pane_id) {
             pane.title = Some(title.clone());
         }
 
-        // Rebuild the pane's state in the layout tree.
-        update_pane_title_in_tree(&mut entry.state.layout, pane_id, &title);
+        // Resolve the effective display title through the priority chain and
+        // update the layout tree with the best available title.
+        let display_title = entry
+            .panes
+            .get(pane_id)
+            .and_then(Self::resolve_effective_title)
+            .unwrap_or(title);
+        update_pane_title_in_tree(&mut entry.state.layout, pane_id, &display_title);
 
         let _ = tab_id;
         Some(entry.state.clone())

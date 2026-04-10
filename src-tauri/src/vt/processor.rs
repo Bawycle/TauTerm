@@ -132,6 +132,11 @@ pub struct VtProcessor {
     // The write-lock MUST be released before writing these to the PTY master
     // to avoid deadlocking when the shell echoes back the response.
     pending_responses: Vec<Vec<u8>>,
+    // Current working directory as reported by OSC 7 (shell CWD reporting).
+    // `None` until the first OSC 7 sequence is received.
+    pub cwd: Option<String>,
+    // Whether the CWD changed since last `take_cwd_changed()` call.
+    pub(super) cwd_changed: bool,
     // Pending base codepoint for variation selector look-ahead (FS-VT-017, R6).
     //
     // FE0F/FE0E arrive *after* the base codepoint.  We buffer the base here so
@@ -231,6 +236,8 @@ impl VtProcessor {
             current_hyperlink_id: None,
             allow_osc52_write,
             pending_osc52_write: None,
+            cwd: None,
+            cwd_changed: false,
             pending_ri: None,
             pending_emoji: None,
             pending_responses: Vec::new(),
@@ -309,6 +316,25 @@ impl VtProcessor {
         }
         use crate::vt::search::search_scrollback;
         search_scrollback(self.normal.scrollback_iter(), query)
+    }
+
+    /// Return the current working directory as reported by OSC 7, if any.
+    pub fn current_cwd(&self) -> Option<&str> {
+        self.cwd.as_deref()
+    }
+
+    /// If the CWD changed since last call, return the new value and clear the pending flag.
+    ///
+    /// This is a "take" pattern consistent with `take_title_changed`: the caller
+    /// drains the value once per processing cycle and stores it externally (in
+    /// `PaneSession.cwd`) so the registry can serve it to the frontend.
+    pub fn take_cwd_changed(&mut self) -> Option<String> {
+        if self.cwd_changed {
+            self.cwd_changed = false;
+            self.cwd.clone()
+        } else {
+            None
+        }
     }
 
     /// If the OSC title changed since last call, returns the new title and resets the flag.

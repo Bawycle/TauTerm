@@ -466,7 +466,7 @@
   .connection-manager--standalone {
     position: fixed;
     right: 0;
-    top: var(--size-tab-bar-height, 44px);
+    top: var(--size-tab-height);
     bottom: var(--size-status-bar-height, 28px);
     width: 400px;
     background-color: var(--color-bg-raised);

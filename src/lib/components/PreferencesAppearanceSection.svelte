@@ -11,6 +11,7 @@
 <script lang="ts">
   import TextInput from '$lib/ui/TextInput.svelte';
   import Dropdown from '$lib/ui/Dropdown.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
   import * as m from '$lib/paraglide/messages';
   import type { Preferences, PreferencesPatch } from '$lib/ipc/types';
   import { BUILT_IN_THEME_NAMES } from '$lib/theming/built-in-themes';
@@ -60,6 +61,11 @@
     if (isNaN(n)) return;
     const clamped = Math.max(0, Math.min(1, Math.round(n * 100) / 100));
     onupdate?.({ appearance: { ...preferences.appearance, opacity: clamped } });
+  }
+
+  function handleHideCursorWhileTypingChange(checked: boolean) {
+    if (!preferences?.appearance) return;
+    onupdate?.({ appearance: { ...preferences.appearance, hideCursorWhileTyping: checked } });
   }
 </script>
 
@@ -119,5 +125,11 @@
     value={String(preferences?.appearance?.opacity ?? 1)}
     helper={m.preferences_appearance_opacity_hint()}
     oninput={handleOpacityChange}
+  />
+
+  <Toggle
+    checked={preferences?.appearance?.hideCursorWhileTyping ?? true}
+    label={m.hide_cursor_while_typing_label()}
+    onchange={handleHideCursorWhileTypingChange}
   />
 </div>

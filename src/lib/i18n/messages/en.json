@@ -288,5 +288,7 @@
 
   "theme_name_hint": "Unique name shown in the theme list and the Appearance dropdown.",
   "theme_palette_hint": "The 16 standard ANSI colors. Colors 0–7 are the normal variants; 8–15 are the bright variants. Most CLI applications use these for syntax highlighting.",
-  "theme_color_hex_hint": "Hex color code, e.g. #1a1a2e"
+  "theme_color_hex_hint": "Hex color code, e.g. #1a1a2e",
+
+  "hide_cursor_while_typing_label": "Hide mouse cursor while typing"
 }

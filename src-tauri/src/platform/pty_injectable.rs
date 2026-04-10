@@ -231,9 +231,12 @@ impl PtyBackend for InjectablePtyBackend {
         &self,
         _cols: u16,
         _rows: u16,
+        _pixel_width: u16,
+        _pixel_height: u16,
         _command: &str,
         _args: &[&str],
         _env: &[(&str, &str)],
+        _working_directory: Option<&std::path::Path>,
     ) -> Result<Box<dyn PtySession>, PtyError> {
         // Create the mpsc channel that bridges inject_pty_output → read task.
         let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();

@@ -76,6 +76,14 @@ pub struct CreateTabConfig {
     /// Initial terminal dimensions.
     pub cols: u16,
     pub rows: u16,
+    /// Cell pixel dimensions for `TIOCSWINSZ` / SSH `pty-req`.
+    /// Defaults to 0 (unknown) — applications that use pixel-perfect rendering
+    /// (e.g. Sixel, ReGIS) will report incorrect cell sizes until the frontend
+    /// sends accurate values.
+    #[serde(default)]
+    pub pixel_width: u16,
+    #[serde(default)]
+    pub pixel_height: u16,
     /// Optional shell executable path. `None` = use `$SHELL` or fall back to `/bin/sh`.
     /// Must be an absolute path to an executable file.
     #[serde(default)]

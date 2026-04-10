@@ -34,6 +34,7 @@ use crate::error::PreferencesError;
 use crate::preferences::schema::{Preferences, PreferencesPatch, UserTheme};
 
 mod io;
+pub mod migration;
 mod path;
 mod schema_convert;
 #[cfg(test)]
@@ -142,6 +143,9 @@ impl PreferencesStore {
             }
             if let Some(v) = patch.fullscreen {
                 a.fullscreen = v;
+            }
+            if let Some(v) = patch.hide_cursor_while_typing {
+                a.hide_cursor_while_typing = v;
             }
         }
         if let Some(terminal) = patch.terminal {
@@ -322,6 +326,15 @@ impl PreferencesStore {
     // -----------------------------------------------------------------------
 
     fn save_to_disk(&self, prefs: &Preferences) -> Result<(), PreferencesError> {
+        use crate::preferences::schema::PREFS_SCHEMA_VERSION;
+
+        // Stamp the current schema version on every write.
+        // This is a shallow clone — only the schema_version field differs.
+        let mut prefs_to_save = prefs.clone();
+        prefs_to_save.schema_version = PREFS_SCHEMA_VERSION;
+
+        let prefs = &prefs_to_save;
+
         // Serialize to toml::Value (keys are camelCase from #[serde(rename_all = "camelCase")])
         let camel_value =
             toml::Value::try_from(prefs).map_err(|e| PreferencesError::Parse(e.to_string()))?;

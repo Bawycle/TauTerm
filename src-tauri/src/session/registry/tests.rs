@@ -27,6 +27,8 @@ fn test_sprint_001_login_true_selects_login_args() {
         label: None,
         cols: 80,
         rows: 24,
+        pixel_width: 0,
+        pixel_height: 0,
         shell: None,
         login: true,
     };
@@ -42,6 +44,8 @@ fn test_sprint_001_login_false_produces_empty_args() {
         label: None,
         cols: 80,
         rows: 24,
+        pixel_width: 0,
+        pixel_height: 0,
         shell: None,
         login: false,
     };
@@ -68,6 +72,8 @@ fn test_sprint_001_create_tab_config_login_true_round_trips() {
         label: None,
         cols: 80,
         rows: 24,
+        pixel_width: 0,
+        pixel_height: 0,
         shell: None,
         login: true,
     };

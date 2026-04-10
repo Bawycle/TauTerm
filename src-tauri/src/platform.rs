@@ -44,13 +44,23 @@ use crate::error::{CredentialError, PtyError};
 /// Implemented by `platform/pty_linux.rs` on Linux.
 pub trait PtyBackend: Send + Sync {
     /// Open a new PTY pair and spawn a shell process.
+    ///
+    /// `pixel_width` and `pixel_height` are the initial cell pixel dimensions
+    /// passed to `TIOCSWINSZ` / SSH `pty-req`. Pass `0` when unknown.
+    ///
+    /// `working_directory` sets the initial working directory for the spawned
+    /// process. `None` inherits the parent's working directory.
+    #[allow(clippy::too_many_arguments)]
     fn open_session(
         &self,
         cols: u16,
         rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
         command: &str,
         args: &[&str],
         env: &[(&str, &str)],
+        working_directory: Option<&std::path::Path>,
     ) -> Result<Box<dyn PtySession>, PtyError>;
 }
 
@@ -70,6 +80,15 @@ pub trait PtySession: Send + Sync {
 
     /// Close the PTY, delivering SIGHUP to the foreground process group.
     fn close(self: Box<Self>);
+
+    /// Return the name of the current foreground process on this PTY master.
+    ///
+    /// Reads `/proc/{pgid}/comm` after calling `tcgetpgrp(master_fd)`. Returns
+    /// `None` for session types that do not support it (SSH, stubs) or when the
+    /// proc file cannot be read.
+    fn foreground_process_name(&self) -> Option<String> {
+        None
+    }
 
     /// Return the process group ID of the current foreground process on this PTY master.
     ///

@@ -18,6 +18,8 @@ pub(super) fn open_sh_session(cols: u16, rows: u16) -> Result<Box<dyn PtySession
     backend.open_session(
         cols,
         rows,
+        0,
+        0,
         "/bin/sh",
         &[],
         &[
@@ -26,6 +28,7 @@ pub(super) fn open_sh_session(cols: u16, rows: u16) -> Result<Box<dyn PtySession
             ("LINES", &rows.to_string()),
             ("COLUMNS", &cols.to_string()),
         ],
+        None,
     )
 }
 
@@ -43,7 +46,7 @@ pub(super) fn open_linux_session_with_env(
 ) -> Box<dyn PtySession> {
     let backend = LinuxPtyBackend::new();
     backend
-        .open_session(cols, rows, command, args, env)
+        .open_session(cols, rows, 0, 0, command, args, env, None)
         .expect("open_linux_session_with_env: open_session failed")
 }
 

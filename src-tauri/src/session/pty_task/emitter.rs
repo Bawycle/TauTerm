@@ -103,5 +103,13 @@ pub(super) fn emit_all_pending(
         );
     }
 
+    if let Some(cwd) = pending.new_cwd.take() {
+        registry.update_pane_cwd(pane_id, cwd);
+        // CWD changes do not require a separate frontend event — the updated
+        // PaneState (with the new `cwd` field) is included in the next
+        // PaneMetadataChanged event triggered by a title or other state change.
+        // The frontend can also query it via `get_session_state` at any time.
+    }
+
     *pending = ProcessOutput::default();
 }

@@ -27,6 +27,8 @@ pub enum OscAction {
     /// Write to the system clipboard (OSC 52 write).
     /// Gated by `allow_osc52_write` preference.
     ClipboardWrite(String),
+    /// Report current working directory (OSC 7).
+    SetCwd(String),
     /// Ignored sequence.
     Ignore,
 }
@@ -126,6 +128,32 @@ pub fn parse_osc(params: &[&[u8]]) -> OscAction {
                 Err(_) => OscAction::Ignore,
             }
         }
+        // OSC 7 — shell CWD reporting: file://hostname/path or bare /path.
+        7 => {
+            let raw = params
+                .get(1)
+                .and_then(|p| std::str::from_utf8(p).ok())
+                .unwrap_or("")
+                .trim_end_matches(|c: char| c == '\0' || c.is_whitespace());
+            if raw.is_empty() {
+                return OscAction::Ignore;
+            }
+            // Parse file:// URI — extract and percent-decode the path component.
+            let path = if let Some(rest) = raw.strip_prefix("file://") {
+                // rest = "hostname/path" or "/path" (empty host).
+                // Skip past the host component (up to first '/') to reach the path.
+                let path_start = rest.find('/').unwrap_or(0);
+                let encoded = &rest[path_start..];
+                percent_decode_path(encoded)
+            } else {
+                // Bare path (e.g. "/home/user/src") — use as-is.
+                raw.to_owned()
+            };
+            if path.is_empty() {
+                return OscAction::Ignore;
+            }
+            OscAction::SetCwd(path)
+        }
         _ => OscAction::Ignore,
     }
 }
@@ -211,6 +239,57 @@ mod tests {
     #[test]
     fn osc23_produces_pop_title() {
         assert!(matches!(parse_osc(&[b"23"]), OscAction::PopTitle));
+    }
+
+    // -----------------------------------------------------------------------
+    // OSC 7 — CWD reporting
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn osc7_file_uri_with_host_extracts_path() {
+        let action = parse_osc(&[b"7", b"file://hostname/home/user/src"]);
+        match action {
+            OscAction::SetCwd(path) => assert_eq!(path, "/home/user/src"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_file_uri_empty_host_extracts_path() {
+        let action = parse_osc(&[b"7", b"file:///home/user/src"]);
+        match action {
+            OscAction::SetCwd(path) => assert_eq!(path, "/home/user/src"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_bare_path_used_as_is() {
+        let action = parse_osc(&[b"7", b"/home/user/project"]);
+        match action {
+            OscAction::SetCwd(path) => assert_eq!(path, "/home/user/project"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_percent_encoded_spaces_decoded() {
+        // file://localhost/home/user/my%20project
+        let action = parse_osc(&[b"7", b"file://localhost/home/user/my%20project"]);
+        match action {
+            OscAction::SetCwd(path) => assert_eq!(path, "/home/user/my project"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_empty_payload_is_ignored() {
+        assert!(matches!(parse_osc(&[b"7", b""]), OscAction::Ignore));
+    }
+
+    #[test]
+    fn osc7_no_payload_is_ignored() {
+        assert!(matches!(parse_osc(&[b"7"]), OscAction::Ignore));
     }
 
     // -----------------------------------------------------------------------
@@ -433,6 +512,91 @@ mod security_tests {
             OscAction::Ignore => {} // Also acceptable.
             other => panic!("Unexpected action: {:?}", other),
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // OSC 7 — CWD reporting
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn osc7_file_uri_with_host_extracts_path() {
+        let action = parse_osc(&[b"7", b"file://hostname/home/user/src"]);
+        match action {
+            OscAction::SetCwd(p) => assert_eq!(p, "/home/user/src"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_file_uri_empty_host_extracts_path() {
+        let action = parse_osc(&[b"7", b"file:///home/user/src"]);
+        match action {
+            OscAction::SetCwd(p) => assert_eq!(p, "/home/user/src"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_bare_path() {
+        let action = parse_osc(&[b"7", b"/home/user/src"]);
+        match action {
+            OscAction::SetCwd(p) => assert_eq!(p, "/home/user/src"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_percent_encoded_non_ascii_path() {
+        // é = %C3%A9 in UTF-8
+        let action = parse_osc(&[b"7", b"file:///home/h%C3%A9l%C3%A8ne/src"]);
+        match action {
+            OscAction::SetCwd(p) => assert_eq!(p, "/home/hélène/src"),
+            _ => panic!("expected SetCwd"),
+        }
+    }
+
+    #[test]
+    fn osc7_empty_payload_returns_ignore() {
+        let action = parse_osc(&[b"7", b""]);
+        assert!(matches!(action, OscAction::Ignore));
+    }
+}
+
+/// Percent-decode a URI path component (RFC 3986 §2.1).
+///
+/// Decodes `%XX` sequences where `XX` are valid hex digits. Malformed sequences
+/// (`%` not followed by two hex digits) are passed through unchanged.
+fn percent_decode_path(encoded: &str) -> String {
+    let bytes = encoded.as_bytes();
+    // Collect raw bytes first; decoded sequences may be multi-byte UTF-8
+    // (e.g. `é` = %C3%A9). Pushing each decoded byte as `char` would corrupt
+    // non-ASCII characters — instead accumulate bytes and do a single UTF-8
+    // conversion at the end.
+    let mut out: Vec<u8> = Vec::with_capacity(encoded.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(hi), Some(lo)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2]))
+        {
+            out.push((hi << 4) | lo);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Decode one ASCII hex digit to its nibble value (0–15). Returns `None` for
+/// non-hex characters.
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
     }
 }
 

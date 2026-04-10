@@ -25,6 +25,8 @@
 - FS-TAB-004: Closing a tab with running processes triggers the confirmation dialog (FS-PTY-008).
 - FS-TAB-005: Dragging a tab to a new position reorders it.
 - FS-TAB-006: Running `printf "\033]0;Custom\007"` changes the tab title. Double-clicking the tab title makes it editable inline; typing a new name and pressing Enter sets the custom label. Right-clicking the tab shows a "Rename" option that achieves the same result. Clearing the label reverts to the process-driven title.
+
+  > **Note — title resolution priority (highest first):** (1) user-defined label, (2) OSC 0/2 title set by the running process, (3) basename of the OSC 7 CWD (FS-VT-064), (4) foreground process name from `/proc/{pgid}/comm`, (5) empty string.
 - FS-TAB-007: Output produced in a background tab causes a visible indicator on that tab's header.
 - FS-TAB-009: With enough tabs open to trigger the scroll arrows, pressing Ctrl+Shift+T creates a new tab and the tab bar scrolls so that the new tab is fully visible without any user scroll action.
 

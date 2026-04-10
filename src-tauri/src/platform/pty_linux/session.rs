@@ -7,6 +7,29 @@ use std::sync::{Arc, Mutex};
 use libc;
 use portable_pty::PtySize;
 
+/// Read the name of the foreground process on a PTY master fd.
+///
+/// Returns the trimmed contents of `/proc/{pgid}/comm` for the foreground
+/// process group of `master_fd`. Returns `None` when:
+/// - `tcgetpgrp` fails or returns ≤ 0
+/// - the `/proc/{pgid}/comm` file cannot be read
+/// - the result is empty after trimming
+fn foreground_process_name_for_fd(master_fd: RawFd) -> Option<String> {
+    // SAFETY: master_fd is a valid open PTY master fd owned by LinuxPtySession.
+    // tcgetpgrp is a read-only ioctl with no memory-safety implications.
+    let pgid = unsafe { libc::tcgetpgrp(master_fd) };
+    if pgid <= 0 {
+        return None;
+    }
+    // Read /proc/{pgid}/comm — contains the process name (up to 15 chars + newline).
+    // We do not log the path to comply with the no-path-logging security rule.
+    let comm_path = format!("/proc/{pgid}/comm");
+    std::fs::read_to_string(comm_path)
+        .ok()
+        .map(|s| s.trim_end_matches('\n').to_owned())
+        .filter(|s| !s.is_empty())
+}
+
 use crate::error::PtyError;
 use crate::platform::PtySession;
 
@@ -106,6 +129,10 @@ impl PtySession for LinuxPtySession {
 
     fn shell_pid(&self) -> Option<u32> {
         self.shell_pid
+    }
+
+    fn foreground_process_name(&self) -> Option<String> {
+        foreground_process_name_for_fd(self.master_fd)
     }
 
     fn try_wait_exit_code(&self) -> Option<Option<i32>> {

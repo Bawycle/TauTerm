@@ -31,6 +31,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     language: 'en',
     contextMenuHintShown: false,
     fullscreen: false,
+    hideCursorWhileTyping: true,
   },
   terminal: {
     scrollbackLines: 10000,

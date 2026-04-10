@@ -200,6 +200,7 @@
             bellType={preferences.value?.terminal.bellType}
             fontFamily={preferences.value?.appearance.fontFamily}
             fontSize={preferences.value?.appearance.fontSize}
+            hideCursorWhileTyping={preferences.value?.appearance.hideCursorWhileTyping ?? true}
             lineHeight={tv.activeThemeLineHeight}
             searchMatches={tv.searchMatches}
             activeSearchMatchIndex={tv.searchCurrentIdx}

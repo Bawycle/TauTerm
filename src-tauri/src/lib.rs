@@ -122,6 +122,8 @@ pub fn run() {
                 label: None,
                 cols: 80,
                 rows: 24,
+                pixel_width: 0,
+                pixel_height: 0,
                 shell: None,
                 login: true,
             }) {

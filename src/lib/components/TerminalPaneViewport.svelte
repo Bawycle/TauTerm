@@ -21,16 +21,20 @@
     tp: ReturnType<typeof useTerminalPane>;
     active: boolean;
     lineHeight?: number;
+    /** When true, applies cursor:none to hide the mouse pointer while the user types. */
+    cursorHidden?: boolean;
     onkeydown: (event: KeyboardEvent) => void;
+    onmousemove?: (event: MouseEvent) => void;
   }
 
-  let { tp, active, lineHeight, onkeydown }: Props = $props();
+  let { tp, active, lineHeight, cursorHidden = false, onkeydown, onmousemove }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   bind:this={tp.viewportEl}
   class="terminal-pane__viewport terminal-grid"
+  class:terminal-pane__viewport--cursor-hidden={cursorHidden}
   data-screen-generation={tp.screenGeneration}
   style={lineHeight != null ? `--line-height-terminal: ${lineHeight}` : undefined}
   tabindex={active ? 0 : -1}
@@ -40,7 +44,10 @@
   aria-readonly="false"
   {onkeydown}
   onmousedown={tp.handleMousedown}
-  onmousemove={tp.handleMousemove}
+  onmousemove={(e) => {
+    tp.handleMousemove(e);
+    onmousemove?.(e);
+  }}
   onmouseup={tp.handleMouseup}
   onwheel={tp.handleWheel}
   onfocus={tp.handleFocus}

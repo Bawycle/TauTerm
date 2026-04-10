@@ -80,6 +80,12 @@ pub(super) fn handle_osc(p: &mut VtProcessor, params: &[&[u8]]) {
                 p.pending_osc52_write = Some(text);
             }
         }
+        OscAction::SetCwd(path) => {
+            if p.cwd.as_deref() != Some(path.as_str()) {
+                p.cwd = Some(path);
+                p.cwd_changed = true;
+            }
+        }
         OscAction::Ignore => {}
     }
 }

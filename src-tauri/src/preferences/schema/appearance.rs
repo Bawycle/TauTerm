@@ -77,6 +77,14 @@ pub struct AppearancePrefs {
     /// deserialize successfully with `false`.
     #[serde(default)]
     pub fullscreen: bool,
+    /// Hide the mouse cursor while the user is typing in the terminal (UI-2).
+    /// Restored immediately on `mousemove`. Default: `true`.
+    #[serde(default = "default_hide_cursor_while_typing")]
+    pub hide_cursor_while_typing: bool,
+}
+
+fn default_hide_cursor_while_typing() -> bool {
+    true
 }
 
 impl Default for AppearancePrefs {
@@ -91,6 +99,7 @@ impl Default for AppearancePrefs {
             language: Language::default(),
             context_menu_hint_shown: false,
             fullscreen: false,
+            hide_cursor_while_typing: true,
         }
     }
 }

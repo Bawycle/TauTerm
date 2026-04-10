@@ -28,17 +28,20 @@ impl PtyBackend for LinuxPtyBackend {
         &self,
         cols: u16,
         rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
         command: &str,
         args: &[&str],
         env: &[(&str, &str)],
+        working_directory: Option<&std::path::Path>,
     ) -> Result<Box<dyn PtySession>, PtyError> {
         let pty_system = native_pty_system();
 
         let size = PtySize {
             rows,
             cols,
-            pixel_width: 0,
-            pixel_height: 0,
+            pixel_width,
+            pixel_height,
         };
 
         let pty_pair = pty_system
@@ -48,6 +51,10 @@ impl PtyBackend for LinuxPtyBackend {
         let mut cmd = CommandBuilder::new(command);
         for arg in args {
             cmd.arg(arg);
+        }
+        // Set the working directory for the child process when provided.
+        if let Some(dir) = working_directory {
+            cmd.cwd(dir);
         }
 
         // SECURITY: env_clear() erases the parent process environment snapshot

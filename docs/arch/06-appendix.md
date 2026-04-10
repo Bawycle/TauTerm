@@ -60,7 +60,7 @@ img-src 'self' asset: http://asset.localhost;
 
 `unsafe-inline` for styles is required by Tailwind 4's runtime token injection. `unsafe-eval` and inline scripts are permanently forbidden.
 
-**Future tightening:** As features stabilize, `style-src 'unsafe-inline'` should be replaced with a nonce-based policy if WebKit's support allows. Each capability grant in `capabilities/default.json` is audited when new commands are added.
+**Constraint status:** `style-src 'unsafe-inline'` is a confirmed permanent v1 constraint — see [ADR-0022](adr/ADR-0022-csp-style-src-unsafe-inline.md). The root cause is `bundleStrategy: "inline"` in `svelte.config.js`, which is itself a workaround for a WebKitGTK CORS limitation on the `tauri://localhost` custom protocol. Nonce-based and hash-based alternatives are not viable under this constraint. The exit criterion (switching to `bundleStrategy: "split"` once WebKitGTK CORS support is added) is documented in ADR-0022. Each capability grant in `capabilities/default.json` is audited when new commands are added.
 
 ### 8.5 Terminal Injection Prevention
 
@@ -119,3 +119,4 @@ See ADR-0005. The PAL stubs are in `platform/pty_macos.rs`, `platform/credential
 | [ADR-0014](adr/ADR-0014-appimage-tauri-bundler.md) | AppImage distribution via Tauri bundler | Accepted |
 | [ADR-0017](adr/ADR-0017-scrollback-memory-estimate-formula.md) | Scrollback memory estimate: 5,500 bytes/line upper-bound formula | Accepted |
 | [ADR-0018](adr/ADR-0018-logging-filter-per-build-profile.md) | Logging filter strategy per build profile (debug vs. release defaults) | Accepted |
+| [ADR-0022](adr/ADR-0022-csp-style-src-unsafe-inline.md) | CSP `style-src 'unsafe-inline'`: permanent v1 constraint | Accepted |

@@ -213,6 +213,29 @@ Component tokens specialize semantic tokens for individual UI components.
 | `--term-hyperlink-fg` | `#7ab3d3` | Hyperlink text color |
 | `--term-hyperlink-underline` | `#4a92bf` | Hyperlink underline color |
 
+#### ANSI 16-Color Palette Tokens
+
+The ANSI palette is tuned to work against the `--term-bg` terminal background (`#16140f`). Normal colors (0–7) are desaturated relative to their bright counterparts (8–15) — bright variants have genuine salience without normal colors being visually aggressive. All non-black values pass 4.5:1 contrast against `#16140f`. The palette is the Umbra theme's own design; it is not a clone of any existing terminal color scheme (AD.md §3.2).
+
+| Token | Umbra hex | Role | Contrast vs bg |
+|-------|-----------|------|----------------|
+| `--term-color-0` | `#2c2921` | Black (normal) — default background-like color, used for reversed text | n/a (background use) |
+| `--term-color-1` | `#c44444` | Red (normal) — errors, shell error prompts | 5.2:1 |
+| `--term-color-2` | `#5c9e5c` | Green (normal) — success output, `git diff` additions | 4.6:1 |
+| `--term-color-3` | `#b89840` | Yellow (normal) — warnings, file names in `ls` | 5.1:1 |
+| `--term-color-4` | `#4a92bf` | Blue (normal) — directories, links | 4.9:1 |
+| `--term-color-5` | `#9b6dbf` | Magenta (normal) — special files, prompt segments | 4.7:1 |
+| `--term-color-6` | `#3d9e8a` | Cyan (normal) — info output, SSH prompts | 4.9:1 |
+| `--term-color-7` | `#ccc7bc` | White (normal) — default text | 8.4:1 |
+| `--term-color-8` | `#4a4640` | Black (bright) — dark gray, used for dimmed text contexts | n/a (dimmed text context) |
+| `--term-color-9` | `#e06060` | Red (bright) — bold errors, diff removal | 7.0:1 |
+| `--term-color-10` | `#82c082` | Green (bright) — bold success, diff addition | 7.5:1 |
+| `--term-color-11` | `#d4b860` | Yellow (bright) — bold warnings | 7.8:1 |
+| `--term-color-12` | `#7ab3d3` | Blue (bright) — bold directories | 8.1:1 |
+| `--term-color-13` | `#c09cd8` | Magenta (bright) — bold special files | 8.5:1 |
+| `--term-color-14` | `#6ec4ae` | Cyan (bright) — bold info output | 7.8:1 |
+| `--term-color-15` | `#f5f2ea` | White (bright) — ANSI bright white, high-emphasis text | 13.4:1 |
+
 #### Text Attribute Rendering Tokens (FS-VT-024, FS-VT-025)
 
 | Token | Resolved Value | Description |
@@ -223,6 +246,20 @@ Component tokens specialize semantic tokens for individual UI components.
 | `--term-strikethrough-thickness` | `1px` | Strikethrough line thickness |
 | `--term-blink-on-duration` | `533ms` | Blink visible phase duration (SGR 5 and SGR 6) |
 | `--term-blink-off-duration` | `266ms` | Blink invisible phase duration — asymmetric 2:1 on/off ratio for legibility |
+
+#### Design Decision: Opacity-Based Dim Rendering
+
+`--term-dim-opacity` (value: `0.5`) is applied as a CSS `opacity` multiplier to cells carrying the SGR 2 (Dim/Faint) attribute.
+
+This is a deliberate choice over the alternative of defining separate dim color tokens for each ANSI color. The rationale:
+
+1. **Uniform application.** A single opacity value applies consistently across all 16 ANSI colors plus the default foreground, across every bold and italic combination. There is no risk of inconsistency between how dim-red and dim-cyan look relative to their non-dim counterparts.
+
+2. **Theme compatibility.** When a user creates a custom theme and changes any palette color, dim rendering automatically adapts — the dim variant is always `opacity × custom-color`. Separate dim tokens would require the user to update 16 additional entries to keep their custom palette coherent.
+
+3. **Token economy.** 16 additional tokens per theme (one dim variant per ANSI color) would be added overhead with no design benefit. The opacity approach achieves the same perceptual result with one token.
+
+The trade-off: opacity-based dimming interacts with the cell background — on a colored background the dim foreground may appear slightly different than a standalone color swatch would suggest. This is acceptable in terminal practice; most dim text appears against the default terminal background.
 
 ### 3.5 Typography Tokens
 

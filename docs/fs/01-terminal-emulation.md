@@ -157,12 +157,14 @@
 | FS-VT-061 | OSC 22 (push title) and OSC 23 (pop title) SHOULD be supported as a title stack. | Should |
 | FS-VT-062 | Tab titles MUST be sanitized: C0 and C1 control characters stripped; maximum length of 256 characters (truncated if exceeded). | Must |
 | FS-VT-063 | Terminal property read-back sequences MUST be silently discarded. This includes: CSI 21t (report window title), OSC queries that would inject the response into the PTY input stream, and any DECRQSS/DECRPM response that echoes terminal state into the input buffer. These sequences are a known injection vector and MUST NOT produce any response. | Must |
+| FS-VT-064 | OSC 7 (`ESC ] 7 ; file://hostname/path ST` or `ESC ] 7 ; path ST`) SHOULD be parsed by the terminal emulator. The path component MUST be stored as the Current Working Directory (CWD) of the pane. The CWD MUST be used as the initial working directory when creating a new pane or tab from the same pane (split or new tab from current). The CWD MAY be used as the tab title fallback (lower priority than OSC 0/2 title, higher priority than process name). | Should |
 
 **Acceptance criteria:**
 - FS-VT-060: `printf "\033]0;My Title\007"` changes the tab title to "My Title".
 - FS-VT-061: A program that pushes and pops titles restores the previous title correctly.
 - FS-VT-062: A title containing control characters displays without them; a 300-character title is truncated to 256 characters.
 - FS-VT-063: `printf "\033[21t"` produces no response in the input stream. A malicious title set via OSC 0 followed by a CSI 21t read-back does not inject the title into the PTY input.
+- FS-VT-064: Emitting `printf "\033]7;file://$(hostname)$(pwd)\033\\"` from the shell updates the pane's stored CWD. Opening a new pane or tab from a pane with a stored CWD starts in that directory.
 
 ### 3.1.8 Hyperlinks
 

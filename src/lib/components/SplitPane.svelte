@@ -48,6 +48,8 @@
     fontSize?: number;
     /** Terminal line height multiplier (FS-THEME-010) — forwarded to TerminalPane. */
     lineHeight?: number;
+    /** Hide mouse cursor while typing — forwarded to TerminalPane (UI-2). */
+    hideCursorWhileTyping?: boolean;
     /**
      * Search matches for the active pane (FS-SEARCH-006).
      * Only transmitted to the leaf whose paneId === activePaneId.
@@ -79,6 +81,7 @@
     cursorBlinkMs,
     bellType,
     lineHeight,
+    hideCursorWhileTyping,
     searchMatches = [],
     activeSearchMatchIndex = 0,
     fontFamily,
@@ -174,6 +177,7 @@
       {fontFamily}
       {fontSize}
       {lineHeight}
+      {hideCursorWhileTyping}
       searchMatches={node.paneId === activePaneId ? searchMatches : []}
       activeSearchMatchIndex={node.paneId === activePaneId ? activeSearchMatchIndex : 0}
       onclosepane={() => onclosepane?.(node.paneId)}
@@ -217,6 +221,7 @@
         {fontFamily}
         {fontSize}
         {lineHeight}
+        {hideCursorWhileTyping}
         {searchMatches}
         {activeSearchMatchIndex}
         {onpaneclick}
@@ -268,6 +273,7 @@
         {fontFamily}
         {fontSize}
         {lineHeight}
+        {hideCursorWhileTyping}
         {searchMatches}
         {activeSearchMatchIndex}
         {onviewportactive}

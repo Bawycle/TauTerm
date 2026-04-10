@@ -20,6 +20,20 @@
 | Drag start (tab reorder) | After 4px of movement | Tab lifts visually (shadow appears), ghost position indicator shown |
 | Drag start (divider resize) | `--duration-instant` (0ms) | Divider color changes to active |
 
+#### Mouse Cursor Hiding During Keyboard Input
+
+**Behavior:** When the user presses any non-modifier key while focus is in the terminal viewport, the mouse cursor is hidden by applying `cursor: none` via the CSS class `terminal-pane--cursor-hidden` on the pane viewport element. The cursor is restored immediately when the mouse moves (`mousemove` event), removing the class.
+
+**Default:** This behavior is on by default, matching the behavior of `hide_when_typing` in Alacritty.
+
+**User control:** Exposed as a preference "Hide mouse cursor while typing" in Preferences > Appearance.
+
+**Modifier-only keypresses** (Ctrl, Alt, Shift, Meta pressed alone) do NOT trigger hiding. Only keypresses that would produce visible output or terminal sequences cause hiding. This prevents the cursor from disappearing on chord shortcuts such as `Ctrl+Shift+C`.
+
+**Rationale:** Aligned with AD.md §1.1 ("chrome should disappear during active work"). A mouse cursor sitting over terminal output while the user is typing is unsolicited visual noise — it partially obscures the text being read or typed. Hiding it costs nothing perceptually because the user's hands are on the keyboard; restoring it on `mousemove` costs nothing because any intentional mouse use is immediately preceded by movement.
+
+**Note:** This feature requires a FS requirement entry. A corresponding `FS-PREF-*` requirement should be added to `docs/fs/` to make this behavior testable and traceable.
+
 ### 8.2 Focus Management
 
 #### 8.2.1 Principle: Terminal-as-Focus-Sink
@@ -157,6 +171,14 @@ A passive indicator that appears whenever `scroll_offset > 0` to signal that the
 - **Visual feedback:** Divider line color changes to `--color-divider-active`. Panes resize in real-time (no ghost/preview).
 - **Constraints:** Minimum pane dimensions enforced (20 columns, 5 rows). Divider stops at minimum boundaries.
 - **Debounce:** Resize events are debounced (FS-PTY-010).
+
+##### Pointer Capture During Divider Drag
+
+At `pointerdown` on the divider element, `setPointerCapture(event.pointerId)` is called on the divider element itself. This routes all subsequent pointer events — `pointermove` and `pointerup` — to the divider element for the duration of the drag, regardless of what element is physically under the cursor.
+
+This is the mechanism that prevents the terminal WebView content from receiving mouse events while the user is resizing panes. The cursor may move over an adjacent terminal viewport during the drag; without pointer capture, those move events would be delivered to the WebView and could trigger unwanted text selection or mouse protocol input inside the running shell.
+
+**No overlay `<div>` shim is needed during the drag.** The pointer capture mechanism is sufficient. Adding an overlay shim to block terminal interaction during resize would be dead code — the captured pointer events never reach the WebView in the first place. If divider drag behaves incorrectly (e.g., move events are lost or the terminal receives stray clicks), the root cause is pointer capture not being established or released correctly, not a missing overlay.
 
 ### 8.5 Clipboard
 

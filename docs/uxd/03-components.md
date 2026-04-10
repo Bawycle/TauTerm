@@ -164,6 +164,23 @@ A fixed-width button anchored to the right edge of the tab row, outside the scro
 
 **Behavior:** Drag to resize adjacent panes. Minimum pane size is 20 columns wide and 5 rows tall (calculated from current font size and cell dimensions). Double-click on divider resets adjacent panes to equal size.
 
+#### Active vs Inactive Pane Visual Distinction
+
+**The active/inactive pane distinction is communicated by border color only.**
+
+| State | Border token | Resolved value |
+|-------|-------------|----------------|
+| Active pane | `--color-pane-border-active` | `#4a92bf` |
+| Inactive pane | `--color-pane-border-inactive` | `#35312a` |
+
+Viewport content opacity is NOT reduced for inactive panes. Rationale:
+
+1. Terminal output in an inactive pane may be important to monitor passively — a running build, a tail of a log file, a remote session. Dimming viewport content reduces readability without providing any navigation benefit.
+2. Reducing content opacity to distinguish pane focus state fails WCAG 2.1 SC 1.4.3 (minimum contrast 4.5:1 for text) for content that remains technically readable in the viewport. The contrast of terminal text against the terminal background must be maintained regardless of pane focus state.
+3. The border color change is sufficient to signal focus state: the active border (`#4a92bf`, blue-400) is visually distinct from the inactive border (`#35312a`, neutral-700) and provides adequate signal without affecting content legibility.
+
+Reference: WCAG 2.1 Success Criterion 1.4.3 (Contrast — Minimum).
+
 #### 7.2.1 Pane Activity Indicators (Inactive Panes)
 
 For inactive (visible but not focused) panes in a split layout, the pane border provides activity feedback:

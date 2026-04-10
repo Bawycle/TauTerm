@@ -45,15 +45,16 @@ impl SessionRegistry {
             .get_mut(&tab_id)
             .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
 
-        // Determine dimensions from the existing pane's VtProcessor.
-        let (cols, rows) = {
+        // Determine dimensions and source CWD from the existing pane's VtProcessor.
+        let (cols, rows, source_cwd) = {
             let pane = entry
                 .panes
                 .get(&pane_id)
                 .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
             let vt = pane.vt.read();
             let snap = vt.get_snapshot();
-            (snap.cols / 2, snap.rows)
+            let cwd = pane.cwd.clone();
+            (snap.cols / 2, snap.rows, cwd)
         };
 
         let cols_str = cols.to_string();
@@ -84,9 +85,23 @@ impl SessionRegistry {
         // during a potentially slow spawn).
         drop(inner);
 
+        let working_dir = source_cwd
+            .as_deref()
+            .map(std::path::Path::new)
+            .filter(|p| p.is_absolute())
+            .map(std::path::Path::to_owned);
         let pty_box: Box<dyn PtySession> = self
             .pty_backend
-            .open_session(cols, rows, &shell_path, &[], &env)
+            .open_session(
+                cols,
+                rows,
+                0, // pixel_width: not known at split time
+                0, // pixel_height: not known at split time
+                &shell_path,
+                &[],
+                &env,
+                working_dir.as_deref(),
+            )
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
 
         // Re-acquire write lock to insert the new pane.

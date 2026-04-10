@@ -33,6 +33,10 @@ pub struct PaneState {
     pub ssh_state: Option<SshLifecycleState>,
     /// Current scroll offset in scrollback lines (0 = bottom/live view).
     pub scroll_offset: i64,
+    /// Current working directory as reported by OSC 7. `None` until the shell
+    /// sends the first CWD notification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 /// Live pane session data (not serialized — kept in the registry).
@@ -42,6 +46,8 @@ pub struct PaneSession {
     pub vt: Arc<RwLock<VtProcessor>>,
     pub lifecycle: PaneLifecycleState,
     pub title: Option<String>,
+    /// Current working directory as reported by OSC 7. Updated by the PTY read task.
+    pub cwd: Option<String>,
     /// `Some` if this pane is connected via SSH.
     pub ssh_state: Option<SshLifecycleState>,
     /// Active PTY session. `None` for SSH panes or before spawn completes.
@@ -89,6 +95,7 @@ impl PaneSession {
             ))),
             lifecycle: PaneLifecycleState::Spawning,
             title: None,
+            cwd: None,
             ssh_state: None,
             pty_session: None,
             pty_task: None,
@@ -108,6 +115,7 @@ impl PaneSession {
             title: self.title.clone(),
             ssh_state: self.ssh_state.clone(),
             scroll_offset: self.scroll_offset,
+            cwd: self.cwd.clone(),
         }
     }
 

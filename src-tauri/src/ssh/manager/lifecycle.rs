@@ -49,6 +49,8 @@ impl SshManager {
         vt: Arc<RwLock<VtProcessor>>,
         cols: u16,
         rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
         registry: Arc<SessionRegistry>,
     ) -> Result<(), SshError> {
         self.open_connection_inner(
@@ -59,6 +61,8 @@ impl SshManager {
             vt,
             cols,
             rows,
+            pixel_width,
+            pixel_height,
             registry,
             /* is_reconnect */ false,
         )
@@ -75,6 +79,8 @@ impl SshManager {
         vt: Arc<RwLock<VtProcessor>>,
         cols: u16,
         rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
         registry: Arc<SessionRegistry>,
         is_reconnect: bool,
     ) -> Result<(), SshError> {
@@ -126,6 +132,8 @@ impl SshManager {
                     vt,
                     cols,
                     rows,
+                    pixel_width,
+                    pixel_height,
                     registry,
                     is_reconnect,
                 )
@@ -231,6 +239,8 @@ impl SshManager {
             vt,
             cols,
             rows,
+            0, // pixel_width: not available on reconnect path
+            0, // pixel_height: not available on reconnect path
             registry,
             true,
         )

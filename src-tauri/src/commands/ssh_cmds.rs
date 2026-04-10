@@ -17,9 +17,12 @@ use crate::session::ids::{ConnectionId, PaneId};
 use crate::ssh::{Credentials, SshManager};
 
 /// Inner implementation — shared by both the production and e2e-testing variants.
+#[allow(clippy::too_many_arguments)]
 async fn open_ssh_connection_impl(
     pane_id: PaneId,
     connection_id: ConnectionId,
+    pixel_width: u16,
+    pixel_height: u16,
     ssh_manager: &Arc<SshManager>,
     prefs: &Arc<RwLock<PreferencesStore>>,
     registry: &Arc<SessionRegistry>,
@@ -84,6 +87,8 @@ async fn open_ssh_connection_impl(
             vt,
             cols,
             rows,
+            pixel_width,
+            pixel_height,
             Arc::clone(registry),
         )
         .await
@@ -92,10 +97,13 @@ async fn open_ssh_connection_impl(
 
 /// Production variant — registered when `e2e-testing` feature is NOT active.
 #[cfg(not(feature = "e2e-testing"))]
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn open_ssh_connection(
     pane_id: PaneId,
     connection_id: ConnectionId,
+    pixel_width: Option<u16>,
+    pixel_height: Option<u16>,
     ssh_manager: State<'_, Arc<SshManager>>,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -105,6 +113,8 @@ pub async fn open_ssh_connection(
     open_ssh_connection_impl(
         pane_id,
         connection_id,
+        pixel_width.unwrap_or(0),
+        pixel_height.unwrap_or(0),
         &ssh_manager,
         &prefs,
         &registry,
@@ -125,6 +135,8 @@ pub async fn open_ssh_connection(
 pub async fn open_ssh_connection(
     pane_id: PaneId,
     connection_id: ConnectionId,
+    pixel_width: Option<u16>,
+    pixel_height: Option<u16>,
     ssh_manager: State<'_, Arc<SshManager>>,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -141,6 +153,8 @@ pub async fn open_ssh_connection(
     open_ssh_connection_impl(
         pane_id,
         connection_id,
+        pixel_width.unwrap_or(0),
+        pixel_height.unwrap_or(0),
         &ssh_manager,
         &prefs,
         &registry,

@@ -768,6 +768,52 @@ Before any E2E test results are considered authoritative, the following checklis
 
 ---
 
+#### TEST-VT-024
+**FS requirements:** FS-VT-083, FS-VT-080, FS-VT-081, FS-VT-082
+**Layer:** Unit (Rust)
+**Priority:** Should
+
+**Preconditions:** A `VtProcessor` initialized with no active mouse mode (`mouse_reporting == None`, `mouse_encoding == X10`).
+
+**Steps:**
+1. Feed `\x1b[?1003h` (activate AnyEvent reporting).
+2. Assert `mouse_reporting == AnyEvent`.
+3. Construct a mouse motion event at col=15, row=8, no button pressed (`button=0`), no modifiers, `is_motion=true`.
+4. Call `encode(SGR)` on the event.
+5. Assert the result is `\x1b[<32;15;8M` (motion bit 32 set, button_bits=0, 1-based coordinates, press trailer `M`).
+6. Feed `\x1b[?1003l` (deactivate AnyEvent).
+7. Assert `mouse_reporting == None`.
+
+**Expected result:** Mode 1003 activates and deactivates correctly. Motion events carry the motion bit (32) in SGR encoding: `cb = button_bits | 32`.
+
+**Implementation:** `vt::processor::tests::modes::mouse_mode_1003_activate_and_deactivate`, `mouse_round_trip_any_event_sgr`.
+
+---
+
+#### TEST-VT-025
+**FS requirements:** FS-VT-080, FS-VT-081, FS-VT-082
+**Layer:** Unit (Rust)
+**Priority:** Should
+
+**Context:** tmux activates mode 1000 then 1002 (ButtonEvent supersedes Normal), then SGR encoding (1006). Reporting mode and encoding are orthogonal fields; activating one must not clear the other. Reset of mode 1000 clears all reporting.
+
+**Preconditions:** A `VtProcessor` initialized with no active mouse mode.
+
+**Steps:**
+1. Feed `\x1b[?1000h` → assert `mouse_reporting == Normal`.
+2. Feed `\x1b[?1002h` → assert `mouse_reporting == ButtonEvent` (1002 supersedes 1000).
+3. Feed `\x1b[?1006h` → assert `mouse_encoding == Sgr`.
+4. Assert `mouse_reporting` is still `ButtonEvent` (encoding change must not affect reporting mode).
+5. Construct a button-press event: left button (`button=0`), col=5, row=3, no modifiers, `is_press=true`.
+6. Call `encode(Sgr)` → assert result is `\x1b[<0;5;3M`.
+7. Feed `\x1b[?1000l` → assert `mouse_reporting == None` (reset clears all reporting).
+
+**Expected result:** tmux sequence activates ButtonEvent + SGR correctly. Reporting mode and encoding are independent. Reset of mode 1000 clears `mouse_reporting` to `None`.
+
+**Implementation:** `vt::processor::tests::modes::mouse_mode_interaction_1000_then_1006`, `mouse_round_trip_button_event_sgr`, `mouse_mode_1002_activate_and_deactivate`.
+
+---
+
 ### 4.3 SSH Lifecycle
 
 ---

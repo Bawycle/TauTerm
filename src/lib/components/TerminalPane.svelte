@@ -63,6 +63,11 @@
     /** Whether there is more than one pane (controls Close Pane visibility). */
     canClosePane?: boolean;
     /**
+     * When true, hides the mouse cursor while the user is typing in the terminal.
+     * Mirrors AppearancePrefs.hideCursorWhileTyping. Default: true.
+     */
+    hideCursorWhileTyping?: boolean;
+    /**
      * Characters treated as word delimiters for double-click word selection.
      * Mirrors the Rust backend default (TerminalPrefs.wordDelimiters).
      */
@@ -128,6 +133,7 @@
     exitCode = 0,
     signalName,
     canClosePane = true,
+    hideCursorWhileTyping = true,
     wordDelimiters = ' \t|"\'`&()*,;<=>[]{}~',
     confirmMultilinePaste = true,
     cursorBlinkMs = 533,
@@ -223,11 +229,38 @@
     };
   });
 
+  // ── Mouse cursor hiding while typing (UI-2) ─────────────────────────────────
+  // When the user presses a key that can produce terminal output, hide the mouse
+  // cursor. It is restored as soon as the mouse moves over the viewport.
+  let cursorHidden = $state(false);
+
+  /** Restore the mouse cursor — bound to mousemove on the viewport. */
+  function handleViewportMouseMove() {
+    if (cursorHidden) cursorHidden = false;
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     // Application shortcuts (Ctrl+Shift+*) are handled at the TerminalView level
     if (event.ctrlKey && event.shiftKey) return;
     if (event.ctrlKey && event.key === ',') return; // Ctrl+, = preferences
     if (event.isComposing) return;
+
+    // Hide mouse cursor on output-producing keystrokes when the preference is on.
+    if (hideCursorWhileTyping) {
+      const k = event.key;
+      const isModifierOnly =
+        k === 'Control' ||
+        k === 'Alt' ||
+        k === 'Shift' ||
+        k === 'Meta' ||
+        k === 'CapsLock' ||
+        k === 'NumLock' ||
+        k === 'ScrollLock' ||
+        k === 'Dead';
+      if (!isModifierOnly) {
+        cursorHidden = true;
+      }
+    }
 
     const sequence = keyEventToVtSequence(event, tp.decckm, tp.deckpam);
     if (sequence !== null) {
@@ -264,7 +297,14 @@
     {onsplitV}
     {onclosepane}
   >
-    <TerminalPaneViewport {tp} {active} {lineHeight} onkeydown={handleKeydown} />
+    <TerminalPaneViewport
+      {tp}
+      {active}
+      {lineHeight}
+      {cursorHidden}
+      onkeydown={handleKeydown}
+      onmousemove={handleViewportMouseMove}
+    />
     <TerminalPaneScrollbar {tp} />
     <TerminalPaneScrollToBottom scrollOffset={tp.scrollOffset} onclick={tp.handleScrollToBottom} />
   </ContextMenu>
@@ -310,6 +350,10 @@
   }
 
   /* Viewport styles remain here since TerminalPaneViewport renders inside .terminal-pane */
+  :global(.terminal-pane__viewport--cursor-hidden) {
+    cursor: none;
+  }
+
   :global(.terminal-pane__viewport) {
     position: relative;
     width: 100%;

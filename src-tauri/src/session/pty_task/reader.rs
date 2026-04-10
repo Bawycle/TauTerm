@@ -114,6 +114,7 @@ pub fn spawn_pty_read_task(
                 let new_cursor_shape = proc.take_cursor_shape_changed();
                 let bell = proc.take_bell_pending();
                 let osc52 = proc.take_osc52_write();
+                let new_cwd = proc.take_cwd_changed();
                 // Extract DSR/DA/CPR responses while still holding the write-lock.
                 // They are written to the PTY master AFTER the lock is released
                 // to prevent a deadlock when the shell echoes back immediately.
@@ -126,6 +127,7 @@ pub fn spawn_pty_read_task(
                         new_cursor_shape,
                         bell,
                         osc52,
+                        new_cwd,
                     },
                     responses,
                 )

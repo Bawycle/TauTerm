@@ -33,6 +33,7 @@ function makePrefs(language: 'en' | 'fr'): Preferences {
       language,
       contextMenuHintShown: false,
       fullscreen: false,
+      hideCursorWhileTyping: true,
     },
     terminal: {
       scrollbackLines: 10000,

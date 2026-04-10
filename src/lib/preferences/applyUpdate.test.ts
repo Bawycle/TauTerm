@@ -34,6 +34,7 @@ function makePreferences(overrides: Partial<Preferences['appearance']> = {}): Pr
       language: 'en',
       contextMenuHintShown: false,
       fullscreen: false,
+      hideCursorWhileTyping: true,
       ...overrides,
     },
     terminal: {

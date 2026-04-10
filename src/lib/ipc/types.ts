@@ -744,6 +744,8 @@ export interface AppearancePrefs {
   contextMenuHintShown: boolean;
   /** Whether the window starts in fullscreen mode. Default: false. */
   fullscreen: boolean;
+  /** Hide the mouse cursor when the user types in the terminal. Default: true. */
+  hideCursorWhileTyping: boolean;
 }
 
 /** Mirrors Rust TerminalPrefs. */
@@ -777,6 +779,7 @@ export interface AppearancePatch {
   language?: Language;
   contextMenuHintShown?: boolean;
   fullscreen?: boolean;
+  hideCursorWhileTyping?: boolean;
 }
 
 /**

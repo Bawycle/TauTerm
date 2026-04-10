@@ -274,6 +274,7 @@ describe('TEST-SPRINT-003: Language IPC type uses lowercase values', () => {
       language: 'en',
       contextMenuHintShown: false,
       fullscreen: false,
+      hideCursorWhileTyping: true,
     };
     expect(prefs.language).toBe('en');
   });
@@ -290,6 +291,7 @@ describe('TEST-SPRINT-003: Language IPC type uses lowercase values', () => {
       language: 'fr',
       contextMenuHintShown: false,
       fullscreen: false,
+      hideCursorWhileTyping: true,
     };
     expect(prefs.language).toBe('fr');
   });

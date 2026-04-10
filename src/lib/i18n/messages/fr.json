@@ -288,5 +288,7 @@
 
   "theme_name_hint": "Nom unique affiché dans la liste des thèmes et dans le menu déroulant Apparence.",
   "theme_palette_hint": "Les 16 couleurs ANSI standard. Les couleurs 0–7 sont les variantes normales ; 8–15 sont les variantes vives. La plupart des applications CLI les utilisent pour la coloration syntaxique.",
-  "theme_color_hex_hint": "Code couleur hexadécimal, ex. #1a1a2e"
+  "theme_color_hex_hint": "Code couleur hexadécimal, ex. #1a1a2e",
+
+  "hide_cursor_while_typing_label": "Masquer le curseur souris pendant la frappe"
 }

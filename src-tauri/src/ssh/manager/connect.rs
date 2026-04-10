@@ -34,6 +34,8 @@ impl SshManager {
         vt: Arc<RwLock<VtProcessor>>,
         cols: u16,
         rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
         registry: Arc<SessionRegistry>,
         is_reconnect: bool,
     ) -> Result<(), SshError> {
@@ -325,8 +327,8 @@ impl SshManager {
                 "xterm-256color",
                 cols as u32,
                 rows as u32,
-                0, // pixel width — not used
-                0, // pixel height — not used
+                pixel_width as u32,
+                pixel_height as u32,
                 TERMINAL_MODES,
             )
             .await

@@ -78,9 +78,12 @@ fn fpl_w_003_read_after_child_exit_returns_eof_or_error() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &["-c", "exit 0"], // shell exits immediately
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
 
@@ -131,9 +134,12 @@ fn fpl_w_004_write_master_readable_via_reader_handle() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &["-c", "echo FPL_W_004_MARKER; sleep 5"],
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
 
@@ -172,12 +178,15 @@ fn fpl_r_005_resize_delivers_sigwinch_to_child() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &[
                 "-c",
                 "trap 'echo SIGWINCH_RECEIVED' WINCH; echo READY; while true; do sleep 1; done",
             ],
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
 

@@ -20,7 +20,16 @@ fn fpl_s_001_open_session_bin_sh_succeeds() {
 #[test]
 fn fpl_s_002_open_session_nonexistent_command_returns_err() {
     let backend = LinuxPtyBackend::new();
-    let result = backend.open_session(80, 24, "/nonexistent_shell_tauterm_test", &[], &[]);
+    let result = backend.open_session(
+        80,
+        24,
+        0,
+        0,
+        "/nonexistent_shell_tauterm_test",
+        &[],
+        &[],
+        None,
+    );
     assert!(
         result.is_err(),
         "open_session with nonexistent command must return Err"
@@ -93,9 +102,12 @@ fn fpl_c_001_close_delivers_sighup_to_child() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &["-c", &script],
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
 
@@ -196,9 +208,12 @@ fn fpl_fg_003_idle_shell_is_its_own_foreground() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &["-c", "echo READY; while true; do sleep 1; done"],
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
 
@@ -288,9 +303,12 @@ fn fpl_exit_002_returns_exit_code_zero_after_clean_exit() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &["-c", "exit 0"],
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
     let reader = session.reader_handle().expect("must have reader");
@@ -312,9 +330,12 @@ fn fpl_exit_003_returns_nonzero_exit_code() {
         .open_session(
             80,
             24,
+            0,
+            0,
             "/bin/sh",
             &["-c", "exit 1"],
             &[("TERM", "xterm-256color")],
+            None,
         )
         .expect("open session");
     let reader = session.reader_handle().expect("must have reader");

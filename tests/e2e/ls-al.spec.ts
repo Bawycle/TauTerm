@@ -453,11 +453,22 @@ describe('ls -al basic flow', () => {
     expect(promptRowIdx).toBe(lastOccupiedIdx); // criterion 4.2
 
     // 4.3 / UX-SC-19: cursor must be on the return prompt row at col = PROMPT_LEN.
+    // Wait for the cursor element to be in the DOM before querying style.left.
+    // The blink timer may have left the cursor in its "off" phase at the end of
+    // the 50 ms pause, causing the {#if} to hide it and getCursorLeftStyle() to
+    // return null (→ NaN). waitUntil(cursorExists) synchronises with the "on"
+    // phase before we read style.left, eliminating the race condition.
+    await browser.waitUntil(cursorExists, {
+      timeout: 5_000,
+      timeoutMsg:
+        'Cursor (.terminal-pane__cursor) did not appear after return-prompt injection (criterion 4.3)',
+    });
     const leftStyle = await getCursorLeftStyle();
     const cursorCol = parseCursorCol(leftStyle);
     expect(cursorCol).toBe(PROMPT_LEN); // criterion 4.3
 
     // 4.4: cursor must be visible (not blink-hidden — we just injected, no blink gap).
+    // cursorExists() already confirmed presence above; this re-checks for explicitness.
     const cursorPresent = await cursorExists();
     expect(cursorPresent).toBe(true); // criterion 4.4
 
@@ -658,9 +669,34 @@ describe('ls -al single-burst injection (grid resize regression)', () => {
 
     await inject(paneId, burst);
 
-    // Wait for the return prompt to be visible — this is the authoritative signal
-    // that the full burst was processed and the grid rendered completely.
-    await waitForTextInGrid(PROMPT.trim(), 15_000);
+    // Wait until the burst is fully rendered: the return prompt must be on its
+    // own row AND appear after the Cargo.toml output row.  We cannot use
+    // waitForTextInGrid(PROMPT.trim()) here because the prompt text already
+    // exists in the grid from the preceding suite — that signal fires
+    // immediately before the burst is processed, causing a race condition.
+    // Instead we poll the rows directly until both structural conditions hold.
+    let rows: string[] = [];
+    let lastOutputRowIdx = -1;
+    let promptRowIdx = -1;
+    await browser.waitUntil(
+      async () => {
+        rows = await getGridRows();
+        lastOutputRowIdx = rows.reduce((last, row, idx) => {
+          if (row.includes('Cargo.toml')) return idx;
+          return last;
+        }, -1);
+        promptRowIdx = rows.reduce((last, row, idx) => {
+          if (row.trimEnd().endsWith(PROMPT.trimEnd())) return idx;
+          return last;
+        }, -1);
+        return promptRowIdx > -1 && promptRowIdx > lastOutputRowIdx;
+      },
+      {
+        timeout: 15_000,
+        timeoutMsg:
+          'Return prompt did not appear on its own row after Cargo.toml within 15 s',
+      },
+    );
 
     // All ls output lines must be present in the grid (no truncation due to
     // grid being too small after the implicit resize that the burst may trigger).
@@ -668,17 +704,6 @@ describe('ls -al single-burst injection (grid resize regression)', () => {
     for (const line of LS_OUTPUT_LINES) {
       expect(gridText).toContain(line.trim());
     }
-
-    // The return prompt must be on its own row, after all output rows.
-    const rows = await getGridRows();
-    const lastOutputRowIdx = rows.reduce((last, row, idx) => {
-      if (row.includes('Cargo.toml')) return idx;
-      return last;
-    }, -1);
-    const promptRowIdx = rows.reduce((last, row, idx) => {
-      if (row.trimEnd().endsWith(PROMPT.trimEnd())) return idx;
-      return last;
-    }, -1);
 
     expect(promptRowIdx).toBeGreaterThan(-1); // return prompt found
     expect(promptRowIdx).toBeGreaterThan(lastOutputRowIdx); // prompt after output

@@ -45,8 +45,7 @@ function mockInvoke(
   extraPrefs: Record<string, unknown> = {},
 ) {
   vi.spyOn(tauriCore, 'invoke').mockImplementation(async (cmd: string) => {
-    if (cmd === 'get_session_state')
-      return { tabs: tabs.map((o) => makeTab(o)), activeTabId };
+    if (cmd === 'get_session_state') return { tabs: tabs.map((o) => makeTab(o)), activeTabId };
     if (cmd === 'get_preferences')
       return {
         appearance: {
@@ -109,7 +108,11 @@ afterEach(() => {
 describe('FS-TAB-010: OS window title follows "{tab-title} — TauTerm"', () => {
   it('sets window title from active tab processTitle', async () => {
     mockInvoke(
-      [{ layout: { type: 'leaf', paneId: 'pane-1', state: makePaneState({ processTitle: 'vim' }) } }],
+      [
+        {
+          layout: { type: 'leaf', paneId: 'pane-1', state: makePaneState({ processTitle: 'vim' }) },
+        },
+      ],
       'tab-1',
     );
 

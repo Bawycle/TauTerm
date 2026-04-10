@@ -66,7 +66,10 @@ function makeMultiPaneTab(id: string): TabState {
 
 type TabBarInstance = ReturnType<typeof mount>;
 
-function mountTabBar(tabs: TabState[], activeTabId: string): {
+function mountTabBar(
+  tabs: TabState[],
+  activeTabId: string,
+): {
   container: HTMLElement;
   instance: TabBarInstance;
 } {

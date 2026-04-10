@@ -300,7 +300,11 @@
     : m.terminal_pane_aria_label()}
 >
   {#if showTitleBar}
-    <PaneTitleBar title={paneTitle ?? m.pane_title_fallback()} isActive={active} onrename={onrenamepane} />
+    <PaneTitleBar
+      title={paneTitle ?? m.pane_title_fallback()}
+      isActive={active}
+      onrename={onrenamepane}
+    />
   {/if}
 
   <!-- Viewport wrapper: fills remaining flex space below PaneTitleBar.

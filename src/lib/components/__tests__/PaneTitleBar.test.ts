@@ -155,7 +155,8 @@ describe('PTB-RN-002: Enter confirms rename and calls onrename', () => {
     const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
     instances.push(instance);
 
-    container.querySelector('.pane-title-bar')!
+    container
+      .querySelector('.pane-title-bar')!
       .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     flushSync();
 
@@ -174,7 +175,8 @@ describe('PTB-RN-002: Enter confirms rename and calls onrename', () => {
     const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
     instances.push(instance);
 
-    container.querySelector('.pane-title-bar')!
+    container
+      .querySelector('.pane-title-bar')!
       .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     flushSync();
 
@@ -198,11 +200,13 @@ describe('PTB-RN-003: Escape cancels rename without calling onrename', () => {
     const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
     instances.push(instance);
 
-    container.querySelector('.pane-title-bar')!
+    container
+      .querySelector('.pane-title-bar')!
       .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     flushSync();
 
-    container.querySelector<HTMLInputElement>('.pane-title-bar__input')!
+    container
+      .querySelector<HTMLInputElement>('.pane-title-bar__input')!
       .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     flushSync();
 
@@ -222,7 +226,8 @@ describe('PTB-RN-004: blur confirms rename', () => {
     const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
     instances.push(instance);
 
-    container.querySelector('.pane-title-bar')!
+    container
+      .querySelector('.pane-title-bar')!
       .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     flushSync();
 

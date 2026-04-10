@@ -20,6 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { PaneState, TabState } from '$lib/ipc/types';
+import { resolveTabTitle } from '$lib/utils/tab-title';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,30 +50,19 @@ function makeTabState(paneTitle: string, userLabel: string | null = null): TabSt
 // ---------------------------------------------------------------------------
 
 describe('OSC-TITLE-004: user label takes precedence over OSC-driven title', () => {
-  /**
-   * Tab title resolution logic that must be implemented in the component:
-   *   displayTitle = tab.label ?? activePane.processTitle
-   */
-  function resolveDisplayTitle(tab: TabState): string {
-    if (tab.label !== null) return tab.label;
-    const layout = tab.layout;
-    if (layout.type === 'leaf') return layout.state.processTitle;
-    return 'terminal';
-  }
-
   it('user label overrides processTitle', () => {
     const tab = makeTabState('bash', 'MyLabel');
-    expect(resolveDisplayTitle(tab)).toBe('MyLabel');
+    expect(resolveTabTitle(tab) ?? '').toBe('MyLabel');
   });
 
   it('null label falls back to processTitle', () => {
     const tab = makeTabState('zsh', null);
-    expect(resolveDisplayTitle(tab)).toBe('zsh');
+    expect(resolveTabTitle(tab) ?? '').toBe('zsh');
   });
 
   it('OSC title update (via processTitle) is visible when no user label', () => {
     const tab = makeTabState('ProcessTitle', null);
-    expect(resolveDisplayTitle(tab)).toBe('ProcessTitle');
+    expect(resolveTabTitle(tab) ?? '').toBe('ProcessTitle');
   });
 });
 

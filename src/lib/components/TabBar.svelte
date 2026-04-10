@@ -30,8 +30,9 @@
 -->
 <script lang="ts">
   import { Plus } from 'lucide-svelte';
-  import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
+  import type { TabState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
+  import { getRootPane, resolveTabTitle } from '$lib/utils/tab-title';
   import { useTabBarScroll } from '$lib/composables/TabBar.scroll.svelte';
   import { useTabBarRename } from '$lib/composables/useTabBarRename.svelte';
   import { useTabBarDnd } from '$lib/composables/useTabBarDnd.svelte';
@@ -82,17 +83,9 @@
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  /** Extract the root (first leaf) pane state from a tab's layout tree. */
-  function getRootPane(tab: TabState): PaneState | null {
-    let node = tab.layout;
-    while (node.type === 'split') node = node.first;
-    return node.type === 'leaf' ? node.state : null;
-  }
-
   /** Display title: user label takes precedence over OSC process title (FS-TAB-006). */
   function tabDisplayTitle(tab: TabState): string {
-    if (tab.label !== null) return tab.label;
-    return getRootPane(tab)?.processTitle ?? m.tab_untitled();
+    return resolveTabTitle(tab) ?? m.tab_untitled();
   }
 
   /** Active pane notification for this tab. */

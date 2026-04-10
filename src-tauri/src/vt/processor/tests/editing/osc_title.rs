@@ -43,3 +43,57 @@ fn osc_title_plain_title_is_stored() {
     vt.process(b"\x1b]0;My Title\x07");
     assert_eq!(vt.title, "My Title");
 }
+
+// ---------------------------------------------------------------------------
+// title_changed flag and take_title_changed() — end-to-end via VtProcessor
+// ---------------------------------------------------------------------------
+
+#[test]
+fn title_changed_flag_is_set_by_osc0() {
+    let mut vt = make_vt(80, 24);
+    vt.process(b"\x1b]0;Title\x07");
+    assert!(
+        vt.title_changed,
+        "title_changed must be true after OSC 0 sets a new title"
+    );
+}
+
+#[test]
+fn take_title_changed_returns_title_and_clears_flag() {
+    let mut vt = make_vt(80, 24);
+    vt.process(b"\x1b]0;Title\x07");
+
+    // First call: must return the title and clear the flag.
+    let first = vt.take_title_changed();
+    assert_eq!(
+        first,
+        Some("Title".to_string()),
+        "take_title_changed must return Some(title) after OSC 0"
+    );
+
+    // Second call: flag was cleared — must return None.
+    let second = vt.take_title_changed();
+    assert_eq!(
+        second, None,
+        "take_title_changed must return None when called a second time (flag already cleared)"
+    );
+}
+
+#[test]
+fn osc1_and_osc2_also_set_title_changed_flag() {
+    for (seq, label) in [
+        (b"\x1b]1;title1\x07".as_slice(), "OSC 1"),
+        (b"\x1b]2;title2\x07".as_slice(), "OSC 2"),
+    ] {
+        let mut vt = make_vt(80, 24);
+        vt.process(seq);
+        assert!(
+            vt.title_changed,
+            "{label} must set title_changed flag in VtProcessor"
+        );
+        assert!(
+            vt.take_title_changed().is_some(),
+            "{label} take_title_changed must return Some after processing"
+        );
+    }
+}

@@ -28,6 +28,8 @@ pub struct PaneState {
     pub pane_id: PaneId,
     pub lifecycle: PaneLifecycleState,
     /// Title from OSC sequences. `None` until first OSC title received.
+    /// Serialized as `processTitle` to match the TypeScript IPC contract.
+    #[serde(rename = "processTitle")]
     pub title: Option<String>,
     /// SSH session state. `None` for local PTY panes.
     pub ssh_state: Option<SshLifecycleState>,

@@ -42,6 +42,7 @@ function makePrefs(overrides: Partial<Preferences> = {}): Preferences {
       contextMenuHintShown: false,
       fullscreen: false,
       hideCursorWhileTyping: true,
+      showPaneTitleBar: true,
     },
     terminal: {
       scrollbackLines: 10000,

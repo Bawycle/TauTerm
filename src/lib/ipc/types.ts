@@ -746,6 +746,8 @@ export interface AppearancePrefs {
   fullscreen: boolean;
   /** Hide the mouse cursor when the user types in the terminal. Default: true. */
   hideCursorWhileTyping: boolean;
+  /** Display a slim title bar at the top of each pane in multi-pane layouts. Default: true. */
+  showPaneTitleBar: boolean;
 }
 
 /** Mirrors Rust TerminalPrefs. */
@@ -780,6 +782,7 @@ export interface AppearancePatch {
   contextMenuHintShown?: boolean;
   fullscreen?: boolean;
   hideCursorWhileTyping?: boolean;
+  showPaneTitleBar?: boolean;
 }
 
 /**

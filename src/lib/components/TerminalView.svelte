@@ -205,6 +205,7 @@
             searchMatches={tv.searchMatches}
             activeSearchMatchIndex={tv.searchCurrentIdx}
             canClosePane={activePanes.length > 1}
+            showPaneTitleBar={preferences.value?.appearance?.showPaneTitleBar ?? true}
             onpaneclick={async (paneId) => {
               try {
                 await setActivePane(paneId);

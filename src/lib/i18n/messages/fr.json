@@ -8,6 +8,7 @@
   "tab_untitled": "Terminal",
 
   "pane_close": "Fermer le panneau",
+  "pane_title_fallback": "Terminal",
 
   "status_bar_ready": "Prêt",
   "status_bar_connected": "Connecté",
@@ -290,5 +291,8 @@
   "theme_palette_hint": "Les 16 couleurs ANSI standard. Les couleurs 0–7 sont les variantes normales ; 8–15 sont les variantes vives. La plupart des applications CLI les utilisent pour la coloration syntaxique.",
   "theme_color_hex_hint": "Code couleur hexadécimal, ex. #1a1a2e",
 
-  "hide_cursor_while_typing_label": "Masquer le curseur souris pendant la frappe"
+  "hide_cursor_while_typing_label": "Masquer le curseur souris pendant la frappe",
+
+  "show_pane_title_bar_label": "Afficher la barre de titre des volets",
+  "show_pane_title_bar_description": "Affiche une mince barre de titre en haut de chaque volet dans les dispositions multi-volets"
 }

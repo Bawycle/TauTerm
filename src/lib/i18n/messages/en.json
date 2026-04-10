@@ -8,6 +8,7 @@
   "tab_untitled": "Terminal",
 
   "pane_close": "Close pane",
+  "pane_title_fallback": "Terminal",
 
   "status_bar_ready": "Ready",
   "status_bar_connected": "Connected",
@@ -290,5 +291,8 @@
   "theme_palette_hint": "The 16 standard ANSI colors. Colors 0–7 are the normal variants; 8–15 are the bright variants. Most CLI applications use these for syntax highlighting.",
   "theme_color_hex_hint": "Hex color code, e.g. #1a1a2e",
 
-  "hide_cursor_while_typing_label": "Hide mouse cursor while typing"
+  "hide_cursor_while_typing_label": "Hide mouse cursor while typing",
+
+  "show_pane_title_bar_label": "Show pane title bar",
+  "show_pane_title_bar_description": "Display a slim title bar at the top of each pane in multi-pane layouts"
 }

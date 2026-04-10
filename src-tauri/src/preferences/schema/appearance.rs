@@ -85,9 +85,16 @@ pub struct AppearancePrefs {
     /// Restored immediately on `mousemove`. Default: `true`.
     #[serde(default = "default_hide_cursor_while_typing")]
     pub hide_cursor_while_typing: bool,
+    /// Whether the pane title bar is visible. Default: `true`.
+    #[serde(default = "default_show_pane_title_bar")]
+    pub show_pane_title_bar: bool,
 }
 
 fn default_hide_cursor_while_typing() -> bool {
+    true
+}
+
+fn default_show_pane_title_bar() -> bool {
     true
 }
 
@@ -104,6 +111,18 @@ impl Default for AppearancePrefs {
             context_menu_hint_shown: false,
             fullscreen: false,
             hide_cursor_while_typing: true,
+            show_pane_title_bar: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn show_pane_title_bar_defaults_to_true() {
+        let prefs = AppearancePrefs::default();
+        assert!(prefs.show_pane_title_bar);
     }
 }

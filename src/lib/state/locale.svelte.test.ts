@@ -34,6 +34,7 @@ function makePrefs(language: 'en' | 'fr'): Preferences {
       contextMenuHintShown: false,
       fullscreen: false,
       hideCursorWhileTyping: true,
+      showPaneTitleBar: true,
     },
     terminal: {
       scrollbackLines: 10000,

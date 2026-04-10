@@ -32,6 +32,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     contextMenuHintShown: false,
     fullscreen: false,
     hideCursorWhileTyping: true,
+    showPaneTitleBar: true,
   },
   terminal: {
     scrollbackLines: 10000,

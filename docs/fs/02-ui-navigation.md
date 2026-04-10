@@ -42,6 +42,8 @@
 | FS-PANE-004 | The user MUST be able to close any pane. Closing the last pane in a tab MUST close the tab. | Must |
 | FS-PANE-005 | The user MUST be able to navigate between panes via keyboard shortcuts (defaults defined in FS-KBD) and via mouse click. | Must |
 | FS-PANE-006 | The active pane MUST be visually distinguishable from inactive panes. | Must |
+| FS-PANE-007 | When a tab contains two or more panes and the `showPaneTitleBar` preference is enabled, each pane MUST display a slim title bar at its top showing the resolved title for that pane (same priority as FS-TAB-006). The title bar MUST NOT render when the tab has only one pane, or when the preference is disabled. The active pane's title bar MUST be visually distinguishable from inactive panes' title bars using typography and/or opacity only — color MUST NOT be the sole distinguishing property. The tab title MUST follow the active pane's resolved title, not the root pane's title, regardless of the `showPaneTitleBar` preference. | Should |
+| FS-PANE-008 | The application MUST expose a `showPaneTitleBar` boolean preference (default: `true`) that controls whether the pane title bar is shown in multi-pane layouts. This preference MUST be persisted and MUST be accessible in the Appearance section of the preferences panel. | Should |
 
 **Acceptance criteria:**
 - FS-PANE-001: A horizontal split produces two panes stacked vertically, each with its own shell session.
@@ -49,6 +51,10 @@
 - FS-PANE-004: Closing the only pane in a tab closes the tab.
 - FS-PANE-005: A keyboard shortcut cycles focus between panes; clicking a pane gives it focus.
 - FS-PANE-006: The focused pane has a visually distinct border or highlight.
+- FS-PANE-007: With two panes open and `showPaneTitleBar: true`, both panes display a title bar showing their respective process titles. With `showPaneTitleBar: false`, no title bar is visible regardless of pane count. With a single pane, no title bar is visible regardless of the preference.
+- FS-PANE-007: Running `printf "\033]0;MyTitle\007"` in the non-active pane: (a) that pane's title bar immediately shows "MyTitle"; (b) clicking that pane updates the tab title to "MyTitle".
+- FS-PANE-007: The active pane's title bar is visually distinct from inactive panes' title bars (different opacity or font weight).
+- FS-PANE-008: Toggling "Show pane title bar" in Appearance preferences persists across app restarts. Title bars appear/disappear immediately upon toggle.
 
 ---
 

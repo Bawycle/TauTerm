@@ -67,6 +67,8 @@
     ondimensionschange?: (paneId: PaneId, cols: number, rows: number) => void;
     /** Called when the active pane's viewport element changes (focus management). */
     onviewportactive?: (el: HTMLElement | null) => void;
+    /** Whether the showPaneTitleBar preference is enabled — forwarded to TerminalPane. */
+    showPaneTitleBar?: boolean;
   }
 
   const {
@@ -94,6 +96,7 @@
     ondisableConfirmMultilinePaste,
     ondimensionschange,
     onviewportactive,
+    showPaneTitleBar = true,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -187,6 +190,8 @@
       {ondisableConfirmMultilinePaste}
       ondimensionschange={(c, r) => ondimensionschange?.(node.paneId, c, r)}
       {onviewportactive}
+      showTitleBar={canClosePane && showPaneTitleBar}
+      paneTitle={node.state.processTitle.length > 0 ? node.state.processTitle : undefined}
     />
   </div>
 {:else}
@@ -232,6 +237,7 @@
         {ondisableConfirmMultilinePaste}
         {ondimensionschange}
         {onviewportactive}
+        {showPaneTitleBar}
       />
     </div>
 
@@ -277,6 +283,7 @@
         {searchMatches}
         {activeSearchMatchIndex}
         {onviewportactive}
+        {showPaneTitleBar}
       />
     </div>
   </div>

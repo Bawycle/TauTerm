@@ -211,6 +211,44 @@ For inactive (visible but not focused) panes in a split layout, the pane border 
 - **Process exit:** On process exit (zero or non-zero) in an inactive pane, the pane border turns `--color-error` (`#c44444`) for 1500ms, then returns to `--color-pane-border-inactive`.
 - **Reduced motion:** When `prefers-reduced-motion: reduce` is active, the border color changes instantly (no transition) and holds for the specified duration before reverting.
 
+#### 7.2.2 Pane Title Bar (FS-PANE-007 / FS-PANE-008)
+
+A slim horizontal bar at the top of each terminal pane. Visible only when:
+- the parent tab contains two or more panes, **and**
+- the `showPaneTitleBar` user preference is `true` (default).
+
+When either condition is false, the title bar **MUST NOT be in the DOM** (not merely hidden).
+
+**Anatomy:**
+
+```
+┌──[Title text truncated with ellipsis]──────────────────────┐
+```
+
+- **Height:** `--size-pane-title-bar-height` (20px — see §3 sizing tokens).
+- **Background:** `--color-bg-surface` (`#242118`).
+- **Bottom border:** 1px solid `--color-border` (`#35312a`).
+- **Horizontal padding:** `--space-2` (8px) left and right.
+- **Font family:** `--font-ui`.
+- **Font size:** `--font-size-ui-xs` (11px).
+- **Text color:** `--color-text-primary` (`#ccc7bc`) — same in both active and inactive states.
+- **Title truncation:** ellipsis when text exceeds available bar width.
+
+**Active vs Inactive pane — typography and opacity only, NOT color:**
+
+| State | Font Weight | Opacity |
+|-------|-------------|---------|
+| Active pane | `--font-weight-medium` (500) | 1.0 |
+| Inactive pane | `--font-weight-normal` (400) | 0.6 |
+
+The background color and bottom border MUST NOT differ between active and inactive panes. Rationale: using color to distinguish would create a second focus signal layered on top of the pane border (§7.2), increasing visual noise. Typography plus opacity is sufficient to communicate relative attention priority without introducing additional WCAG 2.1 SC 1.4.3 obligations.
+
+**Title content:** The resolved title for the specific pane, using the same priority chain as FS-TAB-006: (1) user-defined label, (2) OSC 0/2 title, (3) CWD basename (OSC 7), (4) foreground process name. If no title is available, a generic i18n fallback ("Terminal") is displayed.
+
+**ARIA:** `aria-hidden="true"` on the root element. The title bar is a decorative/contextual affordance for sighted users. The pane's accessible identity is carried by the `role="region"` in `TerminalPane`, not by this bar.
+
+**Preference toggle (FS-PANE-008):** A "Show pane title bar" toggle is present in the Appearance section of the preferences panel, after the "Hide cursor while typing" toggle. Default: enabled. Disabling it removes all pane title bars from multi-pane layouts immediately, without requiring a restart.
+
 ### 7.3 Terminal Area
 
 #### 7.3.1 Cursor Styles

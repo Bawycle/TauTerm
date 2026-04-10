@@ -16,6 +16,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
+import { resolveTabTitle } from '$lib/utils/tab-title';
 
 // ---------------------------------------------------------------------------
 // Helpers — build minimal TabState fixtures
@@ -53,23 +54,20 @@ function makeTabState(overrides: Partial<TabState> = {}): TabState {
 describe('TUITC-UX-010/011: tab title resolution', () => {
   it('null label → uses processTitle', () => {
     const tab = makeTabState({ label: null });
-    const pane = (tab.layout as { type: 'leaf'; state: PaneState }).state;
-    const displayTitle = tab.label ?? pane.processTitle;
+    const displayTitle = resolveTabTitle(tab) ?? '';
     expect(displayTitle).toBe('bash');
   });
 
   it('user label takes precedence over processTitle', () => {
     const tab = makeTabState({ label: 'My Tab' });
-    const pane = (tab.layout as { type: 'leaf'; state: PaneState }).state;
-    const displayTitle = tab.label ?? pane.processTitle;
+    const displayTitle = resolveTabTitle(tab) ?? '';
     expect(displayTitle).toBe('My Tab');
   });
 
   it('empty string label reverts to processTitle', () => {
     // Per FS-TAB-006: clearing label reverts to process-driven title
     const tab = makeTabState({ label: null });
-    const pane = (tab.layout as { type: 'leaf'; state: PaneState }).state;
-    const displayTitle = tab.label !== null ? tab.label : pane.processTitle;
+    const displayTitle = resolveTabTitle(tab) ?? '';
     expect(displayTitle).toBe('bash');
   });
 });
@@ -86,8 +84,7 @@ describe('TUITC-SEC-010/011: tab title injection prevention', () => {
     const maliciousTitle = '<script>evil()</script>';
     const tab = makeTabState();
     (tab.layout as { type: 'leaf'; state: PaneState }).state.processTitle = maliciousTitle;
-    const displayTitle =
-      tab.label ?? (tab.layout as { type: 'leaf'; state: PaneState }).state.processTitle;
+    const displayTitle = resolveTabTitle(tab) ?? '';
     // The string is returned as-is; it will be set as textContent by the component
     expect(displayTitle).toBe(maliciousTitle);
     // It is a plain string — DOM rendering via textContent is safe
@@ -99,9 +96,8 @@ describe('TUITC-SEC-010/011: tab title injection prevention', () => {
     // The TypeScript type is just `string` — we verify no frontend crash on
     // control chars in case they somehow arrive.
     const tab = makeTabState();
-    const pane = (tab.layout as { type: 'leaf'; state: PaneState }).state;
-    pane.processTitle = 'title\x01\x1b[1m';
-    const displayTitle = tab.label ?? pane.processTitle;
+    (tab.layout as { type: 'leaf'; state: PaneState }).state.processTitle = 'title\x01\x1b[1m';
+    const displayTitle = resolveTabTitle(tab) ?? '';
     // No throw, no crash; safe to pass to textContent
     expect(typeof displayTitle).toBe('string');
   });

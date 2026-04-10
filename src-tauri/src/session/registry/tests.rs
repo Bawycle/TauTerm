@@ -548,6 +548,168 @@ fn osc52_prop_004_ssh_conn_allow_false_global_true_survives_propagation() {
     );
 }
 
+// -----------------------------------------------------------------------
+// update_pane_title / update_pane_cwd — title resolution pipeline tests
+//
+// `SessionRegistry` cannot be constructed in unit tests (requires AppHandle).
+// We replicate the logic of `update_pane_title` and `update_pane_cwd` on
+// `RegistryInner` directly, exactly as the OSC52 tests above do for their
+// respective operations.
+//
+// `resolve_effective_title` is a private method of `SessionRegistry` so we
+// duplicate its logic here. Any change to the priority chain in `tab_ops.rs`
+// must be mirrored here — this is an intentional trade-off to avoid the
+// AppHandle dependency in unit tests.
+// -----------------------------------------------------------------------
+
+/// Replicates `SessionRegistry::resolve_effective_title` for use in unit tests.
+fn resolve_effective_title_for_test(pane: &PaneSession) -> Option<String> {
+    // Priority 1: OSC 0/2 title.
+    if let Some(ref t) = pane.title
+        && !t.is_empty()
+    {
+        return Some(t.clone());
+    }
+    // Priority 2: CWD basename.
+    if let Some(ref cwd) = pane.cwd
+        && let Some(name) = std::path::Path::new(cwd)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_owned())
+        && !name.is_empty()
+    {
+        return Some(name);
+    }
+    // Priority 3: foreground process name — always None in unit tests (no real PTY).
+    None
+}
+
+/// Replicates `SessionRegistry::update_pane_title` on `RegistryInner`.
+/// Returns `Some(TabState)` only when the effective display title changed,
+/// `None` when the pane is not found or the title is unchanged.
+fn inner_update_pane_title(
+    inner: &mut RegistryInner,
+    pane_id: &crate::session::ids::PaneId,
+    title: String,
+) -> Option<TabState> {
+    let (_tab_id, entry) = inner
+        .tabs
+        .iter_mut()
+        .find(|(_, e)| e.panes.contains_key(pane_id))
+        .map(|(id, e)| (id.clone(), e))?;
+
+    let old_title = entry
+        .panes
+        .get(pane_id)
+        .and_then(resolve_effective_title_for_test);
+
+    if let Some(pane) = entry.panes.get_mut(pane_id) {
+        pane.title = Some(title.clone());
+    }
+
+    let new_title = entry
+        .panes
+        .get(pane_id)
+        .and_then(resolve_effective_title_for_test);
+
+    if new_title == old_title {
+        return None;
+    }
+
+    let display_title = new_title.unwrap_or(title);
+    layout::update_pane_title_in_tree(&mut entry.state.layout, pane_id, &display_title);
+
+    Some(entry.state.clone())
+}
+
+/// Replicates `SessionRegistry::update_pane_cwd` on `RegistryInner`.
+/// Returns `Some(TabState)` only when the effective display title changed.
+fn inner_update_pane_cwd(
+    inner: &mut RegistryInner,
+    pane_id: &crate::session::ids::PaneId,
+    cwd: String,
+) -> Option<TabState> {
+    let (_tab_id, entry) = inner
+        .tabs
+        .iter_mut()
+        .find(|(_, e)| e.panes.contains_key(pane_id))
+        .map(|(id, e)| (id.clone(), e))?;
+
+    if let Some(pane) = entry.panes.get_mut(pane_id) {
+        let old_title = resolve_effective_title_for_test(pane);
+        pane.cwd = Some(cwd);
+        let new_title = resolve_effective_title_for_test(pane);
+        if new_title != old_title {
+            if let Some(ref t) = new_title {
+                layout::update_pane_title_in_tree(&mut entry.state.layout, pane_id, t);
+            }
+            return Some(entry.state.clone());
+        }
+    }
+    None
+}
+
+/// Extract the `PaneState.title` from the leaf node of a single-pane `TabState`.
+fn leaf_title(tab_state: &TabState, pane_id: &crate::session::ids::PaneId) -> Option<String> {
+    match &tab_state.layout {
+        PaneNode::Leaf { pane_id: id, state } if id == pane_id => state.title.clone(),
+        _ => None,
+    }
+}
+
+#[test]
+fn update_pane_title_stores_title_and_returns_tab_state() {
+    let (mut inner, _tab_id, pane_id) = make_registry_with_one_pane();
+
+    let result = inner_update_pane_title(&mut inner, &pane_id, "my-title".to_string());
+    assert!(
+        result.is_some(),
+        "update_pane_title must return Some(TabState)"
+    );
+
+    let tab_state = result.unwrap();
+    assert_eq!(
+        leaf_title(&tab_state, &pane_id),
+        Some("my-title".to_string()),
+        "PaneState.title in the layout tree must reflect the OSC title"
+    );
+}
+
+#[test]
+fn update_pane_cwd_returns_some_when_osc7_basename_changes_effective_title() {
+    // No OSC 0/2 title set — CWD basename is the effective title.
+    let (mut inner, _tab_id, pane_id) = make_registry_with_one_pane();
+
+    let result = inner_update_pane_cwd(&mut inner, &pane_id, "/home/user/projects".to_string());
+    assert!(
+        result.is_some(),
+        "update_pane_cwd must return Some(TabState) when CWD basename changes the effective title"
+    );
+
+    let tab_state = result.unwrap();
+    assert_eq!(
+        leaf_title(&tab_state, &pane_id),
+        Some("projects".to_string()),
+        "PaneState.title must be the CWD basename when no OSC 0/2 title is set"
+    );
+}
+
+#[test]
+fn update_pane_cwd_returns_none_when_osc02_takes_priority() {
+    // OSC 0/2 title is already set — changing CWD must not change the effective title.
+    let (mut inner, _tab_id, pane_id) = make_registry_with_one_pane();
+
+    // Set an OSC 0/2 title first.
+    inner_update_pane_title(&mut inner, &pane_id, "existing-title".to_string());
+
+    // Now update CWD — OSC 0/2 still takes priority, title unchanged.
+    let result = inner_update_pane_cwd(&mut inner, &pane_id, "/home/user/other".to_string());
+    assert!(
+        result.is_none(),
+        "update_pane_cwd must return None when an OSC 0/2 title takes priority (title unchanged)"
+    );
+}
+
 /// osc52_prop_005: Mixed panes in the same tab — local pane is affected by
 /// propagation while the SSH pane with override is not.
 #[test]

@@ -150,6 +150,23 @@ describe('session.svelte.ts — applySessionDelta', () => {
 
     expect(sessionState.tabs[0].label).toBe('My Shell');
   });
+
+  it('pane-metadata-changed: updates processTitle in layout leaf', async () => {
+    const { setInitialSession, applySessionDelta, sessionState } = await import('./session.svelte');
+    const pane = makePaneState({ id: 'pane-1', processTitle: 'initial' });
+    const tab = makeTab({ id: 'tab-1', layout: makeLeafNode('pane-1', pane) });
+    setInitialSession({ tabs: [tab], activeTabId: 'tab-1' });
+
+    const updatedPane = makePaneState({ id: 'pane-1', processTitle: 'zsh — ~/projects' });
+    const updatedTab = { ...tab, layout: makeLeafNode('pane-1', updatedPane) };
+    applySessionDelta({ changeType: 'pane-metadata-changed', tab: updatedTab });
+
+    const leaf = sessionState.tabs[0].layout;
+    expect(leaf.type).toBe('leaf');
+    if (leaf.type === 'leaf') {
+      expect(leaf.state.processTitle).toBe('zsh — ~/projects');
+    }
+  });
 });
 
 describe('session.svelte.ts — addTab / removeTab / updateTab', () => {

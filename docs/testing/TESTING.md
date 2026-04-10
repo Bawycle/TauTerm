@@ -294,6 +294,7 @@ Pure TypeScript, no Svelte components, no DOM.
 | `lib/layout/split-tree.ts` | `buildFromPaneNode()`, `updateRatio()`, `findLeaf()` |
 | `lib/state/session.svelte.ts` | Delta merge, `getPane()` traversal |
 | `lib/state/locale.svelte.ts` | `setLocale()` writes to preferences via IPC; `getLocale()` returns current locale; unknown locale code from backend defaults to `"en"` (FS-I18N-006) |
+| `lib/utils/tab-title.ts` | `resolveTabTitle()` priority chain (user label > OSC 0/2 title > OSC 7 CWD basename); `getRootPane()` tree traversal (leaf extraction from split tree) |
 | `lib/ipc/commands.ts` | Correct command name and parameter shape passed to `invoke()`; `TauTermError` propagated as thrown value; each wrapper calls the right command string |
 
 #### `lib/terminal/grid.ts` detail
@@ -398,7 +399,8 @@ Require a release build with the E2E feature flag: `pnpm tauri build --no-bundle
 | Navigate panes with keyboard | FS-PANE-005 |
 | Resize pane by drag; verify SIGWINCH (`stty size`) | FS-PANE-003, FS-PTY-009 |
 | Select text; paste Ctrl+Shift+V (clipboard round-trip) | FS-CLIP-004, FS-CLIP-005 |
-| OSC title via printf → tab bar displays title | FS-VT-060 |
+| OSC 0 sequence sets active tab title (TEST-OSC-E2E-001) | FS-VT-060, FS-TAB-006 |
+| Successive OSC 0 sequences — last title wins in DOM (TEST-OSC-E2E-002) | FS-VT-060 |
 | Double-click tab → inline rename → Enter → label updated | FS-TAB-006 |
 | Ctrl+Shift+F → search overlay → match highlighted | FS-SEARCH-006, FS-SEARCH-007 |
 | Open preferences; change font size; terminal redraws | FS-PREF-003 |

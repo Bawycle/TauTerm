@@ -78,7 +78,7 @@ These commands do not follow the `TauTermError` error envelope — they return `
 
 | Event name | Payload type | Trigger |
 |------------|-------------|---------|
-| `session-state-changed` | `SessionStateChanged` | Topology changes that originate asynchronously or outside a direct command: process title changed (OSC), pane process exited (SIGCHLD), active-tab/active-pane changed by user action via `set_active_pane`. **Not** emitted for `split_pane` or `close_pane` — those commands return the updated `TabState` directly. |
+| `session-state-changed` | `SessionStateChanged` | Topology changes that originate asynchronously or outside a direct command: process title changed (OSC 0/2), OSC 7 CWD change that alters the effective tab title (when no OSC 0/2 title is set), pane process exited (SIGCHLD), active-tab/active-pane changed by user action via `set_active_pane`. **Not** emitted for `split_pane` or `close_pane` — those commands return the updated `TabState` directly. |
 | `ssh-state-changed` | `SshStateChangedEvent` | SSH lifecycle state transition |
 | `screen-update` | `ScreenUpdateEvent` | Terminal output processed (cell diffs or full snapshot) |
 | `mode-state-changed` | `ModeStateChangedEvent` | A terminal mode relevant to frontend input encoding changed. Payload: `{ paneId: PaneId, decckm: bool, deckpam: bool }`. Without these flags, `keyboard.ts` cannot distinguish normal mode (ESC [ A/B/C/D) from application cursor mode (ESC O A/B/C/D), causing arrow key encoding errors in vim and readline (FS-KBD-007, FS-KBD-010). Emitted on DECSET/DECRST of modes 1 (DECCKM) and DECKPAM/DECKPNM (ESC =/ESC >). |
@@ -168,7 +168,7 @@ interface SessionStateChanged {
 
 **`session-state-changed` is not emitted for `split_pane` or `close_pane`:** those commands return the updated `TabState` (or `null`) directly in their response. The command response is the authoritative new state; no event is emitted. This avoids a race between the command response and a redundant event.
 
-`session-state-changed` is emitted only for changes that originate asynchronously or from outside a direct user command: OSC-driven process title change, pane process exit (SIGCHLD leading to a `Terminated` state — `ptyState` field updated), `hasForegroundProcess` transitions (foreground process group change detected), and `set_active_pane` confirmation.
+`session-state-changed` is emitted only for changes that originate asynchronously or from outside a direct user command: OSC 0/2-driven title change, OSC 7 CWD change when the CWD basename becomes the effective title (i.e. no OSC 0/2 title is set — lower-priority fallback in the resolution chain), pane process exit (SIGCHLD leading to a `Terminated` state — `ptyState` field updated), `hasForegroundProcess` transitions (foreground process group change detected), and `set_active_pane` confirmation.
 
 #### 4.5.3 `close_pane` return value and last-pane behavior
 

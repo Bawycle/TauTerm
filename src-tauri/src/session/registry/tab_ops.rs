@@ -282,26 +282,30 @@ impl SessionRegistry {
 
     /// Update the stored CWD for a pane (called from PTY read task on OSC 7 change).
     ///
-    /// Applies the title resolution chain after updating the CWD so the layout
-    /// tree reflects the best available title at all times.
-    ///
-    /// Returns the updated `TabState` if the pane is found, `None` otherwise.
+    /// Applies the title resolution chain after updating the CWD. Returns the updated
+    /// `TabState` only when the effective display title actually changed — `None` if
+    /// the pane is not found or if the title is unchanged (e.g. because an OSC 0/2
+    /// title takes priority over the CWD basename). This prevents spurious frontend
+    /// events on every shell prompt.
     pub fn update_pane_cwd(&self, pane_id: &PaneId, cwd: String) -> Option<TabState> {
         let mut inner = self.inner.write();
-        let (tab_id, entry) = inner
+        let (_tab_id, entry) = inner
             .tabs
             .iter_mut()
             .find(|(_, e)| e.panes.contains_key(pane_id))
             .map(|(id, e)| (id.clone(), e))?;
         if let Some(pane) = entry.panes.get_mut(pane_id) {
+            let old_title = Self::resolve_effective_title(pane);
             pane.cwd = Some(cwd);
-            // Re-resolve the effective display title after the CWD update.
-            if let Some(display_title) = Self::resolve_effective_title(pane) {
-                update_pane_title_in_tree(&mut entry.state.layout, pane_id, &display_title);
+            let new_title = Self::resolve_effective_title(pane);
+            if new_title != old_title {
+                if let Some(ref t) = new_title {
+                    update_pane_title_in_tree(&mut entry.state.layout, pane_id, t);
+                }
+                return Some(entry.state.clone());
             }
         }
-        let _ = tab_id;
-        Some(entry.state.clone())
+        None
     }
 
     /// Update the stored title for a pane (called from PTY/SSH read tasks on OSC title change).
@@ -309,30 +313,42 @@ impl SessionRegistry {
     /// Applies the title resolution chain (OSC title → CWD basename → process name)
     /// so the layout tree always shows the best available title.
     ///
-    /// Returns the updated `TabState` if the pane is found, `None` otherwise.
+    /// Returns `Some(TabState)` only when the effective display title actually changed —
+    /// `None` if the pane is not found or if the title is unchanged (prevents spurious
+    /// frontend events when the shell resends the same OSC title on every prompt).
     pub fn update_pane_title(&self, pane_id: &PaneId, title: String) -> Option<TabState> {
         let mut inner = self.inner.write();
-        let (tab_id, entry) = inner
+        let (_tab_id, entry) = inner
             .tabs
             .iter_mut()
             .find(|(_, e)| e.panes.contains_key(pane_id))
             .map(|(id, e)| (id.clone(), e))?;
+
+        // Capture the effective title before updating.
+        let old_title = entry
+            .panes
+            .get(pane_id)
+            .and_then(Self::resolve_effective_title);
 
         // Update the pane's stored OSC title.
         if let Some(pane) = entry.panes.get_mut(pane_id) {
             pane.title = Some(title.clone());
         }
 
-        // Resolve the effective display title through the priority chain and
-        // update the layout tree with the best available title.
-        let display_title = entry
+        // Resolve the new effective display title through the priority chain.
+        let new_title = entry
             .panes
             .get(pane_id)
-            .and_then(Self::resolve_effective_title)
-            .unwrap_or(title);
+            .and_then(Self::resolve_effective_title);
+
+        // If the effective title is unchanged, skip the tree update and suppress the event.
+        if new_title == old_title {
+            return None;
+        }
+
+        let display_title = new_title.unwrap_or(title);
         update_pane_title_in_tree(&mut entry.state.layout, pane_id, &display_title);
 
-        let _ = tab_id;
         Some(entry.state.clone())
     }
 

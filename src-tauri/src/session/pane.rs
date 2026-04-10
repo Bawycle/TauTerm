@@ -39,6 +39,10 @@ pub struct PaneState {
     /// sends the first CWD notification.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    /// User-defined label. `None` until the user sets one.
+    /// Serialized as `label`; overrides the auto-derived title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// Live pane session data (not serialized — kept in the registry).
@@ -50,6 +54,8 @@ pub struct PaneSession {
     pub title: Option<String>,
     /// Current working directory as reported by OSC 7. Updated by the PTY read task.
     pub cwd: Option<String>,
+    /// User-defined label (set via the pane title bar rename UX).
+    pub label: Option<String>,
     /// `Some` if this pane is connected via SSH.
     pub ssh_state: Option<SshLifecycleState>,
     /// Active PTY session. `None` for SSH panes or before spawn completes.
@@ -98,6 +104,7 @@ impl PaneSession {
             lifecycle: PaneLifecycleState::Spawning,
             title: None,
             cwd: None,
+            label: None,
             ssh_state: None,
             pty_session: None,
             pty_task: None,
@@ -118,6 +125,7 @@ impl PaneSession {
             ssh_state: self.ssh_state.clone(),
             scroll_offset: self.scroll_offset,
             cwd: self.cwd.clone(),
+            label: self.label.clone(),
         }
     }
 

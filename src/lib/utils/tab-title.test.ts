@@ -17,11 +17,12 @@ import { getPaneById, resolveTabTitle } from '$lib/utils/tab-title';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makePane(id: string, processTitle: string): PaneState {
+function makePane(id: string, processTitle: string, label?: string | null): PaneState {
   return {
     id,
     sessionType: 'local',
     processTitle,
+    label: label ?? undefined,
     cwd: '/home/user',
     sshConnectionId: null,
     sshState: null,
@@ -163,5 +164,57 @@ describe('resolveTabTitle — multi-pane: follows activePaneId (FS-PANE-007)', (
     const layout = makeSplit(rootPane, activePane);
     const tab = makeTabState(layout, 'pane-active', 'Monitoring');
     expect(resolveTabTitle(tab)).toBe('Monitoring');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// describe('resolveTabTitle — pane label priority (FS-PANE-007)')
+// ---------------------------------------------------------------------------
+
+describe('resolveTabTitle — pane label overrides pane processTitle', () => {
+  it('returns pane label when pane has a user label set', () => {
+    const pane = makePane('pane-1', 'bash', 'my-server');
+    const leaf: PaneNode = { type: 'leaf', paneId: 'pane-1', state: pane };
+    const tab = makeTabState(leaf, 'pane-1', null);
+    expect(resolveTabTitle(tab)).toBe('my-server');
+  });
+
+  it('falls back to processTitle when pane label is absent', () => {
+    const pane = makePane('pane-1', 'vim');
+    const leaf: PaneNode = { type: 'leaf', paneId: 'pane-1', state: pane };
+    const tab = makeTabState(leaf, 'pane-1', null);
+    expect(resolveTabTitle(tab)).toBe('vim');
+  });
+
+  it('falls back to processTitle when pane label is null', () => {
+    const pane = makePane('pane-1', 'zsh', null);
+    const leaf: PaneNode = { type: 'leaf', paneId: 'pane-1', state: pane };
+    const tab = makeTabState(leaf, 'pane-1', null);
+    expect(resolveTabTitle(tab)).toBe('zsh');
+  });
+
+  it('falls back to null when both pane label and processTitle are empty', () => {
+    const pane = makePane('pane-1', '', null);
+    const leaf: PaneNode = { type: 'leaf', paneId: 'pane-1', state: pane };
+    const tab = makeTabState(leaf, 'pane-1', null);
+    expect(resolveTabTitle(tab)).toBeNull();
+  });
+
+  it('active pane label wins over root pane processTitle in multi-pane', () => {
+    const rootPane = makePane('pane-root', 'bash');
+    const activePane = makePane('pane-active', 'htop', 'prod-server');
+    const layout = makeSplit(
+      { type: 'leaf', paneId: 'pane-root', state: rootPane },
+      { type: 'leaf', paneId: 'pane-active', state: activePane },
+    );
+    const tab = makeTabState(layout, 'pane-active', null);
+    expect(resolveTabTitle(tab)).toBe('prod-server');
+  });
+
+  it('tab label wins over active pane label', () => {
+    const pane = makePane('pane-1', 'bash', 'pane-label');
+    const leaf: PaneNode = { type: 'leaf', paneId: 'pane-1', state: pane };
+    const tab = makeTabState(leaf, 'pane-1', 'tab-label');
+    expect(resolveTabTitle(tab)).toBe('tab-label');
   });
 });

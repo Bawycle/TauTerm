@@ -14,7 +14,7 @@ use crate::session::{
 
 use super::{
     ScrollPositionState, SessionRegistry, clamp_pane_dimensions,
-    layout::{remove_pane_from_tree, replace_leaf_with_split},
+    layout::{remove_pane_from_tree, replace_leaf_with_split, update_pane_label_in_tree},
     pty_helpers::{get_reader_handle, get_writer_handle},
     shell::resolve_shell_path,
 };
@@ -322,6 +322,38 @@ impl SessionRegistry {
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         let (cols, rows) = clamp_pane_dimensions(cols, rows);
         pane.resize(cols, rows, pixel_width, pixel_height)
+    }
+
+    /// Set or clear the user-defined label for a pane.
+    /// Returns the updated `TabState` for the owning tab.
+    pub fn rename_pane(
+        &self,
+        pane_id: PaneId,
+        label: Option<String>,
+    ) -> Result<TabState, SessionError> {
+        let mut inner = self.inner.write();
+
+        let tab_id = inner
+            .tabs
+            .iter()
+            .find(|(_, e)| e.panes.contains_key(&pane_id))
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+
+        let entry = inner
+            .tabs
+            .get_mut(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+
+        let pane = entry
+            .panes
+            .get_mut(&pane_id)
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+
+        pane.label = label.clone();
+        update_pane_label_in_tree(&mut entry.state.layout, &pane_id, label);
+
+        Ok(entry.state.clone())
     }
 
     /// Set the active pane (and its containing tab) in the registry.

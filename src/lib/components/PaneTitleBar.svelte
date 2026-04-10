@@ -1,17 +1,68 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <script lang="ts">
+  let isRenaming = $state(false);
+  let renameValue = $state('');
+  let inputEl = $state<HTMLInputElement | undefined>(undefined);
+
   interface Props {
-    /** Resolved title for this pane. Already i18n-resolved by caller. */
     title: string;
-    /** Whether this pane is the active (focused) one. */
     isActive: boolean;
+    onrename?: (label: string | null) => void;
+  }
+  const { title, isActive, onrename }: Props = $props();
+
+  $effect(() => {
+    if (isRenaming && inputEl) {
+      inputEl.focus();
+      inputEl.select();
+    }
+  });
+
+  function startRename() {
+    renameValue = title;
+    isRenaming = true;
   }
 
-  const { title, isActive }: Props = $props();
+  function confirmRename() {
+    if (!isRenaming) return;
+    isRenaming = false;
+    const label: string | null = renameValue.trim() === '' ? null : renameValue.trim();
+    onrename?.(label);
+  }
+
+  function cancelRename() {
+    isRenaming = false;
+    renameValue = '';
+  }
 </script>
 
-<div class="pane-title-bar" class:pane-title-bar--active={isActive} aria-hidden="true">
-  <span class="pane-title-bar__title">{title}</span>
+<div
+  class="pane-title-bar"
+  class:pane-title-bar--active={isActive}
+  aria-hidden="true"
+  ondblclick={startRename}
+>
+  {#if isRenaming}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      bind:this={inputEl}
+      class="pane-title-bar__input"
+      type="text"
+      bind:value={renameValue}
+      onblur={confirmRename}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmRename();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelRename();
+        }
+      }}
+    />
+  {:else}
+    <span class="pane-title-bar__title">{title}</span>
+  {/if}
 </div>
 
 <style>
@@ -30,6 +81,7 @@
     font-weight: var(--font-weight-normal);
     color: var(--color-text-primary);
     overflow: hidden;
+    cursor: default;
   }
 
   .pane-title-bar--active {
@@ -42,5 +94,16 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+
+  .pane-title-bar__input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: inherit;
+    font: inherit;
+    padding: 0;
   }
 </style>

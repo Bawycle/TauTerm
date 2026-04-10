@@ -75,6 +75,10 @@ export function setActivePane(paneId: PaneId): Promise<void> {
   return invoke('set_active_pane', { paneId });
 }
 
+export function setPaneLabel(paneId: PaneId, label: string | null): Promise<TabState> {
+  return invoke('set_pane_label', { paneId, label });
+}
+
 // ---------------------------------------------------------------------------
 // Terminal I/O commands
 // ---------------------------------------------------------------------------

@@ -60,6 +60,8 @@ export interface PaneState {
   sessionType: 'local' | 'ssh';
   /** OSC-driven title or shell name. */
   processTitle: string;
+  /** User-defined label. Null/absent until the user sets one. */
+  label?: string | null;
   cwd: string;
   /** Reference to a saved SSH connection; `null` for local sessions. */
   sshConnectionId: string | null;

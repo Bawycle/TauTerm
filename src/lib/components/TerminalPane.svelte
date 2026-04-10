@@ -123,6 +123,8 @@
     ondimensionschange?: (cols: number, rows: number) => void;
     /** Called when this pane becomes/ceases to be the active viewport for focus management. */
     onviewportactive?: (el: HTMLElement | null) => void;
+    /** Called when the user renames this pane via the title bar. */
+    onrenamepane?: (label: string | null) => void;
     /**
      * Whether to show the pane title bar (true when tab has ≥2 panes AND showPaneTitleBar preference is enabled).
      */
@@ -160,6 +162,7 @@
     ondisableConfirmMultilinePaste,
     ondimensionschange,
     onviewportactive,
+    onrenamepane,
     showTitleBar = false,
     paneTitle = undefined,
   }: Props = $props();
@@ -297,7 +300,7 @@
     : m.terminal_pane_aria_label()}
 >
   {#if showTitleBar}
-    <PaneTitleBar title={paneTitle ?? m.pane_title_fallback()} isActive={active} />
+    <PaneTitleBar title={paneTitle ?? m.pane_title_fallback()} isActive={active} onrename={onrenamepane} />
   {/if}
 
   <!-- Viewport wrapper: fills remaining flex space below PaneTitleBar.

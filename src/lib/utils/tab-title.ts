@@ -34,6 +34,7 @@ export function getPaneById(node: PaneNode, paneId: PaneId): PaneState | null {
  */
 export function resolveTabTitle(tab: TabState): string | null {
   if (tab.label !== null) return tab.label;
-  const processTitle = getPaneById(tab.layout, tab.activePaneId)?.processTitle;
-  return processTitle != null && processTitle.length > 0 ? processTitle : null;
+  const pane = getPaneById(tab.layout, tab.activePaneId);
+  const title = pane?.label || pane?.processTitle;
+  return title != null && title.length > 0 ? title : null;
 }

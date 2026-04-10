@@ -48,6 +48,7 @@ fn make_pane_state(id: PaneId) -> PaneState {
         lifecycle: PaneLifecycleState::Running,
         title: None,
         cwd: None,
+        label: None,
         ssh_state: None,
         scroll_offset: 0,
     }

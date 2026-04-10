@@ -200,6 +200,7 @@ export function useTerminalView() {
     handleNavigatePane: session.handleNavigatePane,
     handleSwitchTab: session.handleSwitchTab,
     handleDimensionsChange: session.handleDimensionsChange,
+    handlePaneRename: session.handlePaneRename,
 
     // Handlers — IO
     handleConnectionSave: io.handleConnectionSave,

@@ -69,6 +69,8 @@
     onviewportactive?: (el: HTMLElement | null) => void;
     /** Whether the showPaneTitleBar preference is enabled — forwarded to TerminalPane. */
     showPaneTitleBar?: boolean;
+    /** Called when the user renames a pane via the title bar. */
+    onrenamepane?: (paneId: PaneId, label: string | null) => void;
   }
 
   const {
@@ -97,6 +99,7 @@
     ondimensionschange,
     onviewportactive,
     showPaneTitleBar = true,
+    onrenamepane,
   }: Props = $props();
 
   // ---------------------------------------------------------------------------
@@ -191,7 +194,8 @@
       ondimensionschange={(c, r) => ondimensionschange?.(node.paneId, c, r)}
       {onviewportactive}
       showTitleBar={canClosePane && showPaneTitleBar}
-      paneTitle={node.state.processTitle || undefined}
+      paneTitle={node.state.label || node.state.processTitle || undefined}
+      onrenamepane={(label) => onrenamepane?.(node.paneId, label)}
     />
   </div>
 {:else}
@@ -238,6 +242,7 @@
         {ondimensionschange}
         {onviewportactive}
         {showPaneTitleBar}
+        {onrenamepane}
       />
     </div>
 
@@ -284,6 +289,7 @@
         {activeSearchMatchIndex}
         {onviewportactive}
         {showPaneTitleBar}
+        {onrenamepane}
       />
     </div>
   </div>

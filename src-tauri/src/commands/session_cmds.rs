@@ -73,6 +73,17 @@ pub async fn rename_tab(
 }
 
 #[tauri::command]
+pub async fn set_pane_label(
+    pane_id: PaneId,
+    label: Option<String>,
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<TabState, TauTermError> {
+    registry
+        .rename_pane(pane_id, label)
+        .map_err(TauTermError::from)
+}
+
+#[tauri::command]
 pub async fn reorder_tab(
     tab_id: TabId,
     new_order: u32,

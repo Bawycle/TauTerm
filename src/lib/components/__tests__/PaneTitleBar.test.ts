@@ -10,15 +10,19 @@
  *   PTB-A11Y-001 — root element has aria-hidden="true"
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { mount, unmount } from 'svelte';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mount, unmount, flushSync } from 'svelte';
 import PaneTitleBar from '../PaneTitleBar.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function mountBar(props: { title: string; isActive: boolean }): {
+function mountBar(props: {
+  title: string;
+  isActive: boolean;
+  onrename?: (label: string | null) => void;
+}): {
   container: HTMLElement;
   instance: ReturnType<typeof mount>;
 } {
@@ -107,5 +111,128 @@ describe('PTB-A11Y-001: root element has aria-hidden="true"', () => {
     instances.push(instance);
     const bar = container.querySelector('.pane-title-bar');
     expect(bar!.getAttribute('aria-hidden')).toBe('true');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PTB-RN-001: double-click enters rename mode
+// ---------------------------------------------------------------------------
+
+describe('PTB-RN-001: double-click enters rename mode', () => {
+  it('shows an input with the current title after double-click', () => {
+    const { container, instance } = mountBar({ title: 'bash', isActive: false });
+    instances.push(instance);
+
+    const bar = container.querySelector('.pane-title-bar')!;
+    bar.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+
+    const input = container.querySelector<HTMLInputElement>('.pane-title-bar__input');
+    expect(input).not.toBeNull();
+    expect(input!.value).toBe('bash');
+  });
+
+  it('hides the title span while the input is shown', () => {
+    const { container, instance } = mountBar({ title: 'vim', isActive: true });
+    instances.push(instance);
+
+    const bar = container.querySelector('.pane-title-bar')!;
+    bar.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+
+    expect(container.querySelector('.pane-title-bar__title')).toBeNull();
+    expect(container.querySelector('.pane-title-bar__input')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PTB-RN-002: Enter confirms rename
+// ---------------------------------------------------------------------------
+
+describe('PTB-RN-002: Enter confirms rename and calls onrename', () => {
+  it('calls onrename with trimmed value and hides input on Enter', () => {
+    const onrename = vi.fn();
+    const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
+    instances.push(instance);
+
+    container.querySelector('.pane-title-bar')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+
+    const input = container.querySelector<HTMLInputElement>('.pane-title-bar__input')!;
+    input.value = '  my-server  ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    flushSync();
+
+    expect(onrename).toHaveBeenCalledWith('my-server');
+    expect(container.querySelector('.pane-title-bar__input')).toBeNull();
+  });
+
+  it('calls onrename(null) when input is empty on Enter', () => {
+    const onrename = vi.fn();
+    const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
+    instances.push(instance);
+
+    container.querySelector('.pane-title-bar')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+
+    const input = container.querySelector<HTMLInputElement>('.pane-title-bar__input')!;
+    input.value = '   ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    flushSync();
+
+    expect(onrename).toHaveBeenCalledWith(null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PTB-RN-003: Escape cancels rename
+// ---------------------------------------------------------------------------
+
+describe('PTB-RN-003: Escape cancels rename without calling onrename', () => {
+  it('hides the input and does not call onrename on Escape', () => {
+    const onrename = vi.fn();
+    const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
+    instances.push(instance);
+
+    container.querySelector('.pane-title-bar')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+
+    container.querySelector<HTMLInputElement>('.pane-title-bar__input')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flushSync();
+
+    expect(onrename).not.toHaveBeenCalled();
+    expect(container.querySelector('.pane-title-bar__input')).toBeNull();
+    expect(container.querySelector('.pane-title-bar__title')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PTB-RN-004: blur confirms rename
+// ---------------------------------------------------------------------------
+
+describe('PTB-RN-004: blur confirms rename', () => {
+  it('calls onrename with the current value when input loses focus', () => {
+    const onrename = vi.fn();
+    const { container, instance } = mountBar({ title: 'bash', isActive: false, onrename });
+    instances.push(instance);
+
+    container.querySelector('.pane-title-bar')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+
+    const input = container.querySelector<HTMLInputElement>('.pane-title-bar__input')!;
+    input.value = 'staging';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    flushSync();
+
+    expect(onrename).toHaveBeenCalledWith('staging');
+    expect(container.querySelector('.pane-title-bar__input')).toBeNull();
   });
 });

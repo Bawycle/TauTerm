@@ -17,6 +17,7 @@ import {
   setActivePane,
   setActiveTab,
   hasForegroundProcess,
+  setPaneLabel,
 } from '$lib/ipc/commands';
 import {
   sessionState,
@@ -191,6 +192,19 @@ export function createSessionHandlers(s: ViewState) {
   }
 
   // -------------------------------------------------------------------------
+  // Pane rename
+  // -------------------------------------------------------------------------
+
+  async function handlePaneRename(paneId: PaneId, label: string | null) {
+    try {
+      const updatedTab = await setPaneLabel(paneId, label);
+      updateTab(updatedTab);
+    } catch {
+      // Non-fatal: title stays unchanged
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Dimensions callback from TerminalPane
   // -------------------------------------------------------------------------
 
@@ -217,5 +231,6 @@ export function createSessionHandlers(s: ViewState) {
     handleNavigatePane,
     handleSwitchTab,
     handleDimensionsChange,
+    handlePaneRename,
   };
 }

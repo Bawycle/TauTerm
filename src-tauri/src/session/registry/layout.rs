@@ -77,6 +77,24 @@ pub(super) fn update_pane_title_in_tree(node: &mut PaneNode, target_id: &PaneId,
     }
 }
 
+/// Update the `PaneState.label` for a specific pane in the layout tree in-place.
+pub(super) fn update_pane_label_in_tree(
+    node: &mut PaneNode,
+    target_id: &PaneId,
+    label: Option<String>,
+) {
+    match node {
+        PaneNode::Leaf { pane_id, state } if pane_id == target_id => {
+            state.label = label;
+        }
+        PaneNode::Leaf { .. } => {}
+        PaneNode::Split { first, second, .. } => {
+            update_pane_label_in_tree(first, target_id, label.clone());
+            update_pane_label_in_tree(second, target_id, label);
+        }
+    }
+}
+
 /// Remove the leaf for `target_id`, collapsing its sibling upward.
 pub(super) fn remove_pane_from_tree(node: PaneNode, target_id: &PaneId) -> PaneNode {
     match node {

@@ -168,6 +168,30 @@ When the active tab contains two or more panes, a Lucide `LayoutPanelLeft` icon 
 
 The reduced opacity (0.5) is intentional: the icon's function is to signal a structural fact (multi-pane layout), not to carry semantic urgency. It should be visible without drawing the eye. The icon must never appear on tabs with a single pane.
 
+#### 7.1.10 OS Window Title (FS-TAB-010)
+
+The application window title (displayed by the OS window manager, taskbar, and Alt+Tab switcher) follows the format:
+
+```
+{tab-title} — TauTerm
+```
+
+**Composition rules:**
+
+- **`{tab-title}`**: the resolved title of the active tab, using the same priority chain as FS-TAB-006 and §7.1.9. Since the tab title already follows the active pane (§7.1.9), the window title inherently reflects the active pane — no separate resolution is needed.
+- **Separator**: em dash ` — ` (U+2014, with a space on each side). Chosen over hyphen-minus to avoid ambiguity with Unix path separators and to match the Linux desktop convention (GNOME, KDE).
+- **Suffix**: `TauTerm` — always present, always last. Enables identification in Alt+Tab and taskbar when multiple windows are open.
+- **Fallback**: when `{tab-title}` resolves to null or empty string, use `Terminal — TauTerm`.
+
+**Update triggers:**
+- Active tab changes.
+- Active pane changes within the current tab (tab-title updates, so window title follows).
+- Active pane's process title changes (same reactive chain).
+
+**Not configurable in v1.** Custom window title patterns (e.g. `%T - %a`) produce broken configurations disproportionate to their benefit. If a use case emerges from personas, add an optional format token in Appearance preferences in v1.1.
+
+**Rationale for context-first ordering:** Window managers truncate titles from the right when screen space is insufficient. Placing `{tab-title}` first ensures the contextual information (`vim`, `user@server`, `~/projects`) survives truncation. `TauTerm` is recoverable from the window icon; the active context is not.
+
 ### 7.2 Pane Divider
 
 - **Orientation:** Vertical (for left/right split) or horizontal (for top/bottom split).
@@ -210,6 +234,44 @@ For inactive (visible but not focused) panes in a split layout, the pane border 
 - **Bell activity:** On BEL received in an inactive pane, the pane border pulses to `--color-indicator-bell` (`#d48a20`) for 800ms, then returns to `--color-pane-border-inactive`. Same animation mechanics.
 - **Process exit:** On process exit (zero or non-zero) in an inactive pane, the pane border turns `--color-error` (`#c44444`) for 1500ms, then returns to `--color-pane-border-inactive`.
 - **Reduced motion:** When `prefers-reduced-motion: reduce` is active, the border color changes instantly (no transition) and holds for the specified duration before reverting.
+
+#### 7.2.2 Pane Title Bar (FS-PANE-007 / FS-PANE-008)
+
+A slim horizontal bar at the top of each terminal pane. Visible only when:
+- the parent tab contains two or more panes, **and**
+- the `showPaneTitleBar` user preference is `true` (default).
+
+When either condition is false, the title bar **MUST NOT be in the DOM** (not merely hidden).
+
+**Anatomy:**
+
+```
+┌──[Title text truncated with ellipsis]──────────────────────┐
+```
+
+- **Height:** `--size-pane-title-bar-height` (20px — see §3 sizing tokens).
+- **Background:** `--color-bg-surface` (`#242118`).
+- **Bottom border:** 1px solid `--color-border` (`#35312a`).
+- **Horizontal padding:** `--space-2` (8px) left and right.
+- **Font family:** `--font-ui`.
+- **Font size:** `--font-size-ui-xs` (11px).
+- **Text color:** `--color-text-primary` (`#ccc7bc`) — same in both active and inactive states.
+- **Title truncation:** ellipsis when text exceeds available bar width.
+
+**Active vs Inactive pane — typography and opacity only, NOT color:**
+
+| State | Font Weight | Opacity |
+|-------|-------------|---------|
+| Active pane | `--font-weight-medium` (500) | 1.0 |
+| Inactive pane | `--font-weight-normal` (400) | 0.6 |
+
+The background color and bottom border MUST NOT differ between active and inactive panes. Rationale: using color to distinguish would create a second focus signal layered on top of the pane border (§7.2), increasing visual noise. Typography plus opacity is sufficient to communicate relative attention priority without introducing additional WCAG 2.1 SC 1.4.3 obligations.
+
+**Title content:** The resolved title for the specific pane, using the same priority chain as FS-TAB-006: (1) user-defined label, (2) OSC 0/2 title, (3) CWD basename (OSC 7), (4) foreground process name. If no title is available, a generic i18n fallback ("Terminal") is displayed.
+
+**ARIA:** `aria-hidden="true"` on the root element. The title bar is a decorative/contextual affordance for sighted users. The pane's accessible identity is carried by the `role="region"` in `TerminalPane`, not by this bar.
+
+**Preference toggle (FS-PANE-008):** A "Show pane title bar" toggle is present in the Appearance section of the preferences panel, after the "Hide cursor while typing" toggle. Default: enabled. Disabling it removes all pane title bars from multi-pane layouts immediately, without requiring a restart.
 
 ### 7.3 Terminal Area
 

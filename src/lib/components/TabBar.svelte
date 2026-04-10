@@ -98,6 +98,11 @@
     return getRootPane(tab)?.sessionType === 'ssh';
   }
 
+  /** Does the tab have ≥2 panes (split layout)? */
+  function isMultiPaneTab(tab: TabState): boolean {
+    return tab.layout.type === 'split';
+  }
+
   // ── Inline rename state (FS-TAB-006) ────────────────────────────────────────
   const rename = useTabBarRename({
     requestedRenameTabId: () => requestedRenameTabId,
@@ -221,6 +226,7 @@
         {notification}
         {title}
         isSSH={isSSHTab(tab)}
+        isMultiPane={isMultiPaneTab(tab)}
         dropIndicatorIndex={dnd.dropIndicatorIndex}
         dragTabId={dnd.dragTabId}
         {onTabClick}
@@ -478,6 +484,14 @@
     outline: none;
     cursor: text;
     user-select: text;
+  }
+
+  /* Split indicator (UXD §7.1.9) */
+  :global(.tab-bar__split-indicator) {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    opacity: 0.5;
   }
 
   /* SSH badge */

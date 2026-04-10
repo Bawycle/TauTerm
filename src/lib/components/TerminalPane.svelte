@@ -35,6 +35,7 @@
   import TerminalPaneBanners from './TerminalPaneBanners.svelte';
   import TerminalPaneReconnectionSeparators from './TerminalPaneReconnectionSeparators.svelte';
   import TerminalPanePasteDialog from './TerminalPanePasteDialog.svelte';
+  import PaneTitleBar from './PaneTitleBar.svelte';
   import * as m from '$lib/paraglide/messages';
   import { sshStates } from '$lib/state/ssh.svelte';
   import type {
@@ -122,6 +123,16 @@
     ondimensionschange?: (cols: number, rows: number) => void;
     /** Called when this pane becomes/ceases to be the active viewport for focus management. */
     onviewportactive?: (el: HTMLElement | null) => void;
+    /** Called when the user renames this pane via the title bar. */
+    onrenamepane?: (label: string | null) => void;
+    /**
+     * Whether to show the pane title bar (true when tab has ≥2 panes AND showPaneTitleBar preference is enabled).
+     */
+    showTitleBar?: boolean;
+    /**
+     * Resolved title for this pane's title bar. If undefined, the i18n fallback is used.
+     */
+    paneTitle?: string;
   }
 
   const {
@@ -151,6 +162,9 @@
     ondisableConfirmMultilinePaste,
     ondimensionschange,
     onviewportactive,
+    onrenamepane,
+    showTitleBar = false,
+    paneTitle = undefined,
   }: Props = $props();
 
   // ── SSH lifecycle state — derived directly from module-level reactive Record ─
@@ -285,47 +299,63 @@
     ? m.terminal_pane_n_aria_label({ n: paneNumber })
     : m.terminal_pane_aria_label()}
 >
-  <!-- ContextMenu wraps the viewport so right-click opens it -->
-  <ContextMenu
-    variant="terminal"
-    hasSelection={tp.hasSelection}
-    {canClosePane}
-    oncopy={tp.handleContextMenuCopy}
-    onpaste={tp.handleContextMenuPaste}
-    {onsearch}
-    {onsplitH}
-    {onsplitV}
-    {onclosepane}
-  >
-    <TerminalPaneViewport
-      {tp}
-      {active}
-      {lineHeight}
-      {cursorHidden}
-      onkeydown={handleKeydown}
-      onmousemove={handleViewportMouseMove}
+  {#if showTitleBar}
+    <PaneTitleBar title={paneTitle ?? m.pane_title_fallback()} isActive={active} onrename={onrenamepane} />
+  {/if}
+
+  <!-- Viewport wrapper: fills remaining flex space below PaneTitleBar.
+       flex: 1; min-height: 0 prevents the viewport from overflowing the pane
+       when a title bar is present. ContextMenu uses class="contents" so this
+       div is the actual flex child that sizes the viewport correctly. -->
+  <div class="terminal-pane__viewport-wrapper">
+    <!-- ContextMenu wraps the viewport so right-click opens it -->
+    <ContextMenu
+      variant="terminal"
+      hasSelection={tp.hasSelection}
+      {canClosePane}
+      oncopy={tp.handleContextMenuCopy}
+      onpaste={tp.handleContextMenuPaste}
+      {onsearch}
+      {onsplitH}
+      {onsplitV}
+      {onclosepane}
+    >
+      <TerminalPaneViewport
+        {tp}
+        {active}
+        {lineHeight}
+        {cursorHidden}
+        onkeydown={handleKeydown}
+        onmousemove={handleViewportMouseMove}
+      />
+      <TerminalPaneScrollbar {tp} />
+      <TerminalPaneScrollToBottom
+        scrollOffset={tp.scrollOffset}
+        onclick={tp.handleScrollToBottom}
+      />
+    </ContextMenu>
+
+    <!-- SSH reconnection separators — UI overlay injected at reconnect events
+         (FS-SSH-042, UXD §7.19). Not interactive; aria-hidden (purely decorative).
+         Must be inside viewport-wrapper so position:absolute inset:0 anchors to
+         the viewport area only, not the full pane (which includes PaneTitleBar). -->
+    <TerminalPaneReconnectionSeparators separators={reconnectionSeparators} />
+
+    <!-- Banners: deprecated SSH algorithm, process terminated, SSH disconnected.
+         Inside viewport-wrapper so absolute positioning excludes the title bar. -->
+    <TerminalPaneBanners
+      {deprecatedAlgorithm}
+      {terminated}
+      {exitCode}
+      {signalName}
+      {sshState}
+      {canClosePane}
+      onDismissAlgorithm={handleDismissAlgorithmBanner}
+      {onrestart}
+      {onclosepane}
+      onReconnect={tp.handleReconnect}
     />
-    <TerminalPaneScrollbar {tp} />
-    <TerminalPaneScrollToBottom scrollOffset={tp.scrollOffset} onclick={tp.handleScrollToBottom} />
-  </ContextMenu>
-
-  <!-- SSH reconnection separators — UI overlay injected at reconnect events
-       (FS-SSH-042, UXD §7.19). Not interactive; aria-hidden (purely decorative). -->
-  <TerminalPaneReconnectionSeparators separators={reconnectionSeparators} />
-
-  <!-- Banners: deprecated SSH algorithm, process terminated, SSH disconnected -->
-  <TerminalPaneBanners
-    {deprecatedAlgorithm}
-    {terminated}
-    {exitCode}
-    {signalName}
-    {sshState}
-    {canClosePane}
-    onDismissAlgorithm={handleDismissAlgorithmBanner}
-    {onrestart}
-    {onclosepane}
-    onReconnect={tp.handleReconnect}
-  />
+  </div>
 </div>
 
 <!-- FS-CLIP-009: Multiline paste confirmation dialog (outside .terminal-pane for z-index) -->
@@ -334,6 +364,8 @@
 <style>
   .terminal-pane {
     position: relative;
+    display: flex;
+    flex-direction: column;
     width: 100%;
     height: 100%;
     overflow: hidden;
@@ -347,6 +379,16 @@
 
   .terminal-pane--active {
     border: 2px solid var(--color-pane-border-active);
+  }
+
+  /* Viewport wrapper: fills the remaining flex space after the title bar.
+     position: relative is required so that ContextMenu/scrollbar/scroll-to-bottom
+     absolute overlays position correctly relative to this element. */
+  .terminal-pane__viewport-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
   }
 
   /* Viewport styles remain here since TerminalPaneViewport renders inside .terminal-pane */

@@ -12,7 +12,7 @@
   Security: tab title via text interpolation only — no {@html} (TUITC-SEC-010/011).
 -->
 <script lang="ts">
-  import { X, Bell, CheckCircle, XCircle, Network } from 'lucide-svelte';
+  import { X, Bell, CheckCircle, XCircle, Network, LayoutPanelLeft } from 'lucide-svelte';
   import type { TabState, PaneNotification } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
 
@@ -52,6 +52,8 @@
     onContextMenu: (event: MouseEvent, tabId: string) => void;
     onTabKeydown: (event: KeyboardEvent, tabId: string, title: string) => void;
     onRenameKeydown: (event: KeyboardEvent, tabId: string) => void;
+    /** Whether the tab has ≥2 panes — controls the split indicator icon visibility. */
+    isMultiPane?: boolean;
   }
 
   let {
@@ -79,6 +81,7 @@
     onContextMenu,
     onTabKeydown,
     onRenameKeydown,
+    isMultiPane = false,
   }: Props = $props();
 </script>
 
@@ -126,6 +129,13 @@
   {#if isSSH}
     <span class="tab-bar__ssh-badge" aria-label={m.tab_bar_ssh_badge_aria_label()}>
       <Network size={12} aria-hidden="true" />
+    </span>
+  {/if}
+
+  <!-- Split indicator (UXD §7.1.9) — visible when tab has ≥2 panes -->
+  {#if isMultiPane && !isRenaming}
+    <span class="tab-bar__split-indicator" aria-hidden="true">
+      <LayoutPanelLeft size={14} />
     </span>
   {/if}
 

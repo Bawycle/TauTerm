@@ -67,6 +67,56 @@ fn apply_patch_font_size_only_does_not_touch_language() {
     );
 }
 
+/// apply_patch with `show_pane_title_bar: Some(false)` must set the field to false.
+#[test]
+fn apply_patch_show_pane_title_bar_some_false_sets_field() {
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let path = tmp.path().join("preferences.toml");
+    let store = PreferencesStore::new_with_defaults(path);
+
+    // Default must be true.
+    assert!(store.read().get().appearance.show_pane_title_bar);
+
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            show_pane_title_bar: Some(false),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+    assert!(
+        !updated.appearance.show_pane_title_bar,
+        "show_pane_title_bar must be set to false"
+    );
+}
+
+/// apply_patch with `show_pane_title_bar: None` must leave the field unchanged.
+#[test]
+fn apply_patch_show_pane_title_bar_none_leaves_unchanged() {
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let path = tmp.path().join("preferences.toml");
+    let store = PreferencesStore::new_with_defaults(path);
+
+    let before = store.read().get().appearance.show_pane_title_bar;
+
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            font_size: Some(16.0), // change something else
+            show_pane_title_bar: None,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+    assert_eq!(
+        updated.appearance.show_pane_title_bar, before,
+        "show_pane_title_bar must remain unchanged when patch field is None"
+    );
+}
+
 /// apply_patch with `appearance: None` must leave all appearance fields untouched.
 #[test]
 fn apply_patch_with_none_appearance_changes_nothing() {

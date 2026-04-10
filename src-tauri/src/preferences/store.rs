@@ -147,6 +147,9 @@ impl PreferencesStore {
             if let Some(v) = patch.hide_cursor_while_typing {
                 a.hide_cursor_while_typing = v;
             }
+            if let Some(v) = patch.show_pane_title_bar {
+                a.show_pane_title_bar = v;
+            }
         }
         if let Some(terminal) = patch.terminal {
             let t = &mut prefs.terminal;

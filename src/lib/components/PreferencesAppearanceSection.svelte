@@ -67,6 +67,11 @@
     if (!preferences?.appearance) return;
     onupdate?.({ appearance: { ...preferences.appearance, hideCursorWhileTyping: checked } });
   }
+
+  function handleShowPaneTitleBarChange(checked: boolean) {
+    if (!preferences?.appearance) return;
+    onupdate?.({ appearance: { showPaneTitleBar: checked } });
+  }
 </script>
 
 <p
@@ -131,5 +136,11 @@
     checked={preferences?.appearance?.hideCursorWhileTyping ?? true}
     label={m.hide_cursor_while_typing_label()}
     onchange={handleHideCursorWhileTypingChange}
+  />
+
+  <Toggle
+    checked={preferences?.appearance?.showPaneTitleBar ?? true}
+    label={m.show_pane_title_bar_label()}
+    onchange={handleShowPaneTitleBarChange}
   />
 </div>

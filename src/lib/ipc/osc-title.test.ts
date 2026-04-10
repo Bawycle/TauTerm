@@ -164,3 +164,80 @@ describe('OSC-TITLE-005: title read-back does not inject bytes into PTY', () => 
     expect(cleanTitle).not.toContain('\x1b');
   });
 });
+
+// ---------------------------------------------------------------------------
+// FS-PANE-007: tab title follows active pane in multi-pane layout
+// ---------------------------------------------------------------------------
+
+describe('FS-PANE-007: tab title follows active pane in multi-pane layout', () => {
+  it('returns processTitle of the active (non-root) pane, not the root pane', () => {
+    const rootPane: PaneState = {
+      id: 'pane-root',
+      sessionType: 'local',
+      processTitle: 'bash',
+      cwd: '/home/user',
+      sshConnectionId: null,
+      sshState: null,
+      notification: null,
+    };
+    const activePane: PaneState = {
+      id: 'pane-active',
+      sessionType: 'local',
+      processTitle: 'htop',
+      cwd: '/home/user',
+      sshConnectionId: null,
+      sshState: null,
+      notification: null,
+    };
+    const tab: TabState = {
+      id: 'tab-1',
+      label: null,
+      activePaneId: 'pane-active',
+      order: 0,
+      layout: {
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        first: { type: 'leaf', paneId: 'pane-root', state: rootPane },
+        second: { type: 'leaf', paneId: 'pane-active', state: activePane },
+      },
+    };
+    expect(resolveTabTitle(tab)).toBe('htop');
+    expect(resolveTabTitle(tab)).not.toBe('bash');
+  });
+
+  it('user label still wins over active pane processTitle in multi-pane', () => {
+    const rootPane: PaneState = {
+      id: 'pane-root',
+      sessionType: 'local',
+      processTitle: 'bash',
+      cwd: '/home/user',
+      sshConnectionId: null,
+      sshState: null,
+      notification: null,
+    };
+    const activePane: PaneState = {
+      id: 'pane-active',
+      sessionType: 'local',
+      processTitle: 'htop',
+      cwd: '/home/user',
+      sshConnectionId: null,
+      sshState: null,
+      notification: null,
+    };
+    const tab: TabState = {
+      id: 'tab-1',
+      label: 'Monitoring',
+      activePaneId: 'pane-active',
+      order: 0,
+      layout: {
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        first: { type: 'leaf', paneId: 'pane-root', state: rootPane },
+        second: { type: 'leaf', paneId: 'pane-active', state: activePane },
+      },
+    };
+    expect(resolveTabTitle(tab)).toBe('Monitoring');
+  });
+});

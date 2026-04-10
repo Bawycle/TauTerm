@@ -26,6 +26,7 @@ pub struct AppearancePatch {
     pub context_menu_hint_shown: Option<bool>,
     pub fullscreen: Option<bool>,
     pub hide_cursor_while_typing: Option<bool>,
+    pub show_pane_title_bar: Option<bool>,
 }
 
 /// Partial update for terminal preferences — only the fields provided are changed.

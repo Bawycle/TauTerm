@@ -35,6 +35,7 @@ function makePreferences(overrides: Partial<Preferences['appearance']> = {}): Pr
       contextMenuHintShown: false,
       fullscreen: false,
       hideCursorWhileTyping: true,
+      showPaneTitleBar: true,
       ...overrides,
     },
     terminal: {

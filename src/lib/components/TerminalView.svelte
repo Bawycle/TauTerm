@@ -36,6 +36,8 @@
   import { fullscreenState } from '$lib/state/fullscreen.svelte';
   import { setActivePane } from '$lib/ipc/commands';
   import * as m from '$lib/paraglide/messages';
+  import { resolveTabTitle } from '$lib/utils/tab-title';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
 
   const tv = useTerminalView();
 
@@ -50,6 +52,15 @@
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const fadeDurationHint = _reducedMotion ? 0 : 300;
   const fadeDurationShort = _reducedMotion ? 0 : 200;
+
+  // OS window title: "{tab-title} — TauTerm" (FS-TAB-010, UXD §7.1.10)
+  // Reactive: updates on active tab change and active pane change (tab-title
+  // already derives from activePaneId, so no separate pane dependency needed).
+  $effect(() => {
+    const tab = getActiveTab();
+    const title = tab ? (resolveTabTitle(tab) ?? m.pane_title_fallback()) : m.pane_title_fallback();
+    getCurrentWindow().setTitle(`${title} \u2014 TauTerm`);
+  });
 
   // Derived from shared session state
   const activeTab = $derived(getActiveTab());
@@ -205,6 +216,7 @@
             searchMatches={tv.searchMatches}
             activeSearchMatchIndex={tv.searchCurrentIdx}
             canClosePane={activePanes.length > 1}
+            showPaneTitleBar={preferences.value?.appearance?.showPaneTitleBar ?? true}
             onpaneclick={async (paneId) => {
               try {
                 await setActivePane(paneId);
@@ -221,6 +233,7 @@
             ondisableConfirmMultilinePaste={() =>
               tv.handlePreferencesUpdate({ terminal: { confirmMultilinePaste: false } })}
             ondimensionschange={(paneId, c, r) => tv.handleDimensionsChange(paneId, c, r)}
+            onrenamepane={tv.handlePaneRename}
             onviewportactive={(el) => {
               tv.activeViewportEl = el;
             }}

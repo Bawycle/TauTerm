@@ -39,8 +39,19 @@ class MockAppWindow {
   /** Counts every destroy() call. */
   public destroyCallCount = 0;
 
+  /** Last title set via setTitle(). */
+  public title: string | null = null;
+
+  /** Counts every setTitle() call. */
+  public setTitleCallCount = 0;
+
   async isFullscreen(): Promise<boolean> {
     return false;
+  }
+
+  async setTitle(title: string): Promise<void> {
+    this.title = title;
+    this.setTitleCallCount++;
   }
 
   async onCloseRequested(handler: CloseHandler): Promise<UnlistenFn> {
@@ -96,6 +107,8 @@ class MockAppWindow {
     this.handlers = [];
     this.closed = false;
     this.destroyCallCount = 0;
+    this.title = null;
+    this.setTitleCallCount = 0;
   }
 }
 

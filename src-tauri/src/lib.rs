@@ -157,6 +157,7 @@ pub fn run() {
             commands::session_cmds::create_tab,
             commands::session_cmds::close_tab,
             commands::session_cmds::rename_tab,
+            commands::session_cmds::set_pane_label,
             commands::session_cmds::reorder_tab,
             commands::session_cmds::split_pane,
             commands::session_cmds::close_pane,

@@ -49,6 +49,18 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ---
 
+## Medium Priority — v1 Quality Target (score 9–12)
+
+### Tab & Pane UI
+
+- [ ] **Pane title bar + tab title follows active pane** `[Score: 12 | R:2, S:1, U:2, E:2]`
+  When a tab contains ≥ 2 panes, each pane displays a slim title bar at the top of its content area. When a tab contains only 1 pane, the title bar is hidden — the tab title in the tab bar takes over that role. The title bar must be elegant and unobtrusive: present without drawing the eye more than necessary.
+  - **Pane title bar**: visible only when ≥ 2 panes in the tab. Shows the pane's resolved title (OSC 0/2 → CWD basename → process name). Distinguishes active vs inactive pane visually (typography/opacity, not color). Hides automatically when the split is reduced to a single pane.
+  - **Tab title with multiple panes**: follows the active pane's title (not the root pane). Updates when the user switches focus between panes.
+  - Requires: UXD spec in `docs/uxd/03-components.md` (new `PaneTitleBar` component section + §7.1 tab title update); FS entry in `docs/fs/02-ui-navigation.md`.
+
+---
+
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
 ### Performance — Benchmarking Blindspots

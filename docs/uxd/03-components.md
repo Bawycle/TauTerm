@@ -147,6 +147,27 @@ A fixed-width button anchored to the right edge of the tab row, outside the scro
 
 **Constraint:** Because the tab bar zone uses `flex: 1 0 0` (basis 0, shrink 0), the toggle always receives its full 44px regardless of tab count. This is a hard layout requirement — do not set `flex-basis: auto` on the tab bar zone.
 
+#### 7.1.9 Tab Title in Multi-Pane Context
+
+When the active tab contains two or more panes (FS-PANE-001), the tab item title reflects the **active pane's resolved title**, not the title of the root pane or any other pane. This means switching the active pane within a tab updates the tab item title immediately, without any tab switch.
+
+**Title resolution priority (unchanged from FS-TAB-006):** (1) user-defined label for that pane, (2) OSC 0/2 title set by the process running in the active pane, (3) basename of the OSC 7 CWD for the active pane, (4) foreground process name from `/proc/{pgid}/comm`, (5) empty string.
+
+**Split indicator icon:**
+
+When the active tab contains two or more panes, a Lucide `LayoutPanelLeft` icon appears immediately before the title text inside the tab item.
+
+- **Icon:** Lucide `LayoutPanelLeft`, `--size-icon-sm` (14px).
+- **Color:** Matches the tab text color in every state:
+  - Active tab: `--color-tab-active-fg` (`#e8e3d8`), at opacity `0.5`.
+  - Inactive tab: `--color-tab-inactive-fg` (`#9c9890`), at opacity `0.5`.
+  - Hover (inactive): `--color-tab-hover-fg` (`#9c9890`), at opacity `0.5`.
+- **Gap:** `--space-1` (4px) between the icon and the title text.
+- **Position:** After the SSH badge (§7.1.7) if present; before the title text.
+- **ARIA:** The icon is decorative (`aria-hidden="true"`). The tab's accessible name is the title text only — the split state is conveyed through the `PaneTitleBar` visible within the pane itself, not through the tab label.
+
+The reduced opacity (0.5) is intentional: the icon's function is to signal a structural fact (multi-pane layout), not to carry semantic urgency. It should be visible without drawing the eye. The icon must never appear on tabs with a single pane.
+
 ### 7.2 Pane Divider
 
 - **Orientation:** Vertical (for left/right split) or horizontal (for top/bottom split).

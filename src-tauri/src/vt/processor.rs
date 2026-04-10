@@ -98,9 +98,14 @@ pub struct VtProcessor {
     pub wrap_pending: bool,
     // Current cursor shape as set by DECSCUSR (0–6). Default 0 = block.
     pub cursor_shape: u8,
+    // The "preferred" cursor shape — set from user preferences at pane creation and
+    // updated by propagate_cursor_shape() when the user changes preferences at runtime.
+    // DECSCUSR 0 ("restore default") restores cursor_shape to this value (FS-VT-030).
+    pub preferred_cursor_shape: u8,
     // Whether the cursor shape changed since last flush.
     pub cursor_shape_changed: bool,
     // Whether cursor blinking is enabled (DECSET 12 / DECRST 12).
+    // Defaults to `true` so that new panes blink by default (FS-VT-031a).
     pub cursor_blink: bool,
     // Whether a rate-limited BEL event is pending since last flush.
     pub bell_pending: bool,
@@ -228,8 +233,9 @@ impl VtProcessor {
             title_changed: false,
             wrap_pending: false,
             cursor_shape: initial_cursor_shape,
+            preferred_cursor_shape: initial_cursor_shape,
             cursor_shape_changed: false,
-            cursor_blink: false,
+            cursor_blink: true,
             bell_pending: false,
             last_bell_instant: None,
             current_hyperlink: None,

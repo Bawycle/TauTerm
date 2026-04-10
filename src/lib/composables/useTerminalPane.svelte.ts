@@ -403,9 +403,9 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     unlistens.push(
       await onCursorStyleChanged((ev) => {
         if (ev.paneId !== props.paneId()) return;
-        cursor = { ...cursor, shape: ev.shape, blink: cursorBlinks(ev.shape) };
-        // The blink $effect re-runs automatically when cursor.blink changes,
-        // restarting the cycle from scratch with the new mode.
+        cursor = { ...cursor, shape: ev.shape };
+        // cursor.blink = DECSET ?12 state, managed exclusively by screen-update (backend authority).
+        // cursorBlinks(cursor.shape) reflects DECSCUSR intention and is combined in currentCursorBlinks.
       }),
     );
 

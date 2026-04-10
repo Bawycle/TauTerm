@@ -33,6 +33,10 @@ impl SessionRegistry {
             for (pane_id, pane) in &entry.panes {
                 let mut vt = pane.vt.write();
                 vt.cursor_shape = shape;
+                // Update preferred so that DECSCUSR 0 ("restore default") issued
+                // by applications restores the new user-preference shape, not the
+                // original initial_cursor_shape (FS-VT-030).
+                vt.preferred_cursor_shape = shape;
                 // Mark as changed so that in-flight read tasks also pick it up on
                 // their next debounce flush (belt-and-suspenders; the event below
                 // already informs the frontend).

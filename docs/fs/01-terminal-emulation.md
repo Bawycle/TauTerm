@@ -91,21 +91,21 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FS-VT-030 | TauTerm MUST support cursor shapes 0–6 via DECSCUSR (CSI Ps SP q): default (0), blinking block (1), steady block (2), blinking underline (3), steady underline (4), blinking bar (5), steady bar (6). DECSCUSR 0 MUST be treated as "blinking block" — it is the xterm default shape and does NOT restore user preferences. DECSCUSR emits a `cursor-style-changed` IPC event immediately (see architecture §4.3). | Must |
+| FS-VT-030 | TauTerm MUST support cursor shapes 0–6 via DECSCUSR (CSI Ps SP q): default (0), blinking block (1), steady block (2), blinking underline (3), steady underline (4), blinking bar (5), steady bar (6). DECSCUSR 0 MUST restore the cursor to the user-configured default shape (the blinking variant of the `cursorStyle` preference). It does NOT hardcode "blinking block". DECSCUSR emits a `cursor-style-changed` IPC event immediately (see architecture §4.3). | Must |
 | FS-VT-031 | Cursor visibility MUST be controllable via DECTCEM (CSI ?25h to show, CSI ?25l to hide). | Must |
-| FS-VT-031a | TauTerm MUST support DECSET/DECRST ?12 (ATT610 — cursor blink). `CSI ?12h` enables cursor blinking; `CSI ?12l` disables it. DECSET ?12 is independent of DECSCUSR: DECSCUSR encodes shape and per-shape blink preference; DECSET ?12 is a global blink on/off override. When DECSET ?12 is disabled, all cursor shapes render steady regardless of the DECSCUSR value. The DECSET ?12 state is propagated to the frontend via the `cursor.blink` field of `ScreenUpdateEvent`. | Must |
+| FS-VT-031a | TauTerm MUST support DECSET/DECRST ?12 (ATT610 — cursor blink). `CSI ?12h` enables cursor blinking; `CSI ?12l` disables it. DECSET ?12 is `true` (enabled) by default at session start, so that new panes blink by default. DECSET ?12 is independent of DECSCUSR: DECSCUSR encodes shape and per-shape blink preference; DECSET ?12 is a global blink on/off override. When DECSET ?12 is disabled, all cursor shapes render steady regardless of the DECSCUSR value. The DECSET ?12 state is propagated to the frontend via the `cursor.blink` field of `ScreenUpdateEvent`. | Must |
 | FS-VT-032 | Cursor blink rate MUST be configurable in user preferences. The default MUST be 533ms visible (on) / 266ms invisible (off) — an asymmetric 2:1 ratio. The user-configurable value controls the visible phase duration; the invisible phase is half that duration. | Must |
 | FS-VT-033 | DECSC and DECRC MUST save and restore cursor state per screen buffer, independently. | Must |
 | FS-VT-034 | When the terminal pane loses focus, the cursor MUST visually indicate the inactive state by rendering as a hollow (outline) rectangle regardless of the DECSCUSR shape that was active. Cursor blinking MUST be suspended while the pane is unfocused. When focus returns, the cursor MUST immediately resume its configured shape and blink state. A hidden cursor (DECTCEM off) MUST remain hidden regardless of focus state. | Must |
 | FS-VT-035 | The minimum terminal dimensions reported to the child process via `TIOCSWINSZ` MUST be 1 column by 1 line. TauTerm MUST NOT clamp or refuse to report sizes below a UI-imposed minimum to the PTY: the PTY always receives the true cell geometry. If the UI enforces a minimum pane size larger than 1×1 (e.g. 20 columns × 5 lines as defined in UXD), the PTY reports that enforced minimum rather than a size smaller than what is displayed. | Must |
 
 **Acceptance criteria:**
-- FS-VT-030: A script emitting each DECSCUSR value (0–6) produces the corresponding cursor shape. `printf '\033[0 q'` (DECSCUSR 0) renders a blinking block — not the user's preference shape.
+- FS-VT-030: A script emitting each DECSCUSR value (0–6) produces the corresponding cursor shape. `printf '\033[0 q'` (DECSCUSR 0) restores the cursor to the user-configured default shape (the blinking variant of the active `cursorStyle` preference) — not a hardcoded blinking block.
 - FS-VT-031: `tput civis` hides the cursor; `tput cnorm` restores it.
 - FS-VT-031a: `printf '\033[?12l'` stops cursor blinking regardless of DECSCUSR shape; `printf '\033[?12h'` re-enables it.
 - FS-VT-032: Changing the blink rate in preferences visibly changes the cursor blink speed without restart.
 - FS-VT-033: In vim (alternate screen), saving/restoring the cursor does not affect the normal screen cursor position, and vice versa.
-- FS-VT-034: Clicking outside the terminal pane changes the cursor to a hollow rectangle and stops blinking; clicking back restores the blinking block (or the application-set shape). A pane with a hidden cursor (`tput civis`) does not reveal the cursor on focus loss.
+- FS-VT-034: Clicking outside the terminal pane changes the cursor to a hollow rectangle and stops blinking; clicking back restores the blinking variant of the configured cursor shape (or the application-set shape). A pane with a hidden cursor (`tput civis`) does not reveal the cursor on focus loss.
 - FS-VT-035: Resizing a pane to the UI minimum (20×5) causes `stty size` inside the pane to report `5 20`.
 
 ### 3.1.5 Screen Modes

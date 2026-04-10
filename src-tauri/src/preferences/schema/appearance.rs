@@ -19,18 +19,22 @@ pub enum CursorStyle {
 }
 
 impl CursorStyle {
-    /// Convert to a DECSCUSR parameter value (steady variant; blinking controlled
-    /// separately by `cursor_blink_ms`).
+    /// Convert to a DECSCUSR parameter value (blinking variant, FS-VT-030).
+    ///
+    /// Blink on/off is controlled at runtime by `cursor_blink` (DECSET ?12 /
+    /// DECRST ?12). Using blinking codes here ensures that when an application
+    /// resets via DECSCUSR 0 the terminal returns to the preferred blinking
+    /// shape, consistent with the default `cursor_blink=true` in `VtProcessor`.
     ///
     /// Mapping:
-    /// - `Block`     → 2 (steady block)
-    /// - `Underline` → 4 (steady underline)
-    /// - `Bar`       → 6 (steady bar)
+    /// - `Block`     → 1 (blinking block)
+    /// - `Underline` → 3 (blinking underline)
+    /// - `Bar`       → 5 (blinking bar)
     pub fn to_decscusr(self) -> u8 {
         match self {
-            CursorStyle::Block => 2,
-            CursorStyle::Underline => 4,
-            CursorStyle::Bar => 6,
+            CursorStyle::Block => 1,
+            CursorStyle::Underline => 3,
+            CursorStyle::Bar => 5,
         }
     }
 }

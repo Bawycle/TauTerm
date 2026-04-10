@@ -130,6 +130,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   vi.restoreAllMocks();
   registry.clear();
+  if (vi.isFakeTimers()) vi.useRealTimers();
 });
 
 // ---------------------------------------------------------------------------
@@ -389,6 +390,74 @@ describe('TPSC-CURSOR-001: cursor-style-changed is handled', () => {
     }).not.toThrow();
 
     expect(container.querySelector('.terminal-pane')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-CURSOR-002: cursor-style-changed does not overwrite cursor.blink
+//
+// cursor.blink = DECSET ?12 state, owned exclusively by screen-update.
+// cursor-style-changed must update only cursor.shape.
+// ---------------------------------------------------------------------------
+
+describe('TPSC-CURSOR-002: cursor-style-changed preserves cursor.blink from screen-update', () => {
+  it('cursor.blink=false (from screen-update) survives a cursor-style-changed with blinking shape', async () => {
+    vi.useFakeTimers();
+    const { container } = await mountPane();
+
+    // Step 1: backend sends screen-update with cursor.blink=false (DECSET ?12 off).
+    // cursor.visible=true so the cursor is in the DOM when not blinking.
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cursor: { row: 0, col: 0, visible: true, shape: 0, blink: false },
+      }),
+    );
+    flushSync();
+
+    // Step 2: backend sends cursor-style-changed with shape=1 (blinking block DECSCUSR).
+    // This must NOT set cursor.blink=true.
+    fireEvent<CursorStyleChangedEvent>('cursor-style-changed', { paneId: PANE_ID, shape: 1 });
+    flushSync();
+
+    // Step 3: with cursor.blink=false, currentCursorBlinks = active && false && … = false.
+    // Therefore cursorVisible is irrelevant — the cursor renders unconditionally.
+    // Advance past one full blink ON phase — cursor must still be visible.
+    vi.advanceTimersByTime(533);
+    flushSync();
+
+    // If cursor.blink had been overwritten to true, currentCursorBlinks would be true
+    // and the cursor would disappear after 533ms. Presence here proves blink was not overwritten.
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TPSC-CURSOR-003: screen-update with cursor.blink=true triggers blink cycle
+// ---------------------------------------------------------------------------
+
+describe('TPSC-CURSOR-003: screen-update with cursor.blink=true enables the blink cycle', () => {
+  it('cursor disappears after cursorBlinkMs when screen-update sets cursor.blink=true', async () => {
+    vi.useFakeTimers();
+    const { container } = await mountPane();
+
+    // Fire screen-update with cursor.blink=true (backend default after the Rust fix).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cursor: { row: 0, col: 0, visible: true, shape: 1, blink: true },
+      }),
+    );
+    flushSync();
+
+    // Cursor must be visible immediately (cursorVisible starts true).
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Advance one ON phase — cursor must enter the OFF phase (invisible).
+    vi.advanceTimersByTime(533);
+    flushSync();
+
+    expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
   });
 });
 

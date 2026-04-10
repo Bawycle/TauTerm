@@ -117,6 +117,59 @@ fn cursor_style_default_is_block() {
     assert_eq!(CursorStyle::default(), CursorStyle::Block);
 }
 
+// ---------------------------------------------------------------------------
+// TEST-PREFS-CURSOR-001 — CursorStyle::to_decscusr() returns blinking codes
+//
+// After the cursor-blink-default fix, `to_decscusr()` must return the
+// blinking variant of each shape (1/3/5) so that newly opened panes start
+// with a blinking cursor. The blink on/off toggle (cursor_blink) is the
+// definitive authority on whether blinking actually occurs; these codes
+// convey the *shape preference* only.
+//
+// Mapping (FS-VT-030):
+//   Block     → 1 (blinking block)
+//   Underline → 3 (blinking underline)
+//   Bar       → 5 (blinking bar)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cursor_style_block_to_decscusr_returns_blinking_code() {
+    assert_eq!(
+        CursorStyle::Block.to_decscusr(),
+        1,
+        "Block must map to DECSCUSR 1 (blinking block)"
+    );
+}
+
+#[test]
+fn cursor_style_underline_to_decscusr_returns_blinking_code() {
+    assert_eq!(
+        CursorStyle::Underline.to_decscusr(),
+        3,
+        "Underline must map to DECSCUSR 3 (blinking underline)"
+    );
+}
+
+#[test]
+fn cursor_style_bar_to_decscusr_returns_blinking_code() {
+    assert_eq!(
+        CursorStyle::Bar.to_decscusr(),
+        5,
+        "Bar must map to DECSCUSR 5 (blinking bar)"
+    );
+}
+
+/// Default CursorStyle (Block) must produce DECSCUSR 1 (blinking block).
+/// This verifies the default pane initial_cursor_shape is 1, not 2.
+#[test]
+fn cursor_style_default_to_decscusr_is_blinking_block() {
+    assert_eq!(
+        CursorStyle::default().to_decscusr(),
+        1,
+        "Default cursor style (Block) must map to DECSCUSR 1 (blinking block)"
+    );
+}
+
 // --- BellType ---
 
 #[test]

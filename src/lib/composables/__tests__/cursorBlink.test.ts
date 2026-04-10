@@ -270,6 +270,46 @@ describe('BLINK-006: active=false suspends the blink cycle', () => {
 });
 
 // ---------------------------------------------------------------------------
+// BLINK-006b — active=true resumes the blink cycle after active=false
+// ---------------------------------------------------------------------------
+
+describe('BLINK-006b: active=true resumes the blink cycle after suspension', () => {
+  it('blink cycle restarts from visible after active transitions false → true', async () => {
+    vi.useFakeTimers();
+    const { container, instance } = await mountHarness({ active: true, cursorBlinkMs: 533 });
+
+    // Step 1: active=true, cursor starts visible.
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Step 2: advance 533ms → cursor invisible (OFF phase).
+    vi.advanceTimersByTime(533);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
+
+    // Step 3: active=false → blink suspended, cursorVisible resets to true → cursor visible.
+    instance.setActive(false);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Step 4: active=true → blink cycle resumes from visible (ON phase starts).
+    instance.setActive(true);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+
+    // Step 5: advance 533ms → cursor invisible (ON phase completed, entering OFF phase).
+    vi.advanceTimersByTime(533);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
+
+    // Step 6: advance 267ms → cursor visible again (OFF phase completed).
+    vi.advanceTimersByTime(267);
+    flushSync();
+    expect(container.querySelector('.terminal-pane__cursor')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BLINK-007 — restartCursorBlink() resets to visible and restarts the ON phase
 // ---------------------------------------------------------------------------
 

@@ -78,9 +78,20 @@ pub(super) fn da(p: &mut VtProcessor, param: u16) {
 }
 
 /// DECSCUSR — Set Cursor Shape (CSI Ps SP q)
+///
+/// DECSCUSR 0 is "restore default cursor shape": it restores `cursor_shape` to
+/// `preferred_cursor_shape` (the user-preference-derived value). All other
+/// codes (1–6) are stored verbatim. The changed flag is only raised when the
+/// resulting `cursor_shape` actually differs from its previous value.
 pub(super) fn decscusr(p: &mut VtProcessor, param: u16) {
     // SAFETY: param0 is clamped to [0, 6] — fits in u8 without truncation.
-    let shape = param.min(6) as u8;
+    let raw = param.min(6) as u8;
+    // DECSCUSR 0 = "restore default" → use the preferred shape.
+    let shape = if raw == 0 {
+        p.preferred_cursor_shape
+    } else {
+        raw
+    };
     if p.cursor_shape != shape {
         p.cursor_shape = shape;
         p.cursor_shape_changed = true;

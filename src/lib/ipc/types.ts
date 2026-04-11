@@ -244,15 +244,29 @@ export interface CursorState {
 export interface CellAttrsDto {
   fg?: ColorDto;
   bg?: ColorDto;
-  bold: boolean;
-  dim: boolean;
-  italic: boolean;
-  /** Underline style: 0 = none, 1 = single, 2 = double, 3 = curly, 4 = dotted, 5 = dashed. */
-  underline: number;
-  blink: boolean;
-  inverse: boolean;
-  hidden: boolean;
-  strikethrough: boolean;
+  /**
+   * Omitted from JSON when false (Rust: #[serde(skip_serializing_if = "is_false")]).
+   * Defaults to false when absent.
+   */
+  bold?: boolean;
+  /** Omitted from JSON when false. Defaults to false when absent. */
+  dim?: boolean;
+  /** Omitted from JSON when false. Defaults to false when absent. */
+  italic?: boolean;
+  /**
+   * Underline style: 0 = none, 1 = single, 2 = double, 3 = curly, 4 = dotted, 5 = dashed.
+   * Omitted from JSON when 0 (Rust: #[serde(skip_serializing_if = "is_zero")]).
+   * Defaults to 0 when absent.
+   */
+  underline?: number;
+  /** Omitted from JSON when false. Defaults to false when absent. */
+  blink?: boolean;
+  /** Omitted from JSON when false. Defaults to false when absent. */
+  inverse?: boolean;
+  /** Omitted from JSON when false. Defaults to false when absent. */
+  hidden?: boolean;
+  /** Omitted from JSON when false. Defaults to false when absent. */
+  strikethrough?: boolean;
   underlineColor?: ColorDto;
 }
 

@@ -11,6 +11,8 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- IPC serialization is now ~56 % faster for typical terminal content: boolean SGR attributes (`bold`, `dim`, `italic`, `blink`, `inverse`, `hidden`, `strikethrough`) and `underline` are omitted from the `screen-update` JSON payload when at their default values (`false`/`0`). For a 220×50 terminal with unformatted text, serialization drops from 1.53 ms to ~660 µs per frame.
+- Terminal apps that use cursor-position queries (CPR, `ESC[6n`) — `vim`, `neovim`, `fzf`, `less` — now get their screen-state update immediately rather than waiting up to 12 ms for the debounce window. The debounce is bypassed only when a VT response was generated; ordinary render updates still coalesce normally.
 - In multi-pane layouts, each pane now displays a slim title bar showing its process title (OSC 0/2, current directory name, or foreground process). The active pane's bar is visually distinct from inactive panes (font weight and opacity, not color). The title bar can be turned off in Preferences > Appearance ("Show pane title bar"). The tab title also now follows the active pane rather than always the leftmost/top pane.
 - Split-pane tabs show a `LayoutPanelLeft` icon in the tab bar to indicate that the tab contains multiple panes.
 - Tab titles now update automatically to reflect the current directory when using shells that emit OSC 7 (`fish`, `zsh` with oh-my-zsh, `bash` with `__vte_prompt_command`). When opening a new tab or split from an existing pane, the new pane starts in the same directory.

@@ -655,3 +655,90 @@ fn ipc_split_direction_serializes_as_camel_case() {
     assert!(json_h.contains("horizontal"), "got: {json_h}");
     assert!(json_v.contains("vertical"), "got: {json_v}");
 }
+
+// ---------------------------------------------------------------------------
+// P-IPC1 — CellAttrsDto skip_serializing_if for default boolean/u8 fields
+// ---------------------------------------------------------------------------
+
+/// P-IPC1: CellAttrsDto with all-default attribute values must not emit any
+/// of the boolean or underline keys in JSON — they are skipped by
+/// `skip_serializing_if = "is_false"` / `skip_serializing_if = "is_zero"`.
+#[test]
+fn cell_attrs_dto_default_booleans_absent_from_json() {
+    let attrs = CellAttrsDto {
+        fg: None,
+        bg: None,
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: 0,
+        blink: false,
+        inverse: false,
+        hidden: false,
+        strikethrough: false,
+        underline_color: None,
+    };
+    let json = serde_json::to_string(&attrs).expect("serialize CellAttrsDto");
+    for key in &[
+        "\"bold\"",
+        "\"dim\"",
+        "\"italic\"",
+        "\"underline\"",
+        "\"blink\"",
+        "\"inverse\"",
+        "\"hidden\"",
+        "\"strikethrough\"",
+    ] {
+        assert!(
+            !json.contains(key),
+            "default field {key} must be absent from JSON; got: {json}"
+        );
+    }
+}
+
+/// P-IPC1: Non-default values must be present in the serialized JSON.
+#[test]
+fn cell_attrs_dto_nondefault_values_present_in_json() {
+    let attrs = CellAttrsDto {
+        fg: None,
+        bg: None,
+        bold: true,
+        dim: false,
+        italic: true,
+        underline: 2,
+        blink: false,
+        inverse: false,
+        hidden: false,
+        strikethrough: false,
+        underline_color: None,
+    };
+    let json = serde_json::to_string(&attrs).expect("serialize CellAttrsDto");
+    assert!(
+        json.contains("\"bold\":true"),
+        "bold:true must be present; got: {json}"
+    );
+    assert!(
+        json.contains("\"italic\":true"),
+        "italic:true must be present; got: {json}"
+    );
+    assert!(
+        json.contains("\"underline\":2"),
+        "underline:2 must be present; got: {json}"
+    );
+}
+
+/// P-IPC1: Deserializing `"{}"` (all fields absent) must yield all-default values.
+/// `#[serde(default)]` is required for this round-trip to work.
+#[test]
+fn cell_attrs_dto_roundtrip_from_minimal_json() {
+    let attrs: CellAttrsDto =
+        serde_json::from_str("{}").expect("deserialize minimal CellAttrsDto");
+    assert!(!attrs.bold, "bold must default to false");
+    assert!(!attrs.dim, "dim must default to false");
+    assert!(!attrs.italic, "italic must default to false");
+    assert_eq!(attrs.underline, 0, "underline must default to 0");
+    assert!(!attrs.blink, "blink must default to false");
+    assert!(!attrs.inverse, "inverse must default to false");
+    assert!(!attrs.hidden, "hidden must default to false");
+    assert!(!attrs.strikethrough, "strikethrough must default to false");
+}

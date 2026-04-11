@@ -51,16 +51,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Medium Priority — v1 Quality Target (score 9–12)
 
-### Performance — Quick Wins (data-driven, 2026-04-11 baseline)
-
-*Identified from Criterion + vtebench baselines in `docs/perf/baseline-2026-04-11.md`. Ordered by cost/benefit ratio.*
-
-- [ ] **P-IPC1 — `CellAttrsDto`: skip default values in JSON serialization** `[Score: 10 | R:1, S:1, U:2, E:3]`
-  `serde_json::to_string` on a full 220×50 `ScreenUpdateEvent` costs **1.53 ms** — the largest single Rust-side cost in the IPC pipeline. Root cause: boolean fields in `CellAttrsDto` (`bold`, `dim`, `italic`, etc.) are serialized even when `false`, inflating every cell's JSON representation to ~130 chars regardless of content. Fix: add `#[serde(skip_serializing_if = "is_false")]` on all boolean fields and `#[serde(skip_serializing_if = "is_zero")]` on `underline: u8`. For typical terminal content (majority of cells without attributes), this reduces payload size by ~50–65%, with a proportional reduction in both serialization time and WebView JSON parsing cost. No API change, no protocol change (missing fields are interpreted as `false`/`0` by the TypeScript decoder). Estimated effort: ~10 lines of Rust. Verify with `bench --bench ipc_throughput` before and after.
-
-- [ ] **P-IPC2 — Adaptive debounce: immediate flush for CPR/DSR responses** `[Score: 10 | R:1, S:1, U:2, E:3]`
-  vtebench `dense_cells` measures **~8 ms** CPR round-trip vs **1–3 ms** for Alacritty. The gap is not in the DOM renderer — it is in Task 2's fixed 12 ms debounce window. A CPR query (`ESC[6n`) generates a response in the Rust PTY read task; that response sits in the Task 2 channel for up to 12 ms before being emitted. On average, the wait is **6 ms**. Fix: add a flag to `ProcessOutput` marking frames that contain VT responses (CPR, DA, DSR). Task 2 flushes immediately when this flag is set, bypassing the debounce. The 12 ms window is preserved for ordinary render updates. Impact: CPR latency from ~8 ms to ~2–3 ms (estimated), making TauTerm competitive with Alacritty on interactive apps that use CPR (`vim`, `neovim`, `fzf`). Complexity: moderate — requires extending `ProcessOutput`, modifying the coalescing logic in Task 2.
-
 ---
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)

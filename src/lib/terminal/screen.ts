@@ -153,8 +153,9 @@ export function cellStyleFromUpdate(
   // so we only promote when the fg is a non-default ANSI color.
   // The cast is safe: ColorDto minus 'default' is structurally identical to Color.
   const rawFg = attrs.fg;
+  const bold = attrs.bold ?? false;
   const promotedFg =
-    rawFg && rawFg.type !== 'default' ? resolveAnsiColor(rawFg as Color, attrs.bold) : rawFg;
+    rawFg && rawFg.type !== 'default' ? resolveAnsiColor(rawFg as Color, bold) : rawFg;
   const fg = resolveColorDto(promotedFg);
   const bg = resolveColorDto(attrs.bg);
   const underlineColor = resolveColorDto(attrs.underlineColor);
@@ -163,14 +164,14 @@ export function cellStyleFromUpdate(
     fg,
     bg,
     width,
-    bold: attrs.bold,
-    dim: attrs.dim,
-    italic: attrs.italic,
-    underline: attrs.underline,
-    blink: attrs.blink,
-    inverse: attrs.inverse,
-    hidden: attrs.hidden,
-    strikethrough: attrs.strikethrough,
+    bold,
+    dim: attrs.dim ?? false,
+    italic: attrs.italic ?? false,
+    underline: attrs.underline ?? 0,
+    blink: attrs.blink ?? false,
+    inverse: attrs.inverse ?? false,
+    hidden: attrs.hidden ?? false,
+    strikethrough: attrs.strikethrough ?? false,
     underlineColor,
     hyperlink,
     style: '',

@@ -287,12 +287,78 @@ fn bench_rwlock_contention(c: &mut Criterion) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// bench_serde_json_full_redraw_default_attrs
+// ---------------------------------------------------------------------------
+
+/// Measures `serde_json::to_string` on a 220×50 `ScreenUpdateEvent` where every
+/// cell has all-default attributes (bold=false, underline=0, fg=None, etc.).
+///
+/// With P-IPC1 (`skip_serializing_if` on boolean/u8 fields), these attributes
+/// are omitted from JSON entirely — this bench quantifies the resulting payload
+/// size reduction and serialization speedup compared to `bench_serde_json_full_redraw`.
+fn bench_serde_json_full_redraw_default_attrs(c: &mut Criterion) {
+    let cells: Vec<CellUpdate> = (0..50u16)
+        .flat_map(|row| {
+            (0..220u16).map(move |col| CellUpdate {
+                row,
+                col,
+                content: "a".to_string(),
+                width: 1,
+                attrs: CellAttrsDto {
+                    fg: None,
+                    bg: None,
+                    bold: false,
+                    dim: false,
+                    italic: false,
+                    underline: 0,
+                    blink: false,
+                    inverse: false,
+                    hidden: false,
+                    strikethrough: false,
+                    underline_color: None,
+                },
+                hyperlink: None,
+            })
+        })
+        .collect();
+
+    let event = ScreenUpdateEvent {
+        pane_id: PaneId("bench".into()),
+        cells,
+        cursor: CursorState {
+            row: 0,
+            col: 0,
+            visible: true,
+            shape: 0,
+            blink: false,
+        },
+        scrollback_lines: 0,
+        is_full_redraw: true,
+        cols: 220,
+        rows: 50,
+        scroll_offset: 0,
+    };
+
+    let mut group = c.benchmark_group("default_attrs");
+    group.throughput(criterion::Throughput::Elements(1));
+    group.bench_function("serialize_full_redraw_220x50_default_attrs", |b| {
+        b.iter(|| {
+            let json = serde_json::to_string(black_box(&event))
+                .expect("ScreenUpdateEvent must be serializable");
+            black_box(json);
+        })
+    });
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_build_screen_update_full_redraw,
     bench_build_screen_update_partial,
     bench_build_scrolled_viewport,
     bench_serde_json_full_redraw,
+    bench_serde_json_full_redraw_default_attrs,
     bench_rwlock_contention,
 );
 criterion_main!(benches);

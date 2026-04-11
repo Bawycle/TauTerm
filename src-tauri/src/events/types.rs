@@ -134,6 +134,14 @@ pub struct CursorState {
     pub blink: bool,
 }
 
+fn is_false(b: &bool) -> bool {
+    !b
+}
+
+fn is_zero(n: &u8) -> bool {
+    *n == 0
+}
+
 /// Serializable SGR cell attributes sent to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -142,13 +150,21 @@ pub struct CellAttrsDto {
     pub fg: Option<ColorDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bg: Option<ColorDto>,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub bold: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub dim: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub italic: bool,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub underline: u8,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub blink: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub inverse: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub hidden: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub strikethrough: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub underline_color: Option<ColorDto>,

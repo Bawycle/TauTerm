@@ -128,6 +128,7 @@ pub fn spawn_pty_read_task(
                         bell,
                         osc52,
                         new_cwd,
+                        needs_immediate_flush: !responses.is_empty(),
                     },
                     responses,
                 )
@@ -188,7 +189,34 @@ pub fn spawn_pty_read_task(
                 msg = rx_e.recv() => {
                     match msg {
                         Some(output) => {
+                            let flush_now = output.needs_immediate_flush;
                             pending.merge(output);
+                            if flush_now {
+                                // CPR/DSR response was sent — bypass debounce to update cursor
+                                // state promptly. Tools like vim/neovim/fzf use CPR to sync
+                                // their rendering and will stall until this event arrives.
+                                // Drain any concurrently buffered output to avoid splitting the
+                                // update across two events.
+                                while let Ok(more) = rx_e.try_recv() {
+                                    pending.merge(more);
+                                }
+                                if !pending.is_empty() {
+                                    emit_all_pending(
+                                        &app_e,
+                                        &pane_id_e,
+                                        &vt_e,
+                                        &registry_e,
+                                        &mut pending,
+                                    );
+                                    // emit_all_pending resets pending to ProcessOutput::default(),
+                                    // which also clears needs_immediate_flush.
+                                } else {
+                                    // Nothing to emit, but clear the flag to avoid stale hints.
+                                    pending.needs_immediate_flush = false;
+                                }
+                                // Start a fresh debounce window after the forced flush.
+                                interval.reset();
+                            }
                         }
                         None => {
                             // Channel closed — Task 1 finished (EOF or error).

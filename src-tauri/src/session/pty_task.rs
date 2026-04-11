@@ -57,6 +57,9 @@ pub(crate) struct ProcessOutput {
     pub osc52: Option<String>,
     /// New CWD from OSC 7, if changed since last cycle.
     pub new_cwd: Option<String>,
+    /// Set when this chunk generated a VT response (CPR, DA, DSR).
+    /// Task 2 bypasses the debounce timer and flushes immediately.
+    pub needs_immediate_flush: bool,
 }
 
 impl ProcessOutput {
@@ -82,6 +85,7 @@ impl ProcessOutput {
         if other.new_cwd.is_some() {
             self.new_cwd = other.new_cwd;
         }
+        self.needs_immediate_flush |= other.needs_immediate_flush;
     }
 
     fn is_empty(&self) -> bool {
@@ -151,7 +155,7 @@ mod tests {
 
     use parking_lot::RwLock;
 
-    use super::build_screen_update_event;
+    use super::{ProcessOutput, build_screen_update_event};
     use crate::events::types::{CursorState, ScreenUpdateEvent};
     use crate::session::ids::PaneId;
     use crate::vt::{DirtyRegion, VtProcessor};
@@ -437,6 +441,55 @@ mod tests {
             !event.cursor.visible,
             "cursor must be hidden when scroll_offset > 0"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-PIPC2-UNIT-001
+    // -----------------------------------------------------------------------
+
+    /// `merge()` propagates `needs_immediate_flush` via OR.
+    #[test]
+    fn process_output_merge_propagates_needs_immediate_flush() {
+        let mut a = ProcessOutput::default();
+        let b = ProcessOutput {
+            needs_immediate_flush: true,
+            ..Default::default()
+        };
+        a.merge(b);
+        assert!(a.needs_immediate_flush);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-PIPC2-UNIT-002
+    // -----------------------------------------------------------------------
+
+    /// `Default` sets `needs_immediate_flush` to false.
+    #[test]
+    fn process_output_needs_immediate_flush_defaults_false() {
+        let p = ProcessOutput::default();
+        assert!(!p.needs_immediate_flush);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-PIPC2-UNIT-003
+    // -----------------------------------------------------------------------
+
+    /// Multiple merges: needs_immediate_flush propagates once it's set.
+    #[test]
+    fn process_output_immediate_flush_sticky_through_merge() {
+        let mut acc = ProcessOutput::default();
+        // First merge: no flush needed.
+        acc.merge(ProcessOutput::default());
+        assert!(!acc.needs_immediate_flush);
+        // Second merge: flush needed.
+        acc.merge(ProcessOutput {
+            needs_immediate_flush: true,
+            ..Default::default()
+        });
+        assert!(acc.needs_immediate_flush);
+        // Third merge: flag stays set even when merging a non-flush output.
+        acc.merge(ProcessOutput::default());
+        assert!(acc.needs_immediate_flush);
     }
 
     // -----------------------------------------------------------------------

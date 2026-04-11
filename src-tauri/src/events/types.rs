@@ -43,8 +43,12 @@ pub enum SessionStateChangedEvent {
     TabClosed {
         /// ID of the tab that was closed. Required by IPC rules: every event
         /// affecting a specific entity must include that entity's ID explicitly.
+        // `rename_all` on the enum renames variant names only, not struct-variant
+        // fields — explicit rename needed so the frontend receives camelCase keys.
+        #[serde(rename = "closedTabId")]
         closed_tab_id: TabId,
         /// Active tab after the close, if any tab remains.
+        #[serde(rename = "activeTabId")]
         #[serde(skip_serializing_if = "Option::is_none")]
         active_tab_id: Option<TabId>,
     },
@@ -53,6 +57,8 @@ pub enum SessionStateChangedEvent {
     },
     ActiveTabChanged {
         tab: TabState,
+        // Same camelCase rename — enum-level `rename_all` does not cover fields.
+        #[serde(rename = "activeTabId")]
         active_tab_id: TabId,
     },
     ActivePaneChanged {
@@ -493,5 +499,35 @@ mod tests {
         } else {
             panic!("expected ProcessExited variant; got: {json}");
         }
+    }
+
+    /// Regression guard: SessionStateChangedEvent fields within struct variants must
+    /// serialise with camelCase keys even though `rename_all = "camelCase"` on the
+    /// enum only renames variant names, not the fields inside them.
+    /// The explicit `#[serde(rename = "...")]` on each field is what makes this correct.
+    #[test]
+    fn session_state_changed_tab_closed_uses_camel_case_field_names() {
+        use crate::session::ids::TabId;
+        let ev = SessionStateChangedEvent::TabClosed {
+            closed_tab_id: TabId(String::from("tab-1")),
+            active_tab_id: Some(TabId(String::from("tab-2"))),
+        };
+        let json = serde_json::to_string(&ev).expect("serialize failed");
+        assert!(
+            json.contains("\"closedTabId\""),
+            "closedTabId key missing; got: {json}"
+        );
+        assert!(
+            json.contains("\"activeTabId\""),
+            "activeTabId key missing; got: {json}"
+        );
+        assert!(
+            !json.contains("\"closed_tab_id\""),
+            "snake_case closed_tab_id must not appear; got: {json}"
+        );
+        assert!(
+            !json.contains("\"active_tab_id\""),
+            "snake_case active_tab_id must not appear; got: {json}"
+        );
     }
 }

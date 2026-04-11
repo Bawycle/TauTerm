@@ -64,6 +64,55 @@ function tauriFireAndForget(cmd: string, args?: Record<string, unknown>): Promis
   ) as unknown as Promise<void>;
 }
 
+/**
+ * Invoke a Tauri IPC command and wait for its result.
+ *
+ * Uses the window-variable polling pattern (same as ssh-overlay-states.spec.ts)
+ * to work around `browser.executeAsync` unreliability with tauri-driver / WebKitGTK.
+ */
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  await browser.execute(function () {
+    (window as unknown as Record<string, unknown>).__e2e_invoke_result = undefined;
+  });
+
+  await browser.execute(
+    function (cmdArg: string, argsArg: Record<string, unknown> | undefined) {
+      (window as unknown as {
+        __TAURI_INTERNALS__: { invoke: (c: string, a?: unknown) => Promise<unknown> };
+      }).__TAURI_INTERNALS__
+        .invoke(cmdArg, argsArg)
+        .then(function (r: unknown) {
+          (window as unknown as Record<string, unknown>).__e2e_invoke_result =
+            r ?? '__e2e_null__';
+        })
+        .catch(function () {
+          (window as unknown as Record<string, unknown>).__e2e_invoke_result = '__e2e_error__';
+        });
+    },
+    cmd,
+    args,
+  );
+
+  await browser.waitUntil(
+    () =>
+      browser.execute(function (): boolean {
+        return (window as unknown as Record<string, unknown>).__e2e_invoke_result !== undefined;
+      }),
+    { timeout: 5_000, timeoutMsg: `tauriInvoke("${cmd}") did not resolve within 5 s` },
+  );
+
+  const raw = await browser.execute(function (): unknown {
+    const v = (window as unknown as Record<string, unknown>).__e2e_invoke_result;
+    delete (window as unknown as Record<string, unknown>).__e2e_invoke_result;
+    return v;
+  });
+
+  if (raw === '__e2e_error__') {
+    throw new Error(`tauriInvoke("${cmd}") rejected`);
+  }
+  return (raw === '__e2e_null__' ? null : raw) as T;
+}
+
 /** Count terminal panes currently rendered in the DOM. */
 async function countPanes(): Promise<number> {
   return (await $$(Selectors.terminalPane)).length;
@@ -187,6 +236,13 @@ async function resetToSingleTab(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 describe('TauTerm — PTY exit and close lifecycle', () => {
+  // Reset to a known single-tab/single-pane state before each test so that
+  // state leaking from a previous test (e.g. a lingering split) does not cause
+  // spurious failures.
+  beforeEach(async () => {
+    await resetToSingleTab();
+  });
+
   /**
    * TEST-PTY-EXIT-001: exit 0 auto-closes the pane (FS-PTY-005).
    *
@@ -194,16 +250,8 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
    * WHEN the shell exits with code 0 in one pane
    * THEN that pane auto-closes immediately
    * AND the other pane remains open
-   *
-   * TODO: requires `inject_pane_exit { pane_id, exit_code: 0 }` Tauri command
-   *       (e2e-testing feature). This command needs to emit a
-   *       `notification-changed` event with `notification: { type: "processExited",
-   *       exitCode: 0, signalName: null }`, which triggers the auto-close path in
-   *       `applyNotificationChanged()` (notifications.svelte.ts).
-   *       Implement in src-tauri/src/commands/testing.rs before enabling this test.
    */
-  it.skip('TEST-PTY-EXIT-001: exit 0 auto-closes the pane (requires inject_pane_exit)', async () => {
-    // TODO: requires inject_pane_exit command
+  it('TEST-PTY-EXIT-001: exit 0 auto-closes the pane', async () => {
     // Setup: create a horizontal split to have 2 panes.
     await $(Selectors.terminalGrid).click();
     await dispatchShortcut('D', 'KeyD', true, true);
@@ -213,10 +261,8 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
     expect(paneIds.length).toBe(2);
     const [paneIdA, paneIdB] = paneIds;
 
-    // Inject exit code 0 into pane A.
-    // TODO: replace tauriFireAndForget('inject_pty_output', ...) with:
-    //   await tauriFireAndForget('inject_pane_exit', { paneId: paneIdA, exitCode: 0 });
-    void paneIdA; // suppress unused-variable warning until command is available
+    // Inject exit code 0 into pane A — triggers auto-close path in applyNotificationChanged.
+    await tauriInvoke<void>('inject_pane_exit', { paneId: paneIdA, exitCode: 0 });
 
     // THEN pane A should auto-close and only pane B should remain.
     await waitForPaneCount(1);
@@ -243,19 +289,21 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
    * TODO: requires `inject_pane_exit { pane_id, exit_code: 1 }` Tauri command
    *       (same as TEST-PTY-EXIT-001 — implement inject_pane_exit first).
    */
-  it.skip('TEST-PTY-EXIT-002: non-zero exit shows terminated banner (requires inject_pane_exit)', async () => {
-    // TODO: requires inject_pane_exit command
+  it('TEST-PTY-EXIT-002: non-zero exit shows terminated banner', async () => {
     const paneId = await getActivePaneId();
     expect(paneId).toBeTruthy();
 
-    // Inject a non-zero exit event.
-    // TODO: replace with:
-    //   await tauriFireAndForget('inject_pane_exit', { paneId, exitCode: 1 });
-    void paneId; // suppress unused-variable warning
+    // Inject a non-zero exit event — triggers the terminated banner path.
+    await tauriInvoke<void>('inject_pane_exit', { paneId, exitCode: 1 });
 
     // THEN the pane must remain open.
     const paneCount = await countPanes();
     expect(paneCount).toBeGreaterThanOrEqual(1);
+
+    // Small pause to allow the IPC event (notification-changed) to propagate
+    // from the backend emit to the Tauri WebView event channel and be processed
+    // by the frontend listener (useTerminalView.lifecycle.svelte.ts).
+    await browser.pause(500);
 
     // The terminated banner must appear.
     await browser.waitUntil(
@@ -344,9 +392,7 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
    *       by TEST-TAB-E2E-003 in tab-lifecycle.spec.ts (tab close dialog), which
    *       shares the same Svelte dialog component and data-testid attributes.
    */
-  it.skip('TEST-PTY-EXIT-004: active process — dialog Cancel keeps pane open (requires inject_foreground_process)', async () => {
-    // TODO: requires inject_foreground_process command
-    //
+  it('TEST-PTY-EXIT-004: active process — dialog Cancel keeps pane open', async () => {
     // Setup: create a split, then inject an active foreground process into one pane.
     await $(Selectors.terminalGrid).click();
     await dispatchShortcut('D', 'KeyD', true, true);
@@ -355,9 +401,8 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
     const activePaneId = await getActivePaneId();
     expect(activePaneId).toBeTruthy();
 
-    // TODO: replace with:
-    //   await tauriFireAndForget('inject_foreground_process', { paneId: activePaneId, active: true });
-    void activePaneId;
+    // Inject a synthetic foreground process — makes has_foreground_process return true.
+    await tauriInvoke<void>('inject_foreground_process', { paneId: activePaneId, processName: 'vim' });
 
     // Trigger close_pane.
     await dispatchShortcut('Q', 'KeyQ', true, true);
@@ -390,6 +435,13 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
       (): boolean => document.querySelector('[data-testid="close-confirm-cancel"]') === null,
     );
     expect(dialogGone).toBe(true);
+
+    // Cleanup: clear the foreground injection so the split pane can be closed
+    // without a dialog in the subsequent resetToSingleTab() call.
+    await tauriInvoke<void>('inject_foreground_process', { paneId: activePaneId, processName: '' });
+    // Close the split pane so the next beforeEach sees a single-pane layout.
+    await dispatchShortcut('Q', 'KeyQ', true, true);
+    await waitForPaneCount(1, 5_000);
   });
 
   /**
@@ -402,8 +454,7 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
    *
    * TODO: same prerequisite as TEST-PTY-EXIT-004 — requires inject_foreground_process.
    */
-  it.skip('TEST-PTY-EXIT-005: active process — dialog Confirm closes pane (requires inject_foreground_process)', async () => {
-    // TODO: requires inject_foreground_process command
+  it('TEST-PTY-EXIT-005: active process — dialog Confirm closes pane', async () => {
     await $(Selectors.terminalGrid).click();
     await dispatchShortcut('D', 'KeyD', true, true);
     await waitForPaneCount(2);
@@ -411,9 +462,8 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
     const activePaneId = await getActivePaneId();
     expect(activePaneId).toBeTruthy();
 
-    // TODO:
-    //   await tauriFireAndForget('inject_foreground_process', { paneId: activePaneId, active: true });
-    void activePaneId;
+    // Inject a synthetic foreground process — makes has_foreground_process return true.
+    await tauriInvoke<void>('inject_foreground_process', { paneId: activePaneId, processName: 'vim' });
 
     await dispatchShortcut('Q', 'KeyQ', true, true);
 
@@ -434,7 +484,7 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
       btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
 
-    // Pane must close.
+    // Pane must close — no foreground cleanup needed since the pane is gone.
     await waitForPaneCount(1, 5_000);
   });
 
@@ -446,11 +496,12 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
    * THEN the window-close confirmation dialog appears (data-testid="window-close-confirm-action")
    * AND clicking Cancel → dialog dismissed; window remains open
    *
-   * TODO: requires inject_foreground_process for the same reasons as TEST-PTY-EXIT-004.
-   *       Additionally requires a way to trigger the window-close event from E2E tests
-   *       (not yet available via WebdriverIO + tauri-driver on Linux).
+   * SKIP REASON: requires a `simulate_window_close` Tauri command to trigger the
+   *       window-close-requested event from outside the WM — this command does not
+   *       exist yet.  inject_foreground_process is now available (TEST-PTY-EXIT-004),
+   *       so this test is unblocked as soon as simulate_window_close is implemented.
    */
-  it.skip('TEST-PTY-EXIT-006: window-close with active process shows window dialog (requires inject_foreground_process)', async () => {
+  it.skip('TEST-PTY-EXIT-006: window-close with active process shows window dialog (requires simulate_window_close)', async () => {
     // TODO: requires inject_foreground_process + window-close event injection
     //
     // When this test is enabled:
@@ -494,10 +545,11 @@ describe('TauTerm — PTY exit and close lifecycle', () => {
    *       This test is therefore SKIPPED for now and must be moved to a
    *       dedicated single-spec run or a suite configured to run in isolation.
    *
-   * TODO: run this test in a dedicated `pnpm wdio --spec pty-exit-lifecycle` run,
-   *       OR configure wdio to restart the app between spec files (not currently
-   *       supported by the tauri-driver setup), OR mock getCurrentWindow().close()
-   *       in an E2E-only Svelte build to intercept without actually closing.
+   * SKIP REASON: this test terminates the Tauri process and must run last in an
+   *       isolated wdio session.  Running it in the shared suite causes all subsequent
+   *       specs to fail with "session not found".  Enable via:
+   *         pnpm wdio --spec tests/e2e/pty-exit-lifecycle.spec.ts
+   *       after configuring tauri-driver to restart the app between spec files.
    */
   it.skip('TEST-PTY-EXIT-007: last tab close terminates the app window (requires isolated run)', async () => {
     // Ensure exactly one tab is open.

@@ -28,8 +28,38 @@ export const tabNotifications = $state<Map<TabId, boolean>>(new Map());
  * A pane absent from this set is either running or exited cleanly (auto-closed).
  * Used by FS-PTY-005/006: terminated banner display.
  * NOT used for FS-PTY-008 close confirmation (use hasForegroundProcess IPC instead).
+ *
+ * Implementation note: uses a plain Set + a primitive $state version counter rather
+ * than $state<Set> directly.  Svelte 5's Set proxy tracking can silently drop
+ * reactive subscriptions in production builds (compiler optimisation); a $state<number>
+ * counter is a simpler, battle-tested signal that propagates reliably in all builds.
+ * The `has()` method reads the counter to register the reactive dependency.
  */
-export const terminatedPanes = $state<Set<PaneId>>(new Set());
+const _terminatedPanesSet = new Set<PaneId>();
+let _terminatedPanesVersion = $state(0);
+
+export const terminatedPanes = {
+  has(paneId: PaneId): boolean {
+    // Reading _terminatedPanesVersion creates a reactive dependency so that
+    // Svelte 5 components re-evaluate this expression when the Set changes.
+    return _terminatedPanesVersion >= 0 && _terminatedPanesSet.has(paneId);
+  },
+  add(paneId: PaneId): void {
+    _terminatedPanesSet.add(paneId);
+    _terminatedPanesVersion++;
+  },
+  delete(paneId: PaneId): void {
+    _terminatedPanesSet.delete(paneId);
+    _terminatedPanesVersion++;
+  },
+  clear(): void {
+    _terminatedPanesSet.clear();
+    _terminatedPanesVersion++;
+  },
+  get size(): number {
+    return _terminatedPanesVersion >= 0 ? _terminatedPanesSet.size : 0;
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Action type — returned by applyNotificationChanged (FS-PTY-005)

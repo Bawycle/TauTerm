@@ -731,8 +731,7 @@ fn cell_attrs_dto_nondefault_values_present_in_json() {
 /// `#[serde(default)]` is required for this round-trip to work.
 #[test]
 fn cell_attrs_dto_roundtrip_from_minimal_json() {
-    let attrs: CellAttrsDto =
-        serde_json::from_str("{}").expect("deserialize minimal CellAttrsDto");
+    let attrs: CellAttrsDto = serde_json::from_str("{}").expect("deserialize minimal CellAttrsDto");
     assert!(!attrs.bold, "bold must default to false");
     assert!(!attrs.dim, "dim must default to false");
     assert!(!attrs.italic, "italic must default to false");

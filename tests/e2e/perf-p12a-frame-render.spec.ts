@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Build requirement: pnpm tauri build --no-bundle -- --features e2e-testing
 // Run: pnpm wdio --spec tests/e2e/perf-p12a-frame-render.spec.ts
+// Build requirement (perf instrumentation):
+//   VITE_PERF_INSTRUMENTATION=1 pnpm tauri build --no-bundle -- --features e2e-testing
 
 /**
  * P12a performance benchmark — tauterm:frameRender
@@ -59,8 +61,10 @@ async function inject(paneId: string, text: string): Promise<void> {
 async function clearPerfEntries(): Promise<void> {
   await browser.execute((): void => {
     performance.clearMeasures('tauterm:frameRender');
-    performance.clearMeasures('tauterm:applyScreenUpdate');
+    performance.clearMeasures('tauterm:applyOnly');
+    performance.clearMeasures('tauterm:repaintTime');
     performance.clearMarks('tauterm:asu:start');
+    performance.clearMarks('tauterm:apply:end');
     performance.clearMarks('tauterm:render:end');
   });
 }
@@ -74,6 +78,18 @@ async function readFrameRenderDurations(): Promise<number[]> {
   })) as number[];
 }
 
+async function readApplyOnlyDurations(): Promise<number[]> {
+  return (await browser.execute((): number[] =>
+    performance.getEntriesByName('tauterm:applyOnly').map((e) => e.duration),
+  )) as number[];
+}
+
+async function readRepaintTimeDurations(): Promise<number[]> {
+  return (await browser.execute((): number[] =>
+    performance.getEntriesByName('tauterm:repaintTime').map((e) => e.duration),
+  )) as number[];
+}
+
 function stats(durations: number[]): { avg: number; p95: number; max: number; n: number } {
   if (durations.length === 0) return { avg: 0, p95: 0, max: 0, n: 0 };
   const sorted = [...durations].sort((a, b) => a - b);
@@ -83,10 +99,14 @@ function stats(durations: number[]): { avg: number; p95: number; max: number; n:
   return { avg, p95, max, n: sorted.length };
 }
 
-function report(label: string, durations: number[]): void {
+function report(label: string, durations: number[], apply: number[], repaint: number[]): void {
   const s = stats(durations);
+  const sa = stats(apply);
+  const sr = stats(repaint);
+  const repaintPct = s.avg > 0 ? ((sr.avg / s.avg) * 100).toFixed(0) : 'n/a';
   console.log(
-    `[P12a bench] ${label}: n=${s.n}  avg=${s.avg.toFixed(2)} ms  p95=${s.p95.toFixed(2)} ms  max=${s.max.toFixed(2)} ms`,
+    `[perf] ${label}: n=${s.n}  avg=${s.avg.toFixed(2)} ms  p95=${s.p95.toFixed(2)} ms` +
+      `  applyOnly=${sa.avg.toFixed(2)} ms  repaintTime=${sr.avg.toFixed(2)} ms  repaint%=${repaintPct}%`,
   );
 }
 
@@ -181,7 +201,9 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
     await browser.pause(100);
 
     const durations = await readFrameRenderDurations();
-    report('SCROLL  (30×12 lines)', durations);
+    const apply = await readApplyOnlyDurations();
+    const repaint = await readRepaintTimeDurations();
+    report('SCROLL  (30×12 lines)', durations, apply, repaint);
 
     // Non-asserting: print result, never fail.
     expect(durations.length).toBeGreaterThan(0);
@@ -226,7 +248,9 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
     await browser.pause(100);
 
     const durations = await readFrameRenderDurations();
-    report('CURSOR  (60 sparse updates)', durations);
+    const apply = await readApplyOnlyDurations();
+    const repaint = await readRepaintTimeDurations();
+    report('CURSOR  (60 sparse updates)', durations, apply, repaint);
 
     expect(durations.length).toBeGreaterThan(0);
   });
@@ -239,8 +263,44 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
     await clearPerfEntries();
     await browser.pause(1_000);
     const durations = await readFrameRenderDurations();
-    report('IDLE    (1 s no output)', durations);
+    const apply = await readApplyOnlyDurations();
+    const repaint = await readRepaintTimeDurations();
+    report('IDLE    (1 s no output)', durations, apply, repaint);
     // Idle should not produce any frame renders.
     expect(durations.length).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Workload 4 — RAPID-FIRE: 5 events arriving within one rAF window (<16 ms)
+  //
+  // Pre-P-OPT-1: each event triggers an immediate applyScreenUpdate() → 5 entries
+  // Post-P-OPT-1: all events coalesced in one rAF callback → ≤2 entries
+  //
+  // Non-asserting: prints coalescing ratio. Use as regression gate after P-OPT-1.
+  // -------------------------------------------------------------------------
+
+  it('PERF-P12A-004: rapid-fire — 5 events in <16 ms (coalescing measurement)', async () => {
+    await clearPerfEntries();
+
+    // 5 events × 3 ms spacing = 15 ms total — fits in one 16.7 ms rAF window.
+    for (let i = 0; i < 5; i++) {
+      await inject(paneId, scrollLines(2, i * 2));
+      await browser.pause(3);
+    }
+
+    // Wait for the rAF callback to fire.
+    await browser.pause(100);
+
+    const durations = await readFrameRenderDurations();
+    const apply = await readApplyOnlyDurations();
+    const repaint = await readRepaintTimeDurations();
+    report('RAPID-FIRE (5×3 ms)', durations, apply, repaint);
+    console.log(
+      `[perf] RAPID-FIRE: frameRender entries=${durations.length}` +
+        ` (pre-P-OPT-1: expect 5, post-P-OPT-1: expect ≤2)`,
+    );
+
+    // Non-asserting: just verify at least one render happened.
+    expect(durations.length).toBeGreaterThan(0);
   });
 });

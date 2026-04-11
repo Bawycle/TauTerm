@@ -115,6 +115,18 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let pendingScrollOffset: number | null = null;
   let scrollRafId: ReturnType<typeof requestAnimationFrame> | null = null;
 
+  // P-OPT-1: rAF batching state for screen-update events.
+  // Declared at composable scope so onDestroy can cancel a pending frame.
+  //
+  // rafScheduled guards scheduleRaf() idempotency and is set BEFORE calling
+  // requestAnimationFrame(). This separates the "is a frame already pending?"
+  // check from the frame handle (rafId), avoiding a race where a synchronous
+  // rAF execution (e.g. in unit tests) clears rafId before the assignment
+  // `rafId = requestAnimationFrame(...)` completes.
+  const rafQueue: ScreenUpdateEvent[] = [];
+  let rafId: number | null = null;
+  let rafScheduled = false;
+
   // -------------------------------------------------------------------------
   // Terminal mode state
   // -------------------------------------------------------------------------
@@ -276,7 +288,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // try-catch: the initial $effect run fires before the first applyScreenUpdate()
   // call, so the start marks do not exist yet — measure would throw.
   $effect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!(import.meta.env.DEV || import.meta.env.VITE_PERF_INSTRUMENTATION === '1')) return;
     const _gen = screenGeneration; // subscribe to every generation increment
     void _gen;
     try {
@@ -300,7 +312,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // The event's cols/rows are authoritative — they reflect the grid dimensions at
   // the time the backend produced this event, eliminating stride mismatch races.
   function applyScreenUpdate(update: ScreenUpdateEvent): void {
-    if (import.meta.env.DEV) performance.mark('tauterm:asu:start');
+    if (import.meta.env.DEV || import.meta.env.VITE_PERF_INSTRUMENTATION === '1')
+      performance.mark('tauterm:asu:start');
     const expectedGridSize = update.rows * update.cols;
 
     // FS-SB-009: live PTY event while locally scrolled → freeze viewport, only update scrollback count.
@@ -364,7 +377,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     // P-DIAG-1: mark end of pure-JS work (before Svelte schedules DOM mutations).
     // tauterm:applyOnly = asu:start → apply:end = applyUpdates + proxy writes.
     // tauterm:repaintTime = apply:end → render:end ≈ Svelte reconcile + WebKitGTK repaint.
-    if (import.meta.env.DEV) performance.mark('tauterm:apply:end');
+    if (import.meta.env.DEV || import.meta.env.VITE_PERF_INSTRUMENTATION === '1')
+      performance.mark('tauterm:apply:end');
     screenGeneration++;
   }
 
@@ -374,6 +388,39 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     const pendingUpdates: ScreenUpdateEvent[] = [];
     let buffering = true;
 
+    // P-OPT-1: rAF batching — coalesce screen-update events arriving between two
+    // browser paint frames into a single requestAnimationFrame callback. This
+    // reduces WebKitGTK repaint count from N events/frame to 1.
+    //
+    // All events are applied in arrival order: each ScreenUpdateEvent carries the
+    // delta since the previous emission (not a full snapshot). Skipping intermediate
+    // events would lose cells not covered by later ones. Svelte 5 batches $state
+    // mutations made in a synchronous call stack — N applyScreenUpdate() calls in
+    // one rAF callback produce 1 DOM reconcile cycle.
+    //
+    // rafQueue, rafId and rafScheduled are declared at composable scope so
+    // onDestroy can cancel a pending frame after the component is unmounted.
+    // rafScheduled is set BEFORE calling requestAnimationFrame() to avoid a
+    // re-entrance bug: if the rAF callback fires synchronously (e.g. in unit
+    // tests with a synchronous rAF mock), rafId would be cleared inside the
+    // callback before the assignment `rafId = requestAnimationFrame(...)` runs,
+    // leaving rafId non-null and blocking future scheduleRaf() calls. The
+    // separate rafScheduled boolean has no such race.
+    function flushRafQueue(): void {
+      rafScheduled = false;
+      rafId = null;
+      const batch = rafQueue.splice(0);
+      for (const update of batch) {
+        applyScreenUpdate(update);
+      }
+    }
+
+    function scheduleRaf(): void {
+      if (rafScheduled) return;
+      rafScheduled = true;
+      rafId = requestAnimationFrame(flushRafQueue);
+    }
+
     unlistens.push(
       await onScreenUpdate((update) => {
         if (update.paneId !== props.paneId()) return;
@@ -382,7 +429,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
           pendingUpdates.push(update);
           return;
         }
-        applyScreenUpdate(update);
+        rafQueue.push(update);
+        scheduleRaf();
       }),
     );
 
@@ -468,6 +516,11 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   });
 
   onDestroy(() => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      rafScheduled = false;
+    }
     for (const unlisten of unlistens) unlisten();
     unlistens = [];
     visualFx.cleanup();

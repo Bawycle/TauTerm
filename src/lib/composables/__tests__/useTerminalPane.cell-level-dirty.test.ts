@@ -97,6 +97,12 @@ beforeEach(() => {
   );
 
   vi.spyOn(tauriCore, 'invoke').mockResolvedValue(undefined as unknown as never);
+
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+    cb(performance.now());
+    return 1;
+  });
+  vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -140,11 +146,7 @@ async function mountPane(
 // Returns the container after the initial setup flush.
 // ---------------------------------------------------------------------------
 
-function initGrid(
-  container: HTMLElement,
-  cols: number,
-  rows: number,
-): void {
+function initGrid(container: HTMLElement, cols: number, rows: number): void {
   const cells = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {

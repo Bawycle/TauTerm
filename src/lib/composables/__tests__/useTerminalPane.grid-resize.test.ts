@@ -95,6 +95,12 @@ beforeEach(() => {
   );
 
   vi.spyOn(tauriCore, 'invoke').mockResolvedValue(undefined as unknown as never);
+
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+    cb(performance.now());
+    return 1;
+  });
+  vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
 });
 
 afterEach(() => {

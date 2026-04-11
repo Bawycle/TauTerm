@@ -114,6 +114,12 @@ beforeEach(() => {
     if (cmd === 'get_pane_screen_snapshot') return makeSnapshot();
     return undefined;
   });
+
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+    cb(performance.now());
+    return 1;
+  });
+  vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
 });
 
 afterEach(() => {

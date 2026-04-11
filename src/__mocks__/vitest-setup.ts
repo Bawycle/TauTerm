@@ -17,3 +17,11 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     disconnect() {}
   };
 }
+
+// scrollIntoView: jsdom does not implement it; components (e.g. TabBar active
+// tab scrolling) call it in requestAnimationFrame callbacks. A no-op stub
+// prevents TypeError when those callbacks fire in unit tests.
+// Smooth-scroll behaviour is validated in E2E tests only.
+if (typeof Element.prototype.scrollIntoView === 'undefined') {
+  Element.prototype.scrollIntoView = function (): void {};
+}

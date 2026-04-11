@@ -87,6 +87,7 @@ describe('locale state — setLocale', () => {
 
   it('does not throw when invoke fails (non-fatal IPC error)', async () => {
     vi.spyOn(tauriCore, 'invoke').mockRejectedValue(new Error('IPC unavailable'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     // Must resolve without throwing — IPC failure is non-fatal (FS-I18N-005).
     await expect(setLocale('fr')).resolves.toBeUndefined();
     // State is still updated despite IPC failure.
@@ -116,6 +117,7 @@ describe('locale state — initLocale', () => {
 
   it('falls back to "en" when IPC is unavailable', async () => {
     vi.spyOn(tauriCore, 'invoke').mockRejectedValue(new Error('no backend'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     // Ensure we start at 'en'.
     await setLocale('en');
     await initLocale();

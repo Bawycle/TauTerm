@@ -261,22 +261,31 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     }
   });
 
-  // P12a: post-render frame time measurement.
+  // Dev-only frame timing (P12a + P-DIAG-1).
+  // import.meta.env.DEV is replaced by `false` in production builds by Vite;
+  // Rollup tree-shakes the entire body — zero production overhead.
+  //
   // $effect runs after Svelte has committed all DOM mutations triggered by the
   // reactive writes in applyScreenUpdate() (the last of which is screenGeneration++).
-  // tauterm:frameRender = wall-clock from "start processing event" to "DOM updated".
-  // performance.mark/measure are ~50 ns no-ops when DevTools is not recording.
+  //
+  // Measures emitted per frame:
+  //   tauterm:frameRender  — full wall-clock: asu:start → render:end
+  //   tauterm:applyOnly    — pure JS cost:    asu:start → apply:end (before screenGeneration++)
+  //   tauterm:repaintTime  — Svelte reconcile + WebKitGTK repaint: apply:end → render:end
+  //
   // try-catch: the initial $effect run fires before the first applyScreenUpdate()
-  // call, so tauterm:asu:start does not exist yet — measure would throw.
+  // call, so the start marks do not exist yet — measure would throw.
   $effect(() => {
+    if (!import.meta.env.DEV) return;
     const _gen = screenGeneration; // subscribe to every generation increment
     void _gen;
     try {
       performance.mark('tauterm:render:end');
       performance.measure('tauterm:frameRender', 'tauterm:asu:start', 'tauterm:render:end');
-      performance.measure('tauterm:applyScreenUpdate', 'tauterm:asu:start', 'tauterm:render:end');
+      performance.measure('tauterm:applyOnly', 'tauterm:asu:start', 'tauterm:apply:end');
+      performance.measure('tauterm:repaintTime', 'tauterm:apply:end', 'tauterm:render:end');
     } catch {
-      // Start mark not yet set (initial run before first screen update). No-op.
+      // Start marks not yet set (initial run before first screen update). No-op.
     }
   });
 
@@ -291,7 +300,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // The event's cols/rows are authoritative — they reflect the grid dimensions at
   // the time the backend produced this event, eliminating stride mismatch races.
   function applyScreenUpdate(update: ScreenUpdateEvent): void {
-    performance.mark('tauterm:asu:start');
+    if (import.meta.env.DEV) performance.mark('tauterm:asu:start');
     const expectedGridSize = update.rows * update.cols;
 
     // FS-SB-009: live PTY event while locally scrolled → freeze viewport, only update scrollback count.
@@ -352,6 +361,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       props.ondimensionschange()?.(update.cols, update.rows);
     }
 
+    // P-DIAG-1: mark end of pure-JS work (before Svelte schedules DOM mutations).
+    // tauterm:applyOnly = asu:start → apply:end = applyUpdates + proxy writes.
+    // tauterm:repaintTime = apply:end → render:end ≈ Svelte reconcile + WebKitGTK repaint.
+    if (import.meta.env.DEV) performance.mark('tauterm:apply:end');
     screenGeneration++;
   }
 

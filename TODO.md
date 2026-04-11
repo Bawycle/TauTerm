@@ -55,23 +55,48 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
+### Performance — Diagnostic First
+
+*Baselines from `docs/perf/baseline-2026-04-11.md`. P-DIAG-1 instrumentation is already deployed (dev-only guards via `import.meta.env.DEV`).*
+
+- [ ] **P-DIAG-1 — Measure `applyOnly` vs `repaintTime` decomposition** `[Score: 8 | R:1, S:1, U:2, E:3]`
+  Instrumentation is deployed (commit `708b36e` + dev-only guard). Three marks: `tauterm:asu:start`, `tauterm:apply:end`, `tauterm:render:end`. Three measures: `tauterm:frameRender`, `tauterm:applyOnly`, `tauterm:repaintTime`.
+  **Action**: run SCROLL workload (e.g. `yes | head -50000`, or htop) in dev build and read:
+  ```javascript
+  const r = performance.getEntriesByName('tauterm:repaintTime').slice(-100);
+  const a = performance.getEntriesByName('tauterm:applyOnly').slice(-100);
+  console.log('repaint avg:', (r.reduce((s,x) => s+x.duration,0)/r.length).toFixed(2));
+  console.log('apply avg:', (a.reduce((s,x) => s+x.duration,0)/a.length).toFixed(2));
+  ```
+  **Goal**: quantify the repaint share of the 23 ms SCROLL average. If `repaintTime` > 80% → WebKitGTK repaint is the bottleneck → P-OPT-1 (rAF batching) first. If `applyOnly` > 20% → JS side has room to improve → P-OPT-2 first.
+  Update `docs/perf/baseline-2026-04-11.md` with results and decide P-OPT-1 vs P-OPT-2 ordering.
+
 ### Performance — Architectural Optimizations
 
-*Baselines from `docs/perf/baseline-2026-04-11.md`.*
+- [ ] **P-OPT-1 — rAF batching of `screen-update` events** `[Score: 8 | R:1, S:1, U:2, E:2]`
+  Currently each `screen-update` event triggers `applyScreenUpdate()` directly in the Tauri event listener callback, which may fire multiple times before the browser has a chance to paint. Batching: drain all pending `screen-update` events in a single `requestAnimationFrame()` callback — one `applyScreenUpdate()` call per rAF, one Svelte reconcile cycle, one WebKitGTK repaint.
+  **Expected impact**: reduces WebKitGTK repaint count from N events/frame to 1 — most likely the highest-leverage JS-side optimization for the SCROLL workload.
+  **Prerequisite**: P-DIAG-1 results confirm that repaint frequency (not per-repaint cost) is a significant contributor to the 23 ms average.
+  **Implementation**: replace `onScreenUpdate(paneId, applyScreenUpdate)` with a queue + `requestAnimationFrame(() => { const last = queue.pop(); if (last) applyScreenUpdate(last); })`. Only apply the last update per rAF (terminal rendering is stateful — intermediate frames need not be rendered if a newer snapshot is available). Handle the case where multiple `paneId` events arrive interleaved.
 
-- [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(only if P12a insufficient after measurement)*
-  **Prerequisite: measure `tauterm:frameRender` with htop after P12a deployment. P12b is unnecessary if the average is below ~4 ms.**
-  If post-P12a benchmarks show DOM is still the bottleneck on wide viewports, consider WebGL2 via an addon. **Canvas 2D is excluded**: it concentrates the drawbacks of both approaches (loses DOM accessibility like WebGL, without GPU gains) — this is xterm.js's conclusion after abandoning its Canvas addon in v6.0 for exactly this reason.
+- [ ] **P-OPT-2 — Reduce `string[]` allocations in `computeCellStyle()`** `[Score: 6 | R:1, S:1, U:1, E:2]`
+  `computeCellStyle()` in `screen.ts` builds a `string[]` of class names per cell on every update. Profile-driven: start this only if P-DIAG-1 shows `applyOnly` > ~5 ms. Options: reuse a pre-allocated array, use bit flags + lookup table, or generate a stable numeric key and cache the class string.
+  **Prerequisite**: P-DIAG-1 results confirm JS-side cost is material.
+
+- [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(only if P-OPT-1 exhausted and repaint still dominates)*
+  **Prerequisites (all required before starting P12b):**
+  1. P-DIAG-1 confirms `repaintTime` > 80% of `frameRender` average on SCROLL workload.
+  2. P-OPT-1 (rAF batching) is implemented and measured — P12b is irrelevant if P-OPT-1 brings the average below ~8 ms.
+  **Canvas 2D is excluded**: it concentrates the drawbacks of both approaches (loses DOM accessibility like WebGL, without GPU gains) — this is xterm.js's conclusion after abandoning its Canvas addon in v6.0 for exactly this reason.
   WebGL2 constraints on WebKitGTK/Linux:
   - Mandatory fallback on `onContextLoss` (GPU driver crash, tab backgrounded)
   - Background transparency incompatible with WebGL (forces opaque background)
   - Ligatures structurally incompatible (cannot draw beyond cell boundaries)
   - Parallel DOM layer for AT-SPI2 accessibility mandatory (`role="list"` + `aria-live="assertive"`, fed from buffer, `aria-hidden="true"` on canvas) — ~17 KB of code at xterm.js for this component alone
   - Text selection to re-implement entirely (logical model `[col, row]`, mouse tracking, extraction from Rust buffer, clipboard via Tauri)
-  **Do not commit to P12b without post-P12a benchmark data.**
 
-- [ ] **P5 — Flat buffer for `ScreenBuffer`** `[Score: 8 | R:1, S:1, U:2, E:1]`
-  Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. Eliminates one level of indirection and improves cache locality during sequential reads (snapshot, partial update). **Revised estimated impact: +10–50% on `build_screen_update_event`** (698 µs baseline) via better cache locality on row iteration — the original "3–10× on `write_1mb_ascii`" estimate was incorrect: VT parsing throughput is dominated by per-cell work, not buffer indirection. Implement only after P-IPC1 removes serde_json as the dominant cost, at which point buffer access in `build_screen_update_event` becomes the new bottleneck. **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.) — non-trivial refactor.
+- [ ] **P5 — Flat buffer for `ScreenBuffer`** `[Score: 6 | R:1, S:1, U:1, E:1]`
+  Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. **Revised scope**: relevant only when frontend rendering drops below ~5 ms average (i.e., after P-OPT-1 resolves the WebKitGTK repaint bottleneck), at which point `build_screen_update_event` (698 µs) re-emerges as the next bottleneck candidate. **Do not start before P-OPT-1 is measured and frontend is no longer the dominant cost.** **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.) — non-trivial refactor.
 
 ### Ligatures — Investigation
 

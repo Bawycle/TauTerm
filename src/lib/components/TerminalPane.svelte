@@ -24,8 +24,8 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
+  import { onSshWarning, onSshReconnected } from '$lib/ipc/events';
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
   import { useTerminalPane } from '$lib/composables/useTerminalPane.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -38,15 +38,7 @@
   import PaneTitleBar from './PaneTitleBar.svelte';
   import * as m from '$lib/paraglide/messages';
   import { sshStates } from '$lib/state/ssh.svelte';
-  import type {
-    PaneId,
-    TabId,
-    SshLifecycleState,
-    SshWarningEvent,
-    SshReconnectedEvent,
-    SearchMatch,
-    BellType,
-  } from '$lib/ipc/types';
+  import type { PaneId, TabId, SshLifecycleState, SearchMatch, BellType } from '$lib/ipc/types';
 
   interface Props {
     paneId: PaneId;
@@ -188,13 +180,11 @@
   let unlistenSshReconnected: (() => void) | null = null;
 
   onMount(async () => {
-    unlistenSshWarning = await listen<SshWarningEvent>('ssh-warning', (event) => {
-      const ev = event.payload;
+    unlistenSshWarning = await onSshWarning((ev) => {
       if (ev.paneId !== paneId) return;
       deprecatedAlgorithm = ev.algorithm;
     });
-    unlistenSshReconnected = await listen<SshReconnectedEvent>('ssh-reconnected', (event) => {
-      const ev = event.payload;
+    unlistenSshReconnected = await onSshReconnected((ev) => {
       if (ev.paneId !== paneId) return;
       reconnectionSeparators = [...reconnectionSeparators, ev.timestampMs];
     });

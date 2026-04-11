@@ -13,6 +13,8 @@ import { listen } from '@tauri-apps/api/event';
 import type {
   SessionStateChangedEvent,
   SshStateChangedEvent,
+  SshWarningEvent,
+  SshReconnectedEvent,
   HostKeyPromptEvent,
   CredentialPromptEvent,
   PassphrasePromptEvent,
@@ -43,6 +45,16 @@ export function onSshStateChanged(
   handler: (event: SshStateChangedEvent) => void,
 ): Promise<() => void> {
   return listen<SshStateChangedEvent>('ssh-state-changed', (e) => handler(e.payload));
+}
+
+export function onSshWarning(handler: (event: SshWarningEvent) => void): Promise<() => void> {
+  return listen<SshWarningEvent>('ssh-warning', (e) => handler(e.payload));
+}
+
+export function onSshReconnected(
+  handler: (event: SshReconnectedEvent) => void,
+): Promise<() => void> {
+  return listen<SshReconnectedEvent>('ssh-reconnected', (e) => handler(e.payload));
 }
 
 export function onHostKeyPrompt(handler: (event: HostKeyPromptEvent) => void): Promise<() => void> {

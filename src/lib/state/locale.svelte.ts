@@ -15,6 +15,7 @@ import {
   overwriteGetLocale,
 } from '$lib/paraglide/runtime';
 import { getPreferences, updatePreferences } from '$lib/ipc/commands';
+import { isTauTermError } from '$lib/ipc/errors';
 
 /** Supported locale codes (FS-I18N-002). */
 export type SupportedLocale = 'en' | 'fr';
@@ -66,8 +67,11 @@ export async function setLocale(locale: SupportedLocale): Promise<void> {
     await updatePreferences({ appearance: { language: safe } });
   } catch (err) {
     // Persistence failure is non-fatal: locale is applied in-session.
-    // Callers may surface this error if appropriate; we do not swallow silently.
-    console.error('[locale] Failed to persist locale via IPC:', err);
+    if (isTauTermError(err)) {
+      console.error(`[locale] Failed to persist locale via IPC (${err.code}):`, err.message);
+    } else {
+      console.error('[locale] Failed to persist locale via IPC:', err);
+    }
   }
 }
 

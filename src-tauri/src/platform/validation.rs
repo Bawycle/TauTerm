@@ -33,25 +33,19 @@ pub fn validate_ssh_identity_path(raw: &str) -> Result<PathBuf, TauTermError> {
         ));
     }
 
-    let canonical = raw_path.canonicalize().map_err(|e| {
-        TauTermError::with_detail(
+    let canonical = raw_path.canonicalize().map_err(|_| {
+        TauTermError::new(
             "INVALID_SSH_IDENTITY_PATH",
-            "SSH identity file does not exist or is not accessible.",
-            e.to_string(),
+            "Cannot resolve SSH identity file path.",
         )
     })?;
 
     let ssh_dir = ssh_directory()?;
 
     if !canonical.starts_with(&ssh_dir) {
-        return Err(TauTermError::with_detail(
+        return Err(TauTermError::new(
             "INVALID_SSH_IDENTITY_PATH",
-            "SSH identity file must be located within the user's ~/.ssh/ directory.",
-            format!(
-                "Path '{}' is outside '{}'",
-                canonical.display(),
-                ssh_dir.display()
-            ),
+            "SSH identity file is outside the permitted directory.",
         ));
     }
 
@@ -83,29 +77,23 @@ pub fn validate_shell_path(raw: &str) -> Result<PathBuf, TauTermError> {
         ));
     }
 
-    let canonical = raw_path.canonicalize().map_err(|e| {
-        TauTermError::with_detail(
-            "INVALID_SHELL_PATH",
-            "Shell executable does not exist or is not accessible.",
-            e.to_string(),
-        )
-    })?;
+    let canonical = raw_path
+        .canonicalize()
+        .map_err(|_| TauTermError::new("INVALID_SHELL_PATH", "Shell path is not permitted."))?;
 
-    let metadata = std::fs::metadata(&canonical).map_err(|e| {
-        TauTermError::with_detail(
+    let metadata = std::fs::metadata(&canonical).map_err(|_| {
+        TauTermError::new(
             "INVALID_SHELL_PATH",
             "Could not read shell executable metadata.",
-            e.to_string(),
         )
     })?;
 
     let mode = metadata.permissions().mode();
     // Check owner, group, or other execute bits (0o111).
     if mode & 0o111 == 0 {
-        return Err(TauTermError::with_detail(
+        return Err(TauTermError::new(
             "INVALID_SHELL_PATH",
             "The specified shell is not executable.",
-            format!("File mode: {:o}", mode),
         ));
     }
 

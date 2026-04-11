@@ -85,6 +85,10 @@ pub fn parse_osc(params: &[&[u8]]) -> OscAction {
             if params.len() < 2 {
                 return OscAction::Ignore;
             }
+            // SEC-OSC-004: reject URIs exceeding 2048 bytes to prevent memory exhaustion.
+            if uri_str.len() > 2048 {
+                return OscAction::Ignore;
+            }
             let id = id_params
                 .split(';')
                 .filter_map(|p| p.strip_prefix("id="))
@@ -150,6 +154,17 @@ pub fn parse_osc(params: &[&[u8]]) -> OscAction {
                 raw.to_owned()
             };
             if path.is_empty() {
+                return OscAction::Ignore;
+            }
+            // SEC-OSC-005: reject non-absolute paths (relative paths are meaningless
+            // as CWD and could be used for injection or path-confusion attacks).
+            if !path.starts_with('/') {
+                return OscAction::Ignore;
+            }
+            // SEC-OSC-005: reject paths containing Unicode bidi-override codepoints.
+            // These are used in "Trojan Source" style attacks to hide the true path
+            // visually in UIs that render the CWD string.
+            if contains_bidi_override(&path) {
                 return OscAction::Ignore;
             }
             OscAction::SetCwd(path)
@@ -560,6 +575,27 @@ mod security_tests {
         let action = parse_osc(&[b"7", b""]);
         assert!(matches!(action, OscAction::Ignore));
     }
+}
+
+/// Returns `true` if `s` contains Unicode bidi-override or invisible codepoints
+/// that could be used to visually misrepresent a path ("Trojan Source" style).
+///
+/// Rejected codepoints:
+/// - U+200F RIGHT-TO-LEFT MARK
+/// - U+202A–U+202E LRE / RLE / PDF / LRO / RLO (explicit directional embeddings)
+/// - U+2066–U+2069 LRI / RLI / FSI / PDI (isolate directional marks)
+/// - U+200B ZERO WIDTH SPACE
+/// - U+FEFF BYTE ORDER MARK / ZERO WIDTH NO-BREAK SPACE
+fn contains_bidi_override(s: &str) -> bool {
+    s.chars().any(|c| {
+        matches!(c,
+            '\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{200B}'
+            | '\u{FEFF}'
+        )
+    })
 }
 
 /// Percent-decode a URI path component (RFC 3986 §2.1).

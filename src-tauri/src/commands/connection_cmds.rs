@@ -34,7 +34,7 @@ pub async fn get_connections(
 const MAX_USERNAME_LEN: usize = 255;
 
 /// Maximum accepted length for the `password` field (SEC-CRED-004).
-const MAX_PASSWORD_LEN: usize = 4096;
+pub(crate) const MAX_PASSWORD_LEN: usize = 4096;
 
 /// Maximum accepted length for the `hostname` field (SEC-IPC-004).
 ///

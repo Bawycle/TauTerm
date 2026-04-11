@@ -28,6 +28,15 @@ pub async fn provide_credentials(
     credentials: Credentials,
     ssh_manager: State<'_, Arc<SshManager>>,
 ) -> Result<(), TauTermError> {
+    // SEC-CRED-004: reject oversized passwords before they reach the auth layer.
+    if let Some(ref pw) = credentials.password
+        && pw.len() > crate::commands::connection_cmds::MAX_PASSWORD_LEN
+    {
+        return Err(TauTermError::new(
+            "VALIDATION_ERROR",
+            "password exceeds maximum length.",
+        ));
+    }
     ssh_manager
         .provide_credentials(&pane_id, credentials)
         .map_err(|e| {
@@ -127,7 +136,6 @@ pub async fn reject_host_key(
         SshStateChangedEvent {
             pane_id,
             state: SshLifecycleState::Closed,
-            reason: Some("Host key rejected by user.".to_string()),
         },
     );
 
@@ -146,6 +154,13 @@ pub async fn provide_passphrase(
     save_in_keychain: bool,
     ssh_manager: State<'_, Arc<SshManager>>,
 ) -> Result<(), TauTermError> {
+    // SEC-CRED-004: reject oversized passphrases — same limit as passwords.
+    if passphrase.len() > crate::commands::connection_cmds::MAX_PASSWORD_LEN {
+        return Err(TauTermError::new(
+            "VALIDATION_ERROR",
+            "passphrase exceeds maximum length.",
+        ));
+    }
     let entry = ssh_manager
         .pending_passphrases
         .remove(&pane_id)

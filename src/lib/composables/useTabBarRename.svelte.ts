@@ -11,6 +11,8 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import type { TabState } from '$lib/ipc/types';
+import { applySessionDelta } from '$lib/state/session.svelte';
 
 export interface TabBarRenameOptions {
   requestedRenameTabId: () => string | null;
@@ -36,7 +38,8 @@ export function useTabBarRename(opts: TabBarRenameOptions) {
     if (renamingTabId !== tabId) return;
     const label: string | null = renameValue.trim() === '' ? null : renameValue.trim();
     try {
-      await invoke('rename_tab', { tabId, label });
+      const updatedTab = await invoke<TabState>('rename_tab', { tabId, label });
+      applySessionDelta({ type: 'paneMetadataChanged', tab: updatedTab });
     } catch {
       // IPC errors are non-fatal; title stays unchanged on next state update.
     }

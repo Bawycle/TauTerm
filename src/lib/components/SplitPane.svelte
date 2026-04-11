@@ -14,7 +14,6 @@
     node           — the PaneNode to render (leaf or split)
     tabId          — parent tab identifier (forwarded to TerminalPane)
     activePaneId   — currently active pane (controls `active` on TerminalPane)
-    terminatedPanes — Set<PaneId> of panes whose process exited
     wordDelimiters — forwarded to TerminalPane
     canClosePane   — whether there are multiple panes (controls close visibility)
     onpaneclick    — called with paneId when user clicks a pane
@@ -25,6 +24,7 @@
 -->
 <script lang="ts">
   import type { PaneNode, PaneId, TabId, SearchMatch, BellType } from '$lib/ipc/types';
+  import { terminatedPanes } from '$lib/state/notifications.svelte';
   import TerminalPane from './TerminalPane.svelte';
   import SplitPane from './SplitPane.svelte';
 
@@ -32,7 +32,6 @@
     node: PaneNode;
     tabId: TabId;
     activePaneId: PaneId;
-    terminatedPanes: Set<PaneId>;
     /** Maps each leaf paneId to its 1-based display number for aria-label. */
     paneNumbers?: Map<PaneId, number>;
     wordDelimiters?: string;
@@ -77,7 +76,6 @@
     node,
     tabId,
     activePaneId,
-    terminatedPanes,
     paneNumbers,
     wordDelimiters,
     canClosePane = true,
@@ -220,7 +218,6 @@
         node={node.first}
         {tabId}
         {activePaneId}
-        {terminatedPanes}
         {paneNumbers}
         {wordDelimiters}
         {canClosePane}
@@ -267,7 +264,6 @@
         node={node.second}
         {tabId}
         {activePaneId}
-        {terminatedPanes}
         {paneNumbers}
         {wordDelimiters}
         {canClosePane}

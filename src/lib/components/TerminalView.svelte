@@ -31,7 +31,6 @@
   import { useTerminalView } from '$lib/composables/useTerminalView.svelte';
   import { sessionState, getActiveTab, getActivePanes } from '$lib/state/session.svelte';
   import { hostKeyPrompt, credentialPrompt, passphrasePrompt } from '$lib/state/ssh.svelte';
-  import { terminatedPanes } from '$lib/state/notifications.svelte';
   import { preferences } from '$lib/state/preferences.svelte';
   import { fullscreenState } from '$lib/state/fullscreen.svelte';
   import { setActivePane } from '$lib/ipc/commands';
@@ -204,7 +203,6 @@
             node={activeTab.layout}
             tabId={activeTab.id}
             activePaneId={activeTab.activePaneId}
-            {terminatedPanes}
             wordDelimiters={preferences.value?.terminal.wordDelimiters}
             confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}
             cursorBlinkMs={preferences.value?.appearance.cursorBlinkMs}

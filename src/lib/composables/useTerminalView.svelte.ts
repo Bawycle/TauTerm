@@ -29,7 +29,7 @@ import {
   credentialPrompt,
   passphrasePrompt,
 } from '$lib/state/ssh.svelte';
-import { tabNotifications, terminatedPanes } from '$lib/state/notifications.svelte';
+import { tabNotifications } from '$lib/state/notifications.svelte';
 import { preferences } from '$lib/state/preferences.svelte';
 import { fullscreenState, setFullscreen } from '$lib/state/fullscreen.svelte';
 import { toggleFullscreen as ipcToggleFullscreen } from '$lib/ipc/commands';
@@ -48,7 +48,6 @@ export {
   credentialPrompt,
   passphrasePrompt,
   tabNotifications,
-  terminatedPanes,
   preferences,
   fullscreenState,
   getActiveTab,

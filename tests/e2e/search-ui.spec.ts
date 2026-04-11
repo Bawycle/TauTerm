@@ -30,7 +30,7 @@
  *   useTerminalPane.svelte.ts.
  */
 
-import { browser, $, $$ } from '@wdio/globals';
+import { browser } from '@wdio/globals';
 import { Selectors } from './helpers/selectors';
 
 // ---------------------------------------------------------------------------
@@ -216,7 +216,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
    */
   it('TEST-SEARCH-E2E-001: Ctrl+Shift+F opens the search overlay', async () => {
     // Give focus to the terminal before sending shortcuts
-    await $(Selectors.terminalGrid).click();
+    await browser.execute((): void => {
+      const grid = document.querySelector<HTMLElement>('.terminal-grid');
+      grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
 
     // Dispatch Ctrl+Shift+F
     await dispatchShortcut('F', 'KeyF', true, true);
@@ -238,7 +241,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
   it('TEST-SEARCH-E2E-002: search input exists and accepts text', async () => {
     // Ensure overlay is open
     if (!(await isSearchOverlayOpen())) {
-      await $(Selectors.terminalGrid).click();
+      await browser.execute((): void => {
+        const grid = document.querySelector<HTMLElement>('.terminal-grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
       await dispatchShortcut('F', 'KeyF', true, true);
       await browser.waitUntil(isSearchOverlayOpen, {
         timeout: 5_000,
@@ -300,7 +306,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
 
     // Ensure search overlay is open
     if (!(await isSearchOverlayOpen())) {
-      await $(Selectors.terminalGrid).click();
+      await browser.execute((): void => {
+        const grid = document.querySelector<HTMLElement>('.terminal-grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
       await dispatchShortcut('F', 'KeyF', true, true);
       await browser.waitUntil(isSearchOverlayOpen, {
         timeout: 5_000,
@@ -343,7 +352,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
   it('TEST-SEARCH-E2E-004: match count shows "N of M" format', async () => {
     // Ensure search is open with a previous query that yielded matches
     if (!(await isSearchOverlayOpen())) {
-      await $(Selectors.terminalGrid).click();
+      await browser.execute((): void => {
+        const grid = document.querySelector<HTMLElement>('.terminal-grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
       await dispatchShortcut('F', 'KeyF', true, true);
       await browser.waitUntil(isSearchOverlayOpen, {
         timeout: 5_000,
@@ -394,6 +406,14 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
     const paneId = await getActivePaneId();
     expect(paneId).toBeTruthy();
 
+    // Reset scroll to bottom: tests 003/004 search navigation may have scrolled
+    // the viewport up to show a match. New inject_pty_output writes to the main
+    // screen (bottom), which is outside the viewport when scrolled — waitForTextInGrid
+    // reads .terminal-grid textContent (visible rows only) and times out even though
+    // the content is present in the buffer. scroll_to_bottom resets scroll_offset to 0.
+    await tauriInvoke<void>('scroll_to_bottom', { paneId: paneId! });
+    await browser.pause(100); // allow one rAF cycle for DOM re-render at scroll bottom
+
     // Seed content via awaited invoke so errors surface instead of timing out.
     const searchToken = 'e2e-nav-token';
     await seedPaneContentAwaited(paneId!, `${searchToken}\r\n${searchToken}\r\n`);
@@ -412,7 +432,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
     await browser.pause(300);
 
     if (!(await isSearchOverlayOpen())) {
-      await $(Selectors.terminalGrid).click();
+      await browser.execute((): void => {
+        const grid = document.querySelector<HTMLElement>('.terminal-grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
       await dispatchShortcut('F', 'KeyF', true, true);
       await browser.waitUntil(isSearchOverlayOpen, {
         timeout: 5_000,
@@ -480,7 +503,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
     // This test depends on TEST-SEARCH-E2E-005 having set up search with ≥2 matches.
     // If the overlay was closed, re-open it.
     if (!(await isSearchOverlayOpen())) {
-      await $(Selectors.terminalGrid).click();
+      await browser.execute((): void => {
+        const grid = document.querySelector<HTMLElement>('.terminal-grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
       await dispatchShortcut('F', 'KeyF', true, true);
       await browser.waitUntil(isSearchOverlayOpen, {
         timeout: 5_000,
@@ -529,7 +555,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
   it('TEST-SEARCH-E2E-007: Escape closes the search overlay', async () => {
     // Ensure overlay is open
     if (!(await isSearchOverlayOpen())) {
-      await $(Selectors.terminalGrid).click();
+      await browser.execute((): void => {
+        const grid = document.querySelector<HTMLElement>('.terminal-grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
       await dispatchShortcut('F', 'KeyF', true, true);
       await browser.waitUntil(isSearchOverlayOpen, {
         timeout: 5_000,
@@ -568,7 +597,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
    */
   it('TEST-SEARCH-E2E-008: X button closes the search overlay', async () => {
     // Re-open search
-    await $(Selectors.terminalGrid).click();
+    await browser.execute((): void => {
+      const grid = document.querySelector<HTMLElement>('.terminal-grid');
+      grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
     await dispatchShortcut('F', 'KeyF', true, true);
     await browser.waitUntil(isSearchOverlayOpen, {
       timeout: 5_000,
@@ -602,7 +634,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
    */
   it('TEST-SEARCH-E2E-009: empty result set shows no-results indicator', async () => {
     // Re-open search
-    await $(Selectors.terminalGrid).click();
+    await browser.execute((): void => {
+      const grid = document.querySelector<HTMLElement>('.terminal-grid');
+      grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
     await dispatchShortcut('F', 'KeyF', true, true);
     await browser.waitUntil(isSearchOverlayOpen, {
       timeout: 5_000,

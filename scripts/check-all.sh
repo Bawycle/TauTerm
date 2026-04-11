@@ -328,9 +328,9 @@ else
     # Combined with an existing debug target/, 8 GB is a conservative minimum.
     check_disk_space 8 "$PROJECT_ROOT" "E2E build — Rust release target/ (step 6)"
 
-    echo "[check] pnpm tauri build --no-bundle -- --features e2e-testing"
+    echo "[check] VITE_PERF_INSTRUMENTATION=1 pnpm tauri build --no-bundle -- --features e2e-testing"
     echo "[check] NOTE: --features e2e-testing is mandatory (enables inject_pty_output)."
-    run pnpm tauri build --no-bundle -- --features e2e-testing
+    run env VITE_PERF_INSTRUMENTATION=1 pnpm tauri build --no-bundle -- --features e2e-testing
 
     echo "[check] pnpm wdio"
     run pnpm wdio

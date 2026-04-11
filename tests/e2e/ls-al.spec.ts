@@ -318,6 +318,13 @@ describe('ls -al basic flow', () => {
 
     // 1.4 / UX-SC-02: cursor column must equal PROMPT_LEN (immediately after
     // the last prompt character). The style is "{col}ch".
+    // Wait for cursor to be in blink-on phase before reading style.left.
+    // The earlier waitUntil at the top of this phase may have been in-between
+    // blink cycles by the time we reach here. Same race as Phase 4 (see comment there).
+    await browser.waitUntil(cursorExists, {
+      timeout: 5_000,
+      timeoutMsg: 'Cursor did not enter blink-on phase before column read (Phase 1, criterion 1.4)',
+    });
     const leftStyle = await getCursorLeftStyle();
     const cursorCol = parseCursorCol(leftStyle);
     expect(cursorCol).toBe(PROMPT_LEN); // criterion 1.4: col = length of prompt
@@ -350,6 +357,10 @@ describe('ls -al basic flow', () => {
     expect(gridText).toContain('a'); // criterion 2.1
 
     // 2.2 / UX-SC-06: cursor must have advanced by 6 columns (PROMPT_LEN + 6).
+    await browser.waitUntil(cursorExists, {
+      timeout: 5_000,
+      timeoutMsg: 'Cursor did not enter blink-on phase before column read (Phase 2, criterion 2.2)',
+    });
     const leftStyle = await getCursorLeftStyle();
     const cursorCol = parseCursorCol(leftStyle);
     expect(cursorCol).toBe(PROMPT_LEN + 6); // criterion 2.2: col = 16 + 6 = 22
@@ -512,6 +523,10 @@ describe('ls -al basic flow', () => {
     await waitForTextInGrid(PROMPT + 'e', 5_000); // criterion 5.1 / UX-SC-20
 
     // 5.2: the cursor must have advanced by one column (col = PROMPT_LEN + 1).
+    await browser.waitUntil(cursorExists, {
+      timeout: 5_000,
+      timeoutMsg: 'Cursor did not enter blink-on phase before column read (Phase 5, criterion 5.2)',
+    });
     const leftStyle = await getCursorLeftStyle();
     const cursorCol = parseCursorCol(leftStyle);
     expect(cursorCol).toBe(PROMPT_LEN + 1); // criterion 5.2

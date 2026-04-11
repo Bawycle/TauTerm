@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `check-all.sh`: set `VITE_PERF_INSTRUMENTATION=1` in the E2E build step so `perf-p12a-frame-render` tests measure actual frame render timing instead of seeing empty performance entry lists.
+
 ### Added
 
 - CSS containment (`contain: strict`) is now applied to the terminal viewport element. This confines WebKitGTK repaints and layout recalculations to the terminal subtree, reducing repaint time by 15 % on average (−20 % at p95) on SCROLL-intensive workloads. Scrolling through large command output or log streams is noticeably smoother.

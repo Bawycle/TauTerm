@@ -55,14 +55,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
-### Performance — Architectural Optimizations
-
-*Measured results (2026-04-11): Post-P-OPT-1 baseline SCROLL avg = 27.54 ms. Post-P-OPT-3 (CSS containment): SCROLL avg = 23.33 ms, repaintTime = 18.13 ms (−15.4 %, p95 −20 %). P-OPT-4 (`will-change: contents`): no measurable effect in WebKitGTK (delta −0.10 ms, noise) — removed. **v1 decision**: ~23 ms on a SCROLL stress test (30×12 lines, `cat`-of-large-file equivalent) is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms, well under budget. WebKitGTK repaint (78%) is a structural ceiling of the DOM renderer — not further reducible via CSS/JS. P12b (WebGL2) is the only remaining lever and is explicitly deferred to post-v1.*
-
-### Ligatures — Confirmed Blocked (run-merging required)
-
-Architectural blocker confirmed: the span-per-cell model fragments the CSS shaping context at every span boundary — ligatures cannot form regardless of `font-feature-settings`. CSS declarations (`"liga" 1, "calt" 1`, `font-variant-ligatures: contextual`) are present on `.terminal-pane__viewport` and will activate automatically when run-merging is implemented. Run-merging (grouping adjacent same-style cells into a single `<span>`) is the prerequisite — it is a substantial change involving search, selection, and hyperlink boundary handling.
-
 ---
 
 ## v1.1 — Roadmap Minor Release
@@ -132,6 +124,21 @@ Architectural blocker confirmed: the span-per-cell model fragments the CSS shapi
   3. Use this channel as TCP transport for a second `russh::client::connect_stream` session toward the final target.
   4. Data model: `jump_host_id: Option<String>` in `SshConnectionConfig` (references another saved connection profile). Limit to 1 hop for v1.
   Actions required: specify in `docs/UR.md §9` + `docs/fs/03-remote-ssh.md`, extend `SshConnectionConfig`, implement the `direct-tcpip` sequence in `src-tauri/src/ssh/manager/connect.rs`, add the "Via jump host" field in the connection form.
+
+- [ ] **[v1.1] Run-merging — group adjacent same-style cells into a single `<span>`** `[Score: 8 | R:1, S:1, U:2, E:1]`
+  **Prerequisite for ligature support.** The current span-per-cell model renders one `<span>` per character, which fragments the CSS shaping context and prevents ligature formation. Run-merging groups consecutive cells with identical style (fg, bg, bold, italic, dim, underline, inverse) into a single `<span>` containing multiple characters, restoring the shaping context.
+  Secondary benefit: fewer DOM nodes → smaller layout tree → marginal repaint reduction (not a frame-budget lever, but a structural improvement).
+  **Boundary constraints** — spans must not cross:
+  - Hyperlink boundaries (OSC 8): each distinct URI must be in its own span. **Depends on OSC 8 item above being implemented first.**
+  - Search match boundaries: highlighted ranges require span splitting at match edges.
+  - Selection boundaries: selected regions require span splitting at selection edges.
+  **P12a compatibility**: cell-level dirty tracking (already implemented) writes `gridRows[r][c]` individually. With run-merging, a dirty cell invalidates the entire run it belongs to — the dirty-tracking granularity must be lifted to run level, or runs must be recomputed per row on any cell change.
+  **TauTerm implementation:**
+  - `TerminalPaneViewport.svelte`: replace `{#each row as cell}` with a derived `runs` array — `$derived.by()` computing `RunCell[]` per row by scanning for style boundaries.
+  - `RunCell`: `{ content: string; style: string; strikethrough: boolean; blink: boolean; hyperlink?: string; width: number }` — one entry per contiguous run.
+  - Cursor: rendered as a separate absolutely-positioned overlay (unchanged).
+  - Selection/search highlighting: computed as run overlays or via CSS `::selection` if feasible.
+  Actions required: specify in `docs/uxd/` (rendering model note), implement `computeRuns()` utility + update `TerminalPaneViewport.svelte`, add vitest tests for run boundary detection.
 
 ---
 

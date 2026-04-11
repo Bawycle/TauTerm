@@ -229,6 +229,45 @@ describe('F4-CSS-001: --blink CSS class exists in TerminalPane.svelte source', (
 });
 
 // ---------------------------------------------------------------------------
+// P-OPT-3 — CSS containment: `contain: strict` on .terminal-pane__viewport
+//
+// jsdom does not compute styles from Svelte <style> blocks (getComputedStyle
+// returns empty strings for :global() rules). The test verifies the CSS rule
+// is declared in the source file — the only reliable approach in jsdom.
+// Runtime effect (WebKitGTK repaint scope reduction) is measured by the E2E
+// benchmark in tests/e2e/perf-p12a-frame-render.spec.ts.
+// ---------------------------------------------------------------------------
+
+describe('P-OPT-3-CSS-001: contain:strict declared on .terminal-pane__viewport', () => {
+  it('declares contain: strict inside the .terminal-pane__viewport rule', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    // Anchor on the two adjacent selectors to extract only the viewport block.
+    // Using selector names as delimiters is more stable than searching for the
+    // next :global( occurrence, which would break if a nested :global() were added.
+    const viewportStart = source.indexOf('terminal-pane__viewport)');
+    const viewportEnd = source.indexOf('terminal-pane__row)', viewportStart + 1);
+    const viewportBlock = source.slice(viewportStart, viewportEnd);
+
+    expect(viewportStart).toBeGreaterThan(-1);
+    expect(viewportEnd).toBeGreaterThan(viewportStart);
+    expect(viewportBlock).toContain('contain: strict');
+  });
+
+  it('renders the .terminal-pane__viewport element (CSS selector target exists in DOM)', async () => {
+    // Confirms the element targeted by the :global(.terminal-pane__viewport) selector
+    // is present in the rendered DOM. jsdom cannot compute the style, but we verify
+    // the element exists so that the selector is not targeting a phantom.
+    const { container, instance } = await mountPane();
+    instances.push(instance);
+    expect(container.querySelector('.terminal-pane__viewport')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // F9 — Strikethrough: --strikethrough class must be declared, not text-decoration
 // ---------------------------------------------------------------------------
 

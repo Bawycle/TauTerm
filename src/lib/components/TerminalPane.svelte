@@ -417,6 +417,7 @@
     white-space: pre;
     outline: none;
     cursor: text;
+    contain: strict;
     user-select: none;
   }
 

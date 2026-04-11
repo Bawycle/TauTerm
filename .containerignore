@@ -1,4 +1,5 @@
-# Kept for Docker compatibility. Podman uses .containerignore (same content).
+# Containers only need src-tauri/ and specific scripts/.
+# Everything else is excluded to keep the build context minimal.
 
 # Rust build artifacts
 src-tauri/target/

@@ -219,12 +219,20 @@ describe('TauTerm — Tab switch session isolation', () => {
     const marker2 = 'TAB2-SESSION-CONTENT';
 
     // Click tab 1 (index 0) and wait for its content to be rendered.
-    await $(`${Selectors.tab}[data-tab-index='0']`).click();
+    // Use dispatchEvent — WebKitGTK marks elements as 'not interactable' for a
+    // brief window after reactive effects fire (same workaround as focus-autofocus.spec.ts).
+    await browser.execute((): void => {
+      const tab = document.querySelector<HTMLElement>(".tab-bar__tab[data-tab-index='0']");
+      tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
     await waitForTextInGrid(marker1);
     expect(await getGridText()).not.toContain(marker2);
 
     // Click tab 2 (index 1) and wait for its content to reappear.
-    await $(`${Selectors.tab}[data-tab-index='1']`).click();
+    await browser.execute((): void => {
+      const tab = document.querySelector<HTMLElement>(".tab-bar__tab[data-tab-index='1']");
+      tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
     await waitForTextInGrid(marker2);
     expect(await getGridText()).not.toContain(marker1);
   });
@@ -248,7 +256,10 @@ describe('TauTerm — Tab switch session isolation', () => {
     expect(stateOnTab2.activeTabId).toBe(tab2Id);
 
     // Switch to tab 1 and verify.
-    await $(`${Selectors.tab}[data-tab-index='0']`).click();
+    await browser.execute((): void => {
+      const tab = document.querySelector<HTMLElement>(".tab-bar__tab[data-tab-index='0']");
+      tab?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
     await waitForTextInGrid('TAB1-SESSION-CONTENT');
 
     const stateOnTab1 = await tauriInvoke<SessionState>('get_session_state');

@@ -303,14 +303,13 @@ impl russh::client::Handler for TauTermSshHandler {
         let app = self.app.clone();
 
         async move {
-            let (new_state, reason_str, is_error) = classify_disconnect_reason(&reason);
+            let (new_state, _reason_str, is_error) = classify_disconnect_reason(&reason);
 
             emit_ssh_state_changed(
                 &app,
                 SshStateChangedEvent {
                     pane_id,
                     state: new_state,
-                    reason: reason_str,
                 },
             );
 

@@ -103,32 +103,20 @@ export type PaneNotification =
  * Delta event payload emitted by `session-state-changed` (ARCHITECTURE §4.5.2).
  * Carries the full `TabState` of the affected tab — no partial merge needed.
  *
- * Mirrors Rust SessionStateChangedEvent (camelCase) with SessionChangeType
- * serialized as kebab-case via #[serde(rename_all = "kebab-case")].
+ * Mirrors Rust SessionStateChangedEvent:
+ *   #[serde(tag = "type", rename_all = "camelCase")]
+ *   enum SessionStateChangedEvent { TabCreated { tab }, TabClosed { closedTabId, activeTabId? }, … }
+ *
+ * The `type` discriminant is the camelCase variant name. Switch on `event.type`
+ * for exhaustive handling — TypeScript narrows each branch automatically.
  */
-export interface SessionStateChangedEvent {
-  changeType:
-    | 'tab-created'
-    | 'tab-closed'
-    | 'tab-reordered'
-    | 'active-tab-changed'
-    | 'active-pane-changed'
-    | 'pane-metadata-changed';
-  /**
-   * Complete updated `TabState` of the affected tab.
-   * Absent when `changeType === 'tab-closed'`.
-   */
-  tab?: TabState;
-  /**
-   * Present when `changeType === 'active-tab-changed'` or `'tab-closed'`.
-   */
-  activeTabId?: TabId;
-  /**
-   * Present when `changeType === 'tab-closed'` — the ID of the closed tab.
-   * Used to reliably identify which tab to remove from the local list.
-   */
-  closedTabId?: TabId;
-}
+export type SessionStateChangedEvent =
+  | { type: 'tabCreated'; tab: TabState }
+  | { type: 'tabClosed'; closedTabId: TabId; activeTabId?: TabId }
+  | { type: 'tabReordered'; tab: TabState }
+  | { type: 'activeTabChanged'; tab: TabState; activeTabId: TabId }
+  | { type: 'activePaneChanged'; tab: TabState }
+  | { type: 'paneMetadataChanged'; tab: TabState };
 
 // ---------------------------------------------------------------------------
 // SSH lifecycle state events (ARCHITECTURE §4.3)
@@ -138,15 +126,15 @@ export interface SessionStateChangedEvent {
  * Emitted on every SSH session state transition.
  *
  * Mirrors Rust SshStateChangedEvent:
- *   pane_id: PaneId  → paneId
+ *   pane_id: PaneId          → paneId
  *   state: SshLifecycleState → state
- *   reason: Option<String>   → reason? (skip_serializing_if = "Option::is_none")
+ *
+ * The disconnect reason is carried inside `state` when `state.type === 'disconnected'`:
+ *   `(event.state as { type: 'disconnected'; reason?: string }).reason`
  */
 export interface SshStateChangedEvent {
   paneId: PaneId;
   state: SshLifecycleState;
-  /** Human-readable reason for `Disconnected` state, if provided. */
-  reason?: string;
 }
 
 // ---------------------------------------------------------------------------

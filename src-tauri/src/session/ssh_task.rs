@@ -19,8 +19,7 @@ use tauri::AppHandle;
 
 use crate::events::{
     SshStateChangedEvent, emit_mode_state_changed, emit_screen_update, emit_session_state_changed,
-    emit_ssh_state_changed,
-    types::{SessionChangeType, SessionStateChangedEvent},
+    emit_ssh_state_changed, types::SessionStateChangedEvent,
 };
 use crate::session::ids::PaneId;
 use crate::session::pty_task::{build_mode_state_event, build_screen_update_event};
@@ -94,12 +93,7 @@ pub fn spawn_ssh_read_task(
                     {
                         emit_session_state_changed(
                             &app,
-                            SessionStateChangedEvent {
-                                change_type: SessionChangeType::PaneMetadataChanged,
-                                tab: Some(tab_state),
-                                active_tab_id: None,
-                                closed_tab_id: None,
-                            },
+                            SessionStateChangedEvent::PaneMetadataChanged { tab: tab_state },
                         );
                     }
                     if !dirty.is_empty() {
@@ -130,12 +124,7 @@ pub fn spawn_ssh_read_task(
                     {
                         emit_session_state_changed(
                             &app,
-                            SessionStateChangedEvent {
-                                change_type: SessionChangeType::PaneMetadataChanged,
-                                tab: Some(tab_state),
-                                active_tab_id: None,
-                                closed_tab_id: None,
-                            },
+                            SessionStateChangedEvent::PaneMetadataChanged { tab: tab_state },
                         );
                     }
                     if !dirty.is_empty() {
@@ -150,7 +139,6 @@ pub fn spawn_ssh_read_task(
                         SshStateChangedEvent {
                             pane_id,
                             state: SshLifecycleState::Closed,
-                            reason: Some("Remote shell exited.".to_string()),
                         },
                     );
                     return;

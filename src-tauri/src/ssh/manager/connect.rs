@@ -89,7 +89,6 @@ impl SshManager {
             SshStateChangedEvent {
                 pane_id: pane_id.clone(),
                 state: SshLifecycleState::Authenticating,
-                reason: None,
             },
         );
 
@@ -408,7 +407,6 @@ impl SshManager {
             SshStateChangedEvent {
                 pane_id: pane_id.clone(),
                 state: SshLifecycleState::Connected,
-                reason: None,
             },
         );
 

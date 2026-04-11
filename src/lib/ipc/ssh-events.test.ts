@@ -31,12 +31,20 @@ import type {
 // Helpers — build minimal event fixtures
 // ---------------------------------------------------------------------------
 
+/**
+ * Build a minimal SshStateChangedEvent.
+ * When `reason` is provided and the state is `disconnected`, the reason is embedded
+ * inside the `state` variant — there is no top-level `reason` field (B8).
+ */
 function makeSshStateEvent(
   state: SshLifecycleState,
   paneId = 'pane-1',
   reason?: string,
 ): SshStateChangedEvent {
-  return { paneId, state, ...(reason !== undefined ? { reason } : {}) };
+  if (reason !== undefined && state.type === 'disconnected') {
+    return { paneId, state: { type: 'disconnected', reason } };
+  }
+  return { paneId, state };
 }
 
 function makeHostKeyEvent(overrides: Partial<HostKeyPromptEvent> = {}): HostKeyPromptEvent {
@@ -72,7 +80,7 @@ describe('SSH-AUTH-001: SshStateChangedEvent state type contract', () => {
   it('Connecting state serialises correctly', () => {
     const event = makeSshStateEvent({ type: 'connecting' });
     expect(event.state.type).toBe('connecting');
-    expect(event.reason).toBeUndefined();
+    // No top-level reason field — reason is inside state for disconnected only.
   });
 
   it('Authenticating state carries no reason', () => {
@@ -85,10 +93,12 @@ describe('SSH-AUTH-001: SshStateChangedEvent state type contract', () => {
     expect(event.state.type).toBe('connected');
   });
 
-  it('Disconnected state may carry a reason', () => {
+  it('Disconnected state may carry a reason inside state', () => {
     const event = makeSshStateEvent({ type: 'disconnected' }, 'pane-1', 'Connection reset');
     expect(event.state.type).toBe('disconnected');
-    expect(event.reason).toBe('Connection reset');
+    // Reason is inside state.reason — no top-level reason field (B8).
+    const disconnected = event.state as { type: 'disconnected'; reason?: string };
+    expect(disconnected.reason).toBe('Connection reset');
   });
 
   it('Closed state carries no reason', () => {
@@ -106,16 +116,18 @@ describe('SEC-BLK-005: Disconnected reason must not contain password', () => {
     const password = 'hunter2';
     // Simulate a Disconnected event as it would arrive from the backend.
     const event = makeSshStateEvent({ type: 'disconnected' }, 'pane-1', 'Authentication failed');
-    expect(event.reason).not.toContain(password);
-    // The reason field must be a safe, generic string.
-    expect(event.reason).toBeDefined();
-    expect(typeof event.reason).toBe('string');
+    const disconnected = event.state as { type: 'disconnected'; reason?: string };
+    expect(disconnected.reason).not.toContain(password);
+    // The reason must be a safe, generic string carried inside the Disconnected variant.
+    expect(disconnected.reason).toBeDefined();
+    expect(typeof disconnected.reason).toBe('string');
   });
 
   it('reason does not include username', () => {
     const event = makeSshStateEvent({ type: 'disconnected' }, 'pane-1', 'Authentication failed');
+    const disconnected = event.state as { type: 'disconnected'; reason?: string };
     // Username 'alice' must not appear in the reason either.
-    expect(event.reason).not.toContain('alice');
+    expect(disconnected.reason).not.toContain('alice');
   });
 });
 

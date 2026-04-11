@@ -106,21 +106,21 @@ describe('session.svelte.ts — applySessionDelta', () => {
     setInitialSession({ tabs: [], activeTabId: '' });
   });
 
-  it('tab-created: adds a new tab', async () => {
+  it('tabCreated: adds a new tab', async () => {
     const { applySessionDelta, sessionState } = await import('./session.svelte');
     const tab = makeTab({ id: 'new-tab' });
-    applySessionDelta({ changeType: 'tab-created', tab });
+    applySessionDelta({ type: 'tabCreated', tab });
     expect(sessionState.tabs.some((t) => t.id === 'new-tab')).toBe(true);
   });
 
-  it('tab-closed: removes the closed tab and updates activeTabId', async () => {
+  it('tabClosed: removes the closed tab and updates activeTabId', async () => {
     const { setInitialSession, applySessionDelta, sessionState } = await import('./session.svelte');
     const tab1 = makeTab({ id: 'tab-1' });
     const tab2 = makeTab({ id: 'tab-2', order: 1 });
     setInitialSession({ tabs: [tab1, tab2], activeTabId: 'tab-1' });
 
     applySessionDelta({
-      changeType: 'tab-closed',
+      type: 'tabClosed',
       closedTabId: 'tab-1',
       activeTabId: 'tab-2',
     });
@@ -129,29 +129,29 @@ describe('session.svelte.ts — applySessionDelta', () => {
     expect(sessionState.activeTabId).toBe('tab-2');
   });
 
-  it('active-tab-changed: updates activeTabId', async () => {
+  it('activeTabChanged: updates activeTabId', async () => {
     const { setInitialSession, applySessionDelta, sessionState } = await import('./session.svelte');
     const tab1 = makeTab({ id: 'tab-1' });
     const tab2 = makeTab({ id: 'tab-2', order: 1 });
     setInitialSession({ tabs: [tab1, tab2], activeTabId: 'tab-1' });
 
-    applySessionDelta({ changeType: 'active-tab-changed', activeTabId: 'tab-2' });
+    applySessionDelta({ type: 'activeTabChanged', tab: tab2, activeTabId: 'tab-2' });
 
     expect(sessionState.activeTabId).toBe('tab-2');
   });
 
-  it('pane-metadata-changed: updates the affected tab in-place', async () => {
+  it('paneMetadataChanged: updates the affected tab in-place', async () => {
     const { setInitialSession, applySessionDelta, sessionState } = await import('./session.svelte');
     const tab = makeTab({ id: 'tab-1', label: null });
     setInitialSession({ tabs: [tab], activeTabId: 'tab-1' });
 
     const updatedTab = { ...tab, label: 'My Shell' };
-    applySessionDelta({ changeType: 'pane-metadata-changed', tab: updatedTab });
+    applySessionDelta({ type: 'paneMetadataChanged', tab: updatedTab });
 
     expect(sessionState.tabs[0].label).toBe('My Shell');
   });
 
-  it('pane-metadata-changed: updates processTitle in layout leaf', async () => {
+  it('paneMetadataChanged: updates processTitle in layout leaf', async () => {
     const { setInitialSession, applySessionDelta, sessionState } = await import('./session.svelte');
     const pane = makePaneState({ id: 'pane-1', processTitle: 'initial' });
     const tab = makeTab({ id: 'tab-1', layout: makeLeafNode('pane-1', pane) });
@@ -159,7 +159,7 @@ describe('session.svelte.ts — applySessionDelta', () => {
 
     const updatedPane = makePaneState({ id: 'pane-1', processTitle: 'zsh — ~/projects' });
     const updatedTab = { ...tab, layout: makeLeafNode('pane-1', updatedPane) };
-    applySessionDelta({ changeType: 'pane-metadata-changed', tab: updatedTab });
+    applySessionDelta({ type: 'paneMetadataChanged', tab: updatedTab });
 
     const leaf = sessionState.tabs[0].layout;
     expect(leaf.type).toBe('leaf');

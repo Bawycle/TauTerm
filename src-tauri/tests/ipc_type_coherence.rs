@@ -17,8 +17,7 @@ use tau_term_lib::{
     events::types::{
         CellAttrsDto, CellUpdate, ColorDto, CredentialPromptEvent, CursorState, HostKeyPromptEvent,
         ModeStateChangedEvent, NotificationChangedEvent, PaneNotificationDto, ScreenUpdateEvent,
-        ScrollPositionChangedEvent, SessionChangeType, SessionStateChangedEvent,
-        SshStateChangedEvent,
+        ScrollPositionChangedEvent, SessionStateChangedEvent, SshStateChangedEvent,
     },
     session::{
         ids::{ConnectionId, PaneId, TabId},
@@ -103,55 +102,67 @@ fn make_cell_attrs() -> CellAttrsDto {
 
 #[test]
 fn ipc_session_state_changed_tab_created_serializes() {
-    let event = SessionStateChangedEvent {
-        change_type: SessionChangeType::TabCreated,
-        tab: Some(make_leaf_tab(0)),
-        active_tab_id: None,
-        closed_tab_id: None,
+    let event = SessionStateChangedEvent::TabCreated {
+        tab: make_leaf_tab(0),
     };
     let json = serde_json::to_string(&event).expect("SessionStateChangedEvent must serialize");
     assert!(
-        json.contains("tabCreated") || json.contains("tab-created"),
-        "change_type tag missing: {json}"
+        json.contains("\"type\":\"tabCreated\""),
+        "type discriminant must be tabCreated: {json}"
     );
 }
 
 #[test]
 fn ipc_session_state_changed_tab_closed_serializes() {
     let tab_id = make_tab_id();
-    let event = SessionStateChangedEvent {
-        change_type: SessionChangeType::TabClosed,
-        tab: None,
-        active_tab_id: Some(tab_id.0.clone()),
-        closed_tab_id: Some(tab_id.clone()),
+    let active_id = make_tab_id();
+    let event = SessionStateChangedEvent::TabClosed {
+        closed_tab_id: tab_id.clone(),
+        active_tab_id: Some(active_id.clone()),
     };
     let json = serde_json::to_string(&event).expect("serialize");
     assert!(
-        json.contains("tab-closed") || json.contains("tabClosed"),
-        "got: {json}"
+        json.contains("\"type\":\"tabClosed\""),
+        "type discriminant must be tabClosed: {json}"
+    );
+    assert!(
+        json.contains(tab_id.as_str()),
+        "closedTabId must be present: {json}"
     );
 }
 
 #[test]
-fn ipc_session_state_changed_all_change_types_serialize() {
-    let variants = [
-        SessionChangeType::TabCreated,
-        SessionChangeType::TabClosed,
-        SessionChangeType::TabReordered,
-        SessionChangeType::ActiveTabChanged,
-        SessionChangeType::ActivePaneChanged,
-        SessionChangeType::PaneMetadataChanged,
-    ];
-    for variant in variants {
-        let event = SessionStateChangedEvent {
-            change_type: variant,
-            tab: None,
+fn ipc_session_state_changed_all_variants_serialize() {
+    let tab = make_leaf_tab(0);
+    let tab_id = tab.id.clone();
+    let events: Vec<SessionStateChangedEvent> = vec![
+        SessionStateChangedEvent::TabCreated {
+            tab: make_leaf_tab(0),
+        },
+        SessionStateChangedEvent::TabClosed {
+            closed_tab_id: make_tab_id(),
             active_tab_id: None,
-            closed_tab_id: None,
-        };
-        // Must serialize without panic.
-        let json = serde_json::to_string(&event).expect("serialize SessionChangeType variant");
+        },
+        SessionStateChangedEvent::TabReordered {
+            tab: make_leaf_tab(1),
+        },
+        SessionStateChangedEvent::ActiveTabChanged {
+            tab: tab.clone(),
+            active_tab_id: tab_id,
+        },
+        SessionStateChangedEvent::ActivePaneChanged { tab: tab.clone() },
+        SessionStateChangedEvent::PaneMetadataChanged {
+            tab: make_leaf_tab(2),
+        },
+    ];
+    for event in events {
+        let json =
+            serde_json::to_string(&event).expect("serialize SessionStateChangedEvent variant");
         assert!(!json.is_empty());
+        assert!(
+            json.contains("\"type\":"),
+            "type discriminant missing: {json}"
+        );
     }
 }
 
@@ -160,7 +171,6 @@ fn ipc_ssh_state_changed_connecting_serializes() {
     let event = SshStateChangedEvent {
         pane_id: make_pane_id(),
         state: SshLifecycleState::Connecting,
-        reason: None,
     };
     let json = serde_json::to_string(&event).expect("SshStateChangedEvent must serialize");
     assert!(
@@ -176,12 +186,12 @@ fn ipc_ssh_state_changed_disconnected_with_reason_serializes() {
         state: SshLifecycleState::Disconnected {
             reason: Some("connection reset by peer".to_string()),
         },
-        reason: Some("connection reset by peer".to_string()),
     };
     let json = serde_json::to_string(&event).expect("serialize");
+    // The reason is carried inside state.reason — verify it's present in the payload.
     assert!(
-        json.contains("reason") || json.contains("connection reset"),
-        "reason missing: {json}"
+        json.contains("connection reset"),
+        "reason inside Disconnected state must be present: {json}"
     );
 }
 
@@ -633,7 +643,6 @@ fn ipc_ssh_state_event_includes_pane_id() {
     let event = SshStateChangedEvent {
         pane_id: pane_id.clone(),
         state: SshLifecycleState::Connected,
-        reason: None,
     };
     let json = serde_json::to_string(&event).expect("serialize");
     assert!(

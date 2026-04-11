@@ -11,7 +11,7 @@ use crate::events::{
     emit_session_state_changed,
     types::{
         BellTriggeredEvent, CursorStyleChangedEvent, NotificationChangedEvent,
-        Osc52WriteRequestedEvent, PaneNotificationDto, SessionChangeType, SessionStateChangedEvent,
+        Osc52WriteRequestedEvent, PaneNotificationDto, SessionStateChangedEvent,
     },
 };
 use crate::session::ids::PaneId;
@@ -94,12 +94,7 @@ pub(super) fn emit_all_pending(
     {
         emit_session_state_changed(
             app,
-            SessionStateChangedEvent {
-                change_type: SessionChangeType::PaneMetadataChanged,
-                tab: Some(tab_state),
-                active_tab_id: None,
-                closed_tab_id: None,
-            },
+            SessionStateChangedEvent::PaneMetadataChanged { tab: tab_state },
         );
     }
 
@@ -108,12 +103,7 @@ pub(super) fn emit_all_pending(
     {
         emit_session_state_changed(
             app,
-            SessionStateChangedEvent {
-                change_type: SessionChangeType::PaneMetadataChanged,
-                tab: Some(tab_state),
-                active_tab_id: None,
-                closed_tab_id: None,
-            },
+            SessionStateChangedEvent::PaneMetadataChanged { tab: tab_state },
         );
     }
 

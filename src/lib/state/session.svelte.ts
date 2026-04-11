@@ -52,48 +52,41 @@ export function setInitialSession(state: SessionState): void {
 /**
  * Apply a SessionStateChangedEvent delta to the reactive session state.
  * Mirrors the logic previously embedded in TerminalView.onMount's listen handler.
+ *
+ * The event is a discriminated union — switch on `change.type` for exhaustive
+ * handling. TypeScript narrows each branch automatically.
  */
 export function applySessionDelta(change: SessionStateChangedEvent): void {
-  switch (change.changeType) {
-    case 'tab-created':
-      if (change.tab) {
-        sessionState.tabs = [
-          ...sessionState.tabs.filter((t) => t.id !== change.tab!.id),
-          change.tab,
-        ];
-      }
+  switch (change.type) {
+    case 'tabCreated':
+      sessionState.tabs = [
+        ...sessionState.tabs.filter((t) => t.id !== change.tab.id),
+        change.tab,
+      ];
       break;
 
-    case 'tab-closed': {
-      const closedId = change.closedTabId;
-      if (closedId !== undefined) {
-        sessionState.tabs = sessionState.tabs.filter((t) => t.id !== closedId);
-      }
+    case 'tabClosed':
+      sessionState.tabs = sessionState.tabs.filter((t) => t.id !== change.closedTabId);
       if (change.activeTabId !== undefined) {
         sessionState.activeTabId = change.activeTabId;
       } else if (sessionState.tabs.length === 0) {
         sessionState.activeTabId = '';
       }
       break;
-    }
 
-    case 'tab-reordered':
-    case 'pane-metadata-changed':
-    case 'active-pane-changed':
-      if (change.tab) {
-        sessionState.tabs = sessionState.tabs.map((t) =>
-          t.id === change.tab!.id ? change.tab! : t,
-        );
-      }
+    case 'tabReordered':
+    case 'paneMetadataChanged':
+    case 'activePaneChanged':
+      sessionState.tabs = sessionState.tabs.map((t) =>
+        t.id === change.tab.id ? change.tab : t,
+      );
       break;
 
-    case 'active-tab-changed':
-      if (change.activeTabId !== undefined) sessionState.activeTabId = change.activeTabId;
-      if (change.tab) {
-        sessionState.tabs = sessionState.tabs.map((t) =>
-          t.id === change.tab!.id ? change.tab! : t,
-        );
-      }
+    case 'activeTabChanged':
+      sessionState.activeTabId = change.activeTabId;
+      sessionState.tabs = sessionState.tabs.map((t) =>
+        t.id === change.tab.id ? change.tab : t,
+      );
       break;
   }
 }

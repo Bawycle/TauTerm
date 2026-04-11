@@ -112,7 +112,6 @@ impl SshManager {
             crate::events::SshStateChangedEvent {
                 pane_id: pane_id.clone(),
                 state: SshLifecycleState::Connecting,
-                reason: None,
             },
         );
 
@@ -152,9 +151,8 @@ impl SshManager {
                     crate::events::SshStateChangedEvent {
                         pane_id: task_pane_id,
                         state: SshLifecycleState::Disconnected {
-                            reason: Some(reason_str.clone()),
+                            reason: Some(reason_str),
                         },
-                        reason: Some(reason_str),
                     },
                 );
             }

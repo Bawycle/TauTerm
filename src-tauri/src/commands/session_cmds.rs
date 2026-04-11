@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::error::{SshError, TauTermError};
-use crate::events::{SessionChangeType, SessionStateChangedEvent, emit_session_state_changed};
+use crate::events::{SessionStateChangedEvent, emit_session_state_changed};
 use crate::session::{
     SessionRegistry,
     ids::{PaneId, TabId},
@@ -50,11 +50,9 @@ pub async fn close_tab(
 
     emit_session_state_changed(
         &app,
-        SessionStateChangedEvent {
-            change_type: SessionChangeType::TabClosed,
-            tab: None,
-            active_tab_id: new_active_tab_id.map(|id| id.to_string()),
-            closed_tab_id: Some(tab_id),
+        SessionStateChangedEvent::TabClosed {
+            closed_tab_id: tab_id,
+            active_tab_id: new_active_tab_id,
         },
     );
 
@@ -132,11 +130,9 @@ pub async fn set_active_tab(
 
     emit_session_state_changed(
         &app,
-        SessionStateChangedEvent {
-            change_type: SessionChangeType::ActiveTabChanged,
-            tab: Some(tab_state),
-            active_tab_id: Some(tab_id.to_string()),
-            closed_tab_id: None,
+        SessionStateChangedEvent::ActiveTabChanged {
+            tab: tab_state,
+            active_tab_id: tab_id,
         },
     );
 
@@ -155,12 +151,7 @@ pub async fn set_active_pane(
 
     emit_session_state_changed(
         &app,
-        SessionStateChangedEvent {
-            change_type: SessionChangeType::ActivePaneChanged,
-            tab: Some(tab_state),
-            active_tab_id: None,
-            closed_tab_id: None,
-        },
+        SessionStateChangedEvent::ActivePaneChanged { tab: tab_state },
     );
 
     Ok(())

@@ -163,13 +163,15 @@ describe('IPC types — structural smoke tests', () => {
     expect(event.scrollbackLines).toBe(200);
   });
 
-  it('SessionStateChangedEvent tab-closed has no tab field by convention', () => {
+  it('SessionStateChangedEvent tabClosed carries closedTabId', () => {
     const event: SessionStateChangedEvent = {
-      changeType: 'tab-closed',
+      type: 'tabClosed',
+      closedTabId: 'tab-1',
       activeTabId: 'tab-2',
     };
-    expect(event.changeType).toBe('tab-closed');
-    expect(event.tab).toBeUndefined();
+    expect(event.type).toBe('tabClosed');
+    expect(event.closedTabId).toBe('tab-1');
+    expect(event.activeTabId).toBe('tab-2');
   });
 
   it('SshStateChangedEvent carries paneId and state', () => {

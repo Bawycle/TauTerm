@@ -31,32 +31,36 @@ use crate::vt::modes::{MouseEncoding, MouseReportingMode};
 ///
 /// Not emitted for `split_pane` or `close_pane` — those commands return
 /// the updated `TabState` directly (§4.5.2 of ARCHITECTURE.md).
+///
+/// Uses `#[serde(tag = "type")]` so the TypeScript union discriminant is `type`,
+/// matching the CLAUDE.md IPC event rule for multi-variant events.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionStateChangedEvent {
-    pub change_type: SessionChangeType,
-    /// Present for all change types except `tab-closed`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tab: Option<TabState>,
-    /// Present when `change_type` is `active-tab-changed` or `tab-closed`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_tab_id: Option<String>,
-    /// Present when `change_type` is `tab-closed` — the ID of the tab that was closed.
-    /// Required by IPC event rules: every event affecting a specific entity must include
-    /// that entity's ID explicitly in the payload.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub closed_tab_id: Option<TabId>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum SessionChangeType {
-    TabCreated,
-    TabClosed,
-    TabReordered,
-    ActiveTabChanged,
-    ActivePaneChanged,
-    PaneMetadataChanged,
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum SessionStateChangedEvent {
+    TabCreated {
+        tab: TabState,
+    },
+    TabClosed {
+        /// ID of the tab that was closed. Required by IPC rules: every event
+        /// affecting a specific entity must include that entity's ID explicitly.
+        closed_tab_id: TabId,
+        /// Active tab after the close, if any tab remains.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        active_tab_id: Option<TabId>,
+    },
+    TabReordered {
+        tab: TabState,
+    },
+    ActiveTabChanged {
+        tab: TabState,
+        active_tab_id: TabId,
+    },
+    ActivePaneChanged {
+        tab: TabState,
+    },
+    PaneMetadataChanged {
+        tab: TabState,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -64,14 +68,15 @@ pub enum SessionChangeType {
 // ---------------------------------------------------------------------------
 
 /// Emitted on every SSH session state transition.
+///
+/// The disconnect reason, if any, is carried inside
+/// `SshLifecycleState::Disconnected { reason }` — no top-level `reason` field
+/// to avoid the duplication that previously required manual sync.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SshStateChangedEvent {
     pub pane_id: PaneId,
     pub state: SshLifecycleState,
-    /// Optional human-readable reason for `Disconnected` state.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

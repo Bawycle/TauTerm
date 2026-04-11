@@ -57,18 +57,10 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ### Performance — Architectural Optimizations
 
-*Baselines from `docs/perf/baseline-2026-04-11.md`. Implement P-IPC1 and P-IPC2 first — they have a far better cost/benefit ratio.*
+*Baselines from `docs/perf/baseline-2026-04-11.md`.*
 
-- [ ] **P12a — DOM with dirty tracking + cell recycling** `[Score: 9 | R:1, S:1, U:2, E:2]` *(step 1 — low risk)*
-  The real problem is that 11,000 `<span>` elements are globally recreated or modified on every update, not that the renderer is DOM-based. xterm.js validated in production (v6.0, Dec. 2024) that a DOM renderer with dirty tracking can be competitive with Canvas — which is why they abandoned the Canvas addon.
-  Actions required:
-  - Measure current frontend frame time first (browser DevTools, `performance.mark`) — no point optimising without a baseline
-  - Only traverse dirty lines (`DirtyRows`) for DOM updates
-  - Recycle existing `<span>` elements (modify their properties rather than recreating them)
-  **Note:** P12a does not improve vtebench CPR latency — that is addressed by P-IPC2. P12a targets perceptible frame-time jank on fast-scrolling content (htop, log tailing).
-  **Success condition:** if P12a brings render latency within the target budget, P12b is unnecessary.
-
-- [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(step 2 — only if P12a insufficient after measurement)*
+- [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(only if P12a insufficient after measurement)*
+  **Prerequisite: measure `tauterm:frameRender` with htop after P12a deployment. P12b is unnecessary if the average is below ~4 ms.**
   If post-P12a benchmarks show DOM is still the bottleneck on wide viewports, consider WebGL2 via an addon. **Canvas 2D is excluded**: it concentrates the drawbacks of both approaches (loses DOM accessibility like WebGL, without GPU gains) — this is xterm.js's conclusion after abandoning its Canvas addon in v6.0 for exactly this reason.
   WebGL2 constraints on WebKitGTK/Linux:
   - Mandatory fallback on `onContextLoss` (GPU driver crash, tab backgrounded)

@@ -54,7 +54,7 @@
   onblur={tp.handleBlur}
 >
   <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
-  {#each tp.gridRows as row, rowIdx}
+  {#each tp.gridRows as row, rowIdx (rowIdx)}
     <div class="terminal-pane__row">
       {#each row as cell, colIdx}
         {#if cell.width !== 0}

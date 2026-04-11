@@ -95,7 +95,7 @@
 
   .ssh-deprecated-banner__dismiss:hover {
     background-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
-    color: var(--color-neutral-100, #f5f2ea);
+    color: var(--color-neutral-100);
   }
 
   .ssh-deprecated-banner__dismiss:focus-visible {

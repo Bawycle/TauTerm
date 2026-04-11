@@ -241,12 +241,11 @@ export function applyUpdates(grid: CellStyle[], updates: CellUpdate[], cols: num
  * Build an initial grid from a ScreenSnapshot.
  * Returns a flat row-major array of CellStyle with rows*cols entries.
  */
-export function buildGridFromSnapshot(
-  cells: SnapshotCell[],
-  rows: number,
-  cols: number,
-): CellStyle[] {
-  const grid: CellStyle[] = new Array(rows * cols).fill(null).map(() => ({
+/**
+ * Default blank cell — used to pad when the snapshot is smaller than rows×cols.
+ */
+function defaultCell(): CellStyle {
+  return {
     content: ' ',
     fg: undefined,
     bg: undefined,
@@ -262,11 +261,19 @@ export function buildGridFromSnapshot(
     underlineColor: undefined,
     hyperlink: undefined,
     style: '',
-  }));
+  };
+}
 
-  for (let i = 0; i < cells.length && i < rows * cols; i++) {
-    grid[i] = cellStyleFromSnapshot(cells[i]);
-  }
-
+export function buildGridFromSnapshot(
+  cells: SnapshotCell[],
+  rows: number,
+  cols: number,
+): CellStyle[] {
+  const total = rows * cols;
+  // Build directly from snapshot data — avoids allocating a full default grid
+  // that would be immediately overwritten (A6 opt: ~rows*cols allocations saved).
+  const grid: CellStyle[] = cells.slice(0, total).map(cellStyleFromSnapshot);
+  // Pad with default cells if the snapshot is smaller than the viewport.
+  while (grid.length < total) grid.push(defaultCell());
   return grid;
 }

@@ -95,6 +95,17 @@ export interface TerminalPaneComposableProps {
 }
 
 // ---------------------------------------------------------------------------
+// Module-level singletons
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared TextEncoder instance — allocated once at module load.
+ * Avoids per-event allocation in sendMouseEvent/handleFocus/handleBlur
+ * (sendMouseEvent can fire at 60+ fps in anyEvent mouse mode).
+ */
+const encoder = new TextEncoder();
+
+// ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
 
@@ -586,7 +597,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       const clamp = (n: number) => Math.min(n + 32, 255);
       seq = `\x1b[M${String.fromCharCode(clamp(cb), clamp(cx), clamp(cy))}`;
     }
-    await sendBytes(new TextEncoder().encode(seq));
+    await sendBytes(encoder.encode(seq));
   }
 
   // mouseButtonCode is imported from useTerminalPane.handlers.ts — used directly.
@@ -747,13 +758,13 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   async function handleFocus() {
     if (!props.active()) return;
     if (focusEventsActive) {
-      await sendBytes(new TextEncoder().encode('\x1b[I'));
+      await sendBytes(encoder.encode('\x1b[I'));
     }
   }
 
   async function handleBlur() {
     if (focusEventsActive) {
-      await sendBytes(new TextEncoder().encode('\x1b[O'));
+      await sendBytes(encoder.encode('\x1b[O'));
     }
   }
 

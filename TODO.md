@@ -51,23 +51,31 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Medium Priority — v1 Quality Target (score 9–12)
 
+### Performance — Quick Wins (data-driven, 2026-04-11 baseline)
+
+*Identified from Criterion + vtebench baselines in `docs/perf/baseline-2026-04-11.md`. Ordered by cost/benefit ratio.*
+
+- [ ] **P-IPC1 — `CellAttrsDto`: skip default values in JSON serialization** `[Score: 10 | R:1, S:1, U:2, E:3]`
+  `serde_json::to_string` on a full 220×50 `ScreenUpdateEvent` costs **1.53 ms** — the largest single Rust-side cost in the IPC pipeline. Root cause: boolean fields in `CellAttrsDto` (`bold`, `dim`, `italic`, etc.) are serialized even when `false`, inflating every cell's JSON representation to ~130 chars regardless of content. Fix: add `#[serde(skip_serializing_if = "is_false")]` on all boolean fields and `#[serde(skip_serializing_if = "is_zero")]` on `underline: u8`. For typical terminal content (majority of cells without attributes), this reduces payload size by ~50–65%, with a proportional reduction in both serialization time and WebView JSON parsing cost. No API change, no protocol change (missing fields are interpreted as `false`/`0` by the TypeScript decoder). Estimated effort: ~10 lines of Rust. Verify with `bench --bench ipc_throughput` before and after.
+
+- [ ] **P-IPC2 — Adaptive debounce: immediate flush for CPR/DSR responses** `[Score: 10 | R:1, S:1, U:2, E:3]`
+  vtebench `dense_cells` measures **~8 ms** CPR round-trip vs **1–3 ms** for Alacritty. The gap is not in the DOM renderer — it is in Task 2's fixed 12 ms debounce window. A CPR query (`ESC[6n`) generates a response in the Rust PTY read task; that response sits in the Task 2 channel for up to 12 ms before being emitted. On average, the wait is **6 ms**. Fix: add a flag to `ProcessOutput` marking frames that contain VT responses (CPR, DA, DSR). Task 2 flushes immediately when this flag is set, bypassing the debounce. The 12 ms window is preserved for ordinary render updates. Impact: CPR latency from ~8 ms to ~2–3 ms (estimated), making TauTerm competitive with Alacritty on interactive apps that use CPR (`vim`, `neovim`, `fzf`). Complexity: moderate — requires extending `ProcessOutput`, modifying the coalescing logic in Task 2.
+
 ---
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
 ### Performance — Architectural Optimizations
 
-These two optimizations were explicitly descoped from the initial performance campaign. The `write_1mb_ascii` benchmark establishes the current baseline at **~19.6 MiB/s** — compare after each change.
-
-- [ ] **P5 — Flat buffer for `ScreenBuffer`** `[Score: 8 | R:1, S:1, U:2, E:1]`
-  Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. Eliminates one level of indirection and improves cache locality during sequential reads (snapshot, partial update). Estimated impact: 3–10× on `write_1mb_ascii`. **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.) — non-trivial refactor.
+*Baselines from `docs/perf/baseline-2026-04-11.md`. Implement P-IPC1 and P-IPC2 first — they have a far better cost/benefit ratio.*
 
 - [ ] **P12a — DOM with dirty tracking + cell recycling** `[Score: 9 | R:1, S:1, U:2, E:2]` *(step 1 — low risk)*
   The real problem is that 11,000 `<span>` elements are globally recreated or modified on every update, not that the renderer is DOM-based. xterm.js validated in production (v6.0, Dec. 2024) that a DOM renderer with dirty tracking can be competitive with Canvas — which is why they abandoned the Canvas addon.
   Actions required:
+  - Measure current frontend frame time first (browser DevTools, `performance.mark`) — no point optimising without a baseline
   - Only traverse dirty lines (`DirtyRows`) for DOM updates
   - Recycle existing `<span>` elements (modify their properties rather than recreating them)
-  - Measure via Criterion benchmarks (latency axis) before and after
+  **Note:** P12a does not improve vtebench CPR latency — that is addressed by P-IPC2. P12a targets perceptible frame-time jank on fast-scrolling content (htop, log tailing).
   **Success condition:** if P12a brings render latency within the target budget, P12b is unnecessary.
 
 - [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(step 2 — only if P12a insufficient after measurement)*
@@ -79,6 +87,9 @@ These two optimizations were explicitly descoped from the initial performance ca
   - Parallel DOM layer for AT-SPI2 accessibility mandatory (`role="list"` + `aria-live="assertive"`, fed from buffer, `aria-hidden="true"` on canvas) — ~17 KB of code at xterm.js for this component alone
   - Text selection to re-implement entirely (logical model `[col, row]`, mouse tracking, extraction from Rust buffer, clipboard via Tauri)
   **Do not commit to P12b without post-P12a benchmark data.**
+
+- [ ] **P5 — Flat buffer for `ScreenBuffer`** `[Score: 8 | R:1, S:1, U:2, E:1]`
+  Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. Eliminates one level of indirection and improves cache locality during sequential reads (snapshot, partial update). **Revised estimated impact: +10–50% on `build_screen_update_event`** (698 µs baseline) via better cache locality on row iteration — the original "3–10× on `write_1mb_ascii`" estimate was incorrect: VT parsing throughput is dominated by per-cell work, not buffer indirection. Implement only after P-IPC1 removes serde_json as the dominant cost, at which point buffer access in `build_screen_update_event` becomes the new bottleneck. **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.) — non-trivial refactor.
 
 ### Ligatures — Investigation
 

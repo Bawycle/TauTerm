@@ -61,7 +61,10 @@ pub(crate) fn cell_color_to_dto(c: crate::vt::cell::Color) -> crate::events::typ
 /// Callers must not hold the write-lock when calling this function.
 ///
 /// `pub(crate)` so `session::ssh_task` can reuse it without duplication.
-pub(crate) fn build_screen_update_event(
+/// `#[doc(hidden)]` exposes this function to benchmarks without making it part
+/// of the public API.
+#[doc(hidden)]
+pub fn build_screen_update_event(
     pane_id: &PaneId,
     vt: &Arc<RwLock<VtProcessor>>,
     dirty: &DirtyRegion,
@@ -174,7 +177,10 @@ pub(crate) fn build_screen_update_event(
 ///
 /// Always sets `is_full_redraw: true` and `scroll_offset: k`.
 /// Cursor is hidden (`visible: false`) whenever `k > 0`.
-pub(crate) fn build_scrolled_viewport_event(
+/// `#[doc(hidden)]` exposes this function to benchmarks without making it part
+/// of the public API.
+#[doc(hidden)]
+pub fn build_scrolled_viewport_event(
     pane_id: &PaneId,
     vt: &Arc<RwLock<VtProcessor>>,
     scroll_offset: i64,

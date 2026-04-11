@@ -59,10 +59,7 @@ export function setInitialSession(state: SessionState): void {
 export function applySessionDelta(change: SessionStateChangedEvent): void {
   switch (change.type) {
     case 'tabCreated':
-      sessionState.tabs = [
-        ...sessionState.tabs.filter((t) => t.id !== change.tab.id),
-        change.tab,
-      ];
+      sessionState.tabs = [...sessionState.tabs.filter((t) => t.id !== change.tab.id), change.tab];
       break;
 
     case 'tabClosed':
@@ -77,16 +74,12 @@ export function applySessionDelta(change: SessionStateChangedEvent): void {
     case 'tabReordered':
     case 'paneMetadataChanged':
     case 'activePaneChanged':
-      sessionState.tabs = sessionState.tabs.map((t) =>
-        t.id === change.tab.id ? change.tab : t,
-      );
+      sessionState.tabs = sessionState.tabs.map((t) => (t.id === change.tab.id ? change.tab : t));
       break;
 
     case 'activeTabChanged':
       sessionState.activeTabId = change.activeTabId;
-      sessionState.tabs = sessionState.tabs.map((t) =>
-        t.id === change.tab.id ? change.tab : t,
-      );
+      sessionState.tabs = sessionState.tabs.map((t) => (t.id === change.tab.id ? change.tab : t));
       break;
   }
 }

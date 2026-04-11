@@ -131,6 +131,11 @@ pub struct SessionRegistry {
     /// can push synthetic bytes into the VT pipeline.
     #[cfg(feature = "e2e-testing")]
     injectable_registry: std::sync::Arc<crate::platform::pty_injectable::InjectableRegistry>,
+    /// Injected foreground process names — present only in e2e-testing builds.
+    /// Keyed by PaneId; checked before the real `tcgetpgrp` path in
+    /// `has_foreground_process` so E2E tests can simulate a busy pane.
+    #[cfg(feature = "e2e-testing")]
+    pub injected_foreground: dashmap::DashMap<PaneId, String>,
 }
 
 struct RegistryInner {
@@ -166,6 +171,8 @@ impl SessionRegistry {
             prefs,
             #[cfg(feature = "e2e-testing")]
             injectable_registry,
+            #[cfg(feature = "e2e-testing")]
+            injected_foreground: dashmap::DashMap::new(),
         })
     }
 }

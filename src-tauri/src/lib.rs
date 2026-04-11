@@ -211,6 +211,10 @@ pub fn run() {
             commands::testing::inject_ssh_disconnect,
             #[cfg(feature = "e2e-testing")]
             commands::testing::inject_credential_prompt,
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_pane_exit,
+            #[cfg(feature = "e2e-testing")]
+            commands::testing::inject_foreground_process,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

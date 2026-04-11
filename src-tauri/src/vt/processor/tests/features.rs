@@ -191,3 +191,40 @@ fn osc52_take_drains_pending_payload() {
         "second call to take_osc52_write must return None (payload already drained)"
     );
 }
+
+// ---------------------------------------------------------------------------
+// TEST-SEC-OSC52-ISOLATION-001 — OSC 52 policy is per-VtProcessor
+// ---------------------------------------------------------------------------
+
+/// OSC 52 allow/deny policy is stored per-VtProcessor instance, not globally.
+///
+/// Two processors with opposite policies receiving the same sequence must produce
+/// independent outcomes. This test guards against accidental global state
+/// (e.g. a static flag or a shared Arc<AtomicBool>).
+#[test]
+fn test_sec_osc52_policy_is_per_processor() {
+    // TEST-SEC-OSC52-ISOLATION-001
+    // proc_allow: OSC 52 writes permitted.
+    let mut proc_allow = crate::vt::VtProcessor::new(80, 24, 10_000, 0, true);
+    // proc_deny: OSC 52 writes blocked.
+    let mut proc_deny = crate::vt::VtProcessor::new(80, 24, 10_000, 0, false);
+
+    // Base64("hello") = "aGVsbG8="
+    let osc52_seq = b"\x1b]52;c;aGVsbG8=\x07";
+    proc_allow.process(osc52_seq);
+    proc_deny.process(osc52_seq);
+
+    // proc_allow must have a pending clipboard write.
+    assert_eq!(
+        proc_allow.take_osc52_write().as_deref(),
+        Some("hello"),
+        "TEST-SEC-OSC52-ISOLATION-001: proc_allow must forward OSC 52 write"
+    );
+
+    // proc_deny must NOT have a pending clipboard write.
+    assert!(
+        proc_deny.take_osc52_write().is_none(),
+        "TEST-SEC-OSC52-ISOLATION-001: proc_deny must block OSC 52 write; \
+         policy must be per-VtProcessor, not global"
+    );
+}

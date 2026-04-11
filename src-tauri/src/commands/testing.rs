@@ -11,6 +11,7 @@ use tauri::State;
 
 use crate::platform::pty_injectable::InjectableRegistry;
 use crate::session::ids::PaneId;
+use crate::session::registry::SessionRegistry;
 
 /// Push synthetic bytes directly into the VT pipeline for a pane.
 ///
@@ -158,7 +159,6 @@ pub async fn inject_ssh_disconnect(
             state: SshLifecycleState::Disconnected {
                 reason: Some("E2E test synthetic disconnect".to_string()),
             },
-            reason: Some("E2E test synthetic disconnect".to_string()),
         },
     );
     Ok(())
@@ -199,5 +199,80 @@ pub async fn inject_credential_prompt(
             is_keychain_available: false,
         },
     );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// PTY process exit injection
+// ---------------------------------------------------------------------------
+
+/// Simulate the termination of the process running in a pane.
+///
+/// Marks the pane as `Terminated` with the given `exit_code` and emits a
+/// `notification-changed` event with a `ProcessExited` payload, reproducing
+/// the same flow triggered by the PTY read task after a real EOF.
+///
+/// Used by E2E tests to exercise the "process exited" UI path (overlay, restart
+/// button, etc.) without requiring a real process to die.
+#[tauri::command]
+pub async fn inject_pane_exit(
+    pane_id: PaneId,
+    exit_code: i32,
+    registry: State<'_, Arc<SessionRegistry>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::events::{
+        emit_notification_changed,
+        types::{NotificationChangedEvent, PaneNotificationDto},
+    };
+
+    // Transition pane to Terminated — uses a caller-supplied exit code instead of
+    // waiting on the real child process.
+    registry
+        .set_pane_terminated_with_code(&pane_id, exit_code)
+        .map_err(|e| e.to_string())?;
+
+    // Emit the ProcessExited notification, mirroring the emit task's post-EOF path.
+    if let Some((_, tab_state)) = registry.get_tab_state_for_pane(&pane_id) {
+        emit_notification_changed(
+            &app,
+            NotificationChangedEvent {
+                tab_id: tab_state.id,
+                pane_id,
+                notification: Some(PaneNotificationDto::ProcessExited {
+                    exit_code: Some(exit_code),
+                    signal_name: None,
+                }),
+            },
+        );
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Foreground process injection
+// ---------------------------------------------------------------------------
+
+/// Inject a synthetic foreground process name for a pane.
+///
+/// After this call, `has_foreground_process` returns `true` for `pane_id`,
+/// simulating a pane with a non-shell process running in the foreground.
+/// This enables E2E tests to exercise the "close pane with foreground process"
+/// confirmation dialog without spawning a real long-running process.
+///
+/// Call `inject_foreground_process` with an empty `process_name` to clear the
+/// injection and restore the real `tcgetpgrp` behaviour.
+#[tauri::command]
+pub async fn inject_foreground_process(
+    pane_id: PaneId,
+    process_name: String,
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<(), String> {
+    if process_name.is_empty() {
+        registry.injected_foreground.remove(&pane_id);
+    } else {
+        registry.injected_foreground.insert(pane_id, process_name);
+    }
     Ok(())
 }

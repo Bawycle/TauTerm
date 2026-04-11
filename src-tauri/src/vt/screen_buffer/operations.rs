@@ -109,8 +109,10 @@ impl ScreenBuffer {
 
         for i in 0..count {
             if is_full_screen && !self.cells.is_empty() {
-                let blank = vec![Cell::default(); self.cols as usize];
-                let evicted = std::mem::replace(&mut self.cells[top], blank);
+                // Reinitialise blank_row (it may carry stale data from a previous scroll)
+                // then clone it as the replacement so the evicted row can go to scrollback.
+                self.blank_row.iter_mut().for_each(|c| *c = Cell::default());
+                let evicted = std::mem::replace(&mut self.cells[top], self.blank_row.clone());
                 if self.scrollback.len() >= self.scrollback_limit {
                     self.scrollback.pop_front();
                 }
@@ -180,6 +182,12 @@ impl ScreenBuffer {
 
         self.cols = new_cols;
         self.rows = new_rows;
+
+        // Rebuild blank_row when column count changes so scroll_up continues to
+        // produce rows of the correct width after a terminal resize.
+        if self.blank_row.len() != new_cols_usize {
+            self.blank_row = vec![Cell::default(); new_cols_usize];
+        }
 
         let _ = old_rows;
         self.dirty.mark_full_redraw();

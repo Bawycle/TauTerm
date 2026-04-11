@@ -16,6 +16,9 @@ pub struct ScreenBuffer {
     pub scrollback_limit: usize,
     /// Pending dirty region since last `take_dirty`.
     pub(super) dirty: DirtyRegion,
+    /// Pre-allocated blank row template (`cols` default cells).
+    /// Cloned or iterated to avoid per-scroll heap allocations.
+    pub(super) blank_row: Vec<Cell>,
 }
 
 impl ScreenBuffer {
@@ -26,9 +29,8 @@ impl ScreenBuffer {
             rows <= 256,
             "ScreenBuffer::new: rows={rows} exceeds DirtyRows capacity (256)"
         );
-        let cells = (0..rows)
-            .map(|_| (0..cols).map(|_| Cell::default()).collect())
-            .collect();
+        let blank_row: Vec<Cell> = (0..cols).map(|_| Cell::default()).collect();
+        let cells = (0..rows).map(|_| blank_row.clone()).collect();
         Self {
             cols,
             rows,
@@ -36,6 +38,7 @@ impl ScreenBuffer {
             scrollback: std::collections::VecDeque::new(),
             scrollback_limit,
             dirty: DirtyRegion::default(),
+            blank_row,
         }
     }
 

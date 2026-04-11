@@ -40,8 +40,8 @@ impl SessionRegistry {
             .find_map(|e| e.panes.get(pane_id))
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         let vt = pane.vt.read();
-        let snap = vt.get_snapshot();
-        Ok((snap.cols, snap.rows))
+        let meta = vt.get_screen_meta();
+        Ok((meta.cols, meta.rows))
     }
 
     /// Get a full screen snapshot for `get_pane_screen_snapshot`.
@@ -177,10 +177,19 @@ impl SessionRegistry {
     ///
     /// The `tcgetpgrp` call is confined to `PtySession::foreground_pgid()` in the
     /// platform layer (`platform/pty_linux.rs`) — no `unsafe` in this method.
+    ///
+    /// In e2e-testing builds: if an injected foreground process name has been set for
+    /// `pane_id` via `inject_foreground_process`, returns `Ok(true)` immediately
+    /// without consulting the real PTY.
     pub fn has_foreground_process(
         &self,
         pane_id: &PaneId,
     ) -> Result<bool, crate::error::SessionError> {
+        // E2E test shortcut: honour injected foreground state before touching the PTY.
+        #[cfg(feature = "e2e-testing")]
+        if self.injected_foreground.contains_key(pane_id) {
+            return Ok(true);
+        }
         let inner = self.inner.read();
         let pane = inner.tabs.values().find_map(|e| e.panes.get(pane_id));
 
@@ -211,6 +220,32 @@ impl SessionRegistry {
         // A non-shell foreground process exists when the foreground PGID differs
         // from the shell's PID (the shell is its own process group leader).
         Ok(fg_pgid != shell_pid as libc::pid_t)
+    }
+
+    /// Force-terminate a pane with a synthetic exit code (e2e-testing only).
+    ///
+    /// Sets `pane.lifecycle = Terminated { exit_code: Some(exit_code), error: None }`
+    /// without consulting the real PTY child process. Used by `inject_pane_exit` to
+    /// simulate process termination in E2E tests.
+    ///
+    /// Returns `Err` if the pane is not found.
+    #[cfg(feature = "e2e-testing")]
+    pub fn set_pane_terminated_with_code(
+        &self,
+        pane_id: &PaneId,
+        exit_code: i32,
+    ) -> Result<(), SessionError> {
+        let mut inner = self.inner.write();
+        let pane = inner
+            .tabs
+            .values_mut()
+            .find_map(|e| e.panes.get_mut(pane_id))
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        pane.lifecycle = crate::session::lifecycle::PaneLifecycleState::Terminated {
+            exit_code: Some(exit_code),
+            error: None,
+        };
+        Ok(())
     }
 
     /// Returns `true` if the pane identified by `pane_id` is a local PTY session

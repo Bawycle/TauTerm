@@ -17,5 +17,8 @@ wdio-logs/
 .wdio-*
 *.log
 
+# Rust build artifacts (root-level, e.g. from scripts run at repo root)
+/target/
+
 # cargo-fuzz build artifacts
 src-tauri/fuzz/target/

@@ -39,7 +39,7 @@ src/
                             getLocale() returns current locale (FS-I18N-003, FS-I18N-004, FS-I18N-005)
 
     terminal/
-      grid.ts             — ScreenGrid: applyDiff(), applySnapshot(), getAttributeRuns()
+      screen.ts           — ScreenGrid: applyDiff(), applySnapshot(), getAttributeRuns()
       mouse.ts            — mouse event routing: PTY vs TauTerm; xterm encoding
       selection.ts        — selection state machine: drag, word-select, line-select,
                             cell-boundary snapping, word delimiters (FS-CLIP-002, FS-CLIP-003)
@@ -53,81 +53,69 @@ src/
 
     layout/
       split-tree.ts       — SplitNode type; buildFromPaneNode(); updateRatio(); findLeaf()
-      resize.ts           — drag resize math; minimum pane constraint; debounce SIGWINCH
+
+    state/
+      session.svelte.ts
+      ssh.svelte.ts
+      fullscreen.svelte.ts
+      notifications.svelte.ts
+      preferences.svelte.ts
+      scroll.svelte.ts
+      locale.svelte.ts
 
     theming/
-      apply.ts            — applyTheme(theme): void; setProperty() on :root;
+      apply-theme.ts      — applyTheme(theme): void; setProperty() on :root;
                             cross-fade transition (FS-THEME-006)
-      tokens.ts           — UMBRA_DEFAULT_TOKENS: fallback reference + reset to default
+      built-in-themes.ts  — built-in theme definitions (Umbra, Solstice, Archipel)
       validate.ts         — client-side validation before save: required tokens,
                             CSS.supports(), contrast ratio checks
 
     preferences/
-      contrast.ts         — WCAG relativeLuminance(), contrastRatio(); pure math
-      memory-estimate.ts  — lines → bytes → MB string; pure (FS-SB-002)
+      applyUpdate.ts      — apply preference delta to reactive state
       shortcuts.ts        — conflict detection; key combo normalization;
                             isRecordingShortcut: boolean (reactive export — see §11.3)
 
   components/
-    terminal/
-      TerminalPane.svelte         — primary container; composes all sub-components;
-                                   ResizeObserver → resize_pane; keydown capture
-      TerminalPane.svelte.ts      — composable: IPC subscriptions, ScreenGrid instance,
-                                   selection state, cursor state (see §11.2)
-      TerminalViewport.svelte     — scrollable viewport; virtualized rows
-      TerminalRow.svelte          — one line: attribute runs → <span> elements
-      TerminalCursor.svelte       — 6 DECSCUSR shapes; blink; focused/unfocused outline
-      TerminalSelection.svelte    — selection overlay; copy flash; PRIMARY clipboard
-      TerminalScrollbar.svelte    — overlay scrollbar with auto-hide (FS-SB-007)
-      ScrollToBottom.svelte       — scroll-to-bottom indicator (UXD §8.3)
-      SearchOverlay.svelte        — search input, match count, prev/next (FS-SEARCH-007)
-      DisconnectBanner.svelte     — SSH Disconnected / Reconnecting states (UXD §7.5.2)
-      TerminatedBanner.svelte     — process exited; restart/close actions (FS-PTY-006)
-      DeprecatedAlgoBanner.svelte — deprecated SSH algorithm warning (FS-SSH-014)
-      ReconnectSeparator.svelte   — reconnection timestamp separator (FS-SSH-042)
-      FirstLaunchHint.svelte      — right-click hint, first launch only (FS-UX-002)
-
-    tabs/
-      TabBar.svelte
-      TabItem.svelte
-      TabInlineRename.svelte
-      TabActivityIndicator.svelte
-      SshBadge.svelte
-      TabContextMenu.svelte
-      TabScrollArrow.svelte
-
-    layout/
-      PaneTree.svelte     — recursive component: leaf → TerminalPane,
-                            split → PaneTree + PaneDivider + PaneTree
-      PaneDivider.svelte  — 1px visual line, 8px hit area; drag-to-resize;
-                            double-click → equal split (UXD §7.2)
-
-    preferences/
-      PreferencesPanel.svelte
-      sections/
-        KeyboardSection.svelte
-        AppearanceSection.svelte
-        TerminalBehaviorSection.svelte
-        ConnectionsSection.svelte
-        ThemesSection.svelte
-      shared/
-        ShortcutRow.svelte
-        ShortcutRecorder.svelte     — activates isRecordingShortcut flag (see §11.3)
-        ThemeEditor.svelte
-        ColorPicker.svelte
-        ContrastAdvisory.svelte
-        MemoryEstimate.svelte
-
-    connections/
-      ConnectionManager.svelte      — slide-in panel; composes List + Form
-      ConnectionList.svelte         — grouped list; reusable in Preferences
-      ConnectionListItem.svelte     — item: icon, label, hover actions
-      ConnectionEditForm.svelte     — create/edit form; client-side path validation
-
-    overlays/
-      ConfirmDialog.svelte          — reusable dialog: heading, body, action variant
-      HostKeyDialog.svelte          — host key verification (first-connect + key-change)
-      ContextMenu.svelte            — base context menu (Bits UI Menu)
+    TerminalPane.svelte              — primary terminal pane container; ResizeObserver → resize_pane
+    TerminalPaneViewport.svelte      — scrollable viewport; virtualized rows
+    TerminalPaneScrollbar.svelte     — overlay scrollbar with auto-hide (FS-SB-007)
+    TerminalPaneScrollToBottom.svelte — scroll-to-bottom indicator (UXD §8.3)
+    TerminalPaneBanners.svelte       — SSH Disconnected/Reconnecting + process terminated banners
+    TerminalPanePasteDialog.svelte   — multi-line paste confirmation dialog (FS-CLIP-009)
+    TerminalPaneReconnectionSeparators.svelte — reconnection timestamp separators (FS-SSH-042)
+    TerminalView.svelte              — top-level terminal view; tab bar + pane tree + overlays
+    SplitPane.svelte                 — recursive split layout: leaf → TerminalPane,
+                                       split → SplitPane + PaneDivider + SplitPane
+    PaneTitleBar.svelte              — slim title bar in multi-pane layouts (FS-PANE-007/008)
+    ScrollToBottomButton.svelte      — scroll-to-bottom floating button
+    SearchOverlay.svelte             — search input, match count, prev/next (FS-SEARCH-007)
+    ProcessTerminatedPane.svelte     — process exited; restart/close actions (FS-PTY-006)
+    SshReconnectionSeparator.svelte  — reconnection timestamp separator (FS-SSH-042)
+    SshConnectingOverlay.svelte      — SSH Connecting / Authenticating overlay
+    SshCredentialDialog.svelte       — credential prompt dialog (password/username)
+    SshPassphraseDialog.svelte       — passphrase prompt dialog for encrypted private keys (FS-SSH-019a)
+    SshHostKeyDialog.svelte          — host key verification dialog (first-connect + key-change)
+    SshDeprecatedAlgorithmBanner.svelte — deprecated SSH algorithm warning (FS-SSH-014)
+    TabBar.svelte
+    TabBarItem.svelte
+    TabBarScroll.svelte
+    TabBarContextMenu.svelte
+    PreferencesPanel.svelte
+    PreferencesAppearanceSection.svelte
+    PreferencesTerminalSection.svelte
+    PreferencesKeyboardSection.svelte
+    PreferencesConnectionsSection.svelte
+    PreferencesThemesSection.svelte
+    KeyboardShortcutRecorder.svelte  — activates isRecordingShortcut flag (see §11.3)
+    ConnectionManager.svelte         — slide-in panel; connection list + edit form
+    ContextMenu.svelte               — base context menu (Bits UI Menu)
+    FullscreenExitBadge.svelte       — badge shown in fullscreen mode to indicate the exit shortcut
+    StatusBar.svelte
+    ThemeEditorDialog.svelte
+    ThemeListView.svelte
+    ThemePaletteEditor.svelte
+    ThemePreview.svelte
+    ThemeContrastAdvisory.svelte
 ```
 
 ### 11.2 Composable Layer

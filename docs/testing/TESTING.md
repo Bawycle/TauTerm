@@ -223,27 +223,29 @@ These tests are **not** part of the default `cargo nextest run` gate. They are a
 
 ### 14.4 VT Conformance Tests
 
-Location: `src-tauri/tests/vt_conformance.rs`. Data-driven test runner over a `VtTestCase` array.
+VT conformance tests are organized as inline unit tests within the `VtProcessor`
+implementation, grouped into thematic modules under
+`src-tauri/src/vt/processor/tests/`:
 
-```rust
-struct VtTestCase {
-    name: &'static str,           // e.g. "FS-VT-022-truecolor-colon"
-    input: &'static [u8],
-    setup: Option<&'static [u8]>, // preamble bytes applied before input
-    cols: u16,
-    rows: u16,
-    expected: ExpectedState,
-}
+| Module | Coverage |
+|--------|----------|
+| `basic.rs` | Basic character output, UTF-8 handling (FS-VT-010–016) |
+| `editing.rs` (+ `editing/` submodules) | Character insert/delete, cursor movement, line operations, text composition, wrap mode, scrolling, reverse index |
+| `features.rs` | SGR attributes (FS-VT-020–025), OSC 52 policy (FS-VT-075–076), bell (FS-VT-090–092) |
+| `modes.rs` | Terminal mode flags: DECCKM, DECKPAM, mouse, bracketed paste, focus events (FS-VT-080–086) |
+| `security.rs` | Terminal injection prevention: read-back sequence rejection (FS-VT-063), OSC 52 read rejection (FS-VT-076) |
+| `cursor_dirty.rs` | Cursor dirty-tracking: cursor position updates trigger dirty flags correctly |
+| `resize_full_redraw.rs` | Full-redraw flag on resize and alternate screen switch |
 
-struct ExpectedState {
-    cells: &'static [(u16, u16, ExpectedCell)], // sparse cell assertions
-    cursor: Option<(u16, u16)>,
-    modes: &'static [ExpectedMode],
-    scrollback_lines: Option<usize>,
-}
-```
+Each test function is named after its FS requirement where applicable (e.g.
+`test_sgr_truecolor_semicolon`, `osc52_write_blocked_by_default_policy`).
+Tests construct a `VtProcessor` directly, feed it byte sequences via `process()`,
+and assert the resulting screen buffer state and side-effect flags.
 
-Sequences are inline Rust byte literals — no external fixture files for short sequences. Binary file pairing (`name.bin` + `name.snap`, matched by name convention) is reserved for large binary captures that would be unreadable inline.
+All VT conformance tests are included in the standard `cargo nextest run` invocation
+(they are inline unit tests, not integration tests in `src-tauri/tests/`).
+No external fixture files or data-driven runner framework is used; sequences are
+inline Rust byte literals.
 
 **Required FS-VT coverage:**
 
@@ -569,7 +571,7 @@ src-tauri/tests/
     vt_harness.rs             — feed_str(), feed_bytes(), snapshot_as_text()
     fixtures.rs               — fixture path resolution (CARGO_MANIFEST_DIR)
   vt_integration.rs           — VtProcessor + ScreenBuffer full pipeline
-  vt_conformance.rs           — VT conformance corpus runner
+  vt_processor_integration.rs — VtProcessor + ScreenBuffer full pipeline (integration)
   session_integration.rs      — SessionRegistry lifecycle
   ssh_integration.rs          — SSH state machine (mocked transport)
   preferences_integration.rs  — load/save/patch round-trips
@@ -666,7 +668,7 @@ tests/
 | Rust unit inline | `#[cfg(test)] mod tests { }` in source file |
 | Rust unit separate | `<module>/tests.rs`, declared with `#[cfg(test)] mod tests;` |
 | Rust integration | `src-tauri/tests/<domain>_integration.rs` |
-| Rust VT conformance | `src-tauri/tests/vt_conformance.rs` |
+| Rust VT conformance | `src-tauri/src/vt/processor/tests/` (inline unit tests per theme) |
 | Rust shared helpers | `src-tauri/tests/common/` |
 | VT fixtures (binary) | `src-tauri/tests/fixtures/vt/sequences/<name>.bin` |
 | VT fixtures (snapshot) | `src-tauri/tests/fixtures/vt/snapshots/<name>.snap` |

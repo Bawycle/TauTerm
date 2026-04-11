@@ -50,6 +50,10 @@
 | `accept_host_key` | `{ pane_id: PaneId }` | `()` | Accept new/changed host key |
 | `reject_host_key` | `{ pane_id: PaneId }` | `()` | Reject host key (abort connection) |
 | `dismiss_ssh_algorithm_warning` | `{ pane_id: PaneId }` | `()` | Dismiss deprecated-algorithm banner |
+| `provide_passphrase` | `{ pane_id: PaneId, passphrase: String, save_in_keychain: bool }` | `()` | Respond to `passphrase-prompt` event — forward passphrase for encrypted SSH private key (FS-SSH-019a). The passphrase is forwarded via a oneshot channel stored in `SshManager::pending_passphrases`. |
+| `set_pane_label` | `{ pane_id: PaneId, label: Option<String> }` | `TabState` | Set or clear the user-defined label for a pane. Returns the updated `TabState` for the containing tab. |
+| `store_connection_password` | `{ connection_id: ConnectionId, username: String, password: String }` | `()` | Store a password for a saved SSH connection in the OS keychain (Secret Service on Linux). Best-effort: errors are surfaced as typed `TauTermError` but do not abort the connection flow. |
+| `toggle_fullscreen` | — | `FullscreenState` | Toggle the application window between windowed and fullscreen modes. Persists the new state to preferences immediately. Emits `fullscreen-state-changed` after a ~200 ms WM stabilisation delay (see §4.6 and ADR-0023). |
 | `copy_to_clipboard` | `{ text: String }` | `()` | Copy to CLIPBOARD selection |
 | `get_clipboard` | — | `String` | Read CLIPBOARD content |
 | `open_url` | `{ url: String }` | `()` | Open validated URL in system browser |
@@ -57,8 +61,9 @@
 | `resize_pane` | `{ pane_id: PaneId, cols: u16, rows: u16, pixel_width: u16, pixel_height: u16 }` | `()` | Notify backend of pane resize; triggers `TIOCSWINSZ` + `SIGWINCH`. `pixel_width`/`pixel_height` are required for complete `TIOCSWINSZ` (image protocols, multiplexers). Resize events are debounced — see [§6.5](04-runtime-platform.md#65-back-pressure). |
 | `get_pane_screen_snapshot` | `{ pane_id: PaneId }` | `ScreenSnapshot` | Full screen state for initial render |
 | `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | *E2E testing only — see §4.2.1* |
-| `inject_ssh_failure` | `{ pane_id: PaneId, error_code: String }` | `()` | *E2E testing only — see §4.2.1* |
+| `inject_ssh_failure` | `{ count: u32 }` | `()` | *E2E testing only — see §4.2.1* |
 | `inject_ssh_delay` | `{ delay_ms: u64 }` | `()` | *E2E testing only — see §4.2.1* |
+| `inject_ssh_disconnect` | `{ pane_id: PaneId }` | `()` | *E2E testing only — see §4.2.1* |
 | `inject_credential_prompt` | `{ pane_id: PaneId, host: String, username: String }` | `()` | *E2E testing only — see §4.2.1* |
 
 #### 4.2.1 E2E Testing Commands (`--features e2e-testing`)
@@ -68,8 +73,9 @@ The following commands are compiled **only** when the `e2e-testing` Cargo featur
 | Command | Input | Output | Purpose |
 |---------|-------|--------|---------|
 | `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | Inject raw bytes into a PTY pane's output channel, bypassing the real PTY. Allows VT round-trip tests without a running shell. |
-| `inject_ssh_failure` | `{ pane_id: PaneId, error_code: String }` | `()` | Force an SSH connection into a failed/disconnected state with a controlled error code. |
+| `inject_ssh_failure` | `{ count: u32 }` | `()` | Arm a counter that causes the next `count` calls to `open_ssh_connection` to fail immediately with a synthetic error, regardless of pane ID. Each failing call decrements the counter by one. Used to exercise the rollback path in `handleConnectionOpen`. |
 | `inject_ssh_delay` | `{ delay_ms: u64 }` | `()` | Set a one-shot delay (milliseconds) that fires at the start of the next SSH `connect_task` run, after the `Connecting` state event has been emitted. Single-shot: the delay is atomically zeroed on first read. Used to hold the connecting overlay visible long enough for assertions. |
+| `inject_ssh_disconnect` | `{ pane_id: PaneId }` | `()` | Force-emit a `Disconnected` ssh-state-changed event for a pane. The connect_task may continue running in the background; the frontend immediately sees `Disconnected` and removes the overlay. Used to make the connecting overlay disappear without depending on a real TCP connection timeout. |
 | `inject_credential_prompt` | `{ pane_id: PaneId, host: String, username: String }` | `()` | Emit a `credential-prompt` event for the specified pane, simulating an SSH server requesting authentication. Used to test the credential dialog flow without a live SSH server. |
 
 These commands do not follow the `TauTermError` error envelope — they return `Result<(), String>` to keep E2E plumbing minimal. They must never be registered in production builds.
@@ -88,6 +94,11 @@ These commands do not follow the `TauTermError` error envelope — they return `
 | `notification-changed` | `NotificationChangedEvent` | Tab/pane activity notification added or cleared |
 | `cursor-style-changed` | `CursorStyleChangedEvent` | DECSCUSR (CSI Ps SP q) changed the cursor shape for a pane. Payload: `{ paneId, shape: u8 }` where `shape` is the raw DECSCUSR parameter 0–6. See FS-VT-030. Emitted immediately on DECSCUSR — does not wait for the next `screen-update` cycle. Not emitted for DECSET/DECRST ?12 (cursor blink mode), which is propagated via the `cursor.blink` field of `ScreenUpdateEvent`. |
 | `bell-triggered` | `BellTriggeredEvent` | Terminal produced a BEL character. Rate-limited to at most one event per 100 ms per pane (FS-VT-090). Payload: `{ paneId }`. |
+| `passphrase-prompt` | `PassphrasePromptEvent` | SSH pubkey auth requires a passphrase for an encrypted private key (FS-SSH-019a). Payload: `{ paneId, keyPathLabel: string, failed: bool, isKeychainAvailable: bool }`. The `keyPathLabel` is the filename only — never the full path (security constraint). |
+| `fullscreen-state-changed` | `FullscreenStateChangedEvent` | Emitted after the WM has confirmed the fullscreen geometry transition (~200 ms after `toggle_fullscreen`). Payload: `{ isFullscreen: bool }`. Informational — the frontend ResizeObserver triggers `resize_pane` independently. |
+| `osc52-write-requested` | `Osc52WriteRequestedEvent` | The terminal requested a clipboard write via OSC 52 and the `allow_osc52_write` policy permits it (FS-VT-075). Payload: `{ paneId, data: string }` where `data` is the decoded UTF-8 clipboard payload. The frontend is responsible for writing to the system clipboard. |
+| `ssh-warning` | `SshWarningEvent` | A deprecated SSH algorithm was detected during the connection handshake (`ssh-rsa` SHA-1, `ssh-dss`). Non-blocking — for informational display only (FS-SSH-014). Payload: `{ paneId, algorithm: string, reason: string }`. |
+| `ssh-reconnected` | `SshReconnectedEvent` | Emitted immediately after a successful SSH reconnect. The frontend inserts a visual separator in the scrollback to distinguish output from the previous and new sessions (FS-SSH-042). Payload: `{ paneId, timestampMs: number }`. |
 
 ### 4.4 Error Envelope
 
@@ -211,6 +222,31 @@ The types from UXD §15 (`SshLifecycleState`, `ScreenUpdateEvent`, `CellUpdate`,
 | `SessionStateChanged.state: Partial<SessionState>` | `SessionStateChanged.tab?: TabState` + `activeTabId?` (§4.5.2) |
 | `close_pane → ()` | `close_pane → TabState \| null` (§4.5.3) |
 | `notification-changed` payload (undefined) | `NotificationChangedEvent` (§4.5.4) |
+
+### 4.7 Multi-Step Flows
+
+Some IPC interactions span multiple commands and events. The two flows below are documented here to make the full sequence visible in one place.
+
+#### 4.7.1 Fullscreen toggle flow
+
+1. Frontend calls `toggle_fullscreen`.
+2. Backend queries the current window state, flips it, and persists the new value to preferences immediately (`prefs.set_fullscreen(target)`).
+3. `toggle_fullscreen` returns `FullscreenState { isFullscreen: bool }` synchronously to the frontend.
+4. In a separate `tokio::spawn`, the backend waits ~200 ms for the WM to confirm the geometry transition (see ADR-0023 for the rationale).
+5. Backend emits `fullscreen-state-changed` with `{ isFullscreen: bool }`.
+6. The frontend `onFullscreenStateChanged` handler (in `useTerminalView.core.svelte.ts`) receives the event and restores focus to the active viewport. The ResizeObserver then fires, triggering `resize_pane` → `SIGWINCH` to the active panes.
+
+Note: SIGWINCH is *not* sent from inside `toggle_fullscreen` itself. The frontend ResizeObserver is the authoritative source of resize events; the `fullscreen-state-changed` event is informational and used for focus restoration timing.
+
+#### 4.7.2 Passphrase flow
+
+1. Frontend calls `open_ssh_connection` (or `reconnect_ssh`).
+2. During pubkey authentication, the SSH connect task detects that the private key is encrypted.
+3. Backend emits `passphrase-prompt` event with `{ paneId, keyPathLabel, failed, isKeychainAvailable }`.
+4. `SshPassphraseDialog.svelte` renders in the frontend, displaying the key filename.
+5. The user enters the passphrase and optionally checks "Save in keychain". The frontend calls `provide_passphrase({ paneId, passphrase, saveInKeychain })`.
+6. The backend SSH connect task receives the passphrase via the oneshot channel stored in `SshManager::pending_passphrases` and resumes the authentication flow.
+7. On success, a `ssh-state-changed` event with `state: connected` is emitted. On failure (wrong passphrase), the backend emits another `passphrase-prompt` event with `failed: true`, and the dialog reappears.
 
 ---
 

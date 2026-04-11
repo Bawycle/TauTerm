@@ -241,7 +241,7 @@ A slim horizontal bar at the top of each terminal pane. Visible only when:
 - the parent tab contains two or more panes, **and**
 - the `showPaneTitleBar` user preference is `true` (default).
 
-When either condition is false, the title bar **MUST NOT be in the DOM** (not merely hidden).
+When either condition is false, the title bar is absent from the DOM entirely — not merely hidden with CSS (FS-PANE-007).
 
 **Anatomy:**
 
@@ -265,7 +265,7 @@ When either condition is false, the title bar **MUST NOT be in the DOM** (not me
 | Active pane | `--font-weight-medium` (500) | 1.0 |
 | Inactive pane | `--font-weight-normal` (400) | 0.6 |
 
-The background color and bottom border MUST NOT differ between active and inactive panes. Rationale: using color to distinguish would create a second focus signal layered on top of the pane border (§7.2), increasing visual noise. Typography plus opacity is sufficient to communicate relative attention priority without introducing additional WCAG 2.1 SC 1.4.3 obligations.
+The background color and bottom border are identical regardless of whether the pane is active or inactive — only font weight and opacity change between states. Using color to distinguish would create a second focus signal layered on top of the pane border (§7.2), increasing visual noise. Typography plus opacity is sufficient to communicate relative attention priority without introducing additional WCAG 2.1 SC 1.4.3 obligations.
 
 **Title content:** The resolved title for the specific pane, using the same priority chain as FS-TAB-006: (1) user-defined label, (2) OSC 0/2 title, (3) CWD basename (OSC 7), (4) foreground process name. If no title is available, a generic i18n fallback ("Terminal") is displayed.
 
@@ -425,7 +425,7 @@ If SGR 7 (Reverse) is combined with SGR 1 (Bold), color promotion (see Bold abov
 
 #### 7.3.5 Extended Underline Styles (FS-VT-025)
 
-SGR 4:2, 4:3, 4:4, and 4:5 define extended underline styles. These are a SHOULD-level requirement (FS-VT-025). The rendering approach uses CSS `text-decoration` or equivalent canvas-drawn lines.
+SGR 4:2, 4:3, 4:4, and 4:5 define extended underline styles. The implementation of these variants is covered by FS-VT-025 (priority SHOULD). The rendering approach uses CSS `text-decoration` or equivalent canvas-drawn lines.
 
 **Underline color:** When SGR 58 has been set for a cell, that color is used for all underline variants. When SGR 58 has not been set, `--term-underline-color-default` (`inherit`) is used — the underline adopts the cell's current foreground color.
 

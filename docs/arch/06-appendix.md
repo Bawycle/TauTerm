@@ -38,6 +38,14 @@ Every `#[tauri::command]` that accepts user-provided data applies validation at 
 - Child processes have no access to other panes' PTY fds, the application's D-Bus connection, or credential memory.
 - OSC 52 clipboard read is permanently rejected in the VtProcessor (FS-VT-076). OSC 52 clipboard write policy (FS-VT-075): for local PTY sessions (no saved connection), write is controlled by the global preference `allow_osc52_write: bool` (default: `false`). For saved connections (local or SSH), a per-connection `allow_osc52_write` flag overrides the global default. This prevents a global "enabled" setting from inadvertently enabling OSC 52 write in SSH sessions where it was not explicitly authorized.
 
+**OSC 52 write delegation flow:**
+
+1. `VtProcessor.process()` dispatches an OSC 52 write sequence to `dispatch/osc.rs`. If `allow_osc52_write` is `true` for the session, the decoded UTF-8 payload is stored in `VtProcessor.pending_osc52_write`.
+2. After each `process()` call, the PTY reader task (Task 1, `reader.rs`) calls `vt.take_osc52_write()` to drain the pending payload. `take_osc52_write()` is a drain operation — it moves the value out of `pending_osc52_write`, leaving it `None`.
+3. The drained payload is forwarded to Task 2 (the async coalescer) via the `ProcessOutput` struct (`osc52: Option<String>` field).
+4. In `emitter.rs`, `emit_all_pending()` calls `emit_osc52_write_requested()`, which emits the `osc52-write-requested` Tauri event with payload `{ paneId, data: String }`.
+5. The frontend receives the event in its `osc52-write-requested` listener and writes `data` to the system clipboard using the browser Clipboard API.
+
 ### 8.3 SSH Security
 
 - Host key verification is TOFU, stored in `~/.config/tauterm/known_hosts` (OpenSSH-compatible format). TauTerm does **not** read `~/.ssh/known_hosts` automatically at startup or during connection (FS-SSH-011). The Preferences UI offers an explicit "Import from OpenSSH" action that copies entries from `~/.ssh/known_hosts` into TauTerm's own known-hosts file on user request; this is the sole interaction with the OpenSSH file (`ssh/known_hosts.rs`). Once imported, entries are managed independently.
@@ -117,6 +125,12 @@ See ADR-0005. The PAL stubs are in `platform/pty_macos.rs`, `platform/credential
 | [ADR-0016](adr/ADR-0016-preferences-toml-format.md) | Preferences persistence: TOML with snake_case keys (supersedes ADR-0012) | Accepted |
 | [ADR-0013](adr/ADR-0013-i18n-paraglide-js.md) | i18n library: Paraglide JS (Inlang) | Accepted |
 | [ADR-0014](adr/ADR-0014-appimage-tauri-bundler.md) | AppImage distribution via Tauri bundler | Accepted |
+| [ADR-0015](adr/ADR-0015-e2e-injectable-pty.md) | E2E testability via injectable PTY backend (`e2e-testing` feature flag, `InjectablePtyBackend`, `inject_pty_output` command) | Accepted |
 | [ADR-0017](adr/ADR-0017-scrollback-memory-estimate-formula.md) | Scrollback memory estimate: 5,500 bytes/line upper-bound formula | Accepted |
 | [ADR-0018](adr/ADR-0018-logging-filter-per-build-profile.md) | Logging filter strategy per build profile (debug vs. release defaults) | Accepted |
-| [ADR-0022](adr/ADR-0022-csp-style-src-unsafe-inline.md) | CSP `style-src 'unsafe-inline'`: permanent v1 constraint | Accepted |
+| [ADR-0019](adr/ADR-0019-pty-session-teardown-strategy.md) | PTY session teardown: drop-cascade approach — `close()` is an empty body; SIGHUP delivered via `MasterPty::drop()` → fd close; tasks observe EIO/EOF and exit naturally | Accepted |
+| [ADR-0020](adr/ADR-0020-render-coalescing-strategy.md) | Render coalescing: two-task pipeline (Task 1: `spawn_blocking` reader, Task 2: async coalescer), 256-slot MPSC channel, 12 ms debounce timer | Accepted |
+| [ADR-0021](adr/ADR-0021-preferences-schema-versioning.md) | Preferences schema versioning: `schema_version: u32` field + sequential migration engine operating on `serde_json::Value` before final deserialization | Accepted |
+| [ADR-0022](adr/ADR-0022-csp-style-src-unsafe-inline.md) | CSP `style-src 'unsafe-inline'`: permanent v1 constraint due to WebKitGTK CORS limitation; exit criterion documented | Accepted |
+| [ADR-0023](adr/ADR-0023-fullscreen-linux-timing-contract.md) | Fullscreen Linux timing contract: fixed 200 ms delay before emitting `fullscreen-state-changed` to allow the WM to confirm the geometry transition | Accepted |
+| [ADR-0024](adr/ADR-0024-passphrase-keychain-scope.md) | Passphrase keychain scope: passphrases for encrypted SSH keys stored in the OS keychain on explicit user opt-in; checked from keychain before prompting on subsequent connections | Accepted |

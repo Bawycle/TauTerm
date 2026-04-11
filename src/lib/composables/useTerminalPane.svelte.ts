@@ -163,6 +163,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // -------------------------------------------------------------------------
 
   let viewportEl = $state<HTMLDivElement | undefined>();
+  /** Hidden textarea — true keyboard focus/input sink. Receives GTK IM commits. */
+  let inputEl = $state<HTMLTextAreaElement | undefined>();
   let scrollbarEl = $state<HTMLDivElement | undefined>();
 
   // -------------------------------------------------------------------------
@@ -277,10 +279,11 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   // Effects
   // -------------------------------------------------------------------------
 
-  // Auto-focus when active
+  // Auto-focus when active — prefer inputEl (hidden textarea, receives GTK IM commits).
+  // Falls back to viewportEl if textarea is not yet mounted.
   $effect(() => {
-    if (props.active() && !false /* not terminated — caller checks */) {
-      viewportEl?.focus({ preventScroll: true });
+    if (props.active()) {
+      (inputEl ?? viewportEl)?.focus({ preventScroll: true });
     }
   });
 
@@ -901,6 +904,12 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     },
     set viewportEl(v: HTMLDivElement | undefined) {
       viewportEl = v;
+    },
+    get inputEl() {
+      return inputEl;
+    },
+    set inputEl(v: HTMLTextAreaElement | undefined) {
+      inputEl = v;
     },
     get scrollbarEl() {
       return scrollbarEl;

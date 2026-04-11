@@ -2,8 +2,15 @@
 <!--
   TerminalPaneViewport — character cell grid, cursor overlay, and input event bindings.
 
-  Renders the terminal screen as DOM rows of spans. Binds keyboard, mouse, wheel,
-  focus, and blur events to the composable handlers.
+  Renders the terminal screen as DOM rows of spans.
+
+  Input architecture (Linux/WebKitGTK):
+  - The hidden <textarea> (terminal-pane__input) receives keyboard focus, keydown events,
+    and GTK IM composition commits (dead keys, AltGr, IBus/Fcitx) via the `input` event.
+    WebKit only delivers GTK IM commits to editable elements; a plain <div> silently drops
+    them. The textarea is invisible (position:fixed, opacity:0, clip-path) but focusable.
+  - The visible <div> hosts the cell grid and handles mouse events. It is tabindex=-1
+    (never receives tab/keyboard focus) and delegates mousedown focus to the textarea.
 
   Security: cell content uses Svelte text interpolation — no {@html} (TUITC-SEC-010).
 
@@ -12,6 +19,7 @@
     active     — whether this pane is focused
     lineHeight — optional line-height override
     onkeydown  — keyboard handler (defined in TerminalPane to access tp.decckm etc.)
+    oninput    — GTK IM / IME composition commit handler
 -->
 <script lang="ts">
   import type { useTerminalPane } from '$lib/composables/useTerminalPane.svelte';
@@ -24,11 +32,43 @@
     /** When true, applies cursor:none to hide the mouse pointer while the user types. */
     cursorHidden?: boolean;
     onkeydown: (event: KeyboardEvent) => void;
+    /** Handles GTK IM / IME composition commits (dead keys, AltGr via IBus, etc.). */
+    oninput: (event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) => void;
     onmousemove?: (event: MouseEvent) => void;
   }
 
-  let { tp, active, lineHeight, cursorHidden = false, onkeydown, onmousemove }: Props = $props();
+  let {
+    tp,
+    active,
+    lineHeight,
+    cursorHidden = false,
+    onkeydown,
+    oninput,
+    onmousemove,
+  }: Props = $props();
 </script>
+
+<!--
+  Hidden textarea — true keyboard focus receptor and GTK IM input sink.
+  Receives keydown, input (GTK IM commits), focus, and blur events.
+  Invisible via position:fixed + opacity:0 + clip-path, but focusable
+  (display:none or visibility:hidden would prevent focus entirely).
+  aria-hidden: true — screen readers use the visible div[role=textbox].
+-->
+<textarea
+  bind:this={tp.inputEl}
+  class="terminal-pane__input"
+  tabindex={active ? 0 : -1}
+  aria-hidden="true"
+  autocomplete="off"
+  autocapitalize="off"
+  spellcheck={false}
+  rows={1}
+  {onkeydown}
+  {oninput}
+  onfocus={tp.handleFocus}
+  onblur={tp.handleBlur}
+></textarea>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
@@ -37,21 +77,23 @@
   class:terminal-pane__viewport--cursor-hidden={cursorHidden}
   data-screen-generation={tp.screenGeneration}
   style={lineHeight != null ? `--line-height-terminal: ${lineHeight}` : undefined}
-  tabindex={active ? 0 : -1}
+  tabindex={-1}
   role="textbox"
   aria-multiline="true"
   aria-label={m.terminal_output_aria_label()}
   aria-readonly="false"
-  {onkeydown}
-  onmousedown={tp.handleMousedown}
+  onmousedown={(e) => {
+    // Redirect keyboard focus to the hidden textarea — the true input receptor.
+    // Must happen on mousedown (before click) so focus arrives before any handler.
+    tp.inputEl?.focus({ preventScroll: true });
+    tp.handleMousedown(e);
+  }}
   onmousemove={(e) => {
     tp.handleMousemove(e);
     onmousemove?.(e);
   }}
   onmouseup={tp.handleMouseup}
   onwheel={tp.handleWheel}
-  onfocus={tp.handleFocus}
-  onblur={tp.handleBlur}
 >
   <!-- Cell grid: rows × cells — SECURITY: text via interpolation, never {@html} -->
   {#each tp.gridRows as row, rowIdx (rowIdx)}

@@ -324,12 +324,14 @@ describe('BLINK-007: restartCursorBlink() resets cursor to visible and restarts 
     flushSync();
     expect(container.querySelector('.terminal-pane__cursor')).toBeNull();
 
-    // Step 2: simulate a keydown — TerminalPane calls restartCursorBlink() internally
-    // by dispatching a keydown event on the viewport element.
-    const viewport = container.querySelector('.terminal-grid') as HTMLElement | null;
-    expect(viewport).not.toBeNull();
-    viewport!.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }),
+    // Step 2: simulate a keydown — TerminalPane calls restartCursorBlink() internally.
+    // keydown is now bound to the hidden textarea (.terminal-pane__input), not the
+    // viewport div. Use a non-printable key (ArrowDown) so it is not skipped by the
+    // bare-printable guard (bare chars are handled via the input event, not keydown).
+    const inputEl = container.querySelector('.terminal-pane__input') as HTMLElement | null;
+    expect(inputEl).not.toBeNull();
+    inputEl!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
     );
     flushSync();
 

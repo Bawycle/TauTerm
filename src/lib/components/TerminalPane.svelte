@@ -223,10 +223,13 @@
     lineHeight: () => lineHeight,
   });
 
-  // Notify parent of the active viewport element for focus management.
+  // Notify parent of the active input element for focus management.
+  // We pass inputEl (the hidden textarea) — it is the true focus receptor.
+  // The parent calls .focus() on this element to restore focus after panel
+  // switches, so it must point to the element that receives keyboard input.
   $effect(() => {
-    if (active && tp.viewportEl) {
-      onviewportactive?.(tp.viewportEl);
+    if (active && tp.inputEl) {
+      onviewportactive?.(tp.inputEl);
       return () => {
         onviewportactive?.(null);
       };
@@ -244,12 +247,21 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    // Application shortcuts (Ctrl+Shift+*) are handled at the TerminalView level
-    // AltGr sur Linux/WebKitGTK génère ctrlKey=true ; AltGr+Shift déclencherait
-    // faussement cette garde. getModifierState('AltGraph') permet de distinguer.
+    // Application shortcuts (Ctrl+Shift+*) are handled at the TerminalView level.
+    // AltGr on Linux/WebKitGTK emits ctrlKey=true; guard must not block AltGr+Shift.
     if (event.ctrlKey && event.shiftKey && !event.getModifierState('AltGraph')) return;
     if (event.ctrlKey && event.key === ',' && !event.getModifierState('AltGraph')) return; // Ctrl+, = preferences
+    // Block in-progress composition (dead key pre-edit, IME candidate selection).
     if (event.isComposing) return;
+
+    // Bare printable characters (no Ctrl/Alt/Meta modifier) are handled by
+    // handleInput via the hidden textarea's input event — which correctly
+    // captures GTK IM commits (dead keys, AltGr, IBus). Routing them through
+    // keydown would cause double-send (keydown sends the raw key, input sends
+    // the IM-resolved character, e.g. space → ~ after dead-tilde).
+    if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      return;
+    }
 
     // Hide mouse cursor on output-producing keystrokes when the preference is on.
     if (hideCursorWhileTyping) {
@@ -274,6 +286,34 @@
       tp.restartCursorBlink();
       tp.sendBytes(sequence);
     }
+  }
+
+  /**
+   * Handle GTK IM / IME composition commits arriving via the hidden textarea's
+   * input event. This covers dead keys (e.g. dead_tilde + space → ~), AltGr
+   * characters, and IBus/Fcitx input — all delivered by WebKitGTK as `input`
+   * events on the editable textarea rather than as keydown events.
+   *
+   * Drains the textarea value immediately to prevent accumulation.
+   * Control characters (cp < 0x20, cp === 0x7f) are excluded — they must
+   * arrive through intentional key bindings handled by handleKeydown.
+   *
+   * Note: some IMs (Fcitx5) write directly to textarea.value rather than
+   * setting event.data. Reading target.value first covers both cases.
+   */
+  function handleInput(event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) {
+    const target = event.target as HTMLTextAreaElement;
+    const inputEvent = event as unknown as InputEvent;
+    const text = target.value || inputEvent.data || '';
+    target.value = '';
+    if (!text) return;
+    const encoder = new TextEncoder();
+    for (const char of text) {
+      const cp = char.codePointAt(0);
+      if (cp === undefined || cp < 0x20 || cp === 0x7f) continue;
+      tp.sendBytes(encoder.encode(char));
+    }
+    tp.restartCursorBlink();
   }
 </script>
 
@@ -322,6 +362,7 @@
         {lineHeight}
         {cursorHidden}
         onkeydown={handleKeydown}
+        oninput={handleInput}
         onmousemove={handleViewportMouseMove}
       />
       <TerminalPaneScrollbar {tp} />
@@ -388,6 +429,32 @@
   }
 
   /* Viewport styles remain here since TerminalPaneViewport renders inside .terminal-pane */
+  /*
+   * Hidden textarea — keyboard focus receptor and GTK IM input sink.
+   * position:fixed removes it from layout flow. display:none or
+   * visibility:hidden would prevent focus entirely, so we use opacity:0
+   * + clip-path to make it invisible while keeping it focusable.
+   */
+  :global(.terminal-pane__input) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    resize: none;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    outline: 0;
+    font-size: 1px;
+    line-height: 1;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   :global(.terminal-pane__viewport--cursor-hidden) {
     cursor: none;
   }

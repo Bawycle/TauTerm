@@ -276,13 +276,23 @@ export function keyEventToVtSequence(
   // AltGr characters (Linux/WebKitGTK)
   // AltGr is emitted as ctrlKey=true AND altKey=true simultaneously.
   // event.key already holds the fully resolved level-3 (or level-4) character
-  // from XKB. Detect via getModifierState('AltGraph') to distinguish AltGr from
-  // a genuine Ctrl+Alt combination, then transmit the character directly to the PTY.
+  // from XKB. Two detection strategies (either is sufficient):
+  //   1. getModifierState('AltGraph') — reliable on Chromium/Firefox, but
+  //      WebKitGTK does NOT set this state, so it returns false for AltGr.
+  //   2. Fallback heuristic: if the resolved key is not a basic ASCII letter
+  //      [a-zA-Z], it cannot be a genuine Ctrl+Alt+letter shortcut, so it must
+  //      be an AltGr-produced symbol or non-ASCII letter (level 3/4 from XKB).
   // ---------------------------------------------------------------------------
-  if (key.length === 1 && ctrlKey && altKey && event.getModifierState('AltGraph')) {
-    const cp = key.codePointAt(0);
-    if (cp !== undefined && cp >= 0x20 && cp !== 0x7f) {
-      return encode(key);
+  if (key.length === 1 && ctrlKey && altKey) {
+    const isAltGr =
+      event.getModifierState('AltGraph') ||
+      // WebKitGTK fallback: level-3/4 characters are never plain ASCII letters.
+      !/^[a-zA-Z]$/.test(key);
+    if (isAltGr) {
+      const cp = key.codePointAt(0);
+      if (cp !== undefined && cp >= 0x20 && cp !== 0x7f) {
+        return encode(key);
+      }
     }
   }
 

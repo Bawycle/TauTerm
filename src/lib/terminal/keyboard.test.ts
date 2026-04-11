@@ -273,4 +273,36 @@ describe('AltGr characters (Linux/WebKitGTK)', () => {
     // © is U+00A9 — UTF-8: C2 A9
     expect(toArr(result!)).toEqual([0xc2, 0xa9]);
   });
+
+  // --- WebKitGTK fallback (getModifierState('AltGraph') === false) ---
+  // WebKitGTK emits AltGr as ctrlKey+altKey but does NOT set the AltGraph state.
+  // The fallback heuristic: if key is not [a-zA-Z], treat as AltGr.
+
+  // TEST-KBD-ALTGR-007: Belgian AltGr+= → ~ with getModifierState returning false (WebKitGTK)
+  it('TEST-KBD-ALTGR-007: AltGr+= (WebKitGTK, AltGraph=false) produces ~ via fallback heuristic', () => {
+    const result = keyEventToVtSequence(key('~', { ctrl: true, alt: true, altgr: false }), false);
+    expect(result).not.toBeNull();
+    expect(toArr(result!)).toEqual(Array.from(bytes('~')));
+  });
+
+  // TEST-KBD-ALTGR-008: AltGr+{ via fallback heuristic
+  it('TEST-KBD-ALTGR-008: AltGr+key producing { (WebKitGTK, AltGraph=false) works via fallback', () => {
+    const result = keyEventToVtSequence(key('{', { ctrl: true, alt: true, altgr: false }), false);
+    expect(result).not.toBeNull();
+    expect(toArr(result!)).toEqual(Array.from(bytes('{')));
+  });
+
+  // TEST-KBD-ALTGR-009: AltGr+€ via fallback heuristic (multi-byte)
+  it('TEST-KBD-ALTGR-009: AltGr+key producing € (WebKitGTK, AltGraph=false) works via fallback', () => {
+    const result = keyEventToVtSequence(key('€', { ctrl: true, alt: true, altgr: false }), false);
+    expect(result).not.toBeNull();
+    expect(toArr(result!)).toEqual([0xe2, 0x82, 0xac]);
+  });
+
+  // TEST-KBD-ALTGR-010: genuine Ctrl+Alt+letter is still blocked by fallback heuristic
+  it('TEST-KBD-ALTGR-010: Ctrl+Alt+letter (no AltGraph, ASCII letter) returns null', () => {
+    // 'z' matches [a-zA-Z] → fallback does not fire → null
+    const result = keyEventToVtSequence(key('z', { ctrl: true, alt: true, altgr: false }), false);
+    expect(result).toBeNull();
+  });
 });

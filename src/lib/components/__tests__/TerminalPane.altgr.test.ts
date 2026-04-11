@@ -96,7 +96,8 @@ describe('TerminalPane.svelte handleKeydown AltGr guards', () => {
     flushSync();
     for (let i = 0; i < 10; i++) await Promise.resolve();
     flushSync();
-    return container.querySelector('.terminal-pane__viewport') as HTMLElement | null;
+    // keydown is now bound to the hidden textarea (GTK IM input sink), not the viewport div.
+    return container.querySelector('.terminal-pane__input') as HTMLElement | null;
   }
 
   it('TEST-TP-ALTGR-001: AltGr+Shift does NOT block — PTY receives bytes', async () => {
@@ -165,6 +166,111 @@ describe('TerminalPane.svelte handleKeydown AltGr guards', () => {
     await Promise.resolve();
     flushSync();
 
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handleInput — GTK IM / dead key / AltGr characters via textarea input event
+// ---------------------------------------------------------------------------
+
+describe('TerminalPane.svelte handleInput (textarea input event)', () => {
+  let container: HTMLDivElement;
+  let instance: ReturnType<typeof mount> | null = null;
+  let sendInputSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    vi.spyOn(tauriEvent, 'listen').mockResolvedValue(() => {});
+    vi.spyOn(ipcCommands, 'getPaneScreenSnapshot').mockResolvedValue(null as unknown as never);
+    vi.spyOn(ipcCommands, 'setActivePane').mockResolvedValue(undefined);
+    sendInputSpy = vi.spyOn(ipcCommands, 'sendInput').mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    if (instance) {
+      unmount(instance);
+      instance = null;
+    }
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  async function mountPaneAndGetInput() {
+    instance = mount(TerminalPane, {
+      target: container,
+      props: { paneId: 'pane-input-test', tabId: 'tab-input-test', active: true },
+    });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    flushSync();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    flushSync();
+    return container.querySelector('.terminal-pane__input') as HTMLTextAreaElement | null;
+  }
+
+  function dispatchInput(inputEl: HTMLTextAreaElement, data: string | null) {
+    // Simulate a GTK IM commit: set textarea.value then fire an input event.
+    if (data !== null) inputEl.value = data;
+    inputEl.dispatchEvent(new InputEvent('input', { data, bubbles: true, cancelable: true }));
+  }
+
+  // TEST-TP-INPUT-001: dead_tilde + space → '~' committed via GTK IM
+  it('TEST-TP-INPUT-001: input event data="~" sends 0x7E to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    dispatchInput(inputEl!, '~');
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0x7e]);
+  });
+
+  // TEST-TP-INPUT-002: euro sign (AltGr+E on some layouts) — multi-byte UTF-8
+  it('TEST-TP-INPUT-002: input event data="€" sends UTF-8 E2 82 AC to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    dispatchInput(inputEl!, '€');
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0xe2, 0x82, 0xac]);
+  });
+
+  // TEST-TP-INPUT-003: null data (e.g. deleteContentBackward) → nothing sent
+  it('TEST-TP-INPUT-003: input event with data=null sends nothing to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    dispatchInput(inputEl!, null);
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+
+  // TEST-TP-INPUT-004: bare printable keydown is skipped — PTY receives nothing via keydown
+  it('TEST-TP-INPUT-004: keydown key="a" (bare printable) is skipped — no PTY bytes via keydown', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    inputEl!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // PTY must NOT receive bytes from keydown — character comes via input event instead
     expect(sendInputSpy).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: MPL-2.0
+/**
+ * TerminalPane.altgr.test.ts
+ *
+ * Tests for AltGr guard fixes in TerminalPane.svelte handleKeydown.
+ *
+ * Covered:
+ *   TEST-TP-ALTGR-001 — AltGr+Shift: guard does NOT block, PTY receives bytes
+ *   TEST-TP-ALTGR-002 — Ctrl+Shift (no AltGraph): guard blocks, PTY receives nothing
+ *   TEST-TP-ALTGR-003 — AltGr+, (AltGraph): guard does NOT block
+ *   TEST-TP-ALTGR-004 — Ctrl+, (no AltGraph): guard blocks
+ *
+ * Implementation note:
+ *   The IPC path is: handleKeydown → tp.sendBytes → sendInput (from $lib/ipc/commands).
+ *   vi.spyOn is applied to $lib/ipc/commands.sendInput — the live binding inside the
+ *   composable — rather than @tauri-apps/api/core.invoke, which is captured at module
+ *   import time and cannot be intercepted via spyOn after the fact.
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mount, unmount, flushSync } from 'svelte';
+import TerminalPane from '$lib/components/TerminalPane.svelte';
+import * as tauriEvent from '@tauri-apps/api/event';
+import * as ipcCommands from '$lib/ipc/commands';
+
+// Stub ResizeObserver (not available in jsdom)
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+/** Build a KeyboardEvent with optional AltGraph modifier state. */
+function makeKeyEvent(
+  key: string,
+  opts: {
+    ctrlKey?: boolean;
+    altKey?: boolean;
+    shiftKey?: boolean;
+    altGraph?: boolean;
+  } = {},
+): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    ctrlKey: opts.ctrlKey ?? false,
+    altKey: opts.altKey ?? false,
+    shiftKey: opts.shiftKey ?? false,
+    bubbles: true,
+    cancelable: true,
+  });
+  const altGraph = opts.altGraph ?? false;
+  Object.defineProperty(event, 'getModifierState', {
+    value: (state: string) => (state === 'AltGraph' ? altGraph : false),
+    configurable: true,
+  });
+  return event;
+}
+
+describe('TerminalPane.svelte handleKeydown AltGr guards', () => {
+  let container: HTMLDivElement;
+  let instance: ReturnType<typeof mount> | null = null;
+  let sendInputSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    vi.spyOn(tauriEvent, 'listen').mockResolvedValue(() => {});
+    // Stub IPC init commands to avoid backend dependency
+    vi.spyOn(ipcCommands, 'getPaneScreenSnapshot').mockResolvedValue(null as unknown as never);
+    vi.spyOn(ipcCommands, 'setActivePane').mockResolvedValue(undefined);
+    sendInputSpy = vi.spyOn(ipcCommands, 'sendInput').mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    if (instance) {
+      unmount(instance);
+      instance = null;
+    }
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  async function mountPane() {
+    instance = mount(TerminalPane, {
+      target: container,
+      props: {
+        paneId: 'pane-altgr-test',
+        tabId: 'tab-altgr-test',
+        active: true,
+      },
+    });
+    // Drain effects
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    flushSync();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    flushSync();
+    return container.querySelector('.terminal-pane__viewport') as HTMLElement | null;
+  }
+
+  it('TEST-TP-ALTGR-001: AltGr+Shift does NOT block — PTY receives bytes', async () => {
+    const viewport = await mountPane();
+    expect(viewport).not.toBeNull();
+
+    sendInputSpy.mockClear();
+
+    // AltGr+Shift+~ : ctrlKey+altKey+shiftKey with AltGraph active.
+    // keyboard.ts AltGr branch: ctrlKey && altKey && getModifierState('AltGraph') && key.length === 1
+    // → returns encode('~'). The guard in handleKeydown must not return early.
+    const event = makeKeyEvent('~', {
+      ctrlKey: true,
+      altKey: true,
+      shiftKey: true,
+      altGraph: true,
+    });
+    viewport!.dispatchEvent(event);
+    await Promise.resolve();
+    flushSync();
+
+    // sendInput should have been called (guard did not return early)
+    expect(sendInputSpy).toHaveBeenCalled();
+  });
+
+  it('TEST-TP-ALTGR-002: Ctrl+Shift (no AltGraph) blocks PTY transmission', async () => {
+    const viewport = await mountPane();
+    expect(viewport).not.toBeNull();
+
+    sendInputSpy.mockClear();
+
+    // Genuine Ctrl+Shift+T (application shortcut) — must NOT reach PTY
+    const event = makeKeyEvent('T', { ctrlKey: true, shiftKey: true, altGraph: false });
+    viewport!.dispatchEvent(event);
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+
+  it('TEST-TP-ALTGR-003: AltGr+comma does NOT block', async () => {
+    const viewport = await mountPane();
+    expect(viewport).not.toBeNull();
+
+    sendInputSpy.mockClear();
+
+    // AltGr+, — the Ctrl+, preferences guard must not fire when AltGraph is active
+    const event = makeKeyEvent(',', { ctrlKey: true, altKey: true, altGraph: true });
+    viewport!.dispatchEvent(event);
+    await Promise.resolve();
+    flushSync();
+
+    // keyboard.ts AltGr branch: ',' has cp=0x2C >= 0x20 and !== 0x7F → encode(',')
+    expect(sendInputSpy).toHaveBeenCalled();
+  });
+
+  it('TEST-TP-ALTGR-004: Ctrl+comma (no AltGraph) blocks (preferences shortcut)', async () => {
+    const viewport = await mountPane();
+    expect(viewport).not.toBeNull();
+
+    sendInputSpy.mockClear();
+
+    // Genuine Ctrl+, — preferences shortcut, must NOT reach PTY
+    const event = makeKeyEvent(',', { ctrlKey: true, altGraph: false });
+    viewport!.dispatchEvent(event);
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+});

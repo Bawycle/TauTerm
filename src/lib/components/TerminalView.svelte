@@ -233,7 +233,11 @@
             ondimensionschange={(paneId, c, r) => tv.handleDimensionsChange(paneId, c, r)}
             onrenamepane={tv.handlePaneRename}
             onviewportactive={(el) => {
-              tv.activeViewportEl = el;
+              if (el !== null) {
+                tv.activeViewportEl = el;
+              }
+              // null ignoré — une nouvelle registration par le pane actif prend la main ;
+              // document.contains() dans le focus guard gère les refs périmées.
             }}
           />
         </div>

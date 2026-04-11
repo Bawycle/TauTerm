@@ -6,15 +6,24 @@ import { keyEventToVtSequence } from './keyboard.js';
 /** Build a minimal KeyboardEvent-like object for testing. */
 function key(
   k: string,
-  mods: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean } = {},
+  mods: {
+    ctrl?: boolean;
+    shift?: boolean;
+    alt?: boolean;
+    meta?: boolean;
+    altgr?: boolean;
+  } = {},
 ): KeyboardEvent {
+  const altgr = mods.altgr ?? false;
   return {
     key: k,
     ctrlKey: mods.ctrl ?? false,
     shiftKey: mods.shift ?? false,
     altKey: mods.alt ?? false,
     metaKey: mods.meta ?? false,
-  } as KeyboardEvent;
+    isComposing: false,
+    getModifierState: (state: string) => (state === 'AltGraph' ? altgr : false),
+  } as unknown as KeyboardEvent;
 }
 
 function bytes(s: string): Uint8Array {
@@ -207,5 +216,61 @@ describe('Special control keys', () => {
 describe('Meta key → null', () => {
   it('Meta+a → null', () => {
     expect(keyEventToVtSequence(key('a', { meta: true }), false)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AltGr characters (Linux/WebKitGTK)
+// ---------------------------------------------------------------------------
+describe('AltGr characters (Linux/WebKitGTK)', () => {
+  // TEST-KBD-ALTGR-001: Belgian keyboard AltGr+= → ~
+  it('TEST-KBD-ALTGR-001: AltGr+= on Belgian keyboard produces ~ (0x7E)', () => {
+    // On Belgian keyboard: AltGr+= → '~' (level 3 character)
+    // WebKitGTK emits: ctrlKey=true, altKey=true, key='~', getModifierState('AltGraph')=true
+    const result = keyEventToVtSequence(key('~', { ctrl: true, alt: true, altgr: true }), false);
+    expect(result).not.toBeNull();
+    expect(toArr(result!)).toEqual(Array.from(bytes('~')));
+  });
+
+  // TEST-KBD-ALTGR-002: Another AltGr combination
+  it('TEST-KBD-ALTGR-002: AltGr produces { (0x7B) on keyboards where this is level 3', () => {
+    const result = keyEventToVtSequence(key('{', { ctrl: true, alt: true, altgr: true }), false);
+    expect(result).not.toBeNull();
+    expect(toArr(result!)).toEqual(Array.from(bytes('{')));
+  });
+
+  // TEST-KBD-ALTGR-003: Genuine Ctrl+Alt (not AltGr) → null (must NOT be transmitted)
+  it('TEST-KBD-ALTGR-003: Ctrl+Alt without AltGraph modifier returns null (not transmitted)', () => {
+    // getModifierState('AltGraph') returns false → genuine Ctrl+Alt, not AltGr
+    const result = keyEventToVtSequence(key('a', { ctrl: true, alt: true, altgr: false }), false);
+    expect(result).toBeNull();
+  });
+
+  // TEST-KBD-ALTGR-004: Ctrl alone (no altKey) with a character → not treated as AltGr
+  it('TEST-KBD-ALTGR-004: Ctrl+key without altKey is not AltGr and not encoded as printable', () => {
+    // Ctrl+~ : ctrlKey only, not AltGr — falls through (not a letter, not printable branch)
+    // NOTE: this should return null (no defined mapping for Ctrl+~)
+    const result = keyEventToVtSequence(key('~', { ctrl: true, alt: false, altgr: false }), false);
+    expect(result).toBeNull();
+  });
+
+  // TEST-KBD-ALTGR-005: AltGr+€ (multi-byte UTF-8 character via AltGr)
+  it('TEST-KBD-ALTGR-005: AltGr produces € (euro sign, U+20AC, level 3 on some layouts)', () => {
+    const result = keyEventToVtSequence(key('€', { ctrl: true, alt: true, altgr: true }), false);
+    expect(result).not.toBeNull();
+    // € is U+20AC — UTF-8: E2 82 AC
+    expect(toArr(result!)).toEqual([0xe2, 0x82, 0xac]);
+  });
+
+  // TEST-KBD-ALTGR-006: AltGr+Shift combination (level 4)
+  it('TEST-KBD-ALTGR-006: AltGr+Shift produces level-4 character', () => {
+    // Example: AltGr+Shift on some layout produces ©
+    const result = keyEventToVtSequence(
+      key('©', { ctrl: true, alt: true, shift: true, altgr: true }),
+      false,
+    );
+    expect(result).not.toBeNull();
+    // © is U+00A9 — UTF-8: C2 A9
+    expect(toArr(result!)).toEqual([0xc2, 0xa9]);
   });
 });

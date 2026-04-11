@@ -227,10 +227,10 @@
   $effect(() => {
     if (active && tp.viewportEl) {
       onviewportactive?.(tp.viewportEl);
+      return () => {
+        onviewportactive?.(null);
+      };
     }
-    return () => {
-      onviewportactive?.(null);
-    };
   });
 
   // ── Mouse cursor hiding while typing (UI-2) ─────────────────────────────────
@@ -245,8 +245,10 @@
 
   function handleKeydown(event: KeyboardEvent) {
     // Application shortcuts (Ctrl+Shift+*) are handled at the TerminalView level
-    if (event.ctrlKey && event.shiftKey) return;
-    if (event.ctrlKey && event.key === ',') return; // Ctrl+, = preferences
+    // AltGr sur Linux/WebKitGTK génère ctrlKey=true ; AltGr+Shift déclencherait
+    // faussement cette garde. getModifierState('AltGraph') permet de distinguer.
+    if (event.ctrlKey && event.shiftKey && !event.getModifierState('AltGraph')) return;
+    if (event.ctrlKey && event.key === ',' && !event.getModifierState('AltGraph')) return; // Ctrl+, = preferences
     if (event.isComposing) return;
 
     // Hide mouse cursor on output-producing keystrokes when the preference is on.

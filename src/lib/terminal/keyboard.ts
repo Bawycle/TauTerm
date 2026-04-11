@@ -272,6 +272,20 @@ export function keyEventToVtSequence(
     return encode(key);
   }
 
+  // ---------------------------------------------------------------------------
+  // AltGr characters (Linux/WebKitGTK)
+  // AltGr is emitted as ctrlKey=true AND altKey=true simultaneously.
+  // event.key already holds the fully resolved level-3 (or level-4) character
+  // from XKB. Detect via getModifierState('AltGraph') to distinguish AltGr from
+  // a genuine Ctrl+Alt combination, then transmit the character directly to the PTY.
+  // ---------------------------------------------------------------------------
+  if (key.length === 1 && ctrlKey && altKey && event.getModifierState('AltGraph')) {
+    const cp = key.codePointAt(0);
+    if (cp !== undefined && cp >= 0x20 && cp !== 0x7f) {
+      return encode(key);
+    }
+  }
+
   // Unrecognised key — do not consume
   return null;
 }

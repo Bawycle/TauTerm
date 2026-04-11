@@ -57,14 +57,30 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ### Performance — Architectural Optimizations
 
-- [ ] **P-OPT-2 — Reduce `string[]` allocations in `computeCellStyle()`** `[Score: 6 | R:1, S:1, U:1, E:2]`
-  `computeCellStyle()` in `screen.ts` builds a `string[]` of class names per cell on every update. Profile-driven: start this only if P-DIAG-1 shows `applyOnly` > ~5 ms. Options: reuse a pre-allocated array, use bit flags + lookup table, or generate a stable numeric key and cache the class string.
-  **Prerequisite**: P-DIAG-1 results confirm JS-side cost is material.
+*Measured baseline (P-DIAG-1, 2026-04-11): SCROLL frameRender avg = 22.77 ms (budget 12 ms). applyOnly = 4.90 ms (22 %), repaintTime = 17.87 ms (78 %). WebKitGTK repaint is the dominant bottleneck. P-OPT-1 (rAF batching) delivered; SCROLL steady-state unchanged (batches at 20 ms > 16 ms rAF); RAPID-FIRE −40 % repaints. Rational sequence: reduce WebKitGTK repaint surface (P-OPT-3, P-OPT-4) before considering a full renderer rewrite (P12b).*
 
-- [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(only if repaint still dominates after P-OPT-1)*
-  **Prerequisites (all met — P12b can be started):**
+- [ ] **P-OPT-3 — CSS `contain: strict` on the terminal grid container** `[Score: 8 | R:1, S:1, U:1, E:3]`
+  Add `contain: strict` (or `contain: layout paint`) to the element wrapping the terminal cell grid. This confines WebKitGTK repaints and layout recalculations to the terminal subtree — mutations to individual `<span>` cells no longer propagate to the page layout. The grid has fixed dimensions (set by `rows × cols` at session open and on resize), making `contain: strict` semantically correct.
+  **Expected impact**: reduces `repaintTime` by preventing cross-tree invalidations. The actual gain is not predictable without measurement — run the SCROLL workload benchmark before/after.
+  **Effort**: ~2 hours (CSS + benchmark run). Measure before P-OPT-4.
+  **Prerequisite**: none.
+
+- [ ] **P-OPT-4 — `will-change: contents` on terminal rows** `[Score: 7 | R:1, S:1, U:1, E:2]`
+  Apply `will-change: contents` (or `transform: translateZ(0)` as fallback) to each row element to promote it to a separate compositing layer. WebKitGTK can then repaint dirty rows independently without invalidating the full grid.
+  **Tradeoff**: each promoted layer costs GPU memory (~row height × terminal width × 4 bytes). At 220 cols × 24 rows, that is ~50 layers — manageable on most systems, but must be measured on a modest target (e.g. integrated GPU). Alternatively, apply only to rows that were dirty in the last frame (dynamic promotion) to cap memory cost.
+  **Expected impact**: reduces per-row repaint cost by isolating compositing units. Measure after P-OPT-3 so the baseline is already CSS-contained.
+  **Prerequisite**: P-OPT-3 measured (establishes the new baseline `repaintTime` before adding layer promotion).
+
+- [ ] **P-OPT-2 — Reduce `string[]` allocations in `computeCellStyle()`** `[Score: 6 | R:1, S:1, U:1, E:2]`
+  `computeCellStyle()` in `screen.ts` builds a `string[]` of class names per cell on every update. Options: reuse a pre-allocated array, use bit flags + lookup table, or generate a stable numeric key and cache the class string.
+  **Revised prerequisite**: start after P-OPT-3 + P-OPT-4 are measured. If `repaintTime` drops significantly, the JS share (`applyOnly` currently 4.90 ms) will become the new dominant cost and P-OPT-2 will have proportionally higher leverage. If `repaintTime` does not drop, P-OPT-2 saves at most ~4 ms on a budget already dominated by WebKitGTK — acceptable but lower priority than P12b at that point.
+
+- [ ] **P12b — WebGL2** `[Score: 7 | R:1, S:1, U:1, E:1]` *(last resort — only if P-OPT-3 + P-OPT-4 fail to bring SCROLL below ~15 ms)*
+  **Prerequisites:**
   1. ✓ P-DIAG-1 measured: `repaintTime` = 78 % SCROLL, 82 % CURSOR. WebKitGTK repaint confirmed as dominant bottleneck.
-  2. ✓ P-OPT-1 (rAF batching) implemented and measured: SCROLL avg unchanged (events arrive > 16 ms apart); RAPID-FIRE 40 % fewer repaints. SCROLL budget still exceeded at 22.77 ms avg.
+  2. ✓ P-OPT-1 (rAF batching) implemented and measured: SCROLL avg 22.77 ms — budget still exceeded.
+  3. P-OPT-3 (CSS containment) measured and insufficient to bring SCROLL below ~15 ms.
+  4. P-OPT-4 (`will-change` layer promotion) measured and insufficient.
   **Canvas 2D is excluded**: it concentrates the drawbacks of both approaches (loses DOM accessibility like WebGL, without GPU gains) — this is xterm.js's conclusion after abandoning its Canvas addon in v6.0 for exactly this reason.
   WebGL2 constraints on WebKitGTK/Linux:
   - Mandatory fallback on `onContextLoss` (GPU driver crash, tab backgrounded)
@@ -74,7 +90,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   - Text selection to re-implement entirely (logical model `[col, row]`, mouse tracking, extraction from Rust buffer, clipboard via Tauri)
 
 - [ ] **P5 — Flat buffer for `ScreenBuffer`** `[Score: 6 | R:1, S:1, U:1, E:1]`
-  Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. **Revised scope**: relevant only when frontend rendering drops below ~5 ms average. P-OPT-1 is measured — SCROLL `applyOnly` is 4.90 ms, still dominated by WebKitGTK repaint (17.87 ms). Frontend cost must drop further (via P12b or CSS containment) before `build_screen_update_event` (698 µs) re-emerges as the next bottleneck. **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.) — non-trivial refactor.
+  Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. **Prerequisite**: frontend `applyOnly` drops below ~2 ms (i.e. after P-OPT-2 or P12b), at which point `build_screen_update_event` (698 µs, currently invisible behind the 17.87 ms repaint) re-emerges as a bottleneck candidate. **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.) — non-trivial refactor.
 
 ### Ligatures — Investigation
 

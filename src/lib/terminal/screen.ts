@@ -81,28 +81,29 @@ export function computeCellStyle(cell: {
   underlineColor: string | undefined;
   inverse: boolean;
 }): string {
-  const parts: string[] = [];
+  // P-OPT-2: direct string accumulation — avoids allocating a temporary string[]
+  // and the join() call. JS engines optimise short string concatenation efficiently.
   const fg = cell.inverse ? cell.bg : cell.fg;
   const bg = cell.inverse ? cell.fg : cell.bg;
-  if (fg) parts.push(`color:${fg}`);
-  if (bg) parts.push(`background-color:${bg}`);
-  if (cell.bold) parts.push('font-weight:bold');
-  if (cell.italic) parts.push('font-style:italic');
-  if (cell.dim) parts.push('opacity:var(--term-dim-opacity)');
-  if (cell.hidden) parts.push('color:transparent');
+  let s = '';
+  if (fg) s = `color:${fg}`;
+  if (bg) s += (s ? ';' : '') + `background-color:${bg}`;
+  if (cell.bold) s += (s ? ';' : '') + 'font-weight:bold';
+  if (cell.italic) s += (s ? ';' : '') + 'font-style:italic';
+  if (cell.dim) s += (s ? ';' : '') + 'opacity:var(--term-dim-opacity)';
+  if (cell.hidden) s += (s ? ';' : '') + 'color:transparent';
 
   // Build text-decoration (F6 — extended underline styles SGR 4:1–4:5).
   // F9: strikethrough is rendered via .terminal-pane__cell--strikethrough CSS class
   // (::after pseudo-element at 50% height) — not via text-decoration: line-through.
   if (cell.underline > 0) {
-    parts.push('text-decoration-line:underline');
+    s += (s ? ';' : '') + 'text-decoration-line:underline';
     const underlineStyle = UNDERLINE_STYLE_MAP[cell.underline];
-    if (underlineStyle) parts.push(`text-decoration-style:${underlineStyle}`);
-    const underlineColor = cell.underlineColor ?? 'var(--term-underline-color-default)';
-    parts.push(`text-decoration-color:${underlineColor}`);
+    if (underlineStyle) s += `;text-decoration-style:${underlineStyle}`;
+    s += `;text-decoration-color:${cell.underlineColor ?? 'var(--term-underline-color-default)'}`;
   }
 
-  return parts.join(';');
+  return s;
 }
 
 /**

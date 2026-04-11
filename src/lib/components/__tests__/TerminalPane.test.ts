@@ -466,3 +466,52 @@ describe('SSH-OVERLAY-REACT-004: overlay ignores state for a different paneId', 
     sshStates[otherPaneId] = undefined;
   });
 });
+
+// ---------------------------------------------------------------------------
+// LIGA — Font ligature CSS declarations on .terminal-pane__viewport
+//
+// The span-per-cell DOM model fragments the CSS shaping context at every span
+// boundary, so ligatures (e.g. -> => // fi) cannot form in the current renderer
+// even with font-feature-settings enabled. The declarations are present because
+// they will activate automatically when run-merging groups adjacent same-style
+// cells into contiguous text nodes.
+//
+// jsdom does not compute styles from Svelte <style> blocks — we verify the
+// declarations are present in the source file (same pattern as P-OPT-3).
+// ---------------------------------------------------------------------------
+
+describe('LIGA-CSS-001: font-feature-settings declared on .terminal-pane__viewport', () => {
+  it('viewport CSS block contains font-feature-settings with liga and calt', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    const viewportStart = source.indexOf('terminal-pane__viewport)');
+    const viewportEnd = source.indexOf('terminal-pane__row)', viewportStart + 1);
+    const viewportBlock = source.slice(viewportStart, viewportEnd);
+
+    expect(viewportStart).toBeGreaterThan(-1);
+    expect(viewportEnd).toBeGreaterThan(viewportStart);
+    expect(viewportBlock).toContain('font-feature-settings');
+    expect(viewportBlock).toMatch(/'liga'/);
+    expect(viewportBlock).toMatch(/'calt'/);
+  });
+});
+
+describe('LIGA-CSS-002: font-variant-ligatures declared on .terminal-pane__viewport', () => {
+  it('viewport CSS block contains font-variant-ligatures: contextual', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalPane.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    const viewportStart = source.indexOf('terminal-pane__viewport)');
+    const viewportEnd = source.indexOf('terminal-pane__row)', viewportStart + 1);
+    const viewportBlock = source.slice(viewportStart, viewportEnd);
+
+    expect(viewportStart).toBeGreaterThan(-1);
+    expect(viewportEnd).toBeGreaterThan(viewportStart);
+    expect(viewportBlock).toContain('font-variant-ligatures: contextual');
+  });
+});

@@ -59,16 +59,9 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 *Measured results (2026-04-11): Post-P-OPT-1 baseline SCROLL avg = 27.54 ms. Post-P-OPT-3 (CSS containment): SCROLL avg = 23.33 ms, repaintTime = 18.13 ms (−15.4 %, p95 −20 %). P-OPT-4 (`will-change: contents`): no measurable effect in WebKitGTK (delta −0.10 ms, noise) — removed. **v1 decision**: ~23 ms on a SCROLL stress test (30×12 lines, `cat`-of-large-file equivalent) is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms, well under budget. WebKitGTK repaint (78%) is a structural ceiling of the DOM renderer — not further reducible via CSS/JS. P12b (WebGL2) is the only remaining lever and is explicitly deferred to post-v1.*
 
-- [ ] **P-OPT-2 — Reduce `string[]` allocations in `computeCellStyle()`** `[Score: 6 | R:1, S:1, U:1, E:2]`
-  `computeCellStyle()` in `screen.ts` builds a `string[]` of class names per cell on every update. Options: reuse a pre-allocated array, use bit flags + lookup table, or generate a stable numeric key and cache the class string.
-  **Status**: with repaintTime at 18 ms (78% of frame), eliminating applyOnly entirely (~5 ms) would bring frameRender to ~18 ms — still 50% over the 12 ms budget. P-OPT-2 is a JS code quality improvement (GC pressure, allocation reduction), not a path to the frame budget. Worthwhile as cleanup, not as a performance target.
+### Ligatures — Confirmed Blocked (run-merging required)
 
-### Ligatures — Investigation
-
-- [ ] **Ligatures — verify feasibility in WebKitGTK** `[Score: 7 | R:1, S:1, U:1, E:2]` *(investigate — likely architecturally blocked)*
-  Font ligatures (FiraCode, Cascadia Code) are the most upvoted Alacritty feature request (issue #50, 1031 👍, open since 2017 — refused for OpenGL architectural reasons). In TauTerm, rendering goes through WebKitGTK: ligatures could be enabled via CSS `font-feature-settings: "liga" 1; font-variant-ligatures: contextual`.
-  **Likely architectural blocker:** TauTerm's span-per-cell model (each character in an individual `<span>`) breaks the CSS shaping context — the render engine does not have access to adjacent glyphs to form ligatures. CSS shaping context requires adjacent glyphs to be in the same text node. This is not a CSS problem, it's a DOM tree constraint. Tabby and Hyper work around this via `@xterm/addon-ligatures` (`tabby-terminal/src/frontends/xtermFrontend.ts`), which uses HarfBuzz compiled to WASM to measure glyphs on canvas — not transposable to a DOM renderer.
-  Action: test with FiraCode and Cascadia Code in the current renderer to confirm or refute the blocker. If blocked, document explicitly and link to P12a (dirty tracking with grouping of same-style `<span>` elements into contiguous text).
+Architectural blocker confirmed: the span-per-cell model fragments the CSS shaping context at every span boundary — ligatures cannot form regardless of `font-feature-settings`. CSS declarations (`"liga" 1, "calt" 1`, `font-variant-ligatures: contextual`) are present on `.terminal-pane__viewport` and will activate automatically when run-merging is implemented. Run-merging (grouping adjacent same-style cells into a single `<span>`) is the prerequisite — it is a substantial change involving search, selection, and hyperlink boundary handling.
 
 ---
 
@@ -145,6 +138,102 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 ## Post-v1 / Roadmap v2+
 
 *Out of scope for v1. Do not start implementation without first updating `docs/UR.md` and `docs/fs/`.*
+
+### Platform Support
+
+- [ ] **Windows 11 support** `[Score: 10 | R:1, S:2, U:2, E:1]`
+
+  **Current state — architecture is ready, implementation is not.**
+  ADR-0005 (PAL) is in place: `PtyBackend`, `CredentialStore`, `ClipboardBackend`, `NotificationBackend` traits are defined, factory functions have `#[cfg(target_os = "windows")]` dispatch, and Windows stubs exist in `platform/pty_windows.rs`, `credentials_windows.rs`, `clipboard_windows.rs`, `notifications_windows.rs`. `portable-pty` (already in Cargo.toml) supports ConPTY. `russh` is pure Rust and cross-platform. `arboard` supports Win32 clipboard natively.
+
+  **Prerequisite — an ADR for the Windows porting strategy is required before starting.** No ADR currently governs the porting approach, maintenance model (single cross-platform binary vs platform-specific builds), or test policy per platform.
+
+  #### Phase 1 — Make the project compile on Windows (3–5 days)
+
+  Five issues currently prevent compilation on Windows:
+
+  1. **`secret-service` (D-Bus) is an unconditional dependency** in `Cargo.toml`. Move to `[target.'cfg(target_os = "linux")'.dependencies]`.
+  2. **`notify-rust` feature `"d"` (D-Bus) is unconditional**. Same fix as above; use `notify-rust` with feature `"windows"` under `[target.'cfg(target_os = "windows")'.dependencies]`.
+  3. **`ssh/known_hosts/store.rs`** imports `std::os::unix::fs::OpenOptionsExt` and calls `.mode(0o600)` without `#[cfg(unix)]` guards. Add `#[cfg(unix)]` around these blocks; Windows fallback can skip POSIX permission enforcement (Windows ACLs on the user directory are already restrictive).
+  4. **`platform/validation.rs`** imports `std::os::unix::fs::PermissionsExt` without guard. Same fix — skip POSIX mode validation on Windows or implement a Windows ACL equivalent.
+  5. **`session/registry/pane_state.rs`** imports `libc` and uses `libc::pid_t` — a POSIX type that leaks outside the PAL. Replace with `i32` (the concrete type on all supported platforms).
+
+  Additionally, all four Windows stubs currently `unimplemented!()` (panic at runtime). Replace with `Err(...)` or no-op before shipping any Windows build.
+
+  #### Phase 2 — PTY via ConPTY (5–10 days)
+
+  Implement `WindowsPtyBackend` in `platform/pty_windows.rs` using `portable_pty::native_pty_system()` (which resolves to `ConPtySystem` on Windows). The trait surface is already defined.
+
+  Known gaps with no POSIX equivalent:
+  - **`foreground_pgid()` / `foreground_process_name()`** — `tcgetpgrp` and `/proc/{pgid}/comm` do not exist on Windows. Return `None`/`Err` — the frontend must handle these gracefully (used for tab title and close-confirmation). If close-confirmation is affected, evaluate `EnumProcesses`-based heuristics, but they are fragile.
+  - **Process termination on session close** — no `SIGHUP` equivalent. ConPTY sends `CTRL_CLOSE_EVENT` via the console handler; closing the input pipe causes the child process to receive EOF. Behavior differs from SIGHUP — validate with PowerShell 7 and cmd.exe.
+  - **`SIGWINCH`** — not sent by ConPTY on resize. `ResizePseudoConsole` is the correct call; `portable-pty` abstracts this correctly. Shells ported via MSYS2 (Git Bash) emulate `SIGWINCH` on top — validate empirically.
+
+  Shell defaults: `$SHELL` does not exist on Windows. Implement a discovery heuristic: check `$SHELL` (Git Bash / WSL), then `pwsh.exe` in `$PATH`, fallback to `cmd.exe`. Read `$COMSPEC` as the authoritative cmd path.
+
+  Encoding: force UTF-8 before spawning the child shell. For PowerShell 7: pass `-InputFormat Text -OutputFormat Text` or set `$OutputEncoding`. For cmd.exe: prefix the command with `chcp 65001`. Inject `TERM=xterm-256color` into the child environment (absent by default on Windows).
+
+  #### Phase 3 — Credentials (Windows Credential Manager) (2–3 days)
+
+  Implement `WindowsCredentialStore` in `platform/credentials_windows.rs`. Use the `keyring` crate (v3+, cross-platform: Secret Service on Linux, DPAPI/Credential Manager on Windows) or `windows-sys` bindings to `CredWrite`/`CredRead`/`CredDelete`. The `keyring` crate is preferred as it would allow unifying all platforms under a single abstraction.
+
+  #### Phase 4 — SSH Agent on Windows (5–10 days, uncertain)
+
+  **This is the largest functional gap.** The Windows native SSH Agent (OpenSSH Agent service, included in Windows 11) exposes a named pipe at `\\.\pipe\openssh-ssh-agent`, not a Unix socket. `russh` does not support named pipes for agent forwarding — it expects `$SSH_AUTH_SOCK` (Unix socket).
+
+  Options:
+  - **Implement named pipe agent support** in TauTerm's SSH layer (`src-tauri/src/ssh/`). Non-trivial but correct.
+  - **Document the limitation** and recommend workarounds: Pageant + socat (MSYS2), or using WSL2 where `$SSH_AUTH_SOCK` works natively.
+  - **Defer agent support** to a follow-up and ship without it — passphrase-protected keys and password auth still work.
+
+  Other SSH specifics on Windows:
+  - `known_hosts` path: `%USERPROFILE%\.ssh\known_hosts` — the `dirs` crate already returns the correct path on Windows. Validate.
+  - OpenSSH is included in Windows 11 by default — users already have keys in `%USERPROFILE%\.ssh\`. No additional setup required for key-based auth (excluding agent).
+
+  #### Phase 5 — Distribution and signing (3–5 days)
+
+  Tauri 2 supports NSIS (`.exe` installer) and MSI (WiX) on Windows. NSIS is the recommended starting point for open-source distribution.
+
+  **Code signing (Authenticode) is required** to avoid the Windows SmartScreen "Unknown Publisher" warning, which is a hard barrier for most users. Options:
+  - **SignPath.io** (free for open source): signs with an EV certificate using their HSM. Integrates with GitHub Actions. Recommended path for an open-source project without a signing budget.
+  - OV certificate (~200–400€/year): reduces SmartScreen reputation friction but does not eliminate it immediately for new binaries.
+  - EV certificate (~300–600€/year + physical HSM token): eliminates SmartScreen on first download. Complicates CI/CD unless a cloud signing service (SignPath) is used.
+
+  #### Phase 6 — WebView2 considerations
+
+  On Windows, Tauri uses WebView2 (Chromium-based Edge) instead of WebKitGTK. Key differences for TauTerm:
+  - `contain: strict` and `will-change` are supported (WebView2 is Chromium-based, no WebKitGTK-specific behaviour).
+  - **Font metrics differ**: WebView2 uses DirectWrite + ClearType. Default monospace resolves to Consolas/Courier New instead of Liberation Mono/DejaVu. The `ch` unit and `getBoundingClientRect()` cell-width calculations must be validated on Windows — glyph metric differences may produce misaligned cell grids.
+  - **CSP hardening opportunity**: WebView2 does not have the WebKitGTK `tauri://localhost` CORS restriction that forces `bundleStrategy: "inline"` and `style-src 'unsafe-inline'`. On Windows, `bundleStrategy: "split"` + `style-src` without `unsafe-inline` is achievable — see ADR-0022 exit criteria.
+  - **Performance**: WebView2 is generally faster than WebKitGTK for JS/DOM rendering. The SCROLL frame budget (currently 23 ms on WebKitGTK) is expected to be lower on WebView2 — run P12a benchmark on Windows before concluding on renderer strategy.
+  - WebView2 is pre-installed on Windows 11. No bootstrapper needed.
+
+  #### Phase 7 — CI (2–3 days)
+
+  Add a `windows-latest` GitHub Actions runner:
+  - `cargo clippy -- -D warnings` (cross-platform)
+  - `cargo nextest run` (excluding Linux-only integration tests)
+  - `pnpm check` + `pnpm vitest run` (frontend — no changes needed)
+  - `pnpm tauri build --no-bundle` (Windows E2E binary)
+  - Keyring/SSH container tests are Linux-only (Podman + Xvfb) — explicitly scope them to `ubuntu-latest` runners.
+
+  #### Effort summary
+
+  | Component | Effort |
+  |---|---|
+  | Phase 1 — Compilation blockers | 3–5 days |
+  | Phase 2 — PTY / ConPTY | 5–10 days |
+  | Phase 3 — Credentials | 2–3 days |
+  | Phase 4 — SSH Agent | 5–10 days |
+  | Phase 5 — Distribution / signing | 3–5 days |
+  | Phase 6 — WebView2 validation / font metrics | 3–5 days |
+  | Phase 7 — CI | 2–3 days |
+  | QA and VT compatibility testing | 5–10 days |
+  | **Total** | **~4–8 weeks** |
+
+  The wide range reflects uncertainty in SSH Agent implementation (named pipe support) and VT compatibility issues discovered during QA with real applications (Neovim, lazygit, fzf in WSL2).
+
+---
 
 ### Performance — Renderer Rewrite
 

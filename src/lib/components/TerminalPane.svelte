@@ -415,6 +415,14 @@
       transparent
     );
     white-space: pre;
+    /* Font ligatures: no visible effect on the current span-per-cell model (the shaping
+       context is fragmented at every span boundary, preventing cross-glyph ligature
+       formation). These declarations are future-proof: they will activate automatically
+       when run-merging groups adjacent same-style cells into contiguous text nodes. */
+    font-feature-settings:
+      'liga' 1,
+      'calt' 1;
+    font-variant-ligatures: contextual;
     outline: none;
     cursor: text;
     contain: strict;

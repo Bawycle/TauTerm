@@ -302,12 +302,13 @@
       tv.prefsOpen = false;
     }}
     onCloseAutoFocus={() => {
-      // Bits UI FocusScope fires this at the exact moment it would normally
-      // restore focus to the trigger (settings button). We intercept here to
-      // redirect focus to the terminal viewport instead.
-      // No modal guard: this dialog is still in the DOM when the event fires,
-      // so querySelector('[role="dialog"]') would return it and block the call.
-      tv.activeViewportEl?.focus({ preventScroll: true });
+      // Bits UI FocusScope may still be active at the instant this fires.
+      // Calling focus() synchronously can be undone by FocusScope teardown.
+      // Defer to next frame — by then the dialog is fully removed from DOM
+      // and nothing will steal focus back.
+      requestAnimationFrame(() => {
+        tv.activeViewportEl?.focus({ preventScroll: true });
+      });
     }}
     onupdate={tv.handlePreferencesUpdate}
   />
@@ -421,9 +422,17 @@
       onclose={() => {
         tv.connectionManagerOpen = false;
         tv.connectionOpenError = false;
-        if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
-          tv.activeViewportEl?.focus({ preventScroll: true });
-        }
+        // Focus restoration is handled by the focusin safety net in
+        // useTerminalView.core once focus lands on document.body.
+        // Defer to next frame to avoid racing with Bits UI FocusScope teardown.
+        requestAnimationFrame(() => {
+          if (
+            document.activeElement === document.body &&
+            !document.querySelector('[role="dialog"][aria-modal="true"]')
+          ) {
+            tv.activeViewportEl?.focus({ preventScroll: true });
+          }
+        });
       }}
     />
   {/if}

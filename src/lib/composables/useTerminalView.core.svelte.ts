@@ -171,14 +171,26 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
   // --- Focus guard (safety net) ---
   // Recaptures focus to the active terminal viewport whenever focus lands on
   // document.body (e.g. after a transient element like ScrollToBottomButton
-  // disappears). Skipped when a modal dialog is open.
+  // disappears, or a modal dialog closes).
 
-  function onFocusIn(e: FocusEvent) {
-    if (e.target !== document.body) return;
+  function refocusTerminal() {
+    if (document.activeElement !== document.body) return;
     if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
     const el = activeViewportEl;
     if (!el || !document.contains(el)) return;
     el.focus({ preventScroll: true });
+  }
+
+  function onFocusIn(e: FocusEvent) {
+    if (e.target !== document.body) return;
+    if (document.querySelector('[role="dialog"][aria-modal="true"]')) {
+      // A modal dialog is still in the DOM — likely mid-close. Bits UI
+      // releases focus to body before removing the dialog element. Defer
+      // the check: if the dialog is gone by next frame, recapture focus.
+      requestAnimationFrame(refocusTerminal);
+      return;
+    }
+    refocusTerminal();
   }
 
   // --- Mount / Destroy ---

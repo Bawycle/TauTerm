@@ -7,6 +7,8 @@
  *   TEST-FOCUS-015 — ConnectionManager onclose focus (static check)
  *   TEST-FOCUS-016 — fullscreen toggle focus
  *   TEST-FOCUS-018 — Preferences panel Dialog.Content focus (static check)
+ *   TEST-FOCUS-019 — Shared Dialog.svelte onCloseAutoFocus (static check)
+ *   TEST-FOCUS-020 — onFocusIn safety net deferred re-check (static check)
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -25,8 +27,7 @@ afterEach(() => {
 //
 // Static source analysis: asserts that the onclose callback of ConnectionManager
 // in TerminalView.svelte calls activeViewportEl?.focus({ preventScroll: true })
-// (with modal guard). Mounting TerminalView in JSDOM requires prohibitive scaffolding
-// so the source file is the authoritative check.
+// (with deferred execution to avoid racing with Bits UI FocusScope teardown).
 // ---------------------------------------------------------------------------
 
 describe('TEST-FOCUS-015: SSH panel onclose restores focus to activeViewportEl', () => {
@@ -41,7 +42,7 @@ describe('TEST-FOCUS-015: SSH panel onclose restores focus to activeViewportEl',
     expect(oncloseIdx).toBeGreaterThan(-1);
 
     // The surrounding onclose block should restore focus to activeViewportEl
-    const oncloseBlock = source.slice(Math.max(0, oncloseIdx - 100), oncloseIdx + 300);
+    const oncloseBlock = source.slice(Math.max(0, oncloseIdx - 100), oncloseIdx + 700);
     expect(oncloseBlock).toContain('activeViewportEl');
     expect(oncloseBlock).toContain('focus');
     expect(oncloseBlock).toContain('preventScroll');
@@ -107,16 +108,16 @@ describe('TEST-FOCUS-016: Fullscreen state-change handler restores focus to acti
 // ---------------------------------------------------------------------------
 // TEST-FOCUS-018: Preferences panel close — Bits UI FocusScope trigger-restoration disabled
 //
-// Root cause of the bug: Bits UI Dialog.Content's FocusScope restores focus to the
-// trigger (settings button) asynchronously after onOpenChange fires. A synchronous
-// focus() call in onclose was overridden by this cleanup.
+// Root cause: Bits UI Dialog.Content's FocusScope restores focus to the trigger
+// (settings button) asynchronously after onOpenChange fires. Without preventing
+// this, a synchronous focus() call is overridden by Bits UI's cleanup.
 //
-// The fix has two parts that must both be present:
-//   1. Dialog.Content must carry onCloseAutoFocus={(e) => e.preventDefault()} to
-//      disable Bits UI's trigger-restoration. This is the critical property — its
-//      absence is what caused the bug.
-//   2. TerminalView.svelte onclose must call activeViewportEl.focus() to restore
-//      focus to the terminal (now that Bits UI won't fight us).
+// The fix has two coordinated parts:
+//   1. PreferencesPanel.svelte Dialog.Content has onCloseAutoFocus with
+//      e.preventDefault() — disables Bits UI's trigger-restoration.
+//   2. The focusin safety net in useTerminalView.core.svelte.ts recaptures
+//      focus to the terminal textarea when focus lands on document.body
+//      after the dialog is fully removed from the DOM.
 // ---------------------------------------------------------------------------
 
 describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-restoration', () => {
@@ -132,21 +133,96 @@ describe('TEST-FOCUS-018: Preferences panel close disables Bits UI trigger-resto
     expect(source).toContain('preventDefault');
   });
 
-  it('TerminalView.svelte onCloseAutoFocus prop restores focus to activeViewportEl', async () => {
+  it('TerminalView.svelte onCloseAutoFocus defers focus to next frame (avoids FocusScope race)', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const filePath = path.resolve(process.cwd(), 'src/lib/components/TerminalView.svelte');
     const source = fs.readFileSync(filePath, 'utf-8');
 
-    // The focus restoration is in onCloseAutoFocus, not onclose, because
-    // onCloseAutoFocus fires at the exact right moment in the Bits UI lifecycle
-    // (when FocusScope would restore focus to the trigger). At that point the
-    // dialog is still in the DOM, so no modal guard is used.
+    // The onCloseAutoFocus callback must use requestAnimationFrame to defer
+    // focus until after Bits UI's FocusScope has fully torn down.
     const onCloseAutoFocusIdx = source.indexOf('onCloseAutoFocus');
     expect(onCloseAutoFocusIdx).toBeGreaterThan(-1);
 
-    const handlerBlock = source.slice(onCloseAutoFocusIdx, onCloseAutoFocusIdx + 500);
+    const handlerBlock = source.slice(onCloseAutoFocusIdx, onCloseAutoFocusIdx + 600);
+    expect(handlerBlock).toContain('requestAnimationFrame');
     expect(handlerBlock).toContain('activeViewportEl');
     expect(handlerBlock).toContain('focus');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEST-FOCUS-019: Shared Dialog.svelte has onCloseAutoFocus on all Content variants
+//
+// The shared Dialog component wraps Bits UI Dialog and AlertDialog. Both
+// Content elements must have onCloseAutoFocus with e.preventDefault() to
+// prevent Bits UI's default trigger-restoration. Without this, focus goes
+// to the original trigger (often a button or body) instead of the terminal.
+// ---------------------------------------------------------------------------
+
+describe('TEST-FOCUS-019: Shared Dialog.svelte prevents Bits UI trigger-restoration', () => {
+  it('Dialog.svelte Dialog.Content has onCloseAutoFocus with preventDefault', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(process.cwd(), 'src/lib/ui/Dialog.svelte');
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    // Both Dialog.Content and AlertDialog.Content must have onCloseAutoFocus
+    const dialogContentIdx = source.indexOf('<Dialog.Content');
+    expect(dialogContentIdx).toBeGreaterThan(-1);
+    const dialogBlock = source.slice(dialogContentIdx, dialogContentIdx + 600);
+    expect(dialogBlock).toContain('onCloseAutoFocus');
+    expect(dialogBlock).toContain('preventDefault');
+
+    const alertDialogContentIdx = source.indexOf('<AlertDialog.Content');
+    expect(alertDialogContentIdx).toBeGreaterThan(-1);
+    const alertBlock = source.slice(alertDialogContentIdx, alertDialogContentIdx + 600);
+    expect(alertBlock).toContain('onCloseAutoFocus');
+    expect(alertBlock).toContain('preventDefault');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEST-FOCUS-020: onFocusIn safety net deferred re-check architecture
+//
+// When focus lands on document.body while a modal dialog is still in the DOM
+// (typical during Bits UI dialog close), the safety net must NOT silently
+// discard the event. Instead, it must schedule a deferred re-check
+// (requestAnimationFrame) that recaptures focus once the dialog is fully
+// removed. Without this, closing any dialog leaves focus on body — the user
+// cannot type until they manually click the terminal or toggle another UI
+// element.
+// ---------------------------------------------------------------------------
+
+describe('TEST-FOCUS-020: onFocusIn deferred re-check prevents focus loss on dialog close', () => {
+  it('onFocusIn defers to requestAnimationFrame when modal is present (not early return)', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.resolve(
+      process.cwd(),
+      'src/lib/composables/useTerminalView.core.svelte.ts',
+    );
+    const source = fs.readFileSync(filePath, 'utf-8');
+
+    const onFocusInIdx = source.indexOf('function onFocusIn');
+    expect(onFocusInIdx).toBeGreaterThan(-1);
+
+    const onFocusInBlock = source.slice(onFocusInIdx, onFocusInIdx + 600);
+
+    // Must use requestAnimationFrame when dialog is present (not just return)
+    expect(onFocusInBlock).toContain('requestAnimationFrame');
+
+    // Must call the refocusTerminal function (extracted for reuse)
+    expect(onFocusInBlock).toContain('refocusTerminal');
+
+    // The refocusTerminal function must check activeElement is still body
+    // before focusing — another dialog may have opened in the meantime
+    const refocusIdx = source.indexOf('function refocusTerminal');
+    expect(refocusIdx).toBeGreaterThan(-1);
+    const refocusBlock = source.slice(refocusIdx, refocusIdx + 400);
+    expect(refocusBlock).toContain('document.activeElement');
+    expect(refocusBlock).toContain('document.body');
+    expect(refocusBlock).toContain('activeViewportEl');
+    expect(refocusBlock).toContain('focus');
   });
 });

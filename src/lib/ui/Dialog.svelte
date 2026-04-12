@@ -79,6 +79,12 @@
         aria-modal="true"
         preventScroll={false}
         onOpenAutoFocus={onopenautoFocus}
+        onCloseAutoFocus={(e) => {
+          // Prevent Bits UI from restoring focus to the trigger element.
+          // The focusin safety net in useTerminalView.core recaptures
+          // focus to the terminal textarea once the dialog is fully removed.
+          e.preventDefault();
+        }}
       >
         <!-- Header: title + close button -->
         <div class="flex items-start justify-between mb-3">
@@ -128,6 +134,9 @@
         aria-modal="true"
         preventScroll={false}
         onOpenAutoFocus={onopenautoFocus}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+        }}
       >
         <!-- Header: title + close button -->
         <div class="flex items-start justify-between mb-3">

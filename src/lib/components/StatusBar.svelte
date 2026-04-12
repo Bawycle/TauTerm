@@ -185,6 +185,7 @@
     <!-- Settings button (DIV-UXD-008) -->
     <button
       type="button"
+      tabindex={-1}
       class="status-bar__settings-btn"
       onclick={() => onsettings?.()}
       aria-label={m.status_bar_settings()}

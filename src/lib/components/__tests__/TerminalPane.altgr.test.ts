@@ -258,6 +258,25 @@ describe('TerminalPane.svelte handleInput (textarea input event)', () => {
     expect(sendInputSpy).not.toHaveBeenCalled();
   });
 
+  // TEST-TP-INPUT-NBSP: WebKitGTK textarea inserts NBSP (U+00A0) instead of regular space.
+  // The terminal must normalize it to ASCII space (0x20) so the shell receives a proper
+  // word separator. Without this, "ls foo" becomes "ls<NBSP>foo" → command not found.
+  it('TEST-TP-INPUT-NBSP: NBSP (U+00A0) from textarea is normalized to ASCII space (0x20)', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Simulate WebKitGTK behaviour: textarea.value contains NBSP
+    dispatchInput(inputEl!, '\u00a0');
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    // Must be [0x20] (regular space), NOT [0xC2, 0xA0] (UTF-8 NBSP)
+    expect(Array.from(bytes)).toEqual([0x20]);
+  });
+
   // TEST-TP-INPUT-004: bare printable keydown is skipped — PTY receives nothing via keydown
   it('TEST-TP-INPUT-004: keydown key="a" (bare printable) is skipped — no PTY bytes via keydown', async () => {
     const inputEl = await mountPaneAndGetInput();
@@ -272,5 +291,115 @@ describe('TerminalPane.svelte handleInput (textarea input event)', () => {
 
     // PTY must NOT receive bytes from keydown — character comes via input event instead
     expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tab key regression (TEST-TP-TAB)
+//
+// Two independent regressions broke Tab (shell completion) and space:
+//
+// 1. tabindex: commit 0a713b7 introduced `tabindex={active ? 0 : -1}` on the
+//    hidden textarea. With tabindex>=0, WebKit treats the textarea as a
+//    sequential focus tab-stop and can consume Tab for focus navigation before
+//    keydown fires in JavaScript.
+//    Fix: tabindex={-1} always. Focus is always programmatic.
+//
+// 2. NBSP (root cause of "command not found" after space): WebKitGTK inserts
+//    U+00A0 (NO-BREAK SPACE) instead of U+0020 in textarea elements. The
+//    shell received [0xC2, 0xA0] (UTF-8 NBSP) instead of [0x20], treating it
+//    as a literal character, not a word separator. This broke both space-after-
+//    command ("ls " → command not found) and Tab completion (the shell saw one
+//    token "ls\xa0Docum" instead of "ls" + "Docum").
+//    Fix: handleInput normalizes U+00A0 → U+0020 (see TEST-TP-INPUT-NBSP).
+//
+// 3. Capture phase: Svelte's onkeydown={handler} uses bubble phase, but
+//    WebKitGTK performs Tab's default action (sequential focus navigation)
+//    before bubble-phase handlers run. handleKeydown is now attached via
+//    addEventListener with { capture: true } so preventDefault() fires before
+//    any default action.
+// ---------------------------------------------------------------------------
+
+describe('TerminalPane.svelte Tab key regression (TEST-TP-TAB)', () => {
+  let container: HTMLDivElement;
+  let instance: ReturnType<typeof mount> | null = null;
+  let sendInputSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    vi.spyOn(tauriEvent, 'listen').mockResolvedValue(() => {});
+    vi.spyOn(ipcCommands, 'getPaneScreenSnapshot').mockResolvedValue(null as unknown as never);
+    vi.spyOn(ipcCommands, 'setActivePane').mockResolvedValue(undefined);
+    sendInputSpy = vi.spyOn(ipcCommands, 'sendInput').mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    if (instance) {
+      unmount(instance);
+      instance = null;
+    }
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  async function mountPaneAndGetInput() {
+    instance = mount(TerminalPane, {
+      target: container,
+      props: { paneId: 'pane-tab-test', tabId: 'tab-tab-test', active: true },
+    });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    flushSync();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    flushSync();
+    return container.querySelector('.terminal-pane__input') as HTMLTextAreaElement | null;
+  }
+
+  // TEST-TP-TAB-001: Tab → PTY receives HT (0x09)
+  it('TEST-TP-TAB-001: Tab keydown sends 0x09 to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    inputEl!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0x09]);
+  });
+
+  // TEST-TP-TAB-002: Shift+Tab → PTY receives CSI Z (backtab)
+  it('TEST-TP-TAB-002: Shift+Tab keydown sends CSI Z (0x1B 0x5B 0x5A) to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    inputEl!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0x1b, 0x5b, 0x5a]);
+  });
+
+  // TEST-TP-TAB-003: Tab keydown must call preventDefault() — this is what prevents
+  // WebKit from consuming Tab for focus navigation when tabindex was non-negative.
+  it('TEST-TP-TAB-003: Tab keydown calls event.preventDefault()', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    inputEl!.dispatchEvent(event);
+    await Promise.resolve();
+    flushSync();
+
+    expect(event.defaultPrevented).toBe(true);
   });
 });

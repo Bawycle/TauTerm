@@ -31,21 +31,12 @@
     lineHeight?: number;
     /** When true, applies cursor:none to hide the mouse pointer while the user types. */
     cursorHidden?: boolean;
-    onkeydown: (event: KeyboardEvent) => void;
     /** Handles GTK IM / IME composition commits (dead keys, AltGr via IBus, etc.). */
     oninput: (event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) => void;
     onmousemove?: (event: MouseEvent) => void;
   }
 
-  let {
-    tp,
-    active,
-    lineHeight,
-    cursorHidden = false,
-    onkeydown,
-    oninput,
-    onmousemove,
-  }: Props = $props();
+  let { tp, active, lineHeight, cursorHidden = false, oninput, onmousemove }: Props = $props();
 </script>
 
 <!--
@@ -54,17 +45,25 @@
   Invisible via position:fixed + opacity:0 + clip-path, but focusable
   (display:none or visibility:hidden would prevent focus entirely).
   aria-hidden: true — screen readers use the visible div[role=textbox].
+
+  tabindex={-1}: excluded from sequential focus navigation. Focus is
+  always programmatic (tp.inputEl?.focus() from mousedown, onviewportactive,
+  and onWindowFocus). With tabindex=-1 here AND on all other interactive
+  elements (TabBarItems, buttons), there are zero elements in the tab order.
+  WebKitGTK cannot consume Tab for focus navigation because there are no
+  sequential-focus candidates. The capture-phase keydown handler in
+  TerminalPane intercepts Tab and sends HT (0x09) to the PTY for shell
+  completion.
 -->
 <textarea
   bind:this={tp.inputEl}
   class="terminal-pane__input"
-  tabindex={active ? 0 : -1}
+  tabindex={-1}
   aria-hidden="true"
   autocomplete="off"
   autocapitalize="off"
   spellcheck={false}
   rows={1}
-  {onkeydown}
   {oninput}
   onfocus={tp.handleFocus}
   onblur={tp.handleBlur}

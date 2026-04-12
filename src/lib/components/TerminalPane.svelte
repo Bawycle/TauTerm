@@ -288,6 +288,19 @@
     }
   }
 
+  // Attach handleKeydown in capture phase on the hidden textarea.
+  // Svelte's onkeydown={handler} uses bubble phase. In WebKitGTK, Tab's default
+  // action (sequential focus navigation) is performed before bubble-phase handlers
+  // run, so event.preventDefault() in bubble phase arrives too late — focus has
+  // already moved. Capture phase fires before any default action, ensuring
+  // preventDefault() suppresses the focus navigation reliably.
+  $effect(() => {
+    const el = tp.inputEl;
+    if (!el) return;
+    el.addEventListener('keydown', handleKeydown, { capture: true });
+    return () => el.removeEventListener('keydown', handleKeydown, { capture: true });
+  });
+
   /**
    * Handle GTK IM / IME composition commits arriving via the hidden textarea's
    * input event. This covers dead keys (e.g. dead_tilde + space → ~), AltGr
@@ -311,7 +324,11 @@
     for (const char of text) {
       const cp = char.codePointAt(0);
       if (cp === undefined || cp < 0x20 || cp === 0x7f) continue;
-      tp.sendBytes(encoder.encode(char));
+      // WebKitGTK inserts NBSP (U+00A0) instead of regular space (U+0020)
+      // in textarea elements to prevent HTML whitespace collapsing.
+      // Normalize to ASCII space so the shell receives a proper word separator.
+      const byte = cp === 0xa0 ? ' ' : char;
+      tp.sendBytes(encoder.encode(byte));
     }
     tp.restartCursorBlink();
   }
@@ -361,7 +378,6 @@
         {active}
         {lineHeight}
         {cursorHidden}
-        onkeydown={handleKeydown}
         oninput={handleInput}
         onmousemove={handleViewportMouseMove}
       />

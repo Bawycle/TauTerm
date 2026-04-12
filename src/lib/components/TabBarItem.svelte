@@ -100,7 +100,7 @@
   role="tab"
   aria-selected={isActive}
   aria-controls="tab-panel-{tab.id}"
-  tabindex={isActive ? 0 : -1}
+  tabindex={-1}
   data-tab-id={tab.id}
   data-tab-index={index}
   draggable="true"

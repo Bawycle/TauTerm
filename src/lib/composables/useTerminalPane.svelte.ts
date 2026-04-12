@@ -289,6 +289,22 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     }
   });
 
+  // Re-focus when the OS window gains native GTK focus. The $effect above fires
+  // after Svelte's DOM commit, but the WebKitGTK window may not yet have GTK-level
+  // focus at that point — focus() is then a no-op. This listener ensures the
+  // terminal input is focused once the window manager actually delivers focus.
+  // Also handles the user switching back from another application.
+  $effect(() => {
+    if (!props.active()) return;
+    function onWindowFocus() {
+      if (!document.querySelector('[role="dialog"][aria-modal="true"]')) {
+        (inputEl ?? viewportEl)?.focus({ preventScroll: true });
+      }
+    }
+    window.addEventListener('focus', onWindowFocus);
+    return () => window.removeEventListener('focus', onWindowFocus);
+  });
+
   // Dev-only frame timing (P12a + P-DIAG-1).
   // import.meta.env.DEV is replaced by `false` in production builds by Vite;
   // Rollup tree-shakes the entire body — zero production overhead.

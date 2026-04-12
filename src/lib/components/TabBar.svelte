@@ -267,6 +267,7 @@
     bind:this={newTabBtnEl}
     class="tab-bar__new-tab"
     type="button"
+    tabindex={-1}
     aria-label={m.tab_bar_new_tab()}
     title={m.tab_bar_new_tab_tooltip()}
     onmousedown={(e) => e.preventDefault()}

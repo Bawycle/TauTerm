@@ -619,18 +619,20 @@ describe('TauTerm — Fullscreen mode', () => {
   // -------------------------------------------------------------------------
   // TEST-FS-BTN-006: FS-FULL-004 — button is keyboard-accessible; Enter toggles fullscreen.
   // -------------------------------------------------------------------------
-  it('TEST-FS-BTN-006: fullscreen toggle button is in the tab order and Enter activates it', async () => {
-    // The button must have a non-negative tabindex (or none, which defaults to 0).
+  it('TEST-FS-BTN-006: fullscreen toggle button is keyboard-accessible via programmatic focus and Enter activates it', async () => {
+    // The button has tabindex={-1} (excluded from sequential Tab navigation —
+    // Tab is reserved for PTY shell completion). It remains focusable via
+    // programmatic focus (JavaScript .focus()), which is how the tab bar recall
+    // and badge interactions reach it.
     const tabindex = await browser.execute((): number => {
       const btn = document.querySelector<HTMLButtonElement>(
         '[data-testid="fullscreen-toggle-btn"]',
       );
       if (!btn) return -999;
-      // getAttribute returns the explicit attribute; null means element-default (0 for buttons).
       const attr = btn.getAttribute('tabindex');
       return attr !== null ? parseInt(attr, 10) : 0;
     });
-    expect(tabindex).toBeGreaterThanOrEqual(0);
+    expect(tabindex).toBe(-1);
 
     // Focus the button programmatically and dispatch Enter — must enter fullscreen.
     await browser.execute((): void => {

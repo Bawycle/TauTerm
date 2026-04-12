@@ -157,6 +157,7 @@
       class="terminal-view__ssh-btn"
       class:terminal-view__ssh-btn--active={tv.connectionManagerOpen}
       type="button"
+      tabindex={-1}
       onclick={() => {
         tv.connectionManagerOpen = !tv.connectionManagerOpen;
       }}
@@ -173,6 +174,7 @@
     <button
       class="terminal-view__ssh-btn"
       type="button"
+      tabindex={-1}
       onclick={tv.handleToggleFullscreen}
       aria-label={tv.isFullscreen ? m.exit_fullscreen() : m.enter_fullscreen()}
       aria-pressed={tv.isFullscreen}

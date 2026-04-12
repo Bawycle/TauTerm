@@ -55,6 +55,12 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
+- [ ] **Multiple concurrent instances — isolated data directories** `[Score: 8 | R:1, S:1, U:1, E:2]`
+  Two TauTerm instances sharing `~/.local/share/tau-term/` cause WebKit hard-link failures in the cache (`Failed to create hard link … WebKitCache`). The app still runs but cache corruption between instances is possible.
+  Solution: honour a `TAURI_DATA_DIR` environment variable (or equivalent Tauri mechanism) to redirect the data directory per instance. Enables parallel dev+prod sessions and power-user multi-profile setups.
+  Scope: set a distinct data dir in `tauri.conf.json` or via runtime env; document the variable in the README.
+  Preferences safety (prerequisite if isolation is not implemented): add **`flock(LOCK_EX)`** around every write to `preferences.toml` and an **`inotify` watch** (via the `notify` crate) so instances sharing the file reload on external change rather than overwriting each other silently.
+
 ---
 
 ## v1.1 — Roadmap Minor Release

@@ -851,6 +851,11 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       }
     } catch {
       /* non-fatal */
+    } finally {
+      // Restore keyboard focus to the hidden textarea. On Linux, closing the
+      // context menu (Bits UI) moves focus away from the terminal input sink.
+      // Without this, the user must click the terminal before typing again.
+      inputEl?.focus({ preventScroll: true });
     }
   }
 

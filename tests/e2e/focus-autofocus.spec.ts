@@ -70,7 +70,9 @@ function isViewportFocused(): Promise<boolean> {
     const el = document.activeElement;
     if (el === null || el === document.body) return false;
     return (
-      el.classList.contains('terminal-grid') || el.classList.contains('terminal-pane__viewport')
+      el.classList.contains('terminal-grid') ||
+      el.classList.contains('terminal-pane__viewport') ||
+      el.classList.contains('terminal-pane__input')
     );
   }) as Promise<boolean>;
 }

@@ -11,12 +11,20 @@
  * scrollable, the nearest scrollable ancestor (the content div) resets to scrollTop=0.
  * Fix: `position:relative` on the Toggle <label> contains the checkbox within the
  * label's bounding box — which is already visible in the scrollable — making
- * scrollIntoView a no-op.
+ * scrollIntoView a no-op. Additionally, `margin: 0` overrides sr-only's `margin: -1px`
+ * which would place the checkbox 1px above the label edge, making scrollIntoView fire
+ * even with position:relative on the label.
  *
  * Note: WebDriver pointer events do not fully replicate WebKitGTK's native
  * focus+scrollIntoView chain triggered by real physical mouse clicks. This test
  * asserts the non-regression invariant (scrollTop is preserved) and documents the
  * scenario, even if it cannot demonstrate the raw regression in automation.
+ *
+ * Implementation note on creating scroll space:
+ * The scrollable content may fully fit within the panel (no overflow) at large monitor
+ * resolutions where 80vh is tall. To guarantee overflow without relying on window size,
+ * step 3 constrains the scrollable's maxHeight via inline style before scrolling, then
+ * removes the constraint before the assertion so layout is restored.
  *
  * Scenarios:
  *   TEST-PREFS-SCROLL-001 — Toggle click in scrolled Appearance section preserves scrollTop
@@ -101,13 +109,17 @@ describe('TauTerm — Preferences panel scrollable position (regression)', () =>
     });
     await browser.pause(150);
 
-    // --- 3. Scroll the content area down to expose the toggles ---
-    // The appearance section content (font, theme, opacity fields) is taller than the
-    // visible area at common window sizes, so the toggles at the bottom require scrolling.
+    // --- 3. Constrain scrollable height and scroll down ---
+    // The scrollable content may fully fit within the panel at large monitor resolutions
+    // (80vh can exceed the content height). We force overflow by capping maxHeight to
+    // 300 px via inline style, ensuring the toggles at the bottom require scrolling.
+    // This constraint is removed after reading scrollBefore so the click target is at
+    // its natural position.
     await browser.execute((): void => {
       const panel = document.querySelector('.preferences-panel');
       const scrollable = panel?.querySelector('.overflow-y-auto') as HTMLElement | null;
       if (scrollable) {
+        scrollable.style.maxHeight = '300px';
         // Request 600px — will be clamped to scrollable's maximum scrollTop.
         scrollable.scrollTop = 600;
       }
@@ -121,6 +133,11 @@ describe('TauTerm — Preferences panel scrollable position (regression)', () =>
       return scrollable?.scrollTop ?? 0;
     })) as number;
     expect(scrollBefore).toBeGreaterThan(0);
+
+    // Note: the maxHeight constraint is intentionally kept active during step 4 so that
+    // scrollTop remains > 0. Removing it before the click would clamp scrollTop to 0
+    // (the content no longer overflows the now-taller scrollable). It is removed after
+    // the scroll-preservation assertion in step 5.
 
     // --- 4. Click the "Show pane title bar" toggle via real WebDriver pointer event ---
     // Obtain the center coordinates of the toggle label in viewport space.
@@ -148,12 +165,19 @@ describe('TauTerm — Preferences panel scrollable position (regression)', () =>
     // Allow WebKitGTK to process the focus, any scrollIntoView, and Svelte re-renders.
     await browser.pause(500);
 
-    // --- 5. Assert scroll position and layout were NOT changed by the toggle click ---
+    // --- 5. Assert scroll position was NOT changed by the toggle click ---
     const scrollAfter = (await browser.execute((): number => {
       const panel = document.querySelector('.preferences-panel');
       const scrollable = panel?.querySelector('.overflow-y-auto') as HTMLElement | null;
       return scrollable?.scrollTop ?? 0;
     })) as number;
+
+    // Remove the maxHeight constraint now that scroll assertions are done.
+    await browser.execute((): void => {
+      const panel = document.querySelector('.preferences-panel');
+      const scrollable = panel?.querySelector('.overflow-y-auto') as HTMLElement | null;
+      if (scrollable) scrollable.style.maxHeight = '';
+    });
 
     // Scroll position must not have reset to zero.
     expect(scrollAfter).toBeGreaterThan(0);

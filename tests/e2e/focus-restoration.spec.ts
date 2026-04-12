@@ -31,7 +31,9 @@ function isViewportFocused(): Promise<boolean> {
     const el = document.activeElement;
     if (el === null || el === document.body) return false;
     return (
-      el.classList.contains('terminal-grid') || el.classList.contains('terminal-pane__viewport')
+      el.classList.contains('terminal-grid') ||
+      el.classList.contains('terminal-pane__viewport') ||
+      el.classList.contains('terminal-pane__input')
     );
   }) as Promise<boolean>;
 }
@@ -66,6 +68,30 @@ describe('TauTerm — Terminal focus restoration after panel interactions (FS-UX
 
     // Ensure the terminal viewport is focused as the baseline.
     await waitForViewportFocus(5_000);
+  });
+
+  after(async () => {
+    // Close any panels opened by the tests (Escape handles both SSH and preferences).
+    await browser.execute((): void => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+    });
+    await browser.pause(100);
+
+    // Exit fullscreen if any test accidentally left the app in that state.
+    // TEST-E2E-FOCUS-003 navigates the tab bar via ArrowRight and presses 'a';
+    // if focus lands on the fullscreen button and the key triggers activation,
+    // subsequent specs see aria-pressed="true" and fail their initial state check.
+    await browser.execute((): void => {
+      const btn = document.querySelector<HTMLButtonElement>(
+        '[data-testid="fullscreen-toggle-btn"]',
+      );
+      if (btn?.getAttribute('aria-pressed') === 'true') {
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      }
+    });
+    await browser.pause(200);
   });
 
   // -------------------------------------------------------------------------

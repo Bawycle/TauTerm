@@ -143,6 +143,8 @@ function cursorUpdate(row: number, col: number, value: string, colorCode: number
 
 describe('P12a benchmark — tauterm:frameRender (measurement only, no assertions)', () => {
   let paneId: string;
+  /** True when the binary was built with VITE_PERF_INSTRUMENTATION=1. */
+  let isInstrumented = false;
 
   before(async () => {
     // Dismiss any lingering confirmation dialogs from previous suites.
@@ -174,6 +176,21 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
     await browser.pause(50);
     await inject(paneId, scrollLines(5, 0));
     await browser.pause(50);
+
+    // Detect whether performance instrumentation was compiled in.
+    // The binary requires VITE_PERF_INSTRUMENTATION=1 at build time for tauterm:*
+    // performance marks/measures to be recorded. Without the flag the workload
+    // tests would always get 0 entries and fail — skip them instead.
+    isInstrumented =
+      ((await browser.execute(
+        (): number => performance.getEntriesByName('tauterm:frameRender').length,
+      )) as number) > 0;
+    if (!isInstrumented) {
+      console.log(
+        '[perf] tauterm:frameRender entries absent — binary built without ' +
+          'VITE_PERF_INSTRUMENTATION=1; workload tests will be skipped.',
+      );
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -184,7 +201,9 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
   // one screen-update event with many dirty rows (scrolled content).
   // -------------------------------------------------------------------------
 
-  it('PERF-P12A-001: scroll workload — 30 batches × 12 lines', async () => {
+  it('PERF-P12A-001: scroll workload — 30 batches × 12 lines', async function () {
+    if (!isInstrumented) { this.skip(); return; }
+
     const BATCHES = 30;
     const LINES_PER_BATCH = 12;
     // 20 ms > 12 ms debounce — each batch produces a separate screen-update event.
@@ -218,7 +237,9 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
   // the updated cells are invalidated, not the entire row.
   // -------------------------------------------------------------------------
 
-  it('PERF-P12A-002: cursor-update workload — 60 sparse in-place updates', async () => {
+  it('PERF-P12A-002: cursor-update workload — 60 sparse in-place updates', async function () {
+    if (!isInstrumented) { this.skip(); return; }
+
     const UPDATES = 60;
     const INTER_UPDATE_MS = 20;
 
@@ -279,7 +300,8 @@ describe('P12a benchmark — tauterm:frameRender (measurement only, no assertion
   // Non-asserting: prints coalescing ratio. Use as regression gate after P-OPT-1.
   // -------------------------------------------------------------------------
 
-  it('PERF-P12A-004: rapid-fire — 5 events in <16 ms (coalescing measurement)', async () => {
+  it('PERF-P12A-004: rapid-fire — 5 events in <16 ms (coalescing measurement)', async function () {
+    if (!isInstrumented) { this.skip(); return; }
     await clearPerfEntries();
 
     // 5 events × 3 ms spacing = 15 ms total — fits in one 16.7 ms rAF window.

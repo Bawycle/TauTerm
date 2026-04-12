@@ -59,10 +59,14 @@
   class:opacity-60={disabled}
 >
   <!-- Hidden native checkbox for semantics -->
+  <!-- style="margin: 0" overrides sr-only's margin:-1px, which would place the element
+       1 px above the label's top edge — enough for WebKitGTK's scrollIntoView to fire
+       and reset the scrollable's scrollTop when the label is near the visible area top. -->
   <input
     type="checkbox"
     role="switch"
     class="sr-only"
+    style="margin: 0"
     {checked}
     {disabled}
     aria-checked={checked}

@@ -158,6 +158,31 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   let isSelecting = $state(false);
   let hasSelection = $state(false);
 
+  // Selection coordinates are stored in buffer-absolute rows (0 = oldest scrollback
+  // line, scrollbackLines = first live screen row). This makes selections stable
+  // across scroll changes — the same pattern used by search match highlighting.
+  //
+  // Conversion: screenRow = bufferRow - (scrollbackLines - scrollOffset)
+  //             bufferRow = screenRow + (scrollbackLines - scrollOffset)
+  function screenToBufferRow(screenRow: number): number {
+    return screenRow + (scrollbackLines - scrollOffset);
+  }
+
+  function bufferToScreenRow(bufferRow: number): number {
+    return bufferRow - (scrollbackLines - scrollOffset);
+  }
+
+  // Returns a GetCellFn that accepts buffer-absolute row indices and maps them
+  // to the current visible grid slice. Rows outside the visible window return ''.
+  function makeBufferGetCell(): (r: number, c: number) => string {
+    const screenStart = scrollbackLines - scrollOffset;
+    return (r, c) => {
+      const screenRow = r - screenStart;
+      if (screenRow < 0 || screenRow >= rows) return '';
+      return grid[screenRow * cols + c]?.content ?? '';
+    };
+  }
+
   // -------------------------------------------------------------------------
   // DOM refs (set by template)
   // -------------------------------------------------------------------------
@@ -404,6 +429,13 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       cols = update.cols;
       rows = update.rows;
       props.ondimensionschange()?.(update.cols, update.rows);
+      // Invalidate selection: buffer-absolute row indices assume a fixed scrollback
+      // layout. After a resize the backend reflows the scrollback, making old
+      // buffer rows point to wrong content.
+      selection.clearSelection();
+      selectionRange = null;
+      isSelecting = false;
+      hasSelection = false;
     }
 
     // P-DIAG-1: mark end of pure-JS work (before Svelte schedules DOM mutations).
@@ -630,7 +662,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   async function copySelectionToClipboard() {
     const sel = selection.getSelection();
     if (sel) {
-      const text = selection.getSelectedText((r, c) => grid[r * cols + c]?.content ?? '', cols);
+      const text = selection.getSelectedText(makeBufferGetCell(), cols);
       hasSelection = text.length > 0;
       if (hasSelection) {
         try {
@@ -644,14 +676,25 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       hasSelection = false;
     }
     selectionRange = sel;
+    // Restore keyboard focus to the hidden textarea. On Linux, the arboard
+    // clipboard write can cause WebKitGTK to move focus to document.body.
+    // This mirrors the refocusTerminal safety-net in useTerminalView.
+    inputEl?.focus({ preventScroll: true });
   }
 
-  function isSelected(row: number, col: number): boolean {
+  function isSelected(rowIdx: number, col: number): boolean {
     if (!selectionRange) return false;
     const { start, end } = selectionRange;
-    if (row < start.row || row > end.row) return false;
-    if (row === start.row && col < start.col) return false;
-    if (row === end.row && col > end.col) return false;
+    // Convert buffer-absolute selection bounds to screen-space for comparison
+    // with the viewport loop index. Out-of-range cases are handled naturally:
+    // if startScreen < 0, `rowIdx < startScreen` is always false (rowIdx ≥ 0)
+    // and `rowIdx === startScreen` is never true, so the full top row is selected.
+    // The symmetric argument applies when endScreen ≥ rows.
+    const startScreen = bufferToScreenRow(start.row);
+    const endScreen = bufferToScreenRow(end.row);
+    if (rowIdx < startScreen || rowIdx > endScreen) return false;
+    if (rowIdx === startScreen && col < start.col) return false;
+    if (rowIdx === endScreen && col > end.col) return false;
     return true;
   }
 
@@ -690,7 +733,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
     if (event.detail >= 3) {
       isSelecting = false;
-      selection.selectLineAt(cell.row, cols);
+      selection.selectLineAt(screenToBufferRow(cell.row), cols);
       await copySelectionToClipboard();
       return;
     }
@@ -699,8 +742,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       isSelecting = false;
       selection.selectWordAt(
         cell.col,
-        cell.row,
-        (r, c) => grid[r * cols + c]?.content ?? '',
+        screenToBufferRow(cell.row),
+        makeBufferGetCell(),
         cols,
         props.wordDelimiters(),
       );
@@ -709,7 +752,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     }
 
     isSelecting = true;
-    selection.startSelection(cell);
+    selection.startSelection({ row: screenToBufferRow(cell.row), col: cell.col });
     selectionRange = selection.getSelection();
   }
 
@@ -726,7 +769,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       }
     }
     if (!isSelecting) return;
-    selection.extendSelection(pixelToCell(event));
+    const moveCell = pixelToCell(event);
+    selection.extendSelection({ row: screenToBufferRow(moveCell.row), col: moveCell.col });
     selectionRange = selection.getSelection();
   }
 
@@ -739,7 +783,8 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     }
     if (!isSelecting) return;
     isSelecting = false;
-    selection.extendSelection(pixelToCell(event));
+    const upCell = pixelToCell(event);
+    selection.extendSelection({ row: screenToBufferRow(upCell.row), col: upCell.col });
     await copySelectionToClipboard();
   }
 

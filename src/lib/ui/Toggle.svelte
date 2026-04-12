@@ -54,7 +54,7 @@
 </script>
 
 <label
-  class="inline-flex items-center gap-2 cursor-pointer"
+  class="relative inline-flex items-center gap-2 cursor-pointer"
   class:cursor-not-allowed={disabled}
   class:opacity-60={disabled}
 >

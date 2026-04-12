@@ -281,8 +281,10 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
 
   // Auto-focus when active — prefer inputEl (hidden textarea, receives GTK IM commits).
   // Falls back to viewportEl if textarea is not yet mounted.
+  // Guard: skip when a modal dialog is open — stealing focus would freeze the dialog's
+  // scrollable area by triggering FocusScope's focus-restoration loop.
   $effect(() => {
-    if (props.active()) {
+    if (props.active() && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
       (inputEl ?? viewportEl)?.focus({ preventScroll: true });
     }
   });

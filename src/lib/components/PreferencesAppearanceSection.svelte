@@ -70,7 +70,7 @@
 
   function handleShowPaneTitleBarChange(checked: boolean) {
     if (!preferences?.appearance) return;
-    onupdate?.({ appearance: { showPaneTitleBar: checked } });
+    onupdate?.({ appearance: { ...preferences.appearance, showPaneTitleBar: checked } });
   }
 </script>
 

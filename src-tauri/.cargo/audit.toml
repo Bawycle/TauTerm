@@ -14,7 +14,6 @@
 # sidechannels in the `rsa` crate.
 #
 # Affected chain: tau-term → russh 0.60 → rsa 0.10.0-rc.17
-#                 tau-term → russh-keys 0.45 → ssh-key → rsa 0.9.10
 #
 # Why we cannot fix this:
 #   The `rsa` crate has no patched release as of 2026-04-09. The advisory

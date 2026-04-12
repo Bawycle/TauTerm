@@ -108,12 +108,12 @@ pub async fn authenticate_keyboard_interactive<H: russh::client::Handler>(
 /// rejected immediately by the parser without any I/O after the initial file read.
 pub fn key_needs_passphrase(key_path: &Path) -> bool {
     match keys::load_secret_key(key_path, None) {
-        // russh-keys 0.45 does not re-export the Error enum variants publicly,
-        // so we match on the Display string. The string "The key is encrypted"
-        // comes from `KeyError::KeyIsEncrypted` (russh_keys/src/lib.rs, `#[error]`
-        // attribute). If the crate ever changes this message, this detection will
-        // silently fail — auth will fall through to password/kbd-interactive rather
-        // than prompting for a passphrase. Track at: russh-keys changelog.
+        // russh::keys (russh's internal fork of ssh-key) does not expose the
+        // error enum variants publicly, so we match on the Display string.
+        // The string "The key is encrypted" comes from the `KeyIsEncrypted`
+        // variant. If russh ever changes this message, detection will silently
+        // fail — auth will fall through to password/kbd-interactive rather than
+        // prompting for a passphrase.
         Err(e) => {
             let msg = e.to_string();
             msg.contains("The key is encrypted") || msg.contains("key is encrypted")

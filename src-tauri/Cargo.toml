@@ -49,7 +49,6 @@ vte = "0.15"
 
 # SSH
 russh = "0.60"
-russh-keys = "0.45"
 
 # Credential store (Secret Service D-Bus — Linux)
 secret-service = { version = "5", features = ["rt-tokio-crypto-rust"] }

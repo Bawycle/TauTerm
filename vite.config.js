@@ -100,6 +100,10 @@ export default defineConfig(async () => ({
   },
 
   build: {
+    // Assets are embedded in the Tauri binary and loaded from memory — no
+    // network transfer cost. 2 MB is a reasonable ceiling before investigating
+    // code-splitting (which adds complexity with no UX benefit in this context).
+    chunkSizeWarningLimit: 2048,
     rolldownOptions: {
       // Suppress EMPTY_IMPORT_META: `bundleStrategy: "inline"` forces an iife-style
       // bundle where import.meta is not natively supported. Rolldown already replaces

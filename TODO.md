@@ -29,13 +29,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Critical — Release Blockers (score 17–21)
 
-### Tests & CI
-
-- [ ] **Set up CI pipeline — GitHub Actions** `[Score: 17 | R:3, S:2, U:2, E:2]`
-  - Minimum jobs: `cargo clippy -- -D warnings`, `cargo nextest run`, `pnpm check`, `pnpm vitest run`
-  - Add `cargo audit` and `cargo deny` (with `deny.toml`) to block advisories and non-compliant licenses
-  - Trigger: push to `dev` and `main`, PR to `main`
-
 ---
 
 ## High Priority — Must Land in v1 (score 13–16)
@@ -47,8 +40,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ---
 
----
-
 ## Medium Priority — v1 Quality Target (score 9–12)
 
 ---
@@ -57,9 +48,9 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 - [ ] **Multiple concurrent instances — isolated data directories** `[Score: 8 | R:1, S:1, U:1, E:2]`
   Two TauTerm instances sharing `~/.local/share/tau-term/` cause WebKit hard-link failures in the cache (`Failed to create hard link … WebKitCache`). The app still runs but cache corruption between instances is possible.
-  Solution: honour a `TAURI_DATA_DIR` environment variable (or equivalent Tauri mechanism) to redirect the data directory per instance. Enables parallel dev+prod sessions and power-user multi-profile setups.
-  Scope: set a distinct data dir in `tauri.conf.json` or via runtime env; document the variable in the README.
-  Preferences safety (prerequisite if isolation is not implemented): add **`flock(LOCK_EX)`** around every write to `preferences.toml` and an **`inotify` watch** (via the `notify` crate) so instances sharing the file reload on external change rather than overwriting each other silently.
+  **Attempted approach (reverted):** `WebviewWindowBuilder::data_directory()` with a PID-based unique path. This broke the prod build — WebKitGTK with a fresh data directory on every launch causes the frontend served via `tauri://` to malfunction (preference changes not reflected in UI). The data directory must be stable across launches.
+  **Remaining approach:** find a Tauri mechanism that isolates the WebKit cache between concurrent instances while preserving a stable data directory per user. `data_store_identifier` is not supported on Linux/WebKitGTK. Possible alternatives: single-instance lock (prevent concurrent launches), or accept the cosmetic WebKit warning.
+  **Preferences safety (implemented):** `flock(LOCK_EX)` via `fs4` on every write to `preferences.toml` and an `inotify` watch (via the `notify` crate) so instances sharing the file reload on external change rather than overwriting each other silently.
 
 ---
 
@@ -170,6 +161,8 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   3. **`ssh/known_hosts/store.rs`** imports `std::os::unix::fs::OpenOptionsExt` and calls `.mode(0o600)` without `#[cfg(unix)]` guards. Add `#[cfg(unix)]` around these blocks; Windows fallback can skip POSIX permission enforcement (Windows ACLs on the user directory are already restrictive).
   4. **`platform/validation.rs`** imports `std::os::unix::fs::PermissionsExt` without guard. Same fix — skip POSIX mode validation on Windows or implement a Windows ACL equivalent.
   5. **`session/registry/pane_state.rs`** imports `libc` and uses `libc::pid_t` — a POSIX type that leaks outside the PAL. Replace with `i32` (the concrete type on all supported platforms).
+
+  Note: file locking (`fs4`) and file watching (`notify`) for preferences safety are already cross-platform — no Windows-specific work needed.
 
   Additionally, all four Windows stubs currently `unimplemented!()` (panic at runtime). Replace with `Err(...)` or no-op before shipping any Windows build.
 

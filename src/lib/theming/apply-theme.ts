@@ -9,6 +9,16 @@ function getOrCreateStyleElement(): HTMLStyleElement {
   if (!el) {
     el = document.createElement('style');
     el.id = STYLE_ELEMENT_ID;
+    // In production, Tauri injects a nonce into all <style> elements and adds
+    // 'nonce-xxx' to the style-src CSP directive.  Per CSP Level 3, this causes
+    // 'unsafe-inline' to be ignored by WebKitGTK.  Dynamically created <style>
+    // elements without the matching nonce are silently blocked.
+    // Mirror the nonce from an existing Tauri-processed <style> element so
+    // WebKitGTK accepts ours.
+    const existingNonce = document.querySelector<HTMLStyleElement>('style[nonce]')?.nonce;
+    if (existingNonce) {
+      el.nonce = existingNonce;
+    }
     document.head.appendChild(el);
   }
   return el;

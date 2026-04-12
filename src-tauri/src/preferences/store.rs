@@ -25,8 +25,9 @@
 //! used as the initial preferences.  The TOML file is written on the next
 //! `save_to_disk` call.  The legacy JSON file is not deleted automatically.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use parking_lot::RwLock;
 
@@ -34,6 +35,7 @@ use crate::error::PreferencesError;
 use crate::preferences::schema::{Preferences, PreferencesPatch, UserTheme};
 
 mod io;
+mod lock;
 pub mod migration;
 mod path;
 mod schema_convert;
@@ -60,17 +62,24 @@ const BUILT_IN_THEME_NAMES: &[&str] = &["umbra", "solstice", "archipel"];
 pub struct PreferencesStore {
     prefs: RwLock<Preferences>,
     path: PathBuf,
+    lock_path: PathBuf,
+    /// Monotonic counter incremented before every self-initiated disk write.
+    /// The file watcher compares this to distinguish own writes from external changes.
+    pub write_epoch: Arc<AtomicU64>,
 }
 
 impl PreferencesStore {
     /// Load preferences from disk, falling back to defaults on any error.
     pub fn load() -> Result<Arc<RwLock<Self>>, PreferencesError> {
         let path = preferences_path()?;
+        let lock_path = path.with_extension("toml.lock");
         let mut prefs = load_from_disk(&path);
         validate_and_clamp(&mut prefs);
         Ok(Arc::new(RwLock::new(Self {
             prefs: RwLock::new(prefs),
             path,
+            lock_path,
+            write_epoch: Arc::new(AtomicU64::new(0)),
         })))
     }
 
@@ -85,20 +94,26 @@ impl PreferencesStore {
     pub fn load_or_default() -> Arc<RwLock<Self>> {
         match preferences_path() {
             Ok(path) => {
+                let lock_path = path.with_extension("toml.lock");
                 let mut prefs = load_from_disk(&path);
                 validate_and_clamp(&mut prefs);
                 Arc::new(RwLock::new(Self {
                     prefs: RwLock::new(prefs),
                     path,
+                    lock_path,
+                    write_epoch: Arc::new(AtomicU64::new(0)),
                 }))
             }
             Err(e) => {
                 tracing::warn!("Could not determine preferences path (using defaults): {e}");
                 // Use a fallback path that will never be written to in this state.
                 let fallback_path = PathBuf::from("/dev/null");
+                let lock_path = PathBuf::from("/dev/null.lock");
                 Arc::new(RwLock::new(Self {
                     prefs: RwLock::new(Preferences::default()),
                     path: fallback_path,
+                    lock_path,
+                    write_epoch: Arc::new(AtomicU64::new(0)),
                 }))
             }
         }
@@ -309,6 +324,29 @@ impl PreferencesStore {
     }
 
     // -----------------------------------------------------------------------
+    // Public accessors
+    // -----------------------------------------------------------------------
+
+    /// Path to the preferences TOML file.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Reload preferences from disk (called by the watcher on external changes).
+    ///
+    /// Acquires a shared (read) lock, re-reads and validates the file, then
+    /// replaces the in-memory state. Returns the freshly loaded preferences
+    /// for event emission.
+    pub fn reload_from_disk(&self) -> Result<Preferences, PreferencesError> {
+        let _lock = lock::acquire_shared(&self.lock_path)?;
+        let mut prefs = load_from_disk(&self.path);
+        validate_and_clamp(&mut prefs);
+        let mut current = self.prefs.write();
+        *current = prefs.clone();
+        Ok(prefs)
+    }
+
+    // -----------------------------------------------------------------------
     // Test helpers
     // -----------------------------------------------------------------------
 
@@ -318,9 +356,12 @@ impl PreferencesStore {
     /// where nextest does not guarantee process-per-test isolation.
     #[cfg(test)]
     pub fn new_with_defaults(path: PathBuf) -> Arc<RwLock<Self>> {
+        let lock_path = path.with_extension("toml.lock");
         Arc::new(RwLock::new(Self {
             prefs: RwLock::new(Preferences::default()),
             path,
+            lock_path,
+            write_epoch: Arc::new(AtomicU64::new(0)),
         }))
     }
 
@@ -349,6 +390,17 @@ impl PreferencesStore {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+
+        // Acquire cross-process exclusive lock for the write-then-rename sequence.
+        let _lock = lock::acquire_exclusive(&self.lock_path)?;
+
+        // Bump epoch only once the lock is held — the inotify event will be
+        // produced after the rename below, by which time the watcher's
+        // last_seen_epoch comparison correctly identifies this as our own write.
+        // Incrementing before lock acquisition would widen the suppression
+        // window and risk swallowing a subsequent external write.
+        self.write_epoch.fetch_add(1, Ordering::SeqCst);
+
         // Atomic write: write to a temp file then rename (ADR-0012, ADR-0016).
         // Prevents file corruption on power loss or process kill mid-write.
         let tmp_path = self.path.with_extension("toml.tmp");

@@ -386,6 +386,16 @@ export interface NotificationChangedEvent {
 }
 
 /**
+ * Emitted when preferences change externally (another TauTerm instance).
+ * The frontend replaces its in-memory preferences with the payload.
+ * Mirrors Rust PreferencesChangedEvent (events/types.rs).
+ * Event name: "preferences-changed"
+ */
+export interface PreferencesChangedEvent {
+  preferences: Preferences;
+}
+
+/**
  * Emitted when a DECSCUSR escape changes the cursor shape for a pane.
  * Mirrors Rust CursorStyleChangedEvent (events/types.rs).
  * `shape` is the raw DECSCUSR parameter (0–6):

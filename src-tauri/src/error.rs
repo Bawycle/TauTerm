@@ -225,6 +225,8 @@ pub enum PreferencesError {
     Parse(String),
     #[error("Invalid preference value: {0}")]
     Validation(String),
+    #[error("Timed out waiting for preferences lock")]
+    LockTimeout,
 }
 
 impl From<PreferencesError> for TauTermError {
@@ -241,6 +243,10 @@ impl From<PreferencesError> for TauTermError {
             PreferencesError::Validation(msg) => {
                 TauTermError::with_detail("PREF_INVALID_VALUE", "Invalid preference value.", msg)
             }
+            PreferencesError::LockTimeout => TauTermError::new(
+                "PREF_LOCK_TIMEOUT",
+                "Timed out waiting for preferences lock.",
+            ),
         }
     }
 }

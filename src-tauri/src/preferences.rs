@@ -8,6 +8,7 @@
 pub mod schema;
 pub mod store;
 pub mod types;
+pub mod watcher;
 
 pub use schema::{
     AppearancePatch, AppearancePrefs, BellType, CursorStyle, KeyboardPrefs, Language, Preferences,

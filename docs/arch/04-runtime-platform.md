@@ -164,6 +164,34 @@ tauri::Builder::default()
 
 This strategy satisfies [§9.1](02-backend-modules.md#91-rust-backend) (no `unwrap()` on filesystem data) and prevents application startup failure due to preference corruption (FS-SEC-003).
 
+### 7.6.1 Cross-Instance Write Safety (FS-PREF-007)
+
+**Advisory lock protocol.** All writes to `preferences.toml` are serialized via an exclusive advisory lock on a separate lock file (`preferences.toml.lock`) using `fs4::fs_std::FileExt::try_lock_exclusive()`. The lock file is created alongside the preferences file in the same directory. The write sequence:
+
+1. Open (or create) `preferences.toml.lock`.
+2. Attempt `try_lock_exclusive()` in a retry loop with 50 ms intervals, up to 1 second total.
+3. If the lock is not acquired within 1 second, return `PREF_LOCK_TIMEOUT` to the caller. The preferences are not written.
+4. On lock acquisition: serialize `Preferences` to TOML, write to a temporary file (`preferences.toml.tmp`), `fsync`, rename to `preferences.toml` (atomic replace), increment the write-epoch counter, unlock.
+
+The lock file is never deleted — it is reused across writes. The lock is held only for the duration of the write (serialize + fsync + rename), not for reads.
+
+**Write-epoch counter.** `PreferencesStore` maintains an in-memory `write_epoch: u64` counter, incremented on every successful write. The watcher (§7.6.2) uses this counter to distinguish own writes from external changes.
+
+### 7.6.2 External Change Detection (FS-PREF-008)
+
+**Preferences watcher.** On startup, `PreferencesStore` spawns an async task that watches the preferences file for external modifications using the `notify` crate (inotify backend on Linux).
+
+Architecture:
+
+1. **Watch target:** the parent directory (`~/.config/tauterm/`), not the file directly. Watching the parent directory is required because atomic writes (rename from `.tmp`) replace the inode — a direct file watch would stop firing after the first external write.
+2. **Event filter:** only `EventKind::Modify(ModifyKind::Name(RenameMode::To))` and `EventKind::Modify(ModifyKind::Data(_))` events matching `preferences.toml` are processed. All other events are ignored.
+3. **Debounce:** events are debounced with a 200 ms window to coalesce rapid successive writes (e.g., an editor that writes + renames in quick succession).
+4. **Epoch comparison:** on a qualifying event, the watcher reads the file's modification time. If the in-memory `write_epoch` was incremented within the last 500 ms, the event is treated as an own write and ignored. Otherwise, the file is reloaded.
+5. **Reload:** the file is read, parsed, and validated (same pipeline as `load_or_default`). If parsing succeeds, the in-memory `Preferences` is replaced and a `preferences-changed` event is emitted to the frontend via `AppHandle::emit()`. If parsing fails (e.g., another instance is mid-write), the event is logged at `WARN` level and no reload occurs.
+6. **Failure tolerance:** if the watcher fails to initialize (e.g., inotify limit exhausted), the error is logged at `WARN` level. `PreferencesStore` continues operating without live-sync. This is non-fatal.
+
+**`preferences-changed` event.** Emitted backend → frontend when an external change is detected and successfully reloaded. Payload: the full `Preferences` struct (same shape as the `update_preferences` return value). The frontend replaces its local preferences state with the received payload, triggering reactive updates for all preference-dependent UI.
+
 ### 7.7 Preference Propagation Model
 
 When `update_preferences` is called, the new `Preferences` value is persisted and the command returns the full updated struct to the frontend. Propagation to existing sessions is field-dependent:

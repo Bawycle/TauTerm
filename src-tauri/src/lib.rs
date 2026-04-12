@@ -133,6 +133,30 @@ pub fn run() {
 
             app.manage(registry);
 
+            // Start the preferences file watcher for cross-instance sync.
+            // Non-fatal: if the watcher fails to start, the app runs without live-sync.
+            {
+                let prefs_for_watcher = app
+                    .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
+                    .inner()
+                    .clone();
+                let write_epoch = prefs_for_watcher.read().write_epoch.clone();
+                let prefs_path = prefs_for_watcher.read().path().to_owned();
+                match crate::preferences::watcher::start(
+                    prefs_for_watcher,
+                    app.handle().clone(),
+                    write_epoch,
+                    prefs_path,
+                ) {
+                    Ok(watcher) => {
+                        app.manage(watcher);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to start preferences watcher: {e}");
+                    }
+                }
+            }
+
             // FS-FULL-009: restore full-screen state from saved preferences.
             let saved_fullscreen = app
                 .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()

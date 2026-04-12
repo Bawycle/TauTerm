@@ -78,6 +78,21 @@ The table below documents, for each configurable field, when its effect takes pl
 - FS-PREF-003: Changing font size in preferences immediately changes the terminal font size.
 - FS-PREF-004: The preferences UI has labeled sections for Keyboard, Appearance, and Terminal Behavior.
 - FS-PREF-005: Ctrl+, opens the preferences panel.
+- FS-PREF-007: Two instances writing preferences concurrently never produce a corrupt file.
+- FS-PREF-008: Changing a preference in instance A is reflected in instance B within 2 seconds.
+
+---
+
+## 3.13.1 FS-PREF: Cross-Instance Preferences Safety
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FS-PREF-007 | The system MUST use advisory file locking (`flock`/`LockFileEx` via `fs4`) to serialize concurrent writes to `preferences.toml` from multiple TauTerm instances. The lock file is `preferences.toml.lock`, separate from the data file. If the lock cannot be acquired within 1 second, the write MUST fail with a `PREF_LOCK_TIMEOUT` error returned to the frontend. | Must |
+| FS-PREF-008 | The system SHOULD watch `preferences.toml` for changes made by other instances (via `notify`/inotify). On detecting an external change, the system SHOULD reload preferences from disk and emit a `preferences-changed` event to the frontend. Own writes MUST NOT trigger a reload (distinguished via a write-epoch counter). If the watcher fails to start, the system MUST continue operating without live-sync (non-fatal). | Should |
+
+**Acceptance criteria:**
+- FS-PREF-007: Two instances writing preferences concurrently never produce a corrupt file.
+- FS-PREF-008: Changing a preference in instance A is reflected in instance B within 2 seconds.
 
 ---
 

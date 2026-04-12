@@ -23,6 +23,7 @@ import {
   onNotificationChanged,
   onModeStateChanged,
   onFullscreenStateChanged,
+  onPreferencesChanged,
 } from '$lib/ipc/events';
 import {
   sessionState,
@@ -39,6 +40,7 @@ import {
 } from '$lib/state/ssh.svelte';
 import { applyNotificationChanged } from '$lib/state/notifications.svelte';
 import { setFullscreen } from '$lib/state/fullscreen.svelte';
+import { setPreferences } from '$lib/state/preferences.svelte';
 import type { ViewState } from './useTerminalView.core.svelte';
 import type { PaneId } from '$lib/ipc/types';
 
@@ -139,6 +141,19 @@ export async function setupViewListeners(
       setBracketedPaste(mode.paneId, mode.bracketedPaste);
     }),
   );
+  // Listen for preferences changes from other TauTerm instances.
+  // Wrapped in try-catch: if this listener fails to register (e.g. WebKitGTK
+  // event bridge not yet ready), it must not prevent the rest of the listeners
+  // from registering.
+  try {
+    unlistens.push(
+      await onPreferencesChanged((ev) => {
+        setPreferences(ev.preferences);
+      }),
+    );
+  } catch {
+    /* non-fatal — cross-instance sync unavailable */
+  }
   // Listen for WM-driven fullscreen changes.
   // The backend emits this event after a 200 ms delay to let the WM stabilise
   // the window geometry before the frontend reads dimensions. Restoring focus

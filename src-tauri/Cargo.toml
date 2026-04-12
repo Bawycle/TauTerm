@@ -84,6 +84,12 @@ zeroize = { version = "1", features = ["derive"] }
 # Desktop notifications (D-Bus org.freedesktop.Notifications on Linux)
 notify-rust = { version = "4", default-features = false, features = ["d"] }
 
+# Cross-platform file locking (flock on Unix) — preferences write safety
+fs4 = "0.13"
+
+# Cross-platform filesystem watching (inotify on Linux) — preferences live-reload
+notify = { version = "8", default-features = true }
+
 [features]
 e2e-testing = []
 # Exclude the Tauri entry point from compilation so the fuzz workspace can

@@ -18,6 +18,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::preferences::schema::Preferences;
 use crate::session::{ConnectionId, PaneId, TabId, TabState};
 use crate::ssh::SshLifecycleState;
 use crate::vt::modes::{MouseEncoding, MouseReportingMode};
@@ -409,6 +410,20 @@ pub enum PaneNotificationDto {
         #[serde(rename = "signalName")]
         signal_name: Option<String>,
     },
+}
+
+// ---------------------------------------------------------------------------
+// Preferences external change
+// ---------------------------------------------------------------------------
+
+/// Emitted when preferences are changed externally (another TauTerm instance).
+///
+/// The frontend replaces its in-memory preferences with the payload to stay in
+/// sync without requiring a manual reload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreferencesChangedEvent {
+    pub preferences: Preferences,
 }
 
 // ---------------------------------------------------------------------------

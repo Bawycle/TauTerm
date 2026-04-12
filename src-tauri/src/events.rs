@@ -28,6 +28,7 @@ pub const EVENT_OSC52_WRITE_REQUESTED: &str = "osc52-write-requested";
 pub const EVENT_SSH_WARNING: &str = "ssh-warning";
 pub const EVENT_SSH_RECONNECTED: &str = "ssh-reconnected";
 pub const EVENT_FULLSCREEN_STATE_CHANGED: &str = "fullscreen-state-changed";
+pub const EVENT_PREFERENCES_CHANGED: &str = "preferences-changed";
 
 /// Emit a session topology change event.
 pub fn emit_session_state_changed(app: &AppHandle, event: SessionStateChangedEvent) {
@@ -131,5 +132,12 @@ pub fn emit_ssh_reconnected(app: &AppHandle, event: SshReconnectedEvent) {
 pub fn emit_fullscreen_state_changed(app: &AppHandle, event: FullscreenStateChangedEvent) {
     if let Err(e) = app.emit(EVENT_FULLSCREEN_STATE_CHANGED, event) {
         tracing::error!("Failed to emit fullscreen-state-changed: {e}");
+    }
+}
+
+/// Emit a preferences-changed event (cross-instance sync).
+pub fn emit_preferences_changed(app: &AppHandle, event: PreferencesChangedEvent) {
+    if let Err(e) = app.emit(EVENT_PREFERENCES_CHANGED, event) {
+        tracing::error!("Failed to emit preferences-changed: {e}");
     }
 }

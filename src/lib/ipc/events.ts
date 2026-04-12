@@ -25,6 +25,7 @@ import type {
   CursorStyleChangedEvent,
   BellTriggeredEvent,
   FullscreenStateChangedEvent,
+  PreferencesChangedEvent,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -115,6 +116,16 @@ export function onCursorStyleChanged(
 
 export function onBellTriggered(handler: (event: BellTriggeredEvent) => void): Promise<() => void> {
   return listen<BellTriggeredEvent>('bell-triggered', (e) => handler(e.payload));
+}
+
+// ---------------------------------------------------------------------------
+// Preferences events
+// ---------------------------------------------------------------------------
+
+export function onPreferencesChanged(
+  handler: (event: PreferencesChangedEvent) => void,
+): Promise<() => void> {
+  return listen<PreferencesChangedEvent>('preferences-changed', (e) => handler(e.payload));
 }
 
 // ---------------------------------------------------------------------------

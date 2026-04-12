@@ -1,0 +1,223 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# CI — Pre-validation for pull requests
+#
+# Mirrors the local check-all.sh --fast pipeline:
+#   Step 1: Formatting (cargo fmt + prettier)
+#   Step 2: Lint (clippy + svelte-check)
+#   Step 3: Unit tests (nextest + vitest)
+#   Step 5: Security / Licenses (cargo audit + cargo deny)
+#
+# Integration tests (Podman containers) and E2E (tauri-driver) are in
+# ci-integration.yml — they run only on PRs to master or on-demand.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [master, dev]
+  push:
+    branches: [master, dev]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Step 1 — Formatting (fail-fast, cheapest check)
+  # -----------------------------------------------------------------------
+  fmt:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: cargo fmt -- --check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: prettier --check src/
+        run: pnpm prettier --check src/
+
+  # -----------------------------------------------------------------------
+  # Step 2 — Lint
+  # -----------------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+          components: clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: rust-lint-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: rust-lint-
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: cargo clippy -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: svelte-check (TypeScript)
+        run: pnpm check
+
+  # -----------------------------------------------------------------------
+  # Step 3 — Unit tests
+  # -----------------------------------------------------------------------
+  test-rust:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: rust-test-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: rust-test-
+
+      - name: cargo nextest run
+        run: cargo nextest run --manifest-path src-tauri/Cargo.toml
+
+  test-frontend:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm vitest run
+        run: pnpm vitest run
+
+  # -----------------------------------------------------------------------
+  # Step 5 — Security / Licenses
+  # -----------------------------------------------------------------------
+  audit:
+    name: Security & Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: cargo audit
+        working-directory: src-tauri
+        run: cargo audit
+
+      - name: cargo deny check
+        run: cargo deny --manifest-path src-tauri/Cargo.toml check
+
+  # -----------------------------------------------------------------------
+  # SPDX header check
+  # -----------------------------------------------------------------------
+  spdx:
+    name: SPDX headers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SPDX headers
+        run: ./scripts/check-spdx.sh

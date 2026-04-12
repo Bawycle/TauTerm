@@ -219,7 +219,10 @@ run cargo fmt --manifest-path "$PROJECT_ROOT/src-tauri/Cargo.toml" -- --check
 echo "[check] pnpm prettier --check src/"
 run pnpm prettier --check src/
 
-step_passed "1: Formatting"
+echo "[check] check-spdx.sh"
+run "$SCRIPT_DIR/check-spdx.sh"
+
+step_passed "1: Formatting + SPDX"
 
 # ---------------------------------------------------------------------------
 # Step 2 — Lint

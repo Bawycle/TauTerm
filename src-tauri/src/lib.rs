@@ -16,6 +16,7 @@ pub mod security_static_checks;
 pub mod session;
 pub mod ssh;
 pub mod vt;
+pub mod webview_data_dir;
 
 // These imports are only used by `run()`, which is gated behind
 // `not(feature = "fuzz-testing")`.  Wrap them in the same cfg guard
@@ -76,6 +77,25 @@ pub fn run() {
         .manage(prefs)
         .manage(credential_manager)
         .setup(|app| {
+            // Create the main window manually (tauri.conf.json has "create": false).
+            // On Linux, inject an instance-unique data directory to prevent WebKitGTK
+            // cache conflicts between concurrent instances (ADR-0025).
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("No window config in tauri.conf.json"))?;
+            let mut builder = tauri::WebviewWindowBuilder::from_config(app, window_config)?;
+
+            #[cfg(target_os = "linux")]
+            {
+                builder =
+                    builder.data_directory(crate::webview_data_dir::resolve_webview_data_dir());
+            }
+
+            builder.build()?;
+
             // `SessionRegistry` needs an `AppHandle` to emit events from PTY read tasks.
             // We create it inside `setup` where the `AppHandle` is available.
 

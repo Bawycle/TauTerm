@@ -135,7 +135,7 @@
     </ContextMenu.Trigger>
 
     <ContextMenu.Portal>
-      <ContextMenu.Content class={menuContentClass}>
+      <ContextMenu.Content class={menuContentClass} preventScroll={false}>
         <!-- Copy -->
         <ContextMenu.Item
           class={menuItemClass}
@@ -233,7 +233,7 @@
     />
 
     <DropdownMenu.Portal>
-      <DropdownMenu.Content class={menuContentClass} align="start" sideOffset={4}>
+      <DropdownMenu.Content class={menuContentClass} align="start" sideOffset={4} preventScroll={false}>
         <!-- New Tab -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onnewtab?.()}>
           <span class={menuItemLabelClass}>

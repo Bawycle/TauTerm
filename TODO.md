@@ -46,12 +46,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
 
-- [ ] **Multiple concurrent instances — isolated data directories** `[Score: 8 | R:1, S:1, U:1, E:2]`
-  Two TauTerm instances sharing `~/.local/share/tau-term/` cause WebKit hard-link failures in the cache (`Failed to create hard link … WebKitCache`). The app still runs but cache corruption between instances is possible.
-  **Attempted approach (reverted):** `WebviewWindowBuilder::data_directory()` with a PID-based unique path. This broke the prod build — WebKitGTK with a fresh data directory on every launch causes the frontend served via `tauri://` to malfunction (preference changes not reflected in UI). The data directory must be stable across launches.
-  **Remaining approach:** find a Tauri mechanism that isolates the WebKit cache between concurrent instances while preserving a stable data directory per user. `data_store_identifier` is not supported on Linux/WebKitGTK. Possible alternatives: single-instance lock (prevent concurrent launches), or accept the cosmetic WebKit warning.
-  **Preferences safety (implemented):** `flock(LOCK_EX)` via `fs4` on every write to `preferences.toml` and an `inotify` watch (via the `notify` crate) so instances sharing the file reload on external change rather than overwriting each other silently.
-
 ---
 
 ## v1.1 — Roadmap Minor Release
@@ -154,13 +148,15 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
   #### Phase 1 — Make the project compile on Windows (3–5 days)
 
-  Five issues currently prevent compilation on Windows:
+  Six issues currently prevent compilation or full functionality on Windows:
 
   1. **`secret-service` (D-Bus) is an unconditional dependency** in `Cargo.toml`. Move to `[target.'cfg(target_os = "linux")'.dependencies]`.
   2. **`notify-rust` feature `"d"` (D-Bus) is unconditional**. Same fix as above; use `notify-rust` with feature `"windows"` under `[target.'cfg(target_os = "windows")'.dependencies]`.
   3. **`ssh/known_hosts/store.rs`** imports `std::os::unix::fs::OpenOptionsExt` and calls `.mode(0o600)` without `#[cfg(unix)]` guards. Add `#[cfg(unix)]` around these blocks; Windows fallback can skip POSIX permission enforcement (Windows ACLs on the user directory are already restrictive).
   4. **`platform/validation.rs`** imports `std::os::unix::fs::PermissionsExt` without guard. Same fix — skip POSIX mode validation on Windows or implement a Windows ACL equivalent.
   5. **`session/registry/pane_state.rs`** imports `libc` and uses `libc::pid_t` — a POSIX type that leaks outside the PAL. Replace with `i32` (the concrete type on all supported platforms).
+
+  6. **`webview_data_dir.rs` stale cleanup** uses `/proc/<pid>/` to detect dead processes — Linux-only (`#[cfg(target_os = "linux")]`). On Windows, implement an equivalent via `OpenProcess` + `GetExitCodeProcess` (or `windows-sys::Win32::System::Threading`). The core path resolution and `TAUTERM_DATA_DIR` override are already cross-platform.
 
   Note: file locking (`fs4`) and file watching (`notify`) for preferences safety are already cross-platform — no Windows-specific work needed.
 
@@ -208,6 +204,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   #### Phase 6 — WebView2 considerations
 
   On Windows, Tauri uses WebView2 (Chromium-based Edge) instead of WebKitGTK. Key differences for TauTerm:
+  - **Data directory isolation already works**: `WebviewWindowBuilder::data_directory()` (ADR-0025) is supported on both WebKitGTK and WebView2. The PID-based isolation mechanism in `webview_data_dir.rs` is cross-platform — only the stale cleanup needs a Windows-specific implementation (see Phase 1, item 6).
   - `contain: strict` and `will-change` are supported (WebView2 is Chromium-based, no WebKitGTK-specific behaviour).
   - **Font metrics differ**: WebView2 uses DirectWrite + ClearType. Default monospace resolves to Consolas/Courier New instead of Liberation Mono/DejaVu. The `ch` unit and `getBoundingClientRect()` cell-width calculations must be validated on Windows — glyph metric differences may produce misaligned cell grids.
   - **CSP hardening opportunity**: WebView2 does not have the WebKitGTK `tauri://localhost` CORS restriction that forces `bundleStrategy: "inline"` and `style-src 'unsafe-inline'`. On Windows, `bundleStrategy: "split"` + `style-src` without `unsafe-inline` is achievable — see ADR-0022 exit criteria.

@@ -85,6 +85,7 @@ if "$BUILD"; then
     run podman build \
         --tag "$IMAGE_NAME" \
         --file "$CONTAINERFILE" \
+        --memory 12g \
         "$PROJECT_ROOT"
     echo "[keyring-test] Image built successfully."
 else
@@ -102,6 +103,7 @@ fi
 echo "[keyring-test] Running SecretService integration tests..."
 run podman run \
     --rm \
+    --memory 4g \
     --security-opt label=disable \
     --cap-drop ALL \
     "$IMAGE_NAME"

@@ -33,11 +33,6 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ## High Priority — Must Land in v1 (score 13–16)
 
-### Distribution
-
-- [ ] **Distribution — GPG signing + SHA256SUMS** `[Score: 13 | R:2, S:2, U:1, E:2]` (FS-DIST-006)
-  No signing script exists in CI/CD. Implement in the release pipeline: `SHA256SUMS` generation, GPG signing, publication of signed artifacts.
-
 ---
 
 ## Medium Priority — v1 Quality Target (score 9–12)

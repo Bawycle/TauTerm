@@ -106,8 +106,10 @@ COPY scripts/ssh-test-sshd_config /etc/ssh/sshd_config_test
 WORKDIR /app
 COPY src-tauri/ .
 
+# Limit parallel compiler jobs to cap peak memory usage during image builds.
 # Disable incremental compilation and debug symbols to limit disk usage
 # (the image build environment has constrained overlay storage).
+ENV CARGO_BUILD_JOBS=4
 ENV CARGO_INCREMENTAL=0
 ENV CARGO_PROFILE_DEV_DEBUG=0
 

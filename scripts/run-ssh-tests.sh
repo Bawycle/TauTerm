@@ -85,6 +85,7 @@ if "$BUILD"; then
     run podman build \
         --tag "$IMAGE_NAME" \
         --file "$CONTAINERFILE" \
+        --memory 12g \
         "$PROJECT_ROOT"
     echo "[ssh-test] Image built successfully."
 else
@@ -103,6 +104,7 @@ fi
 echo "[ssh-test] Running SSH integration tests..."
 run podman run \
     --rm \
+    --memory 4g \
     --security-opt label=disable \
     --cap-drop ALL \
     --cap-add SETUID \

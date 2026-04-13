@@ -6,8 +6,6 @@
 
 > **Version:** 1.4.0
 > **Date:** 2026-04-04
-> **Status:** Draft
-> **Author:** UX/UI Designer — TauTerm team
 > **Input documents:** [User Requirements (UR.md)](../UR.md), [Functional Specifications (FS.md)](../FS.md), [Artistic Direction (AD.md)](../AD.md)
 
 ---

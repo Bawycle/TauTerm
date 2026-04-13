@@ -6,8 +6,6 @@
 
 > **Version:** 1.5.0
 > **Date:** 2026-04-04
-> **Status:** Living document — update when architectural decisions change
-> **Author:** Software Architect — TauTerm team
 
 ---
 

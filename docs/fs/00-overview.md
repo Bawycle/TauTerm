@@ -5,8 +5,7 @@
 
 > **Version:** 1.0.0-draft
 > **Date:** 2026-04-04
-> **Status:** Draft
-> **Input documents:** [User Requirements (UR.md)](../UR.md), Domain Expert Technical Analysis
+> **Input documents:** [User Requirements (UR.md)](../UR.md)
 
 ---
 

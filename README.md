@@ -8,8 +8,7 @@ A terminal emulator for Linux, built with Rust and Tauri 2. Currently Linux-only
 
 **Status: beta (v0.1.0-beta)** — Core features are implemented. Under active stabilization — expect rough edges.
 
-<!-- TODO: Add screenshot of TauTerm with Umbra theme showing split panes and tab bar -->
-*Screenshot coming with the first stable release.*
+![TauTerm with Umbra theme showing split panes and tab bar](docs/images/screenshot.png)
 
 ## Features
 

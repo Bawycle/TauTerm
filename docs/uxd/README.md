@@ -4,7 +4,7 @@
 
 This directory contains the UX/UI Design documentation for TauTerm, split from the original `docs/UXD.md` for easier navigation.
 
-> **Version:** 1.5.0 | **Status:** Draft
+> **Version:** 1.5.0
 > **Input documents:** [UR.md](../UR.md), [FS.md](../FS.md), [AD.md](../AD.md)
 
 FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this directory.

@@ -15,7 +15,7 @@ La plateforme cible, pour cette première version, est Linux (x86_64). ARM64 (aa
 - [`docs/uxd/`](docs/uxd/) — UX/UI Design: design token system, component specifications, interaction patterns, IPC contract. Entry point: `docs/uxd/README.md`. **Source of truth for how things look and behave from a UX perspective. Never restates FS requirements — references FS IDs instead.**
 - [`docs/arch/`](docs/arch/) — Architecture: module decomposition, IPC contract, state machines, concurrency model, platform abstraction, security strategy (source of truth for how the system is built). Entry point: `docs/arch/README.md`.
 - [`docs/testing/TESTING.md`](docs/testing/TESTING.md) — Testing strategy: test pyramid, unit/integration/E2E, coverage policy, no-regression policy
-- [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0025)
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001+)
 - [`docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md`](docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md) — Functional Test Protocol: 93 scenarios covering PTY/session, VT parser, SSH lifecycle, preferences & i18n, UI & accessibility, IPC contract
 - [`docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md`](docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md) — Security Test Protocol: threat model, 28 scenarios covering PTY injection, IPC boundary, SSH auth, credential storage, CSP/WebView, OSC52, input validation
 
@@ -104,17 +104,11 @@ All frontend↔backend communication goes through Tauri commands (`#[tauri::comm
 
 ### Rust backend (`src-tauri/src/`)
 
-- `lib.rs` — Tauri app setup: plugin registration, command handler registration via `generate_handler![]`, `run()` entrypoint
-- `main.rs` — thin entrypoint delegating to `tau_term_lib::run()`
-- New modules go in `src-tauri/src/` and are declared in `lib.rs`
-
-Architecture target: terminal state machine in Rust (PTY, VT parser, screen buffer), exposed to frontend via Tauri commands and events. Use `tauri::AppHandle` for emitting events to the window.
+Architecture target: terminal state machine in Rust (PTY, VT parser, screen buffer), exposed to frontend via Tauri commands and events. Use `tauri::AppHandle` for emitting events to the window. See [`src-tauri/CLAUDE.md`](src-tauri/CLAUDE.md) for the full module listing.
 
 ### Svelte frontend (`src/`)
 
-- `src/routes/+page.svelte` — main terminal view
-- `src/routes/+layout.ts` — SSR disabled (`export const ssr = false` — required for Tauri)
-- Static SPA adapter (no server-side rendering); fallback to `index.html`
+Static SPA adapter (no server-side rendering); fallback to `index.html`. See [`src/CLAUDE.md`](src/CLAUDE.md) for key files, directory structure, and coding rules.
 
 State management: Svelte 5 runes (`$state`, `$derived`, `$effect`). No centralized store needed unless cross-component state grows complex — prefer component-local state first.
 
@@ -137,24 +131,9 @@ UI stack: **Tailwind 4** (utility classes), **Bits UI** (headless primitives), *
 
 ## Agent Team
 
-Development is coordinated by a multi-agent team defined in `.claude/agents/`. Agent definitions are project-scoped and versioned with the codebase.
+Development is coordinated by a multi-agent team (`tauterm-team`) defined in `.claude/agents/`. 10 agents: `moe` (arbitration), `user-rep`, `domain-expert`, `architect`, `ux-designer`, `security-expert`, `rust-dev`, `frontend-dev`, `test-engineer`, `perf-expert`. See each agent file for its role and tools.
 
-| Agent file | Name | Role |
-|---|---|---|
-| `tauterm-moe.md` | `moe` | Maître d'Œuvre — arbitration, quality gate, escalation |
-| `tauterm-user-rep.md` | `user-rep` | User Representative — personas, acceptance criteria, UX validation |
-| `tauterm-domain-expert.md` | `domain-expert` | Terminal/PTY domain expert — VT standards, PTY Linux, SSH, app compatibility |
-| `tauterm-architect.md` | `architect` | Software Architect — IPC design, state machines, ADRs |
-| `tauterm-ux-designer.md` | `ux-designer` | UX/UI Designer — design tokens, themes, WCAG 2.1 AA, component specs |
-| `tauterm-security-expert.md` | `security-expert` | Security Expert & Tester — threat modeling, PTY/IPC/SSH review |
-| `tauterm-rust-dev.md` | `rust-dev` | Rust Developer — PTY, VT parser, screen buffer, Tauri commands |
-| `tauterm-frontend-dev.md` | `frontend-dev` | Frontend Developer — Svelte 5, terminal rendering, Tauri IPC |
-| `tauterm-test-engineer.md` | `test-engineer` | Test Engineer — nextest, vitest, WebdriverIO, no-regression policy |
-| `tauterm-perf-expert.md` | `perf-expert` | Performance Expert — profiling, throughput/latency analysis, Rust + Svelte 5 optimization |
-
-**Team name:** `tauterm-team` — runtime config at `~/.claude/teams/tauterm-team/config.json`
-
-**Typical feature flow:** `domain-expert` + `architect` (constraints) → `ux-designer` + `user-rep` (UX/acceptance) → `rust-dev` + `frontend-dev` in parallel (implementation) → `test-engineer` + `security-expert` + `perf-expert` (review). `moe` arbitrates when specialists disagree and validates quality gates.
+**Typical feature flow:** `domain-expert` + `architect` → `ux-designer` + `user-rep` → `rust-dev` + `frontend-dev` (parallel) → `test-engineer` + `security-expert` + `perf-expert`. `moe` arbitrates disagreements.
 
 ## License
 

@@ -2,12 +2,30 @@
 
 Rust backend for TauTerm. PTY management, VT parser, screen buffer, Tauri commands and events.
 
+For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
+
 ## Module structure
 
 - `lib.rs` — app setup: plugin registration, `generate_handler![]`, `run()` entrypoint
 - `main.rs` — thin entrypoint delegating to `tau_term_lib::run()`
-- New modules go in `src-tauri/src/` and are declared in `lib.rs`
 - Module pattern: use `module_name.rs` + `module_name/` subdirectory for submodules — no `mod.rs`
+
+### Modules
+
+| Module | Responsibility |
+|---|---|
+| `session.rs` | PTY session lifecycle (spawn, resize, close) |
+| `vt.rs` | VT parser — ANSI/xterm escape sequence processing |
+| `commands.rs` + `commands/` | Tauri `#[command]` handlers: `session_cmds`, `input_cmds`, `preferences_cmds`, `connection_cmds`, `ssh_cmds`, `ssh_prompt_cmds`, `system_cmds`, `testing` |
+| `events.rs` + `events/types.rs` | Backend→frontend event definitions and emission |
+| `ssh.rs` | SSH connection management |
+| `credentials.rs` | Credential storage (SecretService/keyring) |
+| `preferences.rs` | User preferences load/save/defaults |
+| `error.rs` | Shared error types (`#[derive(Serialize)]`) |
+| `platform.rs` + `platform/` | Platform-specific code: PTY (`pty_linux`, `pty_macos`, `pty_windows`), clipboard, credentials, notifications |
+| `security_load.rs` | Security policy loading |
+| `security_static_checks.rs` | Compile-time security invariants |
+| `webview_data_dir.rs` | WebKitGTK data directory isolation |
 
 ## Safety rules
 

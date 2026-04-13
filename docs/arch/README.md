@@ -3,8 +3,6 @@
 # TauTerm — Architecture Index
 
 > **Version:** 1.8.0
-> **Status:** Living document — update when architectural decisions change
-> **Author:** Software Architect — TauTerm team
 
 The architecture documentation has been split into focused files. See below for the index.
 

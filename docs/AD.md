@@ -4,8 +4,6 @@
 
 > **Version:** 1.3.0
 > **Date:** 2026-04-08
-> **Status:** Draft
-> **Author:** UX/UI Designer — TauTerm team
 
 ---
 

@@ -49,24 +49,46 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 | Module | Unit testable? | Notes |
 |--------|---------------|-------|
 | `vt/processor.rs` + `vt/processor/dispatch.rs` | Yes | Pure state transformation; tests in `vt/processor/tests.rs` |
-| `vt/screen_buffer.rs` | Yes | Pure grid/scrollback data structure |
+| `vt/screen_buffer.rs` | Yes | Pure grid/scrollback data structure; separate `tests.rs` |
 | `vt/cell.rs` | Yes | Value types |
-| `vt/sgr.rs` | Yes | Pure parsing function |
+| `vt/sgr.rs` | Yes | Pure parsing function; separate `tests.rs` |
 | `vt/osc.rs` | Yes | Pure dispatch logic |
 | `vt/modes.rs` | Yes | Flag state |
 | `vt/mouse.rs` | Yes | Encoding logic is pure |
-| `vt/search.rs` | Yes | Operates on ScreenBuffer snapshot |
+| `vt/search.rs` | Yes | Operates on ScreenBuffer snapshot; separate `tests.rs` |
 | `vt/charset.rs` | Yes | DEC mapping tables |
 | `session/lifecycle.rs` | Yes | State machine transitions |
 | `session/ids.rs` | Yes | Newtype construction |
-| `ssh/known_hosts.rs` | Yes | File parsing — operates on `&str` |
+| `session/pty_task.rs` | Yes | PTY task state machine |
+| `session/registry.rs` | Yes | Session registry map; separate `tests.rs` |
+| `ssh/known_hosts.rs` | Yes | File parsing — operates on `&str`; separate `tests.rs` |
 | `ssh/algorithms.rs` | Yes | String classification — pure |
-| `preferences/schema.rs` | Yes | Serde round-trip |
-| `preferences/store.rs` | Partial | Requires temp dir fixture |
-| `session/registry.rs` | No — integration | Requires `SessionRegistry` + `PaneSession` |
-| `session/pty_task.rs` | No — integration | Requires PTY pair or pipe |
-| `platform/` impls | No — integration | OS resources |
-| `ssh/manager.rs`, `ssh/connection.rs` | No — integration | Network or mock SSH |
+| `ssh/auth.rs` | Yes | Auth method selection |
+| `ssh/connection.rs` | Yes | Connection config parsing |
+| `ssh/keepalive.rs` | Yes | Keepalive interval logic |
+| `ssh/manager.rs` | Yes | SSH session manager; separate `tests.rs` |
+| `preferences/schema.rs` | Yes | Serde round-trip; separate `tests.rs` |
+| `preferences/types.rs` | Yes | Preferences type serde |
+| `preferences/store.rs` | Partial | Requires temp dir fixture; separate `tests.rs` |
+| `preferences/store/validation.rs` | Yes | Store schema validation |
+| `preferences/store/lock.rs` | Yes | Store file locking |
+| `preferences/store/migration.rs` | Yes | Store migration logic |
+| `preferences/schema/appearance.rs` | Yes | Appearance schema validation |
+| `credentials.rs` | Yes | Credential struct round-trips |
+| `security_static_checks.rs` | Yes | Static security assertions |
+| `security_load.rs` | Yes | Input size load limits |
+| `webview_data_dir.rs` | Yes | WebView data dir paths |
+| `events/types.rs` | Yes | IPC event type serde |
+| `commands/connection_cmds.rs` | Yes | Connection IPC command handlers |
+| `commands/input_cmds.rs` | Yes | Input IPC command handlers |
+| `commands/system_cmds.rs` | Yes | System IPC commands; separate `tests.rs` |
+| `platform/validation.rs` | Yes | Platform input validation |
+| `platform/pty_injectable.rs` | Yes | Injectable PTY stub (E2E) |
+| `platform/pty_linux.rs` | Partial | Linux PTY layer; separate `tests.rs`; real PTY needed for some |
+| `platform/pty_linux/session.rs` | Yes | Linux PTY session ops |
+| `platform/credentials_linux.rs` | Partial | Requires running keychain for full coverage |
+| `platform/clipboard_linux.rs` | Partial | Requires display for full coverage |
+| `platform/notifications_linux.rs` | Yes | Linux notification dispatch |
 
 #### `vt/processor.rs` and `vt/screen_buffer.rs`
 
@@ -106,9 +128,9 @@ Deprecated: `ssh-rsa` (SHA-1), `ssh-dss`. Not deprecated: `ssh-ed25519`, `ecdsa-
 
 ### 14.3 Rust Integration Tests
 
-Location: `src-tauri/tests/`. One file per domain.
+Location: `src-tauri/tests/`. One file per domain or concern.
 
-#### `vt` + `session` pipeline (PTY pipe)
+#### `vt_processor_integration.rs` — VT + session pipeline (PTY pipe)
 
 A pipe pair replaces a real PTY for most integration tests. Scenarios:
 - Write ANSI escape bytes to write end → assert screen buffer state
@@ -118,7 +140,7 @@ A pipe pair replaces a real PTY for most integration tests. Scenarios:
 
 One real PTY test: spawn `/bin/sh`, write `echo hello\n`, verify `hello` in screen buffer. Tagged `#[cfg(target_os = "linux")]` and `slow` in nextest config.
 
-#### IPC cycle integration
+#### `ipc_command_handlers.rs` — IPC cycle integration
 
 Uses `tauri::test::mock_app`. Scenarios:
 - `create_tab` → `TabState` with leaf `PaneNode`, valid `PaneId`
@@ -127,6 +149,32 @@ Uses `tauri::test::mock_app`. Scenarios:
 - `close_pane` (last pane) → `null` returned
 - `rename_tab` → label updated; subsequent `get_session_state` reflects rename
 - `update_preferences` with invalid value → `TauTermError { code: "PREF_INVALID_VALUE" }`
+
+#### `ipc_type_coherence.rs` — IPC type contracts
+
+Verifies that Rust IPC types and TypeScript types remain in sync (serde shape coherence).
+
+#### `session_registry_topology.rs` — session registry lifecycle
+
+SessionRegistry creation, tab/pane topology mutations, and cleanup on close.
+
+#### `dsr_responses.rs` — Device Status Report
+
+Validates DSR/CPR response handling through the VT pipeline.
+
+#### `async_concurrency.rs` — concurrent session operations
+
+Exercises concurrent tab/pane operations to catch race conditions in SessionRegistry.
+
+#### `pty_teardown.rs` — PTY cleanup on close
+
+Verifies that PTY resources are properly released when sessions are closed.
+
+#### Preferences integration (3 files)
+
+- `preferences_roundtrip.rs` — load/save/patch round-trips
+- `preferences_schema_validation.rs` — schema validation against invalid payloads
+- `preferences_concurrent.rs` — concurrent preference writes
 
 #### SecretService integration tests (Podman container)
 
@@ -140,7 +188,7 @@ Uses `tauri::test::mock_app`. Scenarios:
 
 **Critical ordering constraint:** `Xvfb` and `DISPLAY` must be set *before* `dbus-run-session` is invoked. D-Bus-activated services (`gcr-prompter`) inherit the environment of `dbus-daemon`, not the calling shell. Setting `DISPLAY` after `dbus-run-session` has started means `gcr-prompter` never sees it and crashes with `cannot open display`.
 
-**Image:** `Containerfile.keyring-test` (project root) — single-stage `rust:1.86-slim-bookworm`. Full Tauri Linux build dependencies are required because `tau_term_lib` (which the test binary links against) depends on `gtk`, `gio`, `webkit2gtk`, etc. at compile time. The test binary is pre-compiled during `docker build` to keep `docker run` fast.
+**Image:** `Containerfile.keyring-test` (project root) — single-stage `rust:1.94.1-slim-bookworm`. Full Tauri Linux build dependencies are required because `tau_term_lib` (which the test binary links against) depends on `gtk`, `gio`, `webkit2gtk`, etc. at compile time. The test binary is pre-compiled during `docker build` to keep `docker run` fast.
 
 **nextest profile:** `keyring` (defined in `src-tauri/.config/nextest.toml`) — `test-threads = 1` (tests share a single daemon; parallelism causes race conditions), `slow-timeout = 60s`, `fail-fast = false`.
 
@@ -179,7 +227,7 @@ These tests are **not** part of the default `cargo nextest run` gate. They are a
 
 **Why a custom image:** The test container runs `sshd` on port 2222 with a pre-configured test user (`tauterm`), a known password, and a pre-authorized ED25519 key pair. A second user (`tauterm-noauth`) has no valid credentials, allowing auth-failure tests without configuring PAM policy.
 
-**Image:** `Containerfile.ssh-test` (project root) — single-stage `rust:1.86-slim-bookworm` with `openssh-server`. The test binary is pre-compiled during image build.
+**Image:** `Containerfile.ssh-test` (project root) — single-stage `rust:1.94.1-slim-bookworm` with `openssh-server`. The test binary is pre-compiled during image build.
 
 **Key materials:** The ED25519 key pair is generated at image build time and embedded in the image at `/root/.ssh-test-keys/`. The private key path is exported as `TAUTERM_TEST_PUBKEY_PATH`. These are ephemeral test credentials only — never used in production.
 
@@ -282,29 +330,30 @@ Pure TypeScript, no Svelte components, no DOM.
 
 | Module | What to test |
 |--------|-------------|
-| `lib/terminal/grid.ts` | `applyDiff()`, `applySnapshot()`, `getAttributeRuns()` |
 | `lib/terminal/selection.ts` | Selection state machine transitions |
 | `lib/terminal/keyboard.ts` | Keydown → byte encoding |
 | `lib/terminal/mouse.ts` | Mouse event routing decision (PTY vs TauTerm UI); X10/SGR-1006/URXVT-1015 encoding given button, modifiers, row, col; mode-to-encoding arbitration |
-| `lib/terminal/hyperlinks.ts` | URI scheme validation |
-| `lib/terminal/ansi-palette.ts` | Color index → CSS token mapping |
+| `lib/terminal/color.ts` | Color index → CSS token mapping |
+| `lib/terminal/screen.ts` | Screen buffer diffing and snapshot handling |
+| `lib/terminal/paste.ts` | Paste handling and confirmation logic |
+| `lib/terminal/cell-dimensions.ts` | Cell dimension calculations |
 | `lib/theming/validate.ts` | Token presence, contrast ratio enforcement |
-| `lib/theming/tokens.ts` | Default token set completeness |
-| `lib/preferences/contrast.ts` | `relativeLuminance()`, `contrastRatio()` |
-| `lib/preferences/memory-estimate.ts` | Lines → MB formula |
+| `lib/theming/apply-theme.ts` | Theme application |
+| `lib/theming/built-in-themes.ts` | Built-in theme integrity |
 | `lib/preferences/shortcuts.ts` | Conflict detection, key combo normalization |
+| `lib/preferences/applyUpdate.ts` | Preference update application |
 | `lib/layout/split-tree.ts` | `buildFromPaneNode()`, `updateRatio()`, `findLeaf()` |
 | `lib/state/session.svelte.ts` | Delta merge, `getPane()` traversal |
 | `lib/state/locale.svelte.ts` | `setLocale()` writes to preferences via IPC; `getLocale()` returns current locale; unknown locale code from backend defaults to `"en"` (FS-I18N-006) |
+| `lib/state/fullscreen.svelte.ts` | Fullscreen state management |
+| `lib/state/notifications.svelte.ts` | Notification state management |
 | `lib/utils/tab-title.ts` | `resolveTabTitle()` priority chain (user label > OSC 0/2 title > OSC 7 CWD basename); `getRootPane()` tree traversal (leaf extraction from split tree) |
 | `lib/ipc/commands.ts` | Correct command name and parameter shape passed to `invoke()`; `TauTermError` propagated as thrown value; each wrapper calls the right command string |
-
-#### `lib/terminal/grid.ts` detail
-
-- `applySnapshot()`: every cell char and attribute matches input
-- `applyDiff()`: only specified cells changed; unchanged cells retain prior values
-- `getAttributeRuns()`: alternating attribute groups → correct run count with no unnecessary splits; adjacent identical attributes merged
-- Edge cases: wide chars (width 2 + placeholder), combining chars (no cursor advance), empty rows (non-null run list)
+| `lib/ipc/types.ts` | IPC type shape validation |
+| `lib/ipc/ssh-events.ts` | SSH event listener registration and dispatch |
+| `lib/ipc/osc-title.ts` | OSC title event handling |
+| `lib/ipc/notification-events.ts` | Notification event listeners |
+| `lib/i18n/catalogue-parity` | en/fr catalogue key parity |
 
 #### `lib/terminal/mouse.ts` detail
 
@@ -356,9 +405,9 @@ Pure rendering components (`MemoryEstimate`, `ContrastAdvisory`, `SshBadge`): no
 2. **Rendering output correctness-critical?** Yes. An incorrect cursor shape or missing blink would be immediately visible. However, the correctness of which shape to render is determined by the backend VT state machine (tested in §14.4, FS-VT-030/031) and propagated as a prop. The component only maps a string prop to a CSS class.
 3. **Reused across multiple contexts?** No. Instantiated once per pane, inside `TerminalPane.svelte` only.
 
-**Verdict: criterion 3 not met → no component test file.** The one non-extractable behavior (blink timer lifecycle) is too thin to warrant a full component test setup. Backend correctness for DECSCUSR shapes is covered by VT conformance tests (§14.4). `TerminalCursor.svelte.test.ts` is not created.
+**Verdict: criterion 3 not met → no component test file.** The one non-extractable behavior (blink timer lifecycle) is too thin to warrant a full component test setup. Backend correctness for DECSCUSR shapes is covered by VT conformance tests (§14.4).
 
-#### `ShortcutRecorder.svelte`
+#### `KeyboardShortcutRecorder`
 
 - Focus → `isRecordingShortcut = true`
 - Keydown while recording → displayed combination updates
@@ -501,18 +550,14 @@ Cross-connection isolation: two panes with different policies → policy state i
 
 #### Fuzzing
 
-Two `cargo-fuzz` targets in `src-tauri/fuzz/fuzz_targets/` (cargo-fuzz convention: adjacent to the target crate):
+One `cargo-fuzz` target in `src-tauri/fuzz/fuzz_targets/` (cargo-fuzz convention: adjacent to the target crate):
 
-- `fuzz_vt_processor.rs`: 80×24 processor, arbitrary bytes → no panic, no unbounded allocation
-- `fuzz_osc_dispatch.rs`: OSC sequence parsing in isolation with mock backends
-- `fuzz_ipc_commands.rs`: arbitrary JSON → serde never panics; downstream validation produces no secondary panic
+- `vt_processor.rs`: 80×24 processor, arbitrary bytes → no panic, no unbounded allocation
 
 Fuzzing is not in the `nextest run` gate. Runs:
 - Manually before declaring VT feature complete (`-max_total_time=300`)
 - Weekly CI scheduled job (10 min/target)
 - Any crash → minimized reproducer → deterministic nextest regression test before fix
-
-Seed corpora committed to `src-tauri/fuzz/corpus/`.
 
 #### Security regression rule
 
@@ -539,145 +584,31 @@ Pre-v1.0: manual penetration assessment of the PTY injection surface and SSH TOF
 
 ### 14.9 Test File Organization
 
-**Governing rule:** tests live as close as possible to the code they test, except when they cross module boundaries.
+**Governing rule:** tests live as close as possible to the code they test, except when they cross module boundaries. Do not maintain an exhaustive file inventory here — use `find` or `tree` for that. This section defines **conventions** so new tests land in the right place.
 
-```
-src-tauri/src/
-  vt/
-    processor.rs              — declares: #[cfg(test)] mod tests;
-    processor/
-      tests.rs                — unit tests for VtProcessor (separate: large surface)
-    screen_buffer.rs          — declares: #[cfg(test)] mod tests;
-    screen_buffer/
-      tests.rs                — unit tests for ScreenBuffer (separate: large surface)
-    cell.rs                   — inline tests
-    sgr.rs                    — inline tests
-    osc.rs                    — inline tests
-    modes.rs                  — inline tests
-    mouse.rs                  — inline tests
-    search.rs                 — inline tests
-    charset.rs                — inline tests
-  session/
-    lifecycle.rs              — inline tests
-    ids.rs                    — inline tests
-    registry.rs               — inline tests (separate file if grows large)
-    pane.rs                   — inline tests
-    ...
+#### Placement rules
 
-src-tauri/tests/
-  common/
-    mod.rs                    — re-exported by each integration test via `mod common;`
-    pty_harness.rs            — test PtyBackend (in-memory pipe)
-    vt_harness.rs             — feed_str(), feed_bytes(), snapshot_as_text()
-    fixtures.rs               — fixture path resolution (CARGO_MANIFEST_DIR)
-  vt_integration.rs           — VtProcessor + ScreenBuffer full pipeline
-  vt_processor_integration.rs — VtProcessor + ScreenBuffer full pipeline (integration)
-  session_integration.rs      — SessionRegistry lifecycle
-  ssh_integration.rs          — SSH state machine (mocked transport)
-  preferences_integration.rs  — load/save/patch round-trips
-  ipc_commands.rs             — command handler validation
-  fixtures/
-    vt/
-      sequences/              — name.bin (raw bytes), paired by name with snapshots
-      snapshots/              — name.snap (UTF-8 grid dump)
-    prefs/
-      valid_prefs.json
-      invalid_prefs.json
+| Layer | Location | Example |
+|-------|----------|---------|
+| Rust unit (small) | Inline `#[cfg(test)] mod tests { }` in source file | `vt/cell.rs`, `session/lifecycle.rs` |
+| Rust unit (large) | Separate `tests.rs` file when module exceeds ~150 lines or source exceeds ~400 lines. Declared as `#[cfg(test)] mod tests;`; file at `<module>/tests.rs` | `vt/processor/tests.rs`, `vt/screen_buffer/tests.rs` |
+| Rust VT conformance | Thematic sub-modules under `vt/processor/tests/` | `tests/basic.rs`, `tests/security.rs`, `tests/modes.rs` |
+| Rust integration | `src-tauri/tests/<domain>.rs` — one file per domain or concern | `vt_processor_integration.rs`, `session_registry_topology.rs` |
+| Rust containerized | `src-tauri/tests/` — run via dedicated Podman scripts, not `cargo nextest run` | `credentials_integration.rs`, `ssh_integration.rs` |
+| Rust fuzz | `src-tauri/fuzz/fuzz_targets/` | `vt_processor.rs` |
+| Frontend unit (TS) | Co-located `<module>.test.ts` | `lib/terminal/keyboard.test.ts` |
+| Frontend component | `__tests__/` directory alongside the components | `lib/components/__tests__/SearchOverlay.test.ts` |
+| Frontend composable | `__tests__/` directory alongside the composables | `lib/composables/__tests__/cursorBlink.test.ts` |
+| E2E | `tests/e2e/<scenario>.spec.ts` — flat, one file per scenario | `tab-lifecycle.spec.ts`, `ssh-reconnect.spec.ts` |
+| E2E helpers | `tests/e2e/helpers/` | `helpers/selectors.ts` |
 
-src-tauri/fuzz/               — cargo-fuzz crate (adjacent to src-tauri/)
-  fuzz_targets/
-    fuzz_vt_processor.rs
-    fuzz_osc_dispatch.rs
-    fuzz_ipc_commands.rs
-  corpus/
-    fuzz_vt_processor/
-    fuzz_osc_dispatch/
-    fuzz_ipc_commands/
+#### Naming conventions
 
-src/lib/
-  terminal/
-    grid.ts
-    grid.test.ts
-    selection.ts
-    selection.test.ts
-    keyboard.ts
-    keyboard.test.ts
-    mouse.ts
-    mouse.test.ts
-  state/
-    session.svelte.ts
-    session.svelte.test.ts
-    locale.svelte.ts
-    locale.svelte.test.ts
-  ipc/
-    commands.ts
-    commands.test.ts
-
-src/components/
-  terminal/
-    TerminalRow.svelte
-    TerminalRow.svelte.test.ts
-    TerminalCursor.svelte              — no test file (see §14.6 evaluation)
-  tabs/
-    TabItem.svelte
-    TabItem.svelte.test.ts
-  preferences/
-    shared/
-      ShortcutRecorder.svelte
-      ShortcutRecorder.svelte.test.ts
-      ThemeEditor.svelte
-      ThemeEditor.svelte.test.ts
-
-tests/
-  e2e/
-    fixtures/
-      ssh-server/             — sshd config + test keys
-      prefs/
-        default.json
-    helpers/
-      app.ts                  — browser setup/teardown
-      pane.ts                 — PaneObject
-      tab.ts                  — TabObject
-      session.ts              — waitForPrompt(), waitForOutput()
-    page-objects/
-      TerminalPage.ts
-      PreferencesPage.ts
-      ConnectionManagerPage.ts
-    specs/
-      terminal/
-        pty-lifecycle.e2e.ts
-        split-pane.e2e.ts
-        keyboard-input.e2e.ts
-        scrollback.e2e.ts
-        selection-copy.e2e.ts
-      ssh/
-        connect-disconnect.e2e.ts
-        reconnect.e2e.ts
-        host-key-dialog.e2e.ts
-      preferences/
-        theme-switch.e2e.ts
-        shortcut-recording.e2e.ts
-      first-launch/
-        first-launch-hint.e2e.ts
-```
-
-#### File naming conventions
-
-| Test type | Convention |
-|-----------|-----------|
-| Rust unit inline | `#[cfg(test)] mod tests { }` in source file |
-| Rust unit separate | `<module>/tests.rs`, declared with `#[cfg(test)] mod tests;` |
-| Rust integration | `src-tauri/tests/<domain>_integration.rs` |
-| Rust VT conformance | `src-tauri/src/vt/processor/tests/` (inline unit tests per theme) |
-| Rust shared helpers | `src-tauri/tests/common/` |
-| VT fixtures (binary) | `src-tauri/tests/fixtures/vt/sequences/<name>.bin` |
-| VT fixtures (snapshot) | `src-tauri/tests/fixtures/vt/snapshots/<name>.snap` |
-| Frontend unit (TS) | `<module>.test.ts` co-located |
-| Frontend component | `<Component>.svelte.test.ts` co-located |
-| E2E specs | `tests/e2e/specs/<feature>/<scenario>.e2e.ts` |
-| E2E helpers/page objects | `tests/e2e/helpers/`, `tests/e2e/page-objects/` |
-
-Project-wide suffix convention: `.test.ts` for TypeScript, `.svelte.test.ts` for Svelte components. No `.spec.ts` — one suffix throughout.
+| Scope | Suffix |
+|-------|--------|
+| Rust unit/integration | Standard `#[test]` / `#[cfg(test)]` — no file suffix convention |
+| Frontend unit + component | `.test.ts` |
+| E2E | `.spec.ts` |
 
 Fixture path resolution in Rust: use `std::env::var("CARGO_MANIFEST_DIR")` — nextest sets this correctly regardless of working directory.
 

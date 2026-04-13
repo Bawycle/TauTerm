@@ -2,8 +2,6 @@
 
 # Tauri 2 Capabilities Audit
 
-> **Status:** Current — audited 2026-04-09
-> **Author:** Software Architect — TauTerm team
 > **Applies to:** `src-tauri/capabilities/default.json`
 
 ---

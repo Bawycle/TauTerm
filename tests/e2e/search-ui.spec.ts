@@ -51,13 +51,14 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
 
   await browser.execute(
     function (cmdArg: string, argsArg: Record<string, unknown> | undefined) {
-      (window as unknown as {
-        __TAURI_INTERNALS__: { invoke: (c: string, a?: unknown) => Promise<unknown> };
-      }).__TAURI_INTERNALS__
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: { invoke: (c: string, a?: unknown) => Promise<unknown> };
+        }
+      ).__TAURI_INTERNALS__
         .invoke(cmdArg, argsArg)
         .then(function (r: unknown) {
-          (window as unknown as Record<string, unknown>).__e2e_invoke_result =
-            r ?? '__e2e_null__';
+          (window as unknown as Record<string, unknown>).__e2e_invoke_result = r ?? '__e2e_null__';
         })
         .catch(function () {
           (window as unknown as Record<string, unknown>).__e2e_invoke_result = '__e2e_error__';
@@ -114,12 +115,7 @@ async function dispatchShortcut(
   shiftKey: boolean,
 ): Promise<void> {
   await browser.execute(
-    function (
-      keyArg: string,
-      codeArg: string,
-      ctrlArg: boolean,
-      shiftArg: boolean,
-    ): void {
+    function (keyArg: string, codeArg: string, ctrlArg: boolean, shiftArg: boolean): void {
       const grid = document.querySelector('.terminal-grid') as HTMLElement | null;
       const target = grid ?? document.body;
       target.dispatchEvent(
@@ -262,9 +258,7 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
 
     // Verify the value was applied
     const inputValue = await browser.execute((): string => {
-      const input = document.querySelector<HTMLInputElement>(
-        '.search-overlay input[type="text"]',
-      );
+      const input = document.querySelector<HTMLInputElement>('.search-overlay input[type="text"]');
       return input?.value ?? '';
     });
     expect(inputValue).toBe('hello');
@@ -282,12 +276,17 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
    * Requires --features e2e-testing binary.
    */
   it('TEST-SEARCH-E2E-003: searching for injected content yields matches', async () => {
-    // Seed the pane with a distinctive searchable token
+    // Seed the pane with a distinctive searchable token.
+    // Use awaited invoke so errors surface instead of timing out.
     const paneId = await getActivePaneId();
     expect(paneId).toBeTruthy();
 
+    // Reset scroll position in case a previous test left the viewport scrolled.
+    await tauriInvoke<void>('scroll_to_bottom', { paneId: paneId! });
+    await browser.pause(100);
+
     const searchToken = 'e2e-search-token-xyz';
-    await seedPaneContent(paneId!, searchToken + '\r\n');
+    await seedPaneContentAwaited(paneId!, searchToken + '\r\n');
 
     // Wait for the content to render in the grid (confirms VT parser processed it)
     await browser.waitUntil(
@@ -301,7 +300,7 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
 
     // search_pane searches the scrollback ring buffer, not the visible screen.
     // Inject newlines to scroll the token off the visible area into scrollback.
-    await seedPaneContent(paneId!, '\r\n'.repeat(50));
+    await seedPaneContentAwaited(paneId!, '\r\n'.repeat(50));
     await browser.pause(300);
 
     // Ensure search overlay is open
@@ -568,9 +567,7 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
 
     // Dispatch Escape on the search input
     await browser.execute((): void => {
-      const input = document.querySelector<HTMLInputElement>(
-        '.search-overlay input[type="text"]',
-      );
+      const input = document.querySelector<HTMLInputElement>('.search-overlay input[type="text"]');
       if (input) {
         input.dispatchEvent(
           new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
@@ -579,13 +576,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
     });
 
     // Wait for overlay to disappear
-    await browser.waitUntil(
-      async () => !(await isSearchOverlayOpen()),
-      {
-        timeout: 5_000,
-        timeoutMsg: 'Search overlay did not close after Escape',
-      },
-    );
+    await browser.waitUntil(async () => !(await isSearchOverlayOpen()), {
+      timeout: 5_000,
+      timeoutMsg: 'Search overlay did not close after Escape',
+    });
 
     expect(await isSearchOverlayOpen()).toBe(false);
   });
@@ -614,13 +608,10 @@ describe('TauTerm — Search UI: query → backend → highlight → navigation'
     });
 
     // Wait for overlay to close
-    await browser.waitUntil(
-      async () => !(await isSearchOverlayOpen()),
-      {
-        timeout: 5_000,
-        timeoutMsg: 'Search overlay did not close after clicking X button',
-      },
-    );
+    await browser.waitUntil(async () => !(await isSearchOverlayOpen()), {
+      timeout: 5_000,
+      timeoutMsg: 'Search overlay did not close after clicking X button',
+    });
 
     expect(await isSearchOverlayOpen()).toBe(false);
   });

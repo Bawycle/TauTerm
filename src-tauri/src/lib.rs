@@ -179,17 +179,21 @@ pub fn run() {
             }
 
             // FS-FULL-009: restore full-screen state from saved preferences.
-            let saved_fullscreen = app
-                .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
-                .read()
-                .get()
-                .appearance
-                .fullscreen;
-            if saved_fullscreen
-                && let Some(window) = app.get_webview_window("main")
-                && let Err(e) = window.set_fullscreen(true)
+            // Skipped in E2E builds so tests always start in windowed mode.
+            #[cfg(not(feature = "e2e-testing"))]
             {
-                tracing::warn!("Could not restore fullscreen state: {e}");
+                let saved_fullscreen = app
+                    .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
+                    .read()
+                    .get()
+                    .appearance
+                    .fullscreen;
+                if saved_fullscreen
+                    && let Some(window) = app.get_webview_window("main")
+                    && let Err(e) = window.set_fullscreen(true)
+                {
+                    tracing::warn!("Could not restore fullscreen state: {e}");
+                }
             }
 
             Ok(())

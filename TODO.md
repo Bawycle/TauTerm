@@ -166,9 +166,29 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   - **Process termination on session close** — no `SIGHUP` equivalent. ConPTY sends `CTRL_CLOSE_EVENT` via the console handler; closing the input pipe causes the child process to receive EOF. Behavior differs from SIGHUP — validate with PowerShell 7 and cmd.exe.
   - **`SIGWINCH`** — not sent by ConPTY on resize. `ResizePseudoConsole` is the correct call; `portable-pty` abstracts this correctly. Shells ported via MSYS2 (Git Bash) emulate `SIGWINCH` on top — validate empirically.
 
-  Shell defaults: `$SHELL` does not exist on Windows. Implement a discovery heuristic: check `$SHELL` (Git Bash / WSL), then `pwsh.exe` in `$PATH`, fallback to `cmd.exe`. Read `$COMSPEC` as the authoritative cmd path.
+  **Default shell detection and configuration:**
 
-  Encoding: force UTF-8 before spawning the child shell. For PowerShell 7: pass `-InputFormat Text -OutputFormat Text` or set `$OutputEncoding`. For cmd.exe: prefix the command with `chcp 65001`. Inject `TERM=xterm-256color` into the child environment (absent by default on Windows).
+  `$SHELL` does not exist on Windows — a dedicated detection strategy is required.
+
+  *Detection heuristic (ordered by preference):*
+  1. User-configured shell in preferences (if set) — takes absolute priority.
+  2. `pwsh.exe` in `$PATH` — PowerShell 7+ (cross-platform, modern, default in Windows Terminal).
+  3. `powershell.exe` — Windows PowerShell 5.1 (always present on Windows 10/11, path: `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`).
+  4. `$COMSPEC` — authoritative path for cmd.exe (fallback of last resort).
+
+  *Rationale for PowerShell 7 over 5.1:* PowerShell 7 (`pwsh.exe`) is what Windows Terminal defaults to; it supports UTF-8 natively, has better VT sequence handling, and is actively maintained. PowerShell 5.1 is in maintenance-only mode since 2018. However, `pwsh.exe` is not pre-installed — users must install it separately. The heuristic must detect both and prefer 7 when available.
+
+  *Alternative shells on Windows:*
+  - **Git Bash** (`bash.exe` from Git for Windows / MSYS2): common among developers. Uses MSYS2's PTY emulation layer on top of ConPTY — validate that ConPTY + MSYS2 bash works correctly (known issues with signal handling and `SIGWINCH` emulation).
+  - **WSL** (`wsl.exe`): spawns a Linux distribution. The PTY is managed inside WSL (Linux PTY, not ConPTY) — TauTerm spawns `wsl.exe` as a regular ConPTY child, and the Linux PTY is transparent. Validate with common WSL distributions (Ubuntu, Debian).
+  - **Nushell**, **Fish** (Windows builds): niche but growing. No special handling needed if they are standard ConPTY clients.
+
+  *Preferences integration:*
+  The shell selection must be exposed in preferences (FS-PREF). On Linux, the default is `$SHELL` — a single value. On Windows, the preference should present detected shells as a list (similar to Windows Terminal's profile model) and allow the user to set a default. This requires extending `ShellConfig` (or equivalent) to support per-platform detection logic behind the PAL.
+
+  *Encoding per shell:*
+
+  Force UTF-8 before spawning the child shell. For PowerShell 7: pass `-InputFormat Text -OutputFormat Text` or set `$OutputEncoding`. For PowerShell 5.1: inject `[Console]::OutputEncoding = [Text.Encoding]::UTF8` or set `$OutputEncoding` in the profile — 5.1 defaults to the system locale codepage, not UTF-8. For cmd.exe: prefix the command with `chcp 65001`. Inject `TERM=xterm-256color` into the child environment (absent by default on Windows).
 
   #### Phase 3 — Credentials (Windows Credential Manager) (2–3 days)
 

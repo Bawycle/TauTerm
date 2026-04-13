@@ -3,6 +3,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_PERF_INSTRUMENTATION?: string;
+  readonly VITE_APP_VERSION: string;
 }
 
 interface ImportMeta {

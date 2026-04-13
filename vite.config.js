@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
-import { defineConfig } from "vite";
-import { sveltekit } from "@sveltejs/kit/vite";
-import tailwindcss from "@tailwindcss/vite";
-import { paraglideVitePlugin } from "@inlang/paraglide-js";
+import { defineConfig } from 'vite';
+import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { licenseGeneratorPlugin } from './vite-plugin-licenses';
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -25,14 +26,14 @@ function tailwindExcludingSvelteVirtual() {
   // Matches ?svelte&type=style&lang.css (and similar Svelte virtual IDs)
   const svelteVirtual = /[?&]svelte[=&]/;
   return tailwindcss().map((plugin) => {
-    if (!plugin?.transform || typeof plugin.transform !== "object") return plugin;
+    if (!plugin?.transform || typeof plugin.transform !== 'object') return plugin;
     const t = plugin.transform;
     // filter.id may be a string, RegExp, array, or an include/exclude object.
     // Only augment the include/exclude object form — other forms have no exclude list.
     const idFilter = t.filter?.id;
     if (
       !idFilter ||
-      typeof idFilter === "string" ||
+      typeof idFilter === 'string' ||
       idFilter instanceof RegExp ||
       Array.isArray(idFilter)
     ) {
@@ -64,17 +65,22 @@ function tailwindExcludingSvelteVirtual() {
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [
+    licenseGeneratorPlugin(),
     sveltekit(),
     tailwindExcludingSvelteVirtual(),
     paraglideVitePlugin({
-      project: "./project.inlang",
-      outdir: "./src/lib/paraglide",
-      strategy: ["globalVariable", "baseLocale"],
+      project: './project.inlang',
+      outdir: './src/lib/paraglide',
+      strategy: ['globalVariable', 'baseLocale'],
     }),
   ],
 
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+  },
+
   test: {
-    environment: "jsdom",
+    environment: 'jsdom',
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
@@ -88,14 +94,14 @@ export default defineConfig(async () => ({
     host: host || false,
     hmr: host
       ? {
-          protocol: "ws",
+          protocol: 'ws',
           host,
           port: 1421,
         }
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ['**/src-tauri/**'],
     },
   },
 
@@ -110,7 +116,7 @@ export default defineConfig(async () => ({
       // import.meta with {} automatically; this makes the intent explicit and silences
       // the warning. Vite has already replaced all import.meta.env.* before this point.
       transform: {
-        define: { "import.meta": "{}" },
+        define: { 'import.meta': '{}' },
       },
       // Suppress PLUGIN_TIMINGS: informational-only performance report, not actionable.
       checks: {

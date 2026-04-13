@@ -27,6 +27,7 @@
   import { cubicIn } from 'svelte/easing';
   import type { PaneState, SshLifecycleState } from '$lib/ipc/types';
   import * as m from '$lib/paraglide/messages';
+  import AboutPopover from './AboutPopover.svelte';
 
   interface Props {
     activePaneState?: PaneState | null;
@@ -42,6 +43,8 @@
     dimsVisible?: boolean;
     /** Called when the Settings button is clicked (DIV-UXD-008). */
     onsettings?: () => void;
+    /** Called when the About popover closes (onCloseAutoFocus — focus restoration). */
+    onAboutCloseAutoFocus?: () => void;
   }
 
   const {
@@ -52,6 +55,7 @@
     rows = null,
     dimsVisible = false,
     onsettings,
+    onAboutCloseAutoFocus,
   }: Props = $props();
 
   // -------------------------------------------------------------------------
@@ -130,6 +134,8 @@
 
   // Left zone: CWD only (processTitle is shown in tab title and OS window title)
   const cwd = $derived(activePaneState?.cwd ?? '');
+
+  const appVersion = import.meta.env.VITE_APP_VERSION;
 </script>
 
 <div class="status-bar" role="status" aria-live="polite">
@@ -177,6 +183,9 @@
         {/if}
       </span>
     {/if}
+
+    <!-- About popover: version label as trigger -->
+    <AboutPopover version={appVersion} onCloseAutoFocus={onAboutCloseAutoFocus} />
 
     <!-- Settings button (DIV-UXD-008) -->
     <button

@@ -12,6 +12,9 @@ vite.config.ts.timestamp-*
 # Paraglide JS — generated code, do not commit
 src/lib/paraglide/
 
+# Build-time generated assets — do not commit
+src/lib/generated/
+
 # WebdriverIO
 wdio-logs/
 .wdio-*

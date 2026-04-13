@@ -268,6 +268,15 @@
   "status_bar_settings": "Open settings",
   "status_bar_dimensions_aria": "{cols} columns, {rows} rows",
 
+  "about_app_version_aria": "TauTerm version {version}, click for details",
+  "about_close": "Close",
+  "about_license_label": "License",
+  "about_source_code": "Source code",
+  "about_copy_version": "Copy version",
+  "about_version_copied": "Copied!",
+  "about_third_party_notices": "Third-party notices",
+  "about_third_party_unavailable": "Third-party notices unavailable",
+
   "preferences_appearance_opacity": "Opacity (0–1)",
   "preferences_appearance_font_family_hint": "Any monospace font installed on your system. Example: JetBrains Mono, Fira Code. Falls back to the system monospace font if not found.",
   "preferences_appearance_font_size_hint": "Terminal font size in pixels. Applies immediately.",

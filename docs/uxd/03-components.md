@@ -575,10 +575,14 @@ Triggered by Ctrl+, or the Settings button in the status bar (FS-PREF-005).
 |  Terminal       |                                          |
 |  Connections    |                                          |
 |  Themes         |                                          |
+|  ───────────    |                                          |
+|  About          |                                          |
 +-----------------+------------------------------------------+
 ```
 
-**Section navigation order rationale:** Language is not a separate nav section. It is a subsection within Appearance (after Themes quick-select, font, and line height controls). This placement ensures that a user opening Preferences for the first time to change the display language finds it in the first content-heavy section they encounter, without scrolling past Terminal Behavior, Connections, and Themes. Language is a display preference (how the UI looks to the user) — grouping it with font, size, and theme is semantically consistent.
+**Section navigation order rationale:** "About" is the last item in the nav, visually separated from the functional sections by a 1px horizontal divider (`--color-border`, `margin: --space-2` top and bottom). It is not a settings section — it contains no editable controls — but it lives inside the Preferences panel because that is the universal convention (VS Code, GNOME Settings, Firefox), it avoids a separate panel, and users intuitively look for app metadata in Settings. The visual separator signals that About is categorically different from the sections above it.
+
+**Section navigation order rationale (Language):** Language is not a separate nav section. It is a subsection within Appearance (after Themes quick-select, font, and line height controls). This placement ensures that a user opening Preferences for the first time to change the display language finds it in the first content-heavy section they encounter, without scrolling past Terminal Behavior, Connections, and Themes. Language is a display preference (how the UI looks to the user) — grouping it with font, size, and theme is semantically consistent.
 
 - **Header:** `--font-size-ui-lg` (16px), `--font-weight-semibold`, `--color-text-primary`. Close button (Lucide `X`) top-right.
 - **Section navigation:** Left column, width `--size-preferences-nav-width` (180px). Vertical list of section labels. Active section: `--color-accent-text` (`#7ab3d3`), left border 2px solid `--color-accent`. Inactive: `--color-text-secondary`. Hover: `--color-hover-bg` background. Transition: `background-color, color, border-color var(--duration-fast) var(--ease-out)`.
@@ -662,6 +666,12 @@ Numeric fields in the Preferences panel (e.g., scrollback lines, cursor blink ra
 - "Create Theme" button (primary variant).
 - Per-theme actions (visible on hover): Edit (opens theme editor, §7.20), Duplicate, Delete (with confirmation; disabled for the default Umbra theme).
 - Section heading: "THEMES" in Caption level.
+
+**About section:**
+- See §7.23 for the full content specification.
+- Section heading: "ABOUT" in Caption level.
+- Read-only. Contains no editable controls. No form validation, no patch emission.
+- Nav item is visually separated from the sections above it by a horizontal divider (1px solid `--color-border`, `margin-block: --space-2`).
 
 
 ### 7.7 Connection Manager
@@ -1433,3 +1443,320 @@ All token values are defined in §3 (tokens) and §7.14 (buttons).
 | `--radius-full` | Badge shape |
 | `--space-3` | Badge offset from viewport edges |
 | `--size-icon-md` | Badge icon size |
+
+
+---
+
+### 7.23 About Section (Preferences Panel)
+
+The About section is the last item in the Preferences panel navigation (§7.6). It presents read-only application metadata: identity, version, license, and third-party notices. It contains no editable controls, emits no preference patches, and requires no form validation.
+
+#### 7.23.1 Placement Rationale
+
+About lives inside the Preferences panel, not in a separate dialog or menu entry, for two reasons. First, it follows the universal convention of developer tools and system apps — users look for app metadata in the settings surface. Second, a dedicated panel (triggered from a menu or status bar) adds a separate entry point, navigation state, and focus management burden for content that is rarely accessed. A nav section inside the existing Preferences panel costs nothing structurally and fits naturally.
+
+The nav item is visually separated from the functional preference sections (Keyboard, Appearance, Terminal, Connections, Themes) by a horizontal divider. This signals that About is categorically different — informational, not configurable — without requiring a label or tooltip to communicate the distinction.
+
+#### 7.23.2 Layout
+
+```
++--[ABOUT]----------------------------------------------------+
+|                                                             |
+|  TauTerm                            [version badge: 0.1.0] |
+|  [tagline: "A terminal for the focused developer."]         |
+|                                                             |
+|  ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──    |
+|                                                             |
+|  License                                                    |
+|  Mozilla Public License 2.0 (MPL-2.0)                      |
+|  Source code — [github.com/…]                               |
+|                                                             |
+|  ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──    |
+|                                                             |
+|  Third-Party Notices                                        |
+|  [scrollable list of dependency entries]                    |
+|                                                             |
++-------------------------------------------------------------+
+```
+
+The section content area is scrollable (inherits the panel's `overflow-y: auto` content column). The Third-Party Notices list is the only zone that may grow unboundedly.
+
+#### 7.23.3 Identity Block
+
+The identity block occupies the top of the section, above the first separator.
+
+**App name:** "TauTerm" — rendered at `--font-size-ui-xl` (20px), `--font-weight-semibold` (600), `--color-text-primary`. This is the only heading-level text in the section and serves as the visual anchor. The name is a proper noun; it is not translated.
+
+**Version badge:** Rendered inline to the right of the app name, vertically centered. The badge displays the version string (e.g., "0.1.0-beta") in `--font-size-ui-sm` (12px), `--font-weight-normal` (400), `--color-text-secondary`. No background, no border — the text alone is sufficient. If a pre-release suffix is present (e.g., `-beta`, `-rc.1`), it is displayed as-is; no special coloring.
+
+**Tagline:** One short sentence below the app name. `--font-size-ui-base` (13px), `--font-weight-normal`, `--color-text-secondary`. Translated via Paraglide. The tagline communicates character without being decorative — consistent with the Umbra philosophy that text earns its place through meaning, not aesthetics.
+
+Layout: The identity block uses a flex row for name + badge (aligned `items-baseline`), with the tagline on the line below. Vertical gap between name row and tagline: `--space-1` (4px). Vertical gap between the identity block and the first separator: `--space-6` (24px).
+
+**Version value source:** The version string is injected at build time as a compile-time constant (e.g., via a Tauri `__VERSION__` build variable or an equivalent Vite define). It is never fetched via IPC at runtime — this avoids a round-trip for purely static data. The frontend developer resolves the exact injection mechanism in coordination with the Rust developer.
+
+#### 7.23.4 License Block
+
+The license block sits between the two horizontal separators.
+
+**Block heading:** "LICENSE" — Caption level: `--font-size-ui-xs` (11px), `--font-weight-semibold`, `text-transform: uppercase`, `letter-spacing: var(--letter-spacing-label)` (0.09em), `--color-text-heading`. This matches the heading convention used throughout the Preferences panel (§7.6.2).
+
+**License name:** "Mozilla Public License 2.0 (MPL-2.0)" — `--font-size-ui-base` (13px), `--font-weight-normal`, `--color-text-primary`. Not a link. The license identifier is a proper noun and is not translated; the surrounding label ("License") is translated.
+
+**Source availability link:** MPL-2.0 requires that recipients can obtain source code. The link text is "Source code" (translated) followed by the repository URL on the same line, rendered as a plain-text URL in `--font-size-ui-sm` (12px), `--color-accent-text` (`#7ab3d3`), `--font-mono-ui`. The URL itself is not translated (it is a proper noun). The link opens in the system browser via a Tauri shell open command.
+
+**Interaction (link):**
+- Resting: `--color-accent-text`, no underline.
+- Hover: `--color-text-primary`, `text-decoration: underline`.
+- Focus (keyboard): `--color-focus-ring` focus ring at 2px, offset 3px (global `:focus-visible` rule applies).
+- Active: `--color-accent`, no underline.
+- Transition: `color var(--duration-fast) var(--ease-out)`.
+
+**ARIA:** The link element carries `aria-label` that includes the full URL for screen readers (e.g., i18n key `about_source_link_label` → "Source code on GitHub: https://github.com/…").
+
+Vertical gap between the license block heading and the license name: `--space-2` (8px). Vertical gap between the license name and the source link: `--space-1` (4px). Vertical gap between the license block and the second separator: `--space-6` (24px).
+
+#### 7.23.5 Third-Party Notices Block
+
+**Block heading:** "THIRD-PARTY NOTICES" — Caption level, same styling as §7.23.4 above.
+
+**Purpose:** Some dependencies (MIT, Apache-2.0, BSD variants) require their copyright notice to be distributed with the software. This block satisfies that obligation in a user-accessible location.
+
+**Content:** A vertically stacked list of dependency entries. Each entry contains:
+- **Crate name** — `--font-size-ui-sm` (12px), `--font-weight-medium` (500), `--font-mono-ui`, `--color-text-primary`. Not translated (proper noun).
+- **License identifier** — same line as the crate name, separated by a `--space-2` gap, rendered in `--font-size-ui-sm`, `--color-text-secondary`. Not translated (SPDX identifier is a proper noun). Example: "MIT", "Apache-2.0".
+- **Copyright notice** — below the crate name, `--font-size-ui-xs` (11px), `--color-text-secondary`, `--font-ui`. One line of text; if the notice is longer than the container width it wraps (no truncation — copyright notices are legal text and truncation would be an error).
+
+Each entry is separated from the next by `--space-4` (16px) vertical gap. No dividers between entries — the spacing alone is sufficient.
+
+**No accordion/collapse:** The list is not collapsed behind expand controls. The rationale is that collapsing legal notices adds interaction complexity for information that is accessed at most once per user lifetime. A flat scrollable list is readable, keyboard-navigable without special handling, and honest about the content volume.
+
+**Container:** The list is contained within a `max-height: 320px` scrollable region with `overflow-y: auto`. This bounds the visual footprint of the notices regardless of the number of crates, while keeping the rest of the About section visible above without scrolling. The region uses the standard thin scrollbar styling (`--color-scrollbar-thumb`, `--size-scrollbar-width`).
+
+If the full list fits within 320px, the container collapses to content height (no forced empty space).
+
+**Vertical gap between block heading and first entry:** `--space-4` (16px).
+
+**Empty state:** If the notices file fails to load (build-time generation error), the container displays a single line of secondary text: the i18n key `about_notices_unavailable` → "Third-party notices are unavailable for this build." No error icon, no destructive styling — this is an informational gap, not a user-facing error.
+
+#### 7.23.6 Horizontal Separators
+
+Two horizontal separators divide the section into three blocks (identity / license / notices). Each separator is a `<hr>` element styled as:
+- `border: none; border-top: 1px solid var(--color-border);`
+- `margin-block: --space-6` (24px top and bottom).
+
+#### 7.23.7 Build-Time Data Generation
+
+This section specifies what must be generated, not how. The mechanism is owned by the Rust developer and frontend developer jointly.
+
+**Version string:** Injected at build time from `Cargo.toml` (package version). Available to the frontend as a static constant.
+
+**Third-party notices:** Generated at build time by `cargo about` (or an equivalent tool integrated into the build pipeline). The output is a structured JSON file embedded in the frontend bundle. The file format per entry:
+
+```json
+{
+  "name": "string",
+  "version": "string",
+  "license": "string (SPDX)",
+  "copyright": "string | null"
+}
+```
+
+Crates whose license does not require copyright notice reproduction (e.g., crates whose author holds the TauTerm copyright, or crates under MPL-2.0 with no additional attribution requirement) may be omitted from the list — this is a legal determination, not a UX one. The file is generated, not hand-maintained. It is committed to the repository as a build artifact (generated at release, not at every dev build).
+
+#### 7.23.8 Accessibility
+
+- The About section content area has no interactive controls except the source code link and the scrollable notices container.
+- The scrollable notices container carries `tabindex="0"` to be keyboard-reachable (WCAG 2.1 §2.1.1), `role="region"`, and `aria-label` bound to i18n key `about_notices_region_label`.
+- The source code link is a native `<a>` element — no ARIA role override needed. It opens via `event.preventDefault()` + Tauri shell open.
+- All text meets WCAG 2.1 AA contrast: `--color-text-primary` (#ccc7bc) on `--color-bg-raised` (#2c2921) is 7.1:1; `--color-text-secondary` (#9c9890) on `--color-bg-raised` is 4.6:1; `--color-accent-text` (#7ab3d3) on `--color-bg-raised` is 5.1:1.
+- The entire section is navigable via Tab (link, scrollable region). No focus traps are introduced.
+
+#### 7.23.9 i18n Keys Required
+
+All user-visible strings in the About section go through Paraglide. Proper nouns (app name, crate names, SPDX identifiers, URLs, version strings) are not translated.
+
+| Key | English value |
+|-----|--------------|
+| `about_tagline` | "A terminal for the focused developer." |
+| `about_section_heading` | "About" (nav label) |
+| `about_license_heading` | "License" |
+| `about_source_link_label` | "Source code on GitHub: {url}" |
+| `about_source_link_text` | "Source code" |
+| `about_notices_heading` | "Third-Party Notices" |
+| `about_notices_unavailable` | "Third-party notices are unavailable for this build." |
+| `about_notices_region_label` | "Third-party notices" |
+
+#### 7.23.10 Token Reference
+
+| Token | Usage in this component |
+|-------|------------------------|
+| `--font-size-ui-xl` | App name |
+| `--font-size-ui-lg` | (not used — app name uses xl) |
+| `--font-size-ui-base` | Tagline, license name |
+| `--font-size-ui-sm` | Version badge, source URL, crate name |
+| `--font-size-ui-xs` | Section headings (ABOUT, LICENSE, THIRD-PARTY NOTICES), copyright notices |
+| `--font-weight-semibold` | App name, section headings |
+| `--font-weight-medium` | Crate name |
+| `--font-weight-normal` | Version badge, tagline, license name, copyright notices |
+| `--font-ui` | UI text throughout |
+| `--font-mono-ui` | Source URL, crate names |
+| `--letter-spacing-label` | Section headings |
+| `--color-text-primary` | App name, license name, crate names |
+| `--color-text-secondary` | Version badge, tagline, source URL (resting), license identifier, copyright notices, empty state |
+| `--color-text-heading` | Section heading labels |
+| `--color-accent-text` | Source link resting color |
+| `--color-accent` | Source link active color |
+| `--color-focus-ring` | Source link focus ring |
+| `--color-border` | Horizontal separators, scrollable region border (none — no border on the region) |
+| `--color-scrollbar-thumb` | Notices scrollbar thumb |
+| `--color-scrollbar-thumb-hover` | Notices scrollbar thumb on hover |
+| `--size-scrollbar-width` | Notices scrollbar track width |
+| `--space-1` | App name to tagline gap |
+| `--space-2` | License name to source link gap; crate name to license identifier gap |
+| `--space-4` | Notices heading to first entry gap; between-entry gap |
+| `--space-6` | Identity block to separator gap; separator to license block gap; license block to separator gap; separator to notices block gap |
+| `--duration-fast` | Source link color transition |
+| `--ease-out` | Source link transition easing |
+
+---
+
+### 7.24 About Popover
+
+The About popover is a lightweight, non-modal surface triggered from the status bar version label (§6.4). It surfaces application identity, version, license, and third-party notices in a compact floating panel without navigating away from the terminal or opening the Preferences panel.
+
+This component is complementary to the About section in the Preferences panel (§7.23). The Preferences panel About section (§7.23) is the primary, keyboard-accessible surface with full-width layout and unrestricted scroll. The popover (§7.24) is a quick-access shortcut for mouse users who spot the version label and want a fast look. Both surfaces display equivalent content; neither is the sole access point.
+
+#### 7.24.1 Trigger
+
+The trigger is the version label in the status bar right zone, described in §6.4.
+
+- **Font:** `--font-mono-ui`, `--font-size-ui-xs` (11px).
+- **Color (resting):** `--color-text-muted`.
+- **Color (hover):** `--color-text-secondary` — a subtle lift that communicates interactivity without making the label appear button-like in its resting state.
+- **Color (active/pressed):** `--color-text-primary`.
+- **Transition:** `color var(--duration-fast) var(--ease-out)`.
+- **Cursor:** `pointer` on hover.
+- **Hit area:** 44×44px via `::before` pseudo-element (absolute-positioned, centered on the label). The status bar height (28px) constrains the vertical axis; the pseudo-element is allowed to extend beyond the visible bar into the terminal area's bottom edge. The pseudo-element carries no visible styling.
+- **`tabindex="-1"`:** The trigger is intentionally excluded from the primary keyboard tab order. The status bar is a dense, always-visible chrome strip — placing interactive elements in the tab cycle would interrupt terminal keyboard navigation. The About popover content is reachable via keyboard through the Preferences panel (§7.23).
+- **No tooltip:** The version string itself is the label. A tooltip would be redundant.
+
+#### 7.24.2 Popover Panel
+
+Built on Bits UI Popover primitive.
+
+- **`side="top"`**, **`align="end"`**: The popover opens above the status bar, right-aligned to the trigger. This places it away from the status bar chrome while keeping it visually anchored to the trigger.
+- **`sideOffset`:** `--space-2` (8px) gap between the popover bottom edge and the status bar top border.
+- **Width:** 320px fixed. Narrow enough to feel like a panel-within-the-terminal, wide enough to display license text and crate names without wrapping.
+- **Max-height:** 360px. If content exceeds this, the popover itself does not scroll — the third-party notices sub-region handles overflow internally (§7.24.4).
+- **Background:** `--color-bg-raised` (`#2c2921`).
+- **Border:** 1px solid `--color-border` (`#35312a`).
+- **Border radius:** `--radius-md`.
+- **Box shadow:** `--shadow-overlay`.
+- **`role="dialog"`**, **`aria-modal="false"`**: Non-modal — focus is not trapped; the user can Tab out of the popover and it remains open.
+- **`aria-label`:** Bound to i18n key `about_popover_label` → "About TauTerm".
+
+#### 7.24.3 Header Block
+
+The header block occupies the top of the popover, padded `--space-4` (16px) all sides.
+
+**Layout:** Two rows.
+- Row 1: App name (left) + Close button (right), aligned `items-center`, `justify-between`.
+- Row 2: Version string, below the app name.
+
+**App name:** "TauTerm" — `--font-size-ui-base` (13px), `--font-weight-semibold` (600), `--color-text-primary`. Not translated (proper noun).
+
+**Version string:** The build-time version (e.g., "0.1.0-beta") displayed below the app name. `--font-size-ui-xs` (11px), `--font-mono-ui`, `--color-text-secondary`. Vertical gap between app name and version: `--space-1` (4px).
+
+**Close button:** Lucide `X` icon, `--size-icon-sm` (14px), positioned top-right of the header block. Ghost button styling: no background or border at rest; `--color-active-bg` background on hover; `--color-icon-default` icon color resting, `--color-icon-active` on hover. Hit area 28×28px (constrained by popover header density; the close button is a secondary affordance — Escape is the primary dismiss). `aria-label` bound to i18n key `about_popover_close` → "Close". On activation, focus returns to the trigger element.
+
+**Bottom border of header block:** 1px solid `--color-border`, separating header from content below.
+
+#### 7.24.4 Content Blocks
+
+Below the header, the popover has two content blocks stacked vertically, each padded `--space-4` (16px) horizontal, `--space-3` (12px) vertical.
+
+**License block:**
+
+- **Label:** "MPL-2.0" — `--font-size-ui-sm` (12px), `--font-weight-normal`, `--color-text-primary`.
+- **Source code link:** "Source code" (translated) — `--font-size-ui-sm`, `--color-accent-text` (`#7ab3d3`), `--font-ui`. Opens in system browser via Tauri opener plugin. Popover remains open after the link is activated. Same hover/focus/active states as §7.23.4. `aria-label` bound to i18n key `about_source_link_label`.
+- Layout: label and link on the same line, separated by `--space-3` (12px).
+
+A 1px solid `--color-border` separator divides the license block from the notices block.
+
+**Third-party notices block:**
+
+- **Label:** "THIRD-PARTY NOTICES" — Caption level: `--font-size-ui-xs` (11px), `--font-weight-semibold`, `text-transform: uppercase`, `letter-spacing: var(--letter-spacing-label)`, `--color-text-heading`. Vertical gap below label: `--space-2` (8px).
+- **Scrollable list:** `max-height: 128px`, `overflow-y: auto`. Thin scrollbar (`--color-scrollbar-thumb`, `--size-scrollbar-width`). `role="region"`, `tabindex="0"`, `aria-label` bound to i18n key `about_notices_region_label`.
+- **Each entry:** Dependency name (mono, `--color-text-secondary`) — SPDX identifier (`--color-text-muted`), on one line. `--font-size-ui-xs` (11px), `--font-mono-ui`. Vertical gap between entries: `--space-1` (4px).
+- **Empty state:** Single line of `--color-text-secondary` text, i18n key `about_notices_unavailable`. No error styling.
+
+The notices block in this popover is intentionally condensed relative to §7.23.5 — it shows name and license identifier only (no copyright notice text). Copyright notice text is available in the full Preferences panel view (§7.23.5), where layout allows unrestricted wrapping. The popover serves discoverability, not the legal obligation; the Preferences panel satisfies the legal obligation.
+
+#### 7.24.5 Interaction Model
+
+- **Open:** Click trigger → popover opens, focus moves to the Close button.
+- **Close (Escape):** Popover closes, focus returns to trigger.
+- **Close (click outside):** Popover closes, focus returns to trigger (Bits UI Popover default behavior).
+- **Close (X button):** Popover closes, focus returns to trigger.
+- **Source code link:** Opens system browser via Tauri opener plugin. Popover stays open — the user did not dismiss it.
+- **Tab within popover:** Source code link → scrollable notices region → Close button → (Tab exits popover, popover remains open, focus continues in natural DOM order).
+
+#### 7.24.6 Accessibility
+
+- **`role="dialog"`**, **`aria-modal="false"`**: Non-modal dialog pattern. Screen readers announce the popover as a dialog without locking navigation to it.
+- **Focus on open:** Close button receives focus on popover open. This is the safest first-focus target: it is always present (unlike the link, which is only focusable when visible), and it communicates the dismissal path to screen reader users immediately.
+- **Focus return on close:** Focus returns to the trigger element (the version label) regardless of how the popover is closed.
+- **Scrollable notices region:** `role="region"`, `tabindex="0"`, `aria-label` → `about_notices_region_label`. Keyboard-reachable via Tab.
+- **Contrast:** All text combinations meet WCAG 2.1 AA. `--color-text-muted` on `--color-bg-raised` must be verified to meet 4.5:1 for the trigger label; if not, `--color-text-secondary` is the fallback.
+- **No motion:** The popover entrance uses the standard Bits UI Popover transition (opacity + slight vertical translate). `prefers-reduced-motion: reduce` collapses this to an instant state change (§9.4).
+
+#### 7.24.7 i18n Keys Required
+
+| Key | English value |
+|-----|--------------|
+| `about_popover_label` | "About TauTerm" |
+| `about_popover_close` | "Close" |
+| `about_source_link_label` | "Source code on GitHub: {url}" (shared with §7.23) |
+| `about_source_link_text` | "Source code" (shared with §7.23) |
+| `about_notices_heading` | "Third-Party Notices" (shared with §7.23) |
+| `about_notices_unavailable` | "Third-party notices are unavailable for this build." (shared with §7.23) |
+| `about_notices_region_label` | "Third-party notices" (shared with §7.23) |
+
+Keys shared with §7.23 use the same Paraglide message accessor — no duplication.
+
+#### 7.24.8 Token Reference
+
+| Token | Usage in this component |
+|-------|------------------------|
+| `--font-mono-ui` | Trigger label, version string, crate entries |
+| `--font-ui` | App name, source link, notices heading |
+| `--font-size-ui-xs` | Trigger label, version string, notices heading, entry text |
+| `--font-size-ui-sm` | License label, source link |
+| `--font-size-ui-base` | App name |
+| `--font-weight-semibold` | App name, notices heading |
+| `--font-weight-normal` | License label, source link |
+| `--letter-spacing-label` | Notices heading |
+| `--color-text-muted` | Trigger resting, entry SPDX identifiers |
+| `--color-text-secondary` | Trigger hover, version string, entry crate names, empty state |
+| `--color-text-primary` | Trigger active, app name, license label |
+| `--color-text-heading` | Notices heading label |
+| `--color-accent-text` | Source link resting |
+| `--color-accent` | Source link active |
+| `--color-focus-ring` | Source link focus ring |
+| `--color-icon-default` | Close button icon resting |
+| `--color-icon-active` | Close button icon hover |
+| `--color-active-bg` | Close button background hover |
+| `--color-bg-raised` | Popover background |
+| `--color-border` | Popover border, header bottom border, block separator |
+| `--color-scrollbar-thumb` | Notices scrollbar thumb |
+| `--color-scrollbar-thumb-hover` | Notices scrollbar thumb hover |
+| `--size-scrollbar-width` | Notices scrollbar track width |
+| `--radius-md` | Popover border radius |
+| `--shadow-overlay` | Popover drop shadow |
+| `--space-1` | App name to version gap; entry vertical gap |
+| `--space-2` | Notices heading to first entry gap; trigger-to-popover offset |
+| `--space-3` | Block vertical padding; license label to link gap |
+| `--space-4` | Header padding; block horizontal padding |
+| `--duration-fast` | Trigger color transition; source link color transition |
+| `--ease-out` | Trigger and source link transition easing |

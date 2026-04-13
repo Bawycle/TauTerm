@@ -17,7 +17,7 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 |------|----------|
 | [01-principles.md](01-principles.md) | §1 Purpose & Scope, §2 Design Principles — SSOT rules, authoritativeness, the 7 design principles |
 | [02-tokens.md](02-tokens.md) | §3 Design Token System, §4 Typography System, §5 Color System, §6 Layout & Spatial Model |
-| [03-components.md](03-components.md) | §7 Component Specifications — all 22 sub-sections (§7.1 Tab Bar through §7.22 Full-Screen Mode) |
+| [03-components.md](03-components.md) | §7 Component Specifications — all 24 sub-sections (§7.1 Tab Bar through §7.24 About Popover) |
 | [04-interaction.md](04-interaction.md) | §8 Interaction Patterns, §9 Motion & Animation, §10 Iconography |
 | [05-accessibility.md](05-accessibility.md) | §11 Accessibility, §12 Responsiveness & Window Resizing |
 | [06-themes.md](06-themes.md) | §13 Theme Extensibility — required/optional tokens, non-themeable tokens, validation rules |
@@ -58,6 +58,8 @@ FS ID references (e.g. `FS-TAB-009`) are unchanged throughout all files in this 
 | Theme Editor | [03-components.md](03-components.md) | §7.20 |
 | Deprecated SSH Algorithm Banner | [03-components.md](03-components.md) | §7.21 |
 | Full-Screen Mode | [03-components.md](03-components.md) | §7.22 |
+| About Section (Preferences Panel) | [03-components.md](03-components.md) | §7.23 |
+| About Popover (status bar trigger) | [03-components.md](03-components.md) | §7.24 |
 | Mouse interaction patterns | [04-interaction.md](04-interaction.md) | §8.1 |
 | Focus management | [04-interaction.md](04-interaction.md) | §8.2 |
 | Scroll behavior | [04-interaction.md](04-interaction.md) | §8.3 |

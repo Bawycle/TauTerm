@@ -324,6 +324,14 @@
       onsettings={() => {
         tv.prefsOpen = true;
       }}
+      onAboutCloseAutoFocus={() => {
+        // Same pattern as PreferencesPanel onCloseAutoFocus:
+        // Bits UI FocusScope may still be active at the instant this fires.
+        // Defer to next frame so the popover is fully removed from DOM.
+        requestAnimationFrame(() => {
+          tv.activeViewportEl?.focus({ preventScroll: true });
+        });
+      }}
     />
   </div>
 

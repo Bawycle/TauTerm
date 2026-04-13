@@ -268,6 +268,15 @@
   "status_bar_settings": "Ouvrir les paramètres",
   "status_bar_dimensions_aria": "{cols} colonnes, {rows} lignes",
 
+  "about_app_version_aria": "TauTerm version {version}, cliquez pour les détails",
+  "about_close": "Fermer",
+  "about_license_label": "Licence",
+  "about_source_code": "Code source",
+  "about_copy_version": "Copier la version",
+  "about_version_copied": "Copié !",
+  "about_third_party_notices": "Mentions tierces",
+  "about_third_party_unavailable": "Mentions tierces indisponibles",
+
   "preferences_appearance_opacity": "Opacité (0–1)",
   "preferences_appearance_font_family_hint": "Toute police monospace installée sur le système. Exemple : JetBrains Mono, Fira Code. Retour à la police monospace système si introuvable.",
   "preferences_appearance_font_size_hint": "Taille de la police du terminal en pixels. Appliqué immédiatement.",

@@ -36,7 +36,7 @@ Run before pushing. Mirrors what CI does. See `scripts/check-all.sh --help` for 
 ```bash
 ./scripts/bump-version.sh <version>      # Bump version in Cargo.toml, package.json, README.md, CHANGELOG.md
 ./scripts/generate-licenses.sh           # Regenerate THIRD-PARTY-NOTICES.md (also runs at each build via Vite plugin)
-./scripts/prepare-release.sh             # Collect AppImage + generate SHA256SUMS
+# Release is handled by CI: .github/workflows/release.yml (triggered on v* tags pushed to master)
 ```
 
 ### Development

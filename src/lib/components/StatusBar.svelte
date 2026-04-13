@@ -3,7 +3,7 @@
   StatusBar — single-line status strip at the bottom of the window.
 
   Layout (UXD §6.4):
-    Left  : shell name (processTitle) + current working directory, truncated with ellipsis.
+    Left  : current working directory (CWD), truncated with ellipsis.
     Right : SSH connection status indicator (if applicable).
 
   Elements deferred to DIV-UXD-008 (not implemented here):
@@ -128,17 +128,13 @@
     return '';
   });
 
-  // Left zone: shell name (processTitle) and CWD
-  const processTitle = $derived(activePaneState?.processTitle ?? '');
+  // Left zone: CWD only (processTitle is shown in tab title and OS window title)
   const cwd = $derived(activePaneState?.cwd ?? '');
 </script>
 
 <div class="status-bar" role="status" aria-live="polite">
-  <!-- Left: shell name + CWD (UXD §6.4) -->
+  <!-- Left: CWD (UXD §6.4) -->
   <div class="status-bar__left">
-    {#if processTitle}
-      <span class="status-bar__shell-name">{processTitle}</span>
-    {/if}
     {#if cwd}
       <span class="status-bar__cwd" title={cwd}>{cwd}</span>
     {/if}
@@ -212,7 +208,7 @@
     gap: var(--space-2);
   }
 
-  /* Left: shell name + CWD — takes all available space, truncates with ellipsis */
+  /* Left: CWD — takes all available space, truncates with ellipsis */
   .status-bar__left {
     display: flex;
     align-items: center;
@@ -228,18 +224,6 @@
     align-items: center;
     gap: var(--space-1);
     flex-shrink: 0;
-  }
-
-  /* Shell name (processTitle): monospace, truncated */
-  .status-bar__shell-name {
-    font-family: var(--font-mono-ui);
-    font-size: var(--font-size-ui-sm);
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 0;
-    max-width: 30%;
   }
 
   /* CWD: monospace, truncated, takes remaining space */

@@ -35,6 +35,7 @@ function makePrefs(language: 'en' | 'fr'): Preferences {
       fullscreen: false,
       hideCursorWhileTyping: true,
       showPaneTitleBar: true,
+      fullscreenChromeBehavior: 'autoHide' as const,
     },
     terminal: {
       scrollbackLines: 10000,

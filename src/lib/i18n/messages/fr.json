@@ -294,5 +294,9 @@
   "hide_cursor_while_typing_label": "Masquer le curseur souris pendant la frappe",
 
   "show_pane_title_bar_label": "Afficher la barre de titre des volets",
-  "show_pane_title_bar_description": "Affiche une mince barre de titre en haut de chaque volet dans les dispositions multi-volets"
+  "show_pane_title_bar_description": "Affiche une mince barre de titre en haut de chaque volet dans les dispositions multi-volets",
+
+  "pref_fullscreen_chrome_behavior_label": "Chrome en plein écran",
+  "pref_fullscreen_chrome_auto_hide": "Masquage automatique",
+  "pref_fullscreen_chrome_always_visible": "Toujours visible"
 }

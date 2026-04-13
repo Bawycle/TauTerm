@@ -36,6 +36,7 @@ function makePreferences(overrides: Partial<Preferences['appearance']> = {}): Pr
       fullscreen: false,
       hideCursorWhileTyping: true,
       showPaneTitleBar: true,
+      fullscreenChromeBehavior: 'autoHide' as const,
       ...overrides,
     },
     terminal: {

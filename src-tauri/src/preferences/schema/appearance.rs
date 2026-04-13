@@ -57,6 +57,20 @@ pub enum BellType {
     Both,
 }
 
+// ---------------------------------------------------------------------------
+// Fullscreen chrome behavior
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FullscreenChromeBehavior {
+    /// Tab bar and status bar auto-hide when entering fullscreen (default).
+    #[default]
+    AutoHide,
+    /// Tab bar and status bar remain visible in fullscreen.
+    AlwaysVisible,
+}
+
 /// Appearance-related preferences.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -88,6 +102,11 @@ pub struct AppearancePrefs {
     /// Whether the pane title bar is visible. Default: `true`.
     #[serde(default = "default_show_pane_title_bar")]
     pub show_pane_title_bar: bool,
+    /// How the tab bar and status bar behave in fullscreen mode.
+    /// `#[serde(default)]` ensures existing preferences files without this field
+    /// deserialize successfully with `FullscreenChromeBehavior::AutoHide`.
+    #[serde(default)]
+    pub fullscreen_chrome_behavior: FullscreenChromeBehavior,
 }
 
 fn default_hide_cursor_while_typing() -> bool {
@@ -112,6 +131,7 @@ impl Default for AppearancePrefs {
             fullscreen: false,
             hide_cursor_while_typing: true,
             show_pane_title_bar: true,
+            fullscreen_chrome_behavior: FullscreenChromeBehavior::default(),
         }
     }
 }

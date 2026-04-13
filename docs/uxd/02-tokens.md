@@ -580,7 +580,7 @@ The TauTerm window is composed of four horizontal bands stacked vertically, plus
 - **Background:** `--color-bg-base` (`#0e0d0b`).
 - **Top border:** 1px solid `--color-border` (`#35312a`).
 - **Internal padding:** `--space-2` (8px) horizontal.
-- **Content:** Left-aligned: active pane shell name and current working directory (truncated with ellipsis if too long). Right-aligned (in order): Settings button, SSH connection status (if applicable), terminal dimensions (cols × rows) — transient: visible only during pane resize, fades out after a 2s delay (see §9.3).
+- **Content:** Left-aligned: active pane current working directory (truncated with ellipsis if too long). Right-aligned (in order): Settings button, SSH connection status (if applicable), terminal dimensions (cols × rows) — transient: visible only during pane resize, fades out after a 2s delay (see §9.3).
 - **Settings button:** Lucide `Settings` icon, `--size-icon-md` (16px), ghost button variant. Hit area `--size-target-min` (44px) height clamped to `--size-status-bar-height` (28px), width `--size-target-min` (44px). Icon color: `--color-icon-default` resting, `--color-icon-active` on hover, `--color-active-bg` background on active/pressed. Action: opens the Preferences panel (same as Ctrl+,). Tooltip: "Settings (Ctrl+,)" shown after `--duration-slow` (300ms) hover delay. ARIA label: "Open settings".
 - **Font:** `--font-size-ui-sm` (12px), `--font-weight-normal` (400), color `--color-text-secondary` (`#9c9890`).
 

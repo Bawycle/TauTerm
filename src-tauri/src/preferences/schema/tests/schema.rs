@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::preferences::schema::{
-    AppearancePatch, AppearancePrefs, BellType, CursorStyle, Language, Preferences,
-    PreferencesPatch,
+    AppearancePatch, AppearancePrefs, BellType, CursorStyle, FullscreenChromeBehavior, Language,
+    Preferences, PreferencesPatch,
 };
 
 // --- Default values ---
@@ -334,6 +334,9 @@ fn appearance_patch_default_has_all_none_fields() {
     assert!(patch.language.is_none());
     assert!(patch.context_menu_hint_shown.is_none());
     assert!(patch.fullscreen.is_none());
+    assert!(patch.hide_cursor_while_typing.is_none());
+    assert!(patch.show_pane_title_bar.is_none());
+    assert!(patch.fullscreen_chrome_behavior.is_none());
 }
 
 // --- Fullscreen preference (FS-FULL-009) ---
@@ -383,6 +386,59 @@ fn appearance_patch_fullscreen_serializes_correctly() {
         value.get("fullscreen").and_then(|v| v.as_bool()),
         Some(true),
         "fullscreen must serialize to true"
+    );
+}
+
+// -----------------------------------------------------------------------
+// FullscreenChromeBehavior — serde round-trip and backward compatibility
+// -----------------------------------------------------------------------
+
+/// FullscreenChromeBehavior::AutoHide serializes to "autoHide" (camelCase).
+#[test]
+fn fullscreen_chrome_behavior_auto_hide_serializes_to_camel_case() {
+    let json = serde_json::to_string(&FullscreenChromeBehavior::AutoHide).expect("serialize");
+    assert_eq!(json, "\"autoHide\"");
+}
+
+/// FullscreenChromeBehavior::AlwaysVisible serializes to "alwaysVisible" (camelCase).
+#[test]
+fn fullscreen_chrome_behavior_always_visible_serializes_to_camel_case() {
+    let json = serde_json::to_string(&FullscreenChromeBehavior::AlwaysVisible).expect("serialize");
+    assert_eq!(json, "\"alwaysVisible\"");
+}
+
+/// FullscreenChromeBehavior round-trips through JSON for both variants.
+#[test]
+fn fullscreen_chrome_behavior_round_trips_through_json() {
+    for variant in [
+        FullscreenChromeBehavior::AutoHide,
+        FullscreenChromeBehavior::AlwaysVisible,
+    ] {
+        let json = serde_json::to_string(&variant).expect("serialize");
+        let restored: FullscreenChromeBehavior = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, variant, "round-trip failed for {variant:?}");
+    }
+}
+
+/// FullscreenChromeBehavior::default() must be AutoHide.
+#[test]
+fn fullscreen_chrome_behavior_default_is_auto_hide() {
+    assert_eq!(
+        FullscreenChromeBehavior::default(),
+        FullscreenChromeBehavior::AutoHide
+    );
+}
+
+/// Existing preferences JSON without `fullscreenChromeBehavior` must
+/// deserialize with AutoHide (backward compatibility).
+#[test]
+fn fullscreen_chrome_behavior_absent_from_json_defaults_to_auto_hide() {
+    let json = r#"{"appearance":{"fontSize":16.0}}"#;
+    let prefs: Preferences = serde_json::from_str(json).expect("deserialize");
+    assert_eq!(
+        prefs.appearance.fullscreen_chrome_behavior,
+        FullscreenChromeBehavior::AutoHide,
+        "Missing fullscreenChromeBehavior must default to AutoHide"
     );
 }
 

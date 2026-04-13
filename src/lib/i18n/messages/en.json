@@ -294,5 +294,9 @@
   "hide_cursor_while_typing_label": "Hide mouse cursor while typing",
 
   "show_pane_title_bar_label": "Show pane title bar",
-  "show_pane_title_bar_description": "Display a slim title bar at the top of each pane in multi-pane layouts"
+  "show_pane_title_bar_description": "Display a slim title bar at the top of each pane in multi-pane layouts",
+
+  "pref_fullscreen_chrome_behavior_label": "Full-screen chrome",
+  "pref_fullscreen_chrome_auto_hide": "Auto-hide",
+  "pref_fullscreen_chrome_always_visible": "Always visible"
 }

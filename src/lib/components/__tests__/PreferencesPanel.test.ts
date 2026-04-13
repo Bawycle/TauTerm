@@ -43,6 +43,7 @@ function makePrefs(overrides: Partial<Preferences> = {}): Preferences {
       fullscreen: false,
       hideCursorWhileTyping: true,
       showPaneTitleBar: true,
+      fullscreenChromeBehavior: 'autoHide' as const,
     },
     terminal: {
       scrollbackLines: 10000,

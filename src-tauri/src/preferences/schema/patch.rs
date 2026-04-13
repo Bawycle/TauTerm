@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::appearance::{BellType, CursorStyle};
+use super::appearance::{BellType, CursorStyle, FullscreenChromeBehavior};
 use super::language::Language;
 use crate::preferences::types::{FontFamily, ThemeName, WordDelimiters};
 
@@ -27,6 +27,7 @@ pub struct AppearancePatch {
     pub fullscreen: Option<bool>,
     pub hide_cursor_while_typing: Option<bool>,
     pub show_pane_title_bar: Option<bool>,
+    pub fullscreen_chrome_behavior: Option<FullscreenChromeBehavior>,
 }
 
 /// Partial update for terminal preferences — only the fields provided are changed.

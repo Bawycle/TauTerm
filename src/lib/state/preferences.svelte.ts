@@ -13,7 +13,7 @@
  * mutations alone — always sync from the value returned by update_preferences.
  */
 
-import type { Preferences } from '$lib/ipc/types';
+import type { FullscreenChromeBehavior, Preferences } from '$lib/ipc/types';
 
 // ---------------------------------------------------------------------------
 // Default preferences — mirrors Rust defaults in preferences.rs
@@ -33,6 +33,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     fullscreen: false,
     hideCursorWhileTyping: true,
     showPaneTitleBar: true,
+    fullscreenChromeBehavior: 'autoHide' as FullscreenChromeBehavior,
   },
   terminal: {
     scrollbackLines: 10000,

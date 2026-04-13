@@ -13,7 +13,7 @@
   import Dropdown from '$lib/ui/Dropdown.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { Preferences, PreferencesPatch } from '$lib/ipc/types';
+  import type { FullscreenChromeBehavior, Preferences, PreferencesPatch } from '$lib/ipc/types';
   import { BUILT_IN_THEME_NAMES } from '$lib/theming/built-in-themes';
   import type { UserTheme } from '$lib/ipc/types';
 
@@ -71,6 +71,23 @@
   function handleShowPaneTitleBarChange(checked: boolean) {
     if (!preferences?.appearance) return;
     onupdate?.({ appearance: { ...preferences.appearance, showPaneTitleBar: checked } });
+  }
+
+  const fullscreenChromeBehaviorOptions = [
+    { value: 'autoHide', label: m.pref_fullscreen_chrome_auto_hide() },
+    { value: 'alwaysVisible', label: m.pref_fullscreen_chrome_always_visible() },
+  ];
+
+  function handleFullscreenChromeBehaviorChange(val: string) {
+    if (!preferences?.appearance) return;
+    if (val === 'autoHide' || val === 'alwaysVisible') {
+      onupdate?.({
+        appearance: {
+          ...preferences.appearance,
+          fullscreenChromeBehavior: val as FullscreenChromeBehavior,
+        },
+      });
+    }
   }
 </script>
 
@@ -142,5 +159,13 @@
     checked={preferences?.appearance?.showPaneTitleBar ?? true}
     label={m.show_pane_title_bar_label()}
     onchange={handleShowPaneTitleBarChange}
+  />
+
+  <Dropdown
+    id="pref-fullscreen-chrome-behavior"
+    label={m.pref_fullscreen_chrome_behavior_label()}
+    options={fullscreenChromeBehaviorOptions}
+    value={preferences?.appearance?.fullscreenChromeBehavior ?? 'autoHide'}
+    onchange={handleFullscreenChromeBehaviorChange}
   />
 </div>

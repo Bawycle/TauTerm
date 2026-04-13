@@ -714,6 +714,14 @@ export type UpdatePreferencesCommand = (args: { patch: PreferencesPatch }) => Pr
 export type Language = 'en' | 'fr';
 
 /**
+ * Fullscreen chrome behavior.
+ * - 'autoHide': tab bar and status bar float as fixed overlays, auto-hide after 1.5s.
+ * - 'alwaysVisible': bars stay in the flex flow — no auto-hide, no hover zones.
+ * Mirrors Rust FullscreenChromeBehavior: #[serde(rename_all = "camelCase")]
+ */
+export type FullscreenChromeBehavior = 'autoHide' | 'alwaysVisible';
+
+/**
  * Cursor shape.
  * Mirrors Rust CursorStyle: #[serde(rename_all = "camelCase")]
  * CursorStyle::Block → "block", CursorStyle::Underline → "underline", CursorStyle::Bar → "bar"
@@ -762,6 +770,13 @@ export interface AppearancePrefs {
   hideCursorWhileTyping: boolean;
   /** Display a slim title bar at the top of each pane in multi-pane layouts. Default: true. */
   showPaneTitleBar: boolean;
+  /**
+   * Controls tab bar / status bar behavior in fullscreen mode.
+   * 'autoHide': bars are positioned as fixed overlays, hidden after 1.5s, recalled on hover.
+   * 'alwaysVisible': bars stay in the flex flow — no overlay, no auto-hide.
+   * Default: 'autoHide'.
+   */
+  fullscreenChromeBehavior: FullscreenChromeBehavior;
 }
 
 /** Mirrors Rust TerminalPrefs. */
@@ -797,6 +812,7 @@ export interface AppearancePatch {
   fullscreen?: boolean;
   hideCursorWhileTyping?: boolean;
   showPaneTitleBar?: boolean;
+  fullscreenChromeBehavior?: FullscreenChromeBehavior;
 }
 
 /**

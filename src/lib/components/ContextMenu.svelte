@@ -233,7 +233,12 @@
     />
 
     <DropdownMenu.Portal>
-      <DropdownMenu.Content class={menuContentClass} align="start" sideOffset={4} preventScroll={false}>
+      <DropdownMenu.Content
+        class={menuContentClass}
+        align="start"
+        sideOffset={4}
+        preventScroll={false}
+      >
         <!-- New Tab -->
         <DropdownMenu.Item class={menuItemClass} onSelect={() => onnewtab?.()}>
           <span class={menuItemLabelClass}>

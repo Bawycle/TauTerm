@@ -165,6 +165,9 @@ impl PreferencesStore {
             if let Some(v) = patch.show_pane_title_bar {
                 a.show_pane_title_bar = v;
             }
+            if let Some(v) = patch.fullscreen_chrome_behavior {
+                a.fullscreen_chrome_behavior = v;
+            }
         }
         if let Some(terminal) = patch.terminal {
             let t = &mut prefs.terminal;

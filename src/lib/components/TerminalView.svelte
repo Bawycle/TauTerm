@@ -71,8 +71,18 @@
   );
 
   // ---------------------------------------------------------------------------
+  // Fullscreen chrome behavior preference
+  // ---------------------------------------------------------------------------
+
+  const fullscreenChrome = $derived(
+    preferences.value?.appearance?.fullscreenChromeBehavior ?? 'autoHide',
+  );
+  const isAutoHide = $derived(fullscreenChrome === 'autoHide');
+
+  // ---------------------------------------------------------------------------
   // Fullscreen auto-hide: tab bar and status bar fade out after 1.5s in
-  // fullscreen mode, and reappear when the user hovers the top/bottom edge.
+  // fullscreen / autoHide mode, and reappear when the user hovers the top/bottom edge.
+  // In alwaysVisible mode, bars stay in the flex flow with no timers or hover zones.
   // ---------------------------------------------------------------------------
 
   let tabBarVisible = $state(true);
@@ -80,43 +90,75 @@
   let tabBarHideTimer: ReturnType<typeof setTimeout> | null = null;
   let statusBarHideTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // DOM refs for focus management: needed to move focus away before hiding bars.
+  let tabRowEl: HTMLDivElement | null = null;
+  let statusRowEl: HTMLDivElement | null = null;
+
+  function cancelTimers() {
+    if (tabBarHideTimer) {
+      clearTimeout(tabBarHideTimer);
+      tabBarHideTimer = null;
+    }
+    if (statusBarHideTimer) {
+      clearTimeout(statusBarHideTimer);
+      statusBarHideTimer = null;
+    }
+  }
+
   function recallTabBar() {
+    if (!isAutoHide) return;
     tabBarVisible = true;
     if (tabBarHideTimer) clearTimeout(tabBarHideTimer);
     tabBarHideTimer = setTimeout(() => {
-      if (fullscreenState.value) tabBarVisible = false;
+      if (fullscreenState.value && isAutoHide) {
+        // Move focus away before hiding so keyboard users are not trapped inside.
+        if (tabRowEl?.contains(document.activeElement)) {
+          tv.activeViewportEl?.focus({ preventScroll: true });
+        }
+        tabBarVisible = false;
+      }
       tabBarHideTimer = null;
     }, 1500);
   }
 
   function recallStatusBar() {
+    if (!isAutoHide) return;
     statusBarVisible = true;
     if (statusBarHideTimer) clearTimeout(statusBarHideTimer);
     statusBarHideTimer = setTimeout(() => {
-      if (fullscreenState.value) statusBarVisible = false;
+      if (fullscreenState.value && isAutoHide) {
+        // Move focus away before hiding so keyboard users are not trapped inside.
+        if (statusRowEl?.contains(document.activeElement)) {
+          tv.activeViewportEl?.focus({ preventScroll: true });
+        }
+        statusBarVisible = false;
+      }
       statusBarHideTimer = null;
     }, 1500);
   }
 
-  // When entering/exiting fullscreen, reset visibility state.
+  // React to fullscreen state changes and preference changes.
   $effect(() => {
-    if (!fullscreenState.value) {
+    const inFullscreen = fullscreenState.value;
+    const autoHide = isAutoHide;
+
+    if (!inFullscreen) {
       // Exiting fullscreen: restore bars immediately, cancel pending timers.
       tabBarVisible = true;
       statusBarVisible = true;
-      if (tabBarHideTimer) {
-        clearTimeout(tabBarHideTimer);
-        tabBarHideTimer = null;
-      }
-      if (statusBarHideTimer) {
-        clearTimeout(statusBarHideTimer);
-        statusBarHideTimer = null;
-      }
-    } else {
-      // Entering fullscreen: start the auto-hide sequence.
+      cancelTimers();
+    } else if (autoHide) {
+      // Entering fullscreen in autoHide mode: start the auto-hide sequence.
       recallTabBar();
       recallStatusBar();
+    } else {
+      // Entering fullscreen in alwaysVisible mode: bars stay visible, no timers.
+      tabBarVisible = true;
+      statusBarVisible = true;
+      cancelTimers();
     }
+
+    return () => cancelTimers();
   });
 </script>
 
@@ -130,8 +172,10 @@
 
   <!-- Tab bar: renders tabs from session state -->
   <div
+    bind:this={tabRowEl}
     class="terminal-view__tab-row"
-    class:terminal-view__tab-row--hidden={fullscreenState.value && !tabBarVisible}
+    class:terminal-view__tab-row--fullscreen-overlay={fullscreenState.value && isAutoHide}
+    class:terminal-view__tab-row--hidden={fullscreenState.value && isAutoHide && !tabBarVisible}
   >
     <TabBar
       tabs={sessionState.tabs}
@@ -265,8 +309,12 @@
 
   <!-- Status bar: reflects active pane state (DIV-UXD-008) -->
   <div
+    bind:this={statusRowEl}
     class="terminal-view__status-row"
-    class:terminal-view__status-row--hidden={fullscreenState.value && !statusBarVisible}
+    class:terminal-view__status-row--fullscreen-overlay={fullscreenState.value && isAutoHide}
+    class:terminal-view__status-row--hidden={fullscreenState.value &&
+      isAutoHide &&
+      !statusBarVisible}
   >
     <StatusBar
       {activePaneState}
@@ -437,8 +485,8 @@
     />
   {/if}
 
-  <!-- Fullscreen: hover zones to recall hidden bars, and exit badge -->
-  {#if fullscreenState.value}
+  <!-- Fullscreen: hover zones to recall hidden bars, and exit badge (autoHide mode only) -->
+  {#if fullscreenState.value && isAutoHide}
     <!-- Top hover zone: recalls the tab bar -->
     <div
       class="terminal-view__fullscreen-hover-top"
@@ -451,7 +499,8 @@
       onmouseenter={recallStatusBar}
       aria-hidden="true"
     ></div>
-    <!-- Exit badge: visible only when tab bar is hidden -->
+    <!-- Exit badge: visible only when tab bar is hidden.
+         In alwaysVisible mode, the fullscreen toggle button in the tab row is sufficient. -->
     <FullscreenExitBadge {tabBarVisible} onToggle={tv.handleToggleFullscreen} />
   {/if}
 
@@ -505,6 +554,16 @@
     pointer-events: none;
   }
 
+  /* Fullscreen overlay mode (autoHide): bars leave the flex flow via fixed positioning
+     so the terminal area expands to 100% height. */
+  .terminal-view__tab-row--fullscreen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-fullscreen-chrome);
+  }
+
   .terminal-view__status-row {
     flex-shrink: 0;
     transition: opacity var(--duration-fast) var(--ease-in);
@@ -519,6 +578,15 @@
   .terminal-view__status-row--hidden {
     opacity: 0;
     pointer-events: none;
+  }
+
+  /* Fullscreen overlay mode (autoHide): status bar leaves the flex flow. */
+  .terminal-view__status-row--fullscreen-overlay {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-fullscreen-chrome);
   }
 
   /* Fullscreen hover zones — 4px strips at top/bottom edges */
@@ -592,10 +660,10 @@
 
   .terminal-view__search-container {
     position: absolute;
-    top: 44px; /* below tab bar */
+    top: var(--size-tab-height);
     right: 0;
     left: 0;
-    bottom: 28px; /* above status bar */
+    bottom: var(--size-status-bar-height);
     pointer-events: none;
     z-index: 20;
   }

@@ -18,7 +18,7 @@ mod theme;
 #[cfg(test)]
 mod tests;
 
-pub use appearance::{AppearancePrefs, BellType, CursorStyle};
+pub use appearance::{AppearancePrefs, BellType, CursorStyle, FullscreenChromeBehavior};
 pub use keyboard::KeyboardPrefs;
 pub use language::Language;
 pub use patch::{AppearancePatch, KeyboardPatch, PreferencesPatch, TerminalPatch};

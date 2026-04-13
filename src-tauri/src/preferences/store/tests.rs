@@ -4,7 +4,9 @@ use super::{
     MAX_CONNECTIONS, PreferencesStore,
     schema_convert::{camel_to_snake, snake_to_camel},
 };
-use crate::preferences::schema::{AppearancePatch, Language, PreferencesPatch, UserTheme};
+use crate::preferences::schema::{
+    AppearancePatch, FullscreenChromeBehavior, Language, PreferencesPatch, UserTheme,
+};
 
 // -----------------------------------------------------------------------
 // apply_patch — AppearancePatch merge semantics
@@ -114,6 +116,60 @@ fn apply_patch_show_pane_title_bar_none_leaves_unchanged() {
     assert_eq!(
         updated.appearance.show_pane_title_bar, before,
         "show_pane_title_bar must remain unchanged when patch field is None"
+    );
+}
+
+/// apply_patch with `fullscreen_chrome_behavior: Some(AlwaysVisible)` must set the field.
+#[test]
+fn apply_patch_fullscreen_chrome_behavior_some_always_visible_sets_field() {
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let path = tmp.path().join("preferences.toml");
+    let store = PreferencesStore::new_with_defaults(path);
+
+    // Default must be AutoHide.
+    assert_eq!(
+        store.read().get().appearance.fullscreen_chrome_behavior,
+        FullscreenChromeBehavior::AutoHide
+    );
+
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            fullscreen_chrome_behavior: Some(FullscreenChromeBehavior::AlwaysVisible),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+    assert_eq!(
+        updated.appearance.fullscreen_chrome_behavior,
+        FullscreenChromeBehavior::AlwaysVisible,
+        "fullscreen_chrome_behavior must be set to AlwaysVisible"
+    );
+}
+
+/// apply_patch with `fullscreen_chrome_behavior: None` must leave the field unchanged.
+#[test]
+fn apply_patch_fullscreen_chrome_behavior_none_leaves_unchanged() {
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let path = tmp.path().join("preferences.toml");
+    let store = PreferencesStore::new_with_defaults(path);
+
+    let before = store.read().get().appearance.fullscreen_chrome_behavior;
+
+    let patch = PreferencesPatch {
+        appearance: Some(AppearancePatch {
+            font_size: Some(18.0), // change something else
+            fullscreen_chrome_behavior: None,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let updated = store.read().apply_patch(patch).expect("apply_patch");
+
+    assert_eq!(
+        updated.appearance.fullscreen_chrome_behavior, before,
+        "fullscreen_chrome_behavior must remain unchanged when patch field is None"
     );
 }
 

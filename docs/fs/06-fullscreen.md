@@ -21,6 +21,7 @@
 | FS-FULL-008 | Entering or exiting full-screen mode MUST NOT affect application functionality: all tabs, panes, preferences, and SSH connections MUST remain fully accessible and functional throughout the transition and in both window states. | Must |
 | FS-FULL-009 | The full-screen state (entered or exited at last application close) MUST be persisted in user preferences and restored on next launch. | Should |
 | FS-FULL-010 | On Linux, where full-screen is implemented as a window manager hint and the transition may be asynchronous, TauTerm MUST send SIGWINCH only after the window geometry has stabilized (i.e., after the WM has acknowledged the full-screen state), not at the time the request is issued. | Must |
+| FS-FULL-011 | The user SHOULD be able to choose between auto-hiding chrome (`autoHide`) and always-visible chrome (`alwaysVisible`) in full-screen mode via an appearance preference (`fullscreenChromeBehavior`). The default value is `autoHide`. When set to `alwaysVisible`, the tab bar and status bar remain visible and in the normal layout flow; hover zones and the exit badge are not rendered. | Should |
 
 **Acceptance criteria:**
 
@@ -32,3 +33,4 @@
 - FS-FULL-008: With three tabs open and an active SSH session, entering full-screen mode: (a) does not close or disrupt any tab or pane; (b) does not disconnect the SSH session; (c) keeps the preferences panel accessible via Ctrl+,.
 - FS-FULL-009: Closing TauTerm while in full-screen mode, then relaunching, opens the application in full-screen mode.
 - FS-FULL-010: On a tiling window manager that applies full-screen asynchronously, the PTY dimensions reported by `tput cols` / `tput lines` match the full-screen geometry, not the pre-transition geometry.
+- FS-FULL-011: (a) Setting `fullscreenChromeBehavior` to `alwaysVisible` and entering full-screen mode: the tab bar and status bar remain continuously visible; no hover zones are active; no exit badge is rendered. (b) Setting `fullscreenChromeBehavior` to `autoHide` and entering full-screen mode: the tab bar and status bar hide automatically; hovering the top/bottom edges recalls them; the exit badge is visible in the top-right corner. (c) The default value of the preference is `autoHide`.

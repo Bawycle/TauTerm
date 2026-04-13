@@ -1339,6 +1339,13 @@ In full-screen mode the window anatomy changes from the four-band layout (§6.1)
 - All in-pane elements remain visible: pane dividers, scrollbars, the scroll-to-bottom button, the search overlay, in-pane SSH banners, the process-terminated banner, and the deprecated-algorithm banner.
 - The **window frame** (title bar, OS window borders) is suppressed — this is handled by Tauri at the window manager level. TauTerm UX takes effect only after the OS transition completes.
 
+The chrome behavior in full-screen mode is controlled by the `fullscreenChromeBehavior` appearance preference:
+
+| Value | Behavior |
+|---|---|
+| `autoHide` (default) | Tab bar and status bar use `position: fixed` (out of the flex flow), auto-hide after 1.5 s, recalled via hover zones. Terminal area occupies 100 % of the window height. |
+| `alwaysVisible` | Tab bar and status bar remain in the normal flex flow (identical to windowed mode). No auto-hide, no hover zones, no exit badge. The full-screen toggle button in the tab row provides the discoverable exit affordance (FS-FULL-004). |
+
 #### 7.22.2 Entrance and Exit Transition
 
 Full-screen transitions are driven by the OS/window-manager compositor, not by TauTerm CSS. TauTerm cannot animate the physical expansion of pixels to fill the screen — that is outside the WebView boundary. TauTerm does control the *chrome visibility change*:
@@ -1355,6 +1362,8 @@ Full-screen transitions are driven by the OS/window-manager compositor, not by T
 
 #### 7.22.3 Auto-Hide and Recall of Chrome
 
+*This section applies only when `fullscreenChromeBehavior` is `autoHide`.*
+
 When in full-screen mode:
 
 - The tab bar and status bar are hidden by default.
@@ -1365,6 +1374,8 @@ When in full-screen mode:
 **`prefers-reduced-motion: reduce`:** Recall and auto-hide transitions are instant.
 
 #### 7.22.4 Full-Screen Indicator
+
+*The exit badge described in this section is rendered only when `fullscreenChromeBehavior` is `autoHide`. In `alwaysVisible` mode, the tab row's full-screen toggle button is always visible and provides the same exit affordance (FS-FULL-004).*
 
 The user needs a persistent, non-intrusive signal that the window is in full-screen mode, and a mouse-accessible path to exit.
 

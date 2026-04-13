@@ -71,9 +71,7 @@ jobs:
           toolchain: "1.94.1"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
+        run: npm install -g pnpm@10.28.2
 
       - name: Install Node.js
         uses: actions/setup-node@v6

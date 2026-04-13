@@ -12,9 +12,10 @@
 
 #### 7.1.1 Tab Bar Container
 
-- **Element:** Horizontal flex row spanning the full window width, containing two zones:
-  1. **Tab bar zone** (`.tab-bar`, `flex: 1 0 0`) — occupies all available width minus the SSH connections toggle (§7.1.8). Contains: scroll arrows, tab items, new-tab button.
-  2. **SSH connections toggle** (§7.1.8, `flex-shrink: 0`) — anchored to the right edge, always visible.
+- **Element:** Horizontal flex row spanning the full window width, containing three zones:
+  1. **Tab bar zone** (`.tab-bar`, `flex: 1 0 0`) — occupies all available width minus the right-anchored controls. Contains: scroll arrows, tab items, new-tab button.
+  2. **Full-screen toggle** (§7.1.11, `flex-shrink: 0`) — always visible, toggles full-screen mode (FS-FULL-004).
+  3. **SSH connections toggle** (§7.1.8, `flex-shrink: 0`) — anchored to the right edge, always visible.
 - **Height:** `--size-tab-height` (40px).
 - **Background:** `--color-tab-bg` (`#242118`).
 - **Bottom border:** 1px solid `--color-border`.
@@ -191,6 +192,27 @@ The application window title (displayed by the OS window manager, taskbar, and A
 **Not configurable in v1.** Custom window title patterns (e.g. `%T - %a`) produce broken configurations disproportionate to their benefit. If a use case emerges from personas, add an optional format token in Appearance preferences in v1.1.
 
 **Rationale for context-first ordering:** Window managers truncate titles from the right when screen space is insufficient. Placing `{tab-title}` first ensures the contextual information (`vim`, `user@server`, `~/projects`) survives truncation. `TauTerm` is recoverable from the window icon; the active context is not.
+
+#### 7.1.11 Full-Screen Toggle Button (FS-FULL-004)
+
+A fixed-width button in the tab row that provides a discoverable, always-visible affordance for entering and exiting full-screen mode. It satisfies FS-FULL-004 (UI action reachable without prior shortcut knowledge).
+
+- **Position:** Between the tab bar zone and the SSH connections toggle — a direct flex sibling of both, NOT inside the tab bar zone. Visual order: tab bar → full-screen toggle → SSH toggle.
+- **Size:** `--size-target-min` (44px) × `--size-tab-height` (40px). `flex-shrink: 0`.
+- **Icon:** Contextual — Lucide `Maximize2` when in windowed mode, Lucide `Minimize2` when in full-screen mode. `--size-icon-sm` (16px).
+- **Bottom border:** 1px solid `--color-border`.
+- **Resting color:** `--color-text-secondary`.
+- **Hover:** Icon `--color-text-primary`; background `--color-hover-bg`.
+- **Active:** Background `--color-active-bg`.
+- **Focus ring:** 2px solid `--color-focus-ring`, offset 3px.
+- **`aria-label`:** Contextual, bound to i18n keys — `"Enter full screen"` (`enter_fullscreen`) in windowed mode, `"Exit full screen"` (`exit_fullscreen`) in full-screen mode. The label must update reactively when the full-screen state changes.
+- **Tooltip:** Matches the current `aria-label`, shown after `--duration-slow` (300ms) hover delay.
+- **Keyboard activation:** Standard button semantics — `Enter` and `Space` activate.
+- **`data-testid`:** `"fullscreen-toggle-btn"` for E2E targeting.
+
+**In full-screen mode (alwaysVisible):** The button remains in the normal layout flow and provides the primary exit affordance. No exit badge is rendered.
+
+**In full-screen mode (autoHide):** The button is part of the recalled tab bar. When the tab bar is hidden, the exit badge (§7.22.4) provides the exit affordance. When the tab bar is recalled via hover zone, both the button and the badge are available — the badge hides to avoid redundancy (§7.22.4).
 
 ### 7.2 Pane Divider
 

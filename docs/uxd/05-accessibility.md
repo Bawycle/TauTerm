@@ -93,6 +93,7 @@ These are user-configurable defaults (FS-KBD-002).
 | Confirmation dialog | `alertdialog` | `aria-modal="true"` |
 | Connection manager | `complementary` | `aria-label="Connection Manager"` |
 | Status bar | `status` | Live region for SSH state changes |
+| Full-screen toggle button | `button` | Contextual `aria-label`: `enter_fullscreen` (windowed) / `exit_fullscreen` (full-screen). See §7.1.11. |
 | Full-screen exit badge | `button` | `aria-label` bound to i18n key `exit_fullscreen`; `aria-describedby` pointing to tooltip |
 | Full-screen mode announcement | `aria-live="polite"` region | Hidden `<span>` at `position: absolute; clip-path: inset(50%)` announces the mode change to screen readers: "Entered full screen" / "Exited full screen". Located at the top of the root layout. |
 | Tooltip | `tooltip` | Referenced by trigger's `aria-describedby` |

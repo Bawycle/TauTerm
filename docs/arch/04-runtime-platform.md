@@ -315,3 +315,18 @@ The CI strategy is as follows (FS-DIST-003):
 The release publishes a single AppImage artefact (`TauTerm-{version}-x86_64.AppImage`). The ARM64 CI job validates that the source builds and tests pass on aarch64, but produces no distributable package.
 
 **Minimum supported WebKitGTK version:** `libwebkit2gtk-4.1 >= 2.38` (Ubuntu 22.04+) or `libwebkit2gtk-4.0 >= 2.38` (older distributions). Version 2.38 is the threshold that introduced post-2022 WebKit security patches addressing multiple CVE-class vulnerabilities. Distributions shipping an older WebKitGTK release are not officially supported; TauTerm may run but security properties are not guaranteed. The CI build environment enforces this minimum by targeting Ubuntu 22.04 as the baseline.
+
+### 10.7 Version Single Source of Truth
+
+**SSOT:** `src-tauri/Cargo.toml` `[package].version` is the single authoritative version for TauTerm. Every other artefact that carries a version string derives it from there.
+
+**Tauri:** `tauri.conf.json` has no `version` field. Tauri 2 automatically reads `[package].version` from `Cargo.toml` when the field is absent from the config. No duplication.
+
+**Frontend:** `vite.config.js` reads `Cargo.toml` at build time (regex parse via `readCargoVersion()`) and injects the result as `import.meta.env.VITE_APP_VERSION`. Frontend components that need to display the version consume this env variable — they never read `package.json`.
+
+**`package.json`:** Retains a `version` field for tooling compatibility (npm scripts, `npm_package_version` in some environments). This field is **not authoritative** — it must be kept in sync with `Cargo.toml` when bumping, but it is never read by the application at runtime.
+
+**How to bump the version:**
+1. Update `version` in `src-tauri/Cargo.toml`.
+2. Update `version` in `package.json` to the same value (cosmetic sync).
+3. A `scripts/bump-version.sh` script should automate both steps when it is introduced.

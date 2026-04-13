@@ -27,3 +27,16 @@ Svelte 5 frontend for TauTerm. Terminal rendering, tabs, panes, preferences, the
 ## State management
 
 Svelte 5 runes (`$state`, `$derived`, `$effect`). Prefer component-local state; use a shared store only when state is genuinely cross-component.
+
+## Focus management — overlay close pattern
+
+When closing any Bits UI overlay (Dialog, Popover, panel), follow this pattern to restore focus to the terminal viewport:
+
+1. **In the overlay component:** `onCloseAutoFocus` → `e.preventDefault()` (prevents Bits UI from returning focus to the trigger) + call a parent callback prop.
+2. **In TerminalView (parent):** `requestAnimationFrame(() => tv.activeViewportEl?.focus({ preventScroll: true }))` — force focus unconditionally (no condition on `document.activeElement`).
+
+Do **not** rely on the focus guard (`onFocusIn` in `useTerminalView.core`) for overlay close. The guard is a safety net, not the primary mechanism. See PreferencesPanel, ConnectionManager, and AboutPopover for reference implementations.
+
+## Bits UI portaled content — `:global()` CSS
+
+Bits UI `Popover.Content`, `Dialog.Content`, and `DropdownMenu.Content` are **portaled to `document.body`** by default. Scoped Svelte `<style>` rules do not apply to portaled content. Use `:global(.class-name)` for all CSS targeting elements inside portaled Bits UI containers.

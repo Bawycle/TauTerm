@@ -71,6 +71,7 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | Build pipeline (Vite + Cargo) | [04-runtime-platform.md](04-runtime-platform.md) §10.1 |
 | i18n (Paraglide JS, locale files, `Language` enum) | [04-runtime-platform.md](04-runtime-platform.md) §10.5 |
 | AppImage distribution (Tauri bundler, multi-arch CI) | [04-runtime-platform.md](04-runtime-platform.md) §10.6 |
+| Version SSOT (`Cargo.toml`, `VITE_APP_VERSION`, `package.json` sync) | [04-runtime-platform.md](04-runtime-platform.md) §10.7 |
 | Frontend module map (`lib/`, `components/`, routes) | [05-frontend.md](05-frontend.md) §11.1 |
 | `TerminalPane` component split rule (250-line threshold) | [05-frontend.md](05-frontend.md) §11.2 |
 | Keyboard shortcut interception (`isRecordingShortcut`) | [05-frontend.md](05-frontend.md) §11.3 |

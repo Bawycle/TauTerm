@@ -1,9 +1,18 @@
 // SPDX-License-Identifier: MPL-2.0
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { licenseGeneratorPlugin } from './vite-plugin-licenses';
+
+/** Read the app version from the single source of truth: src-tauri/Cargo.toml. */
+function readCargoVersion() {
+  const cargo = readFileSync('src-tauri/Cargo.toml', 'utf-8');
+  const match = cargo.match(/^version\s*=\s*"([^"]+)"/m);
+  if (!match) throw new Error('Cannot find version in src-tauri/Cargo.toml');
+  return match[1];
+}
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -76,7 +85,7 @@ export default defineConfig(async () => ({
   ],
 
   define: {
-    'import.meta.env.VITE_APP_VERSION': JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(readCargoVersion()),
   },
 
   test: {

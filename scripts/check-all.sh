@@ -16,6 +16,7 @@
 #   --skip-audit        Skip cargo audit + cargo deny (step 5)
 #   --no-build          Pass --no-build to Podman scripts (reuse existing images)
 #   --fast              Alias for --skip-containers --skip-e2e --skip-audit
+#   --check-version     Also check that version strings are in sync (opt-in)
 #   --dry-run           Print commands without executing them
 #   --install-hooks     Install the git pre-push hook and exit
 #   --help, -h          Show this help message
@@ -44,6 +45,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKIP_CONTAINERS=false
 SKIP_E2E=false
 SKIP_AUDIT=false
+CHECK_VERSION=false
 NO_BUILD=false
 DRY_RUN=false
 
@@ -57,6 +59,7 @@ for arg in "$@"; do
         --skip-e2e)        SKIP_E2E=true ;;
         --skip-audit)      SKIP_AUDIT=true ;;
         --no-build)        NO_BUILD=true ;;
+        --check-version)   CHECK_VERSION=true ;;
         --fast)
             SKIP_CONTAINERS=true
             SKIP_E2E=true
@@ -339,6 +342,40 @@ else
     run pnpm wdio
 
     step_passed "6: E2E tests"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 7 — Version consistency (opt-in via --check-version)
+# ---------------------------------------------------------------------------
+
+step_header 7 "Version consistency (--check-version)"
+
+if "$CHECK_VERSION"; then
+    CARGO_VERSION=$(grep -m1 '^version\s*=' "$PROJECT_ROOT/src-tauri/Cargo.toml" | sed 's/.*"\(.*\)".*/\1/')
+    PKG_VERSION=$(python3 -c "import json; print(json.load(open('$PROJECT_ROOT/package.json'))['version'])")
+    README_VERSION=$(grep -oP 'Version: \K[^)]+(?=\])' "$PROJECT_ROOT/README.md" | head -1)
+
+    VERSION_OK=true
+
+    if [[ "$PKG_VERSION" != "$CARGO_VERSION" ]]; then
+        echo "[check] MISMATCH: package.json version ($PKG_VERSION) != Cargo.toml ($CARGO_VERSION)"
+        VERSION_OK=false
+    fi
+
+    if [[ -n "$README_VERSION" && "$README_VERSION" != "$CARGO_VERSION" ]]; then
+        echo "[check] MISMATCH: README.md badge version ($README_VERSION) != Cargo.toml ($CARGO_VERSION)"
+        VERSION_OK=false
+    fi
+
+    if "$VERSION_OK"; then
+        echo "[check] All version strings match: $CARGO_VERSION"
+        step_passed "7: Version consistency"
+    else
+        echo "[check] Run: ./scripts/bump-version.sh $CARGO_VERSION"
+        exit 1
+    fi
+else
+    step_skipped "7: Version consistency"
 fi
 
 # ---------------------------------------------------------------------------

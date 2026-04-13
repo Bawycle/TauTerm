@@ -15,7 +15,7 @@ La plateforme cible, pour cette première version, est Linux (x86_64). ARM64 (aa
 - [`docs/uxd/`](docs/uxd/) — UX/UI Design: design token system, component specifications, interaction patterns, IPC contract. Entry point: `docs/uxd/README.md`. **Source of truth for how things look and behave from a UX perspective. Never restates FS requirements — references FS IDs instead.**
 - [`docs/arch/`](docs/arch/) — Architecture: module decomposition, IPC contract, state machines, concurrency model, platform abstraction, security strategy (source of truth for how the system is built). Entry point: `docs/arch/README.md`.
 - [`docs/testing/TESTING.md`](docs/testing/TESTING.md) — Testing strategy: test pyramid, unit/integration/E2E, coverage policy, no-regression policy
-- [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0015)
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records: rationale behind structural decisions (ADR-0001 through ADR-0025)
 - [`docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md`](docs/test-protocols/functional-pty-vt-ssh-preferences-ui-ipc.md) — Functional Test Protocol: 93 scenarios covering PTY/session, VT parser, SSH lifecycle, preferences & i18n, UI & accessibility, IPC contract
 - [`docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md`](docs/test-protocols/security-pty-ipc-ssh-credentials-csp-osc52.md) — Security Test Protocol: threat model, 28 scenarios covering PTY injection, IPC boundary, SSH auth, credential storage, CSP/WebView, OSC52, input validation
 
@@ -26,9 +26,18 @@ La plateforme cible, pour cette première version, est Linux (x86_64). ARM64 (aa
 ```bash
 ./scripts/check-all.sh           # fmt + lint + unit tests + containers + audit + E2E
 ./scripts/check-all.sh --fast    # fmt + lint + unit tests only (skip containers, audit, E2E)
+./scripts/check-all.sh --check-version  # also verify version strings are in sync (opt-in)
 ```
 
 Run before pushing. Mirrors what CI does. See `scripts/check-all.sh --help` for all options.
+
+### Release preparation
+
+```bash
+./scripts/bump-version.sh <version>      # Bump version in Cargo.toml, package.json, README.md, CHANGELOG.md
+./scripts/generate-licenses.sh           # Regenerate THIRD-PARTY-NOTICES.md (also runs at each build via Vite plugin)
+./scripts/prepare-release.sh             # Collect AppImage + generate SHA256SUMS
+```
 
 ### Development
 
@@ -42,7 +51,7 @@ pnpm check:watch        # Watch mode type checking
 ### Build
 
 ```bash
-pnpm tauri build        # Production build (bundles Rust + frontend); set bundle.targets: ["appimage"] in tauri.conf.json to produce AppImage
+pnpm tauri build        # Production build (bundles Rust + frontend); produces AppImage by default
 pnpm build              # Frontend only
 ```
 
@@ -199,6 +208,7 @@ These two documents have a strict, non-overlapping responsibility boundary:
 - CSP is configured in `tauri.conf.json` — `style-src 'unsafe-inline'` is retained for Tailwind 4 dev mode and must be reviewed when production build is validated
 - `language` field in `AppearancePrefs` MUST be `enum Language { En, Fr }` — never a free `String` across IPC (FS-I18N-006)
 - Never log filesystem paths that include usernames or home directories (e.g. `/home/<user>/…`). Log the filename or a generic label only (e.g. `"preferences.json"`, not `path.display()`).
+- **Version SSOT:** `src-tauri/Cargo.toml` `[package].version` is the single source of truth. `tauri.conf.json` has no `version` field (Tauri 2 reads Cargo.toml). `vite.config.js` reads Cargo.toml and injects `import.meta.env.VITE_APP_VERSION`. `package.json` version is cosmetic (synced via `bump-version.sh`).
 
 ### Svelte coding rules
 

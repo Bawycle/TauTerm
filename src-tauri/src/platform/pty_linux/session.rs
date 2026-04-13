@@ -30,6 +30,29 @@ fn foreground_process_name_for_fd(master_fd: RawFd) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// Read the current working directory of the foreground process on a PTY master fd.
+///
+/// Returns the target of `/proc/{pgid}/cwd` for the foreground process group of
+/// `master_fd`. Returns `None` when:
+/// - `tcgetpgrp` fails or returns ≤ 0
+/// - the `/proc/{pgid}/cwd` symlink cannot be read
+/// - the result is empty or not an absolute path
+fn foreground_process_cwd_for_fd(master_fd: RawFd) -> Option<String> {
+    // SAFETY: master_fd is a valid open PTY master fd owned by LinuxPtySession.
+    // tcgetpgrp is a read-only ioctl with no memory-safety implications.
+    let pgid = unsafe { libc::tcgetpgrp(master_fd) };
+    if pgid <= 0 {
+        return None;
+    }
+    // /proc/{pgid}/cwd is a symlink — use read_link, not read_to_string.
+    // We do not log the resolved path to comply with the no-path-logging security rule.
+    let link_path = format!("/proc/{pgid}/cwd");
+    std::fs::read_link(link_path)
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_owned()))
+        .filter(|s| !s.is_empty() && std::path::Path::new(s).is_absolute())
+}
+
 use crate::error::PtyError;
 use crate::platform::PtySession;
 
@@ -135,6 +158,10 @@ impl PtySession for LinuxPtySession {
         foreground_process_name_for_fd(self.master_fd)
     }
 
+    fn foreground_process_cwd(&self) -> Option<String> {
+        foreground_process_cwd_for_fd(self.master_fd)
+    }
+
     fn try_wait_exit_code(&self) -> Option<Option<i32>> {
         let mut child = self._child.lock().ok()?;
         let status = child.try_wait().ok()??;
@@ -148,5 +175,21 @@ impl PtySession for LinuxPtySession {
         let status = child.wait().ok()?;
         let code = i32::try_from(status.exit_code()).unwrap_or(i32::MAX);
         Some(Some(code))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn foreground_process_cwd_invalid_fd_returns_none() {
+        // An invalid fd (-1) must not panic — it should return None gracefully.
+        assert!(foreground_process_cwd_for_fd(-1).is_none());
+    }
+
+    #[test]
+    fn foreground_process_name_invalid_fd_returns_none() {
+        assert!(foreground_process_name_for_fd(-1).is_none());
     }
 }

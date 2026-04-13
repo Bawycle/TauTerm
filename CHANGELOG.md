@@ -35,6 +35,8 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 - Keyboard navigation between panes (`Ctrl+Shift+Arrow`)
 - Per-pane title bar showing process name or directory (toggleable in Preferences)
 - New split opens in the same directory as the current pane
+- New tab inherits the working directory of the active pane (FS-VT-064)
+- `/proc` fallback for CWD detection when the shell does not emit OSC 7
 
 #### SSH
 

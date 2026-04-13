@@ -147,6 +147,7 @@ pub fn run() {
                 pixel_height: 0,
                 shell: None,
                 login: true,
+                source_pane_id: None,
             }) {
                 tracing::error!("Failed to create initial tab during setup: {e}");
             }

@@ -31,6 +31,7 @@ fn test_sprint_001_login_true_selects_login_args() {
         pixel_height: 0,
         shell: None,
         login: true,
+        source_pane_id: None,
     };
     // Mirror the logic from create_tab (line ~160):
     let args: &[&str] = if config.login { &["--login"] } else { &[] };
@@ -48,6 +49,7 @@ fn test_sprint_001_login_false_produces_empty_args() {
         pixel_height: 0,
         shell: None,
         login: false,
+        source_pane_id: None,
     };
     let args: &[&str] = if config.login { &["--login"] } else { &[] };
     assert!(args.is_empty(), "login:false must produce no args");
@@ -76,6 +78,7 @@ fn test_sprint_001_create_tab_config_login_true_round_trips() {
         pixel_height: 0,
         shell: None,
         login: true,
+        source_pane_id: None,
     };
     let json = serde_json::to_string(&config).expect("serialize failed");
     let restored: CreateTabConfig = serde_json::from_str(&json).expect("deserialize failed");
@@ -623,7 +626,8 @@ fn inner_update_pane_title(
 }
 
 /// Replicates `SessionRegistry::update_pane_cwd` on `RegistryInner`.
-/// Returns `Some(TabState)` only when the effective display title changed.
+/// Always returns `Some(TabState)` when the pane is found (CWD is always
+/// propagated to the layout tree so the frontend can read it).
 fn inner_update_pane_cwd(
     inner: &mut RegistryInner,
     pane_id: &crate::session::ids::PaneId,
@@ -637,14 +641,15 @@ fn inner_update_pane_cwd(
 
     if let Some(pane) = entry.panes.get_mut(pane_id) {
         let old_title = resolve_effective_title_for_test(pane);
-        pane.cwd = Some(cwd);
+        pane.cwd = Some(cwd.clone());
         let new_title = resolve_effective_title_for_test(pane);
+        layout::update_pane_cwd_in_tree(&mut entry.state.layout, pane_id, &cwd);
         if new_title != old_title {
             if let Some(ref t) = new_title {
                 layout::update_pane_title_in_tree(&mut entry.state.layout, pane_id, t);
             }
-            return Some(entry.state.clone());
         }
+        return Some(entry.state.clone());
     }
     None
 }
@@ -695,18 +700,38 @@ fn update_pane_cwd_returns_some_when_osc7_basename_changes_effective_title() {
 }
 
 #[test]
-fn update_pane_cwd_returns_none_when_osc02_takes_priority() {
-    // OSC 0/2 title is already set — changing CWD must not change the effective title.
+fn update_pane_cwd_preserves_osc02_title_but_updates_cwd() {
+    // OSC 0/2 title is already set — changing CWD must not change the effective title,
+    // but the CWD must still be updated in the layout tree (for status bar, tab creation).
     let (mut inner, _tab_id, pane_id) = make_registry_with_one_pane();
 
     // Set an OSC 0/2 title first.
     inner_update_pane_title(&mut inner, &pane_id, "existing-title".to_string());
 
-    // Now update CWD — OSC 0/2 still takes priority, title unchanged.
+    // Now update CWD — always returns Some so the frontend gets the new CWD.
     let result = inner_update_pane_cwd(&mut inner, &pane_id, "/home/user/other".to_string());
     assert!(
-        result.is_none(),
-        "update_pane_cwd must return None when an OSC 0/2 title takes priority (title unchanged)"
+        result.is_some(),
+        "update_pane_cwd must return Some(TabState) even when the title is unchanged"
+    );
+
+    // The effective title must still be the OSC 0/2 title, not the CWD basename.
+    let tab_state = result.unwrap();
+    assert_eq!(
+        leaf_title(&tab_state, &pane_id),
+        Some("existing-title".to_string()),
+        "OSC 0/2 title must still take priority over CWD basename"
+    );
+
+    // But the CWD must be updated in the layout tree.
+    let leaf_cwd = match &tab_state.layout {
+        PaneNode::Leaf { state, .. } => state.cwd.clone(),
+        _ => None,
+    };
+    assert_eq!(
+        leaf_cwd,
+        Some("/home/user/other".to_string()),
+        "PaneState.cwd in the layout tree must reflect the new CWD"
     );
 }
 
@@ -773,5 +798,87 @@ fn osc52_prop_005_mixed_panes_local_affected_ssh_not() {
     assert!(
         read_osc52_allow(&inner, &pane_ssh),
         "SSH pane with override must keep allow=true after propagate_osc52_allow(false)"
+    );
+}
+
+// -----------------------------------------------------------------------
+// validated_working_dir — CWD validation helper tests (FS-VT-064)
+// -----------------------------------------------------------------------
+
+use super::pty_helpers::validated_working_dir;
+
+#[test]
+fn validated_working_dir_none_returns_none() {
+    assert!(validated_working_dir(None).is_none());
+}
+
+#[test]
+fn validated_working_dir_empty_returns_none() {
+    assert!(validated_working_dir(Some("")).is_none());
+}
+
+#[test]
+fn validated_working_dir_relative_returns_none() {
+    assert!(validated_working_dir(Some("foo/bar")).is_none());
+}
+
+#[test]
+fn validated_working_dir_absolute_returns_some() {
+    let result = validated_working_dir(Some("/home/user/projects"));
+    assert_eq!(
+        result,
+        Some(std::path::PathBuf::from("/home/user/projects"))
+    );
+}
+
+#[test]
+fn validated_working_dir_root_returns_some() {
+    let result = validated_working_dir(Some("/"));
+    assert_eq!(result, Some(std::path::PathBuf::from("/")));
+}
+
+#[test]
+fn validated_working_dir_bidi_override_returns_none() {
+    // U+202E RIGHT-TO-LEFT OVERRIDE embedded in a path
+    assert!(validated_working_dir(Some("/home/user/\u{202E}evil")).is_none());
+}
+
+#[test]
+fn validated_working_dir_zero_width_space_returns_none() {
+    // U+200B ZERO WIDTH SPACE
+    assert!(validated_working_dir(Some("/home/user/\u{200B}hidden")).is_none());
+}
+
+// -----------------------------------------------------------------------
+// CreateTabConfig.source_pane_id — serde tests
+// -----------------------------------------------------------------------
+
+#[test]
+fn create_tab_config_source_pane_id_defaults_to_none() {
+    let json = r#"{"cols":80,"rows":24}"#;
+    let config: CreateTabConfig = serde_json::from_str(json).expect("deserialize failed");
+    assert!(
+        config.source_pane_id.is_none(),
+        "serde default for source_pane_id must be None"
+    );
+}
+
+#[test]
+fn create_tab_config_source_pane_id_round_trips() {
+    let config = CreateTabConfig {
+        label: None,
+        cols: 80,
+        rows: 24,
+        pixel_width: 0,
+        pixel_height: 0,
+        shell: None,
+        login: false,
+        source_pane_id: Some(PaneId::new()),
+    };
+    let json = serde_json::to_string(&config).expect("serialize failed");
+    let restored: CreateTabConfig = serde_json::from_str(&json).expect("deserialize failed");
+    assert_eq!(
+        restored.source_pane_id, config.source_pane_id,
+        "source_pane_id must survive serde round-trip"
     );
 }

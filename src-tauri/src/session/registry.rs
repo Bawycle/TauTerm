@@ -92,6 +92,10 @@ pub struct CreateTabConfig {
     /// (subsequent tabs and panes). Default: false.
     #[serde(default)]
     pub login: bool,
+    /// If set, inherit the working directory from this pane (with `/proc` fallback
+    /// when OSC 7 is unavailable). FS-VT-064.
+    #[serde(default)]
+    pub source_pane_id: Option<PaneId>,
 }
 
 /// Scroll position state returned by `scroll_pane`.

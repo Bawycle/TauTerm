@@ -586,7 +586,7 @@ mod security_tests {
 /// - U+2066–U+2069 LRI / RLI / FSI / PDI (isolate directional marks)
 /// - U+200B ZERO WIDTH SPACE
 /// - U+FEFF BYTE ORDER MARK / ZERO WIDTH NO-BREAK SPACE
-fn contains_bidi_override(s: &str) -> bool {
+pub(crate) fn contains_bidi_override(s: &str) -> bool {
     s.chars().any(|c| {
         matches!(c,
             '\u{200F}'

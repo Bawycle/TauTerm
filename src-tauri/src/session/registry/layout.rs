@@ -77,6 +77,20 @@ pub(super) fn update_pane_title_in_tree(node: &mut PaneNode, target_id: &PaneId,
     }
 }
 
+/// Update the `PaneState.cwd` for a specific pane in the layout tree in-place.
+pub(super) fn update_pane_cwd_in_tree(node: &mut PaneNode, target_id: &PaneId, cwd: &str) {
+    match node {
+        PaneNode::Leaf { pane_id, state } if pane_id == target_id => {
+            state.cwd = Some(cwd.to_string());
+        }
+        PaneNode::Leaf { .. } => {}
+        PaneNode::Split { first, second, .. } => {
+            update_pane_cwd_in_tree(first, target_id, cwd);
+            update_pane_cwd_in_tree(second, target_id, cwd);
+        }
+    }
+}
+
 /// Update the `PaneState.label` for a specific pane in the layout tree in-place.
 pub(super) fn update_pane_label_in_tree(
     node: &mut PaneNode,

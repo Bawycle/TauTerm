@@ -110,7 +110,9 @@ export function createSessionHandlers(s: ViewState) {
   async function handleNewTab() {
     try {
       const login = sessionState.tabs.length === 0;
-      const newTab: TabState = await createTab({ cols: 80, rows: 24, login });
+      const activeTab = getActiveTab();
+      const sourcePaneId = activeTab?.activePaneId;
+      const newTab: TabState = await createTab({ cols: 80, rows: 24, login, sourcePaneId });
       addTab(newTab);
     } catch {
       // Non-fatal

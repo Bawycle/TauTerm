@@ -164,7 +164,7 @@
 - FS-VT-061: A program that pushes and pops titles restores the previous title correctly.
 - FS-VT-062: A title containing control characters displays without them; a 300-character title is truncated to 256 characters.
 - FS-VT-063: `printf "\033[21t"` produces no response in the input stream. A malicious title set via OSC 0 followed by a CSI 21t read-back does not inject the title into the PTY input.
-- FS-VT-064: Emitting `printf "\033]7;file://$(hostname)$(pwd)\033\\"` from the shell updates the pane's stored CWD. Opening a new pane or tab from a pane with a stored CWD starts in that directory.
+- FS-VT-064: Emitting `printf "\033]7;file://$(hostname)$(pwd)\033\\"` from the shell updates the pane's stored CWD. Opening a new pane or tab from a pane with a stored CWD starts in that directory. When the shell does not emit OSC 7, the terminal SHOULD fall back to reading the foreground process's CWD from `/proc/<fg_pid>/cwd` (Linux). OSC 7 takes priority when available.
 
 ### 3.1.8 Hyperlinks
 

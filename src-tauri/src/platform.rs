@@ -90,6 +90,15 @@ pub trait PtySession: Send + Sync {
         None
     }
 
+    /// Return the current working directory of the foreground process on this PTY master.
+    ///
+    /// Reads `/proc/{pgid}/cwd` (a symlink) after calling `tcgetpgrp(master_fd)`.
+    /// Returns `None` for session types that do not support it (SSH, stubs) or
+    /// when the symlink cannot be read.
+    fn foreground_process_cwd(&self) -> Option<String> {
+        None
+    }
+
     /// Return the process group ID of the current foreground process on this PTY master.
     ///
     /// Uses `tcgetpgrp(master_fd)` (Linux: TIOCGPGRP).

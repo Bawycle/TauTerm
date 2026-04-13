@@ -15,7 +15,7 @@ use crate::session::{
 use super::{
     ScrollPositionState, SessionRegistry, clamp_pane_dimensions,
     layout::{remove_pane_from_tree, replace_leaf_with_split, update_pane_label_in_tree},
-    pty_helpers::{get_reader_handle, get_writer_handle},
+    pty_helpers::{get_reader_handle, get_writer_handle, validated_working_dir},
     shell::resolve_shell_path,
 };
 
@@ -53,7 +53,11 @@ impl SessionRegistry {
                 .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
             let vt = pane.vt.read();
             let snap = vt.get_snapshot();
-            let cwd = pane.cwd.clone();
+            let cwd = pane.cwd.clone().or_else(|| {
+                pane.pty_session
+                    .as_ref()
+                    .and_then(|pty| pty.foreground_process_cwd())
+            });
             (snap.cols / 2, snap.rows, cwd)
         };
 
@@ -85,11 +89,7 @@ impl SessionRegistry {
         // during a potentially slow spawn).
         drop(inner);
 
-        let working_dir = source_cwd
-            .as_deref()
-            .map(std::path::Path::new)
-            .filter(|p| p.is_absolute())
-            .map(std::path::Path::to_owned);
+        let working_dir = validated_working_dir(source_cwd.as_deref());
         let pty_box: Box<dyn PtySession> = self
             .pty_backend
             .open_session(

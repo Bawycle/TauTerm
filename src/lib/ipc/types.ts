@@ -452,6 +452,12 @@ export interface CreateTabConfig {
    * Pass `true` for the first tab so ~/.bash_profile / ~/.zprofile are sourced.
    */
   login?: boolean;
+  /**
+   * If set, inherit the working directory from this pane (with `/proc` fallback
+   * when OSC 7 is unavailable). Takes priority over an explicit `cwd` field.
+   * FS-VT-064.
+   */
+  sourcePaneId?: string;
 }
 
 /**

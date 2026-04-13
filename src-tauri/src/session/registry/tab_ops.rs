@@ -16,8 +16,8 @@ use crate::session::{
 
 use super::{
     CreateTabConfig, SessionRegistry, TabEntry,
-    layout::update_pane_title_in_tree,
-    pty_helpers::{get_reader_handle, get_writer_handle},
+    layout::{update_pane_cwd_in_tree, update_pane_title_in_tree},
+    pty_helpers::{get_reader_handle, get_writer_handle, validated_working_dir},
     shell::resolve_shell_path,
 };
 
@@ -62,6 +62,28 @@ impl SessionRegistry {
         // --- Build args (login shell if first tab, FS-PTY-013) ---
         let args: &[&str] = if config.login { &["--login"] } else { &[] };
 
+        // --- Resolve working directory from source pane (FS-VT-064) ---
+        // OSC 7 CWD takes priority; falls back to /proc/<fg_pid>/cwd.
+        let working_dir = if let Some(ref source_id) = config.source_pane_id {
+            let inner = self.inner.read();
+            let cwd = inner
+                .tabs
+                .values()
+                .flat_map(|e| e.panes.get(source_id))
+                .next()
+                .and_then(|pane| {
+                    pane.cwd.clone().or_else(|| {
+                        pane.pty_session
+                            .as_ref()
+                            .and_then(|pty| pty.foreground_process_cwd())
+                    })
+                });
+            drop(inner);
+            validated_working_dir(cwd.as_deref())
+        } else {
+            None
+        };
+
         // --- Spawn the PTY session via the platform backend ---
         let pty_box: Box<dyn PtySession> = self
             .pty_backend
@@ -73,7 +95,7 @@ impl SessionRegistry {
                 &shell_path,
                 args,
                 &env,
-                None,
+                working_dir.as_deref(),
             )
             .map_err(|e| SessionError::PtySpawn(e.to_string()))?;
 
@@ -296,14 +318,20 @@ impl SessionRegistry {
             .map(|(id, e)| (id.clone(), e))?;
         if let Some(pane) = entry.panes.get_mut(pane_id) {
             let old_title = Self::resolve_effective_title(pane);
-            pane.cwd = Some(cwd);
+            pane.cwd = Some(cwd.clone());
             let new_title = Self::resolve_effective_title(pane);
+            // Always keep the layout tree's PaneState.cwd in sync.
+            update_pane_cwd_in_tree(&mut entry.state.layout, pane_id, &cwd);
             if new_title != old_title {
                 if let Some(ref t) = new_title {
                     update_pane_title_in_tree(&mut entry.state.layout, pane_id, t);
                 }
                 return Some(entry.state.clone());
             }
+            // Even when the title didn't change, emit the updated TabState
+            // so the frontend receives the new CWD (used by status bar, tab
+            // creation with source_pane_id, etc.).
+            return Some(entry.state.clone());
         }
         None
     }

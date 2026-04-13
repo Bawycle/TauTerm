@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! PTY reader/writer handle extraction helpers.
+//! PTY reader/writer handle extraction helpers and CWD validation.
 
 use crate::platform::PtySession;
 
@@ -17,6 +17,26 @@ pub(super) fn get_reader_handle(
 ) -> Option<std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Read + Send>>>> {
     pty.reader_handle()
 }
+
+// ---------------------------------------------------------------------------
+// CWD validation
+// ---------------------------------------------------------------------------
+
+/// Validate and convert an optional CWD string to a `PathBuf`.
+///
+/// Returns `None` if the input is `None`, empty, not an absolute path, or
+/// contains Unicode bidi-override / invisible codepoints (SEC-OSC-005).
+pub(super) fn validated_working_dir(cwd: Option<&str>) -> Option<std::path::PathBuf> {
+    cwd.filter(|s| !s.is_empty())
+        .map(std::path::Path::new)
+        .filter(|p| p.is_absolute())
+        .filter(|p| !crate::vt::osc::contains_bidi_override(&p.to_string_lossy()))
+        .map(|p| p.to_owned())
+}
+
+// ---------------------------------------------------------------------------
+// PTY writer extraction
+// ---------------------------------------------------------------------------
 
 /// Extract a writer handle from a `Box<dyn PtySession>` for the read task.
 ///

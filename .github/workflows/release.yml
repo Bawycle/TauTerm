@@ -129,14 +129,16 @@ jobs:
             exit 1
           fi
 
-          # Generate SHA256SUMS
-          (cd release && sha256sum -- *.AppImage | sort -k2 > SHA256SUMS)
+          # Generate per-artifact .sha256 checksum files
+          for f in release/*.AppImage; do
+            (cd release && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
+          done
 
           echo "Found $ARTIFACT_COUNT artifact(s):"
           ls -lh release/
           echo ""
-          echo "SHA256SUMS:"
-          cat release/SHA256SUMS
+          echo "Checksums:"
+          cat release/*.sha256
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4

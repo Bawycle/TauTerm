@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2026-04-14
+
 ### Added
 
 - Terminal now responds to capability queries from tmux, Claude Code, and other tools — faster tmux attach, better feature detection by TUI frameworks

@@ -1,6 +1,6 @@
 {
   "name": "tau-term",
-  "version": "0.1.0-beta",
+  "version": "0.1.0-beta.2",
   "description": "",
   "type": "module",
   "scripts": {
@@ -43,7 +43,7 @@
     "lucide-svelte": "^1.0.1",
     "prettier": "^3.8.2",
     "prettier-plugin-svelte": "^3.5.1",
-    "svelte": "^5.55.3",
+    "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",

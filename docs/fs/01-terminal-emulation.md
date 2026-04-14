@@ -225,6 +225,17 @@
 - FS-VT-092: A rapid sequence of BEL characters (e.g., `yes $'\a' | head -100`) does not produce 100 separate notifications.
 - FS-VT-093: A bell in a background tab causes a visible indicator on that tab.
 
+### 3.1.12 Device Attributes
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FS-VT-094 | TauTerm MUST respond to Primary Device Attributes (DA1: `CSI c` / `CSI 0 c`) with `\x1b[?1;2c` (VT100 with Advanced Video Option). TauTerm MUST respond to Secondary Device Attributes (DA2: `CSI > c` / `CSI > 0 c`) with `\x1b[>0;10;0c` (Pp=0 VT100-class, Pv=10 opaque firmware version, Pc=0 no ROM cartridge). DA1 and DA2 queries with a non-zero parameter MUST be silently ignored. | Must |
+
+**Acceptance criteria:**
+- FS-VT-094-DA1: The VtProcessor populates `pending_responses` with `\x1b[?1;2c` when processing `CSI c` or `CSI 0 c`. No response for non-zero parameters.
+- FS-VT-094-DA2: The VtProcessor populates `pending_responses` with `\x1b[>0;10;0c` when processing `CSI > c` or `CSI > 0 c`. No response for non-zero parameters.
+- FS-VT-094-SEQ: When DA1 and DA2 queries arrive in a single byte stream, both responses are produced in order.
+
 ---
 
 ## 3.2 FS-PTY: PTY Lifecycle

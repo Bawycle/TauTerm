@@ -408,7 +408,8 @@ impl VtProcessor {
     /// avoid a deadlock when the shell echoes back the response.
     ///
     /// Covers: DSR ready (`CSI 5n` → `\x1b[0n`), CPR (`CSI 6n` → `\x1b[row;colR`),
-    /// and Primary DA (`CSI c` / `CSI 0c` → `\x1b[?1;2c`).
+    /// Primary DA (`CSI c` / `CSI 0c` → `\x1b[?1;2c`), and Secondary DA
+    /// (`CSI > c` / `CSI > 0c` → `\x1b[>0;10;0c`).
     pub fn take_responses(&mut self) -> Vec<Vec<u8>> {
         std::mem::take(&mut self.pending_responses)
     }

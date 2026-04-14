@@ -370,22 +370,3 @@ fn decrc_normalizes_position_when_content_changed_after_save() {
         "decrc must normalize restored position"
     );
 }
-
-#[test]
-fn dsr_cpr_reports_normalized_position() {
-    // Wide char at col 0; CUP to phantom col 1; CPR must report col 1 (1-based) = base cell.
-    let mut vt = make_vt(10, 5);
-    vt.process(b"\xe4\xb8\xad"); // 中 at col 0; phantom at col 1
-    vt.process(b"\x1b[1;2H"); // CUP row 1, col 2 (phantom at col 1 0-indexed)
-    // After fix, cursor.col should be 0 (normalized).
-    // Trigger DSR CPR:
-    vt.process(b"\x1b[6n");
-    // Collect CPR response:
-    let responses = vt.take_responses();
-    let response = responses.into_iter().flatten().collect::<Vec<u8>>();
-    // Expected: ESC[1;1R (row 1, col 1, both 1-based)
-    assert_eq!(
-        response, b"\x1b[1;1R",
-        "CPR must report normalized (base cell) position"
-    );
-}

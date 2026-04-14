@@ -121,6 +121,8 @@ impl Perform for VtPerformBridge<'_> {
             ([], 'n') => csi_misc::dsr(p, param0),
             // DA — Primary Device Attributes
             ([], 'c') => csi_misc::da(p, param0),
+            // DA2 — Secondary Device Attributes
+            ([b'>'], 'c') => csi_misc::da2(p, param0),
 
             _ => {} // Unknown CSI sequence — ignore.
         }

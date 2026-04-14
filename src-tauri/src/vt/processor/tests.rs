@@ -2,6 +2,7 @@
 
 mod basic;
 mod cursor_dirty;
+mod device_attributes;
 mod editing;
 mod features;
 mod helpers;

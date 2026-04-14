@@ -77,6 +77,18 @@ pub(super) fn da(p: &mut VtProcessor, param: u16) {
     }
 }
 
+/// DA2 — Secondary Device Attributes (CSI > c / CSI > 0 c)
+///
+/// Reports terminal type (Pp=0, VT100-class), firmware version (Pv=10, opaque),
+/// and ROM cartridge registration (Pc=0, absent). Applications use DA2 to detect
+/// terminal capabilities beyond what `$TERM` and terminfo provide (e.g. tmux
+/// probes DA2 on attach to enable truecolor passthrough and SGR mouse).
+pub(super) fn da2(p: &mut VtProcessor, param: u16) {
+    if param == 0 {
+        p.pending_responses.push(b"\x1b[>0;10;0c".to_vec());
+    }
+}
+
 /// DECSCUSR — Set Cursor Shape (CSI Ps SP q)
 ///
 /// DECSCUSR 0 is "restore default cursor shape": it restores `cursor_shape` to

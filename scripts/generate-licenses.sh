@@ -40,7 +40,8 @@ import sys
 import json
 import glob
 import os
-from datetime import date
+
+
 
 cargo_file  = sys.argv[1]
 npm_pat_a   = sys.argv[2]
@@ -122,8 +123,7 @@ npm_deps   = [e for e in unique if e["source"] == "npm"]
 
 with open(output_file, "w", encoding="utf-8") as out:
     out.write("# Third-Party Notices\n\n")
-    out.write("This file lists the third-party dependencies used by TauTerm and their licenses.\n")
-    out.write(f"Generated on {date.today().isoformat()}.\n\n")
+    out.write("This file lists the third-party dependencies used by TauTerm and their licenses.\n\n")
 
     if cargo_deps:
         out.write(f"## Rust Crates ({len(cargo_deps)})\n\n")

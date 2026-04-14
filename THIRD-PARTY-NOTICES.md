@@ -1,7 +1,6 @@
 # Third-Party Notices
 
 This file lists the third-party dependencies used by TauTerm and their licenses.
-Generated on 2026-04-14.
 
 ## Rust Crates (736)
 
@@ -49,7 +48,7 @@ Generated on 2026-04-14.
 | bit-set | 0.8.0 | Apache-2.0 OR MIT |
 | bit-vec | 0.8.0 | Apache-2.0 OR MIT |
 | bitflags | 1.3.2 | MIT/Apache-2.0 |
-| bitflags | 2.11.0 | MIT OR Apache-2.0 |
+| bitflags | 2.11.1 | MIT OR Apache-2.0 |
 | blake2 | 0.10.6 | MIT OR Apache-2.0 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
 | block-buffer | 0.12.0 | MIT OR Apache-2.0 |
@@ -305,7 +304,7 @@ Generated on 2026-04-14.
 | leb128fmt | 0.1.0 | MIT OR Apache-2.0 |
 | libappindicator | 0.9.0 | Apache-2.0 OR MIT |
 | libappindicator-sys | 0.9.0 | Apache-2.0 OR MIT |
-| libc | 0.2.184 | MIT OR Apache-2.0 |
+| libc | 0.2.185 | MIT OR Apache-2.0 |
 | libdbus-sys | 0.2.7 | Apache-2.0/MIT |
 | libloading | 0.7.4 | ISC |
 | libm | 0.2.16 | MIT |
@@ -410,7 +409,7 @@ Generated on 2026-04-14.
 | pkcs1 | 0.8.0-rc.4 | Apache-2.0 OR MIT |
 | pkcs5 | 0.8.0-rc.13 | Apache-2.0 OR MIT |
 | pkcs8 | 0.11.0-rc.11 | Apache-2.0 OR MIT |
-| pkg-config | 0.3.32 | MIT OR Apache-2.0 |
+| pkg-config | 0.3.33 | MIT OR Apache-2.0 |
 | plist | 1.8.0 | MIT |
 | plotters | 0.3.7 | MIT |
 | plotters-backend | 0.3.7 | MIT |
@@ -450,11 +449,11 @@ Generated on 2026-04-14.
 | rand_chacha | 0.3.1 | MIT OR Apache-2.0 |
 | rand_core | 0.5.1 | MIT OR Apache-2.0 |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 |
-| rand_core | 0.10.0 | MIT OR Apache-2.0 |
+| rand_core | 0.10.1 | MIT OR Apache-2.0 |
 | rand_hc | 0.2.0 | MIT/Apache-2.0 |
 | rand_pcg | 0.2.1 | MIT OR Apache-2.0 |
 | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib |
-| rayon | 1.11.0 | MIT OR Apache-2.0 |
+| rayon | 1.12.0 | MIT OR Apache-2.0 |
 | rayon-core | 1.13.0 | MIT OR Apache-2.0 |
 | redox_syscall | 0.5.18 | MIT |
 | redox_users | 0.5.2 | MIT |
@@ -503,7 +502,7 @@ Generated on 2026-04-14.
 | serde_with | 3.18.0 | MIT OR Apache-2.0 |
 | serde_with_macros | 3.18.0 | MIT OR Apache-2.0 |
 | serdect | 0.4.2 | Apache-2.0 OR MIT |
-| serial2 | 0.2.35 | BSD-2-Clause OR Apache-2.0 |
+| serial2 | 0.2.36 | BSD-2-Clause OR Apache-2.0 |
 | serial_test | 3.4.0 | MIT |
 | serial_test_derive | 3.4.0 | MIT |
 | serialize-to-javascript | 0.1.2 | MIT OR Apache-2.0 |
@@ -744,7 +743,7 @@ Generated on 2026-04-14.
 | zvariant_derive | 5.10.0 | MIT |
 | zvariant_utils | 3.3.0 | MIT |
 
-## npm Packages (573)
+## npm Packages (582)
 
 | Package | Version | License |
 |---|---|---|
@@ -755,9 +754,12 @@ Generated on 2026-04-14.
 | @babel/helper-validator-identifier | 7.28.5 | MIT |
 | @bramus/specificity | 2.4.2 | MIT |
 | @csstools/color-helpers | 6.0.2 | MIT-0 |
+| @csstools/css-calc | 3.2.0 | MIT |
 | @csstools/css-calc | 3.1.1 | MIT |
+| @csstools/css-color-parser | 4.1.0 | MIT |
 | @csstools/css-color-parser | 4.0.2 | MIT |
 | @csstools/css-parser-algorithms | 4.0.0 | MIT |
+| @csstools/css-syntax-patches-for-csstree | 1.1.3 | MIT-0 |
 | @csstools/css-syntax-patches-for-csstree | 1.1.2 | MIT-0 |
 | @csstools/css-tokenizer | 4.0.0 | MIT |
 | @esbuild/linux-x64 | 0.27.7 | MIT |
@@ -971,6 +973,7 @@ Generated on 2026-04-14.
 | domelementtype | 2.3.0 | BSD-2-Clause |
 | domhandler | 5.0.3 | BSD-2-Clause |
 | domutils | 3.2.2 | BSD-2-Clause |
+| dotenv | 17.4.2 | BSD-2-Clause |
 | dotenv | 17.4.1 | BSD-2-Clause |
 | eastasianwidth | 0.2.0 | MIT |
 | easy-table | 1.2.0 | MIT |
@@ -1010,6 +1013,7 @@ Generated on 2026-04-14.
 | fast-deep-equal | 2.0.1 | MIT |
 | fast-fifo | 1.3.2 | MIT |
 | fast-xml-builder | 1.1.4 | MIT |
+| fast-xml-parser | 5.5.12 | MIT |
 | fast-xml-parser | 5.5.11 | MIT |
 | fd-slicer | 1.1.0 | MIT |
 | fdir | 6.5.0 | MIT |
@@ -1109,6 +1113,7 @@ Generated on 2026-04-14.
 | log-symbols | 4.1.0 | MIT |
 | loglevel | 1.9.2 | MIT |
 | loglevel-plugin-prefix | 0.8.4 | MIT |
+| lru-cache | 11.3.5 | BlueOak-1.0.0 |
 | lru-cache | 11.3.3 | BlueOak-1.0.0 |
 | lru-cache | 7.18.3 | ISC |
 | lru-cache | 10.4.3 | ISC |
@@ -1244,6 +1249,7 @@ Generated on 2026-04-14.
 | supports-color | 8.1.1 | MIT |
 | supports-color | 7.2.0 | MIT |
 | svelte | 5.55.3 | MIT |
+| svelte | 5.55.4 | MIT |
 | svelte-check | 4.4.6 | MIT |
 | svelte-toolbelt | 0.10.6 | unknown |
 | symbol-tree | 3.2.4 | MIT |
@@ -1271,7 +1277,9 @@ Generated on 2026-04-14.
 | type-fest | 4.41.0 | (MIT OR CC0-1.0) |
 | type-fest | 3.13.1 | (MIT OR CC0-1.0) |
 | typescript | 6.0.2 | Apache-2.0 |
+| undici | 7.25.0 | MIT |
 | undici | 7.24.7 | MIT |
+| undici | 6.25.0 | MIT |
 | undici | 6.24.1 | MIT |
 | undici-types | 7.19.2 | MIT |
 | undici-types | 6.21.0 | MIT |

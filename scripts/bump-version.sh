@@ -98,6 +98,10 @@ else
     info "CHANGELOG.md not found — skipping"
 fi
 
+# ── 5. THIRD-PARTY-NOTICES.md — regenerate from current lock files ───
+info "Regenerating THIRD-PARTY-NOTICES.md"
+"$SCRIPT_DIR/generate-licenses.sh"
+
 # ── Summary ──────────────────────────────────────────────────────────
 echo ""
 info "Version bumped to $NEW_VERSION in:"
@@ -105,6 +109,7 @@ echo "   src-tauri/Cargo.toml"
 echo "   package.json"
 echo "   README.md"
 [[ -f "$CHANGELOG" ]] && echo "   CHANGELOG.md"
+echo "   THIRD-PARTY-NOTICES.md (regenerated)"
 echo ""
 info "Review the changes, then commit:"
 echo "   git add -A && git commit -m 'chore(release): bump version to $NEW_VERSION'"

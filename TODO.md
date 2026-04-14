@@ -28,17 +28,48 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ## Critical — Release Blockers (score 17–21)
 
+- [ ] **P-HT-1 — Coalesce rAF queue into single update per frame** `[Score: 18 | R:3, S:2, U:3, E:2]`
+  vtebench (sustained ~100 MB/s) freezes TauTerm and crashes the host. Current P-OPT-1 applies N events sequentially in one rAF callback — N `applyScreenUpdate()` calls cost O(N × cells) in proxy writes. Under vtebench, N full redraws each replace the `gridRows` reference → N complete proxy invalidation cycles. Events accumulate in WebKitGTK's IPC buffer without limit → OOM.
+  **Fix:** In `flushRafQueue()`, merge all queued `ScreenUpdateEvent` into one before calling `applyScreenUpdate()`:
+  - If any event has `isFullRedraw: true`, discard everything before the **last** full redraw (it contains complete state). Merge any partials after it.
+  - If all events are partial, merge `CellUpdate[]` arrays — last write per `(row, col)` wins.
+  - Call `applyScreenUpdate()` exactly once per frame.
+  **Files:** `src/lib/composables/useTerminalPane.svelte.ts` (`flushRafQueue`).
+
 ---
 
 ## High Priority — Must Land in Next Release (score 13–16)
+
+- [ ] **P-HT-3 — rAF queue safety cap with snapshot re-fetch** `[Score: 15 | R:2, S:2, U:2, E:3]`
+  If `rafQueue.length > 20` at flush time, the frontend is irrecoverably behind. Drop the entire queue and re-fetch a fresh snapshot from the backend (`getPaneScreenSnapshot`). Guarantees correctness (no stale cells from dropped partials) and caps memory growth.
+  **Prerequisite:** P-HT-1 (coalescing should prevent this from ever triggering under normal high-throughput).
+  **Files:** `src/lib/composables/useTerminalPane.svelte.ts`.
+
+- [ ] **P-HT-2 — Adaptive debounce in Task 2** `[Score: 14 | R:2, S:2, U:2, E:2]`
+  Measure `emit_all_pending()` wall-clock duration. Replace fixed 12 ms interval with `max(12ms, min(last_emit_duration × 1.2, 100ms))`. Under normal load: 12 ms (83 Hz). Under vtebench: self-regulates to 30–80 ms (12–33 Hz). Must decay back to 12 ms when load decreases.
+  **Files:** `src-tauri/src/session/pty_task/reader.rs` (Task 2 loop), `src-tauri/src/session/pty_task/emitter.rs`.
 
 ---
 
 ## Medium Priority — Next Release Quality Target (score 9–12)
 
+- [ ] **P-HT-4 — Skip `isSelected`/`searchMatchSet` evaluations when inactive** `[Score: 10 | R:1, S:1, U:2, E:3]`
+  When no selection is active and no search matches exist, the per-cell `isSelected(rowIdx, colIdx)` and `activeSearchMatchSet.has()` calls in the `{#each}` template are pure waste — evaluated for every cell on every reconcile. Short-circuit with a boolean guard.
+  **Files:** `src/lib/components/TerminalPaneViewport.svelte`.
+
+- [ ] **P-HT-6 — Frontend→backend flow control (frame-ack)** `[Score: 10 | R:1, S:2, U:2, E:1]`
+  The backend has no knowledge of whether the frontend is consuming events. Add a `frame-ack` Tauri command: the frontend calls it after each `flushRafQueue()`. The backend tracks the last ack timestamp; if no ack for >100 ms, it increases debounce further or drops events until an ack arrives. This is the real backpressure solution (P-HT-2 is a one-sided approximation).
+  **Tradeoff:** Adds an IPC round-trip per frame. More invasive than P-HT-2 — consider after P-HT-1/2/3 are validated.
+  **Files:** new Tauri command + `src-tauri/src/session/pty_task/reader.rs` + `src/lib/composables/useTerminalPane.svelte.ts`.
+
 ---
 
 ## Low Priority — Nice-to-Have (score ≤ 8)
+
+- [ ] **P-HT-5 — Binary encoding for full-redraw payloads** `[Score: 8 | R:1, S:1, U:2, E:1]`
+  Full-redraw JSON at 220×50 = 11,000 `CellUpdate` structs with per-cell `row`/`col` fields. For full redraws, coordinates are implicit from flat index + stride. Switch to MessagePack (`rmp-serde`) or a flat binary buffer for `screen-update` events. Could reduce payload size by 60–80% and eliminate JSON serialization cost (667 µs post-P-IPC1).
+  **Prerequisite:** Measure actual payload sizes under vtebench first. Evaluate `rmp-serde` vs custom binary format.
+  **Files:** `src-tauri/src/session/pty_task/event_builders.rs`, `src/lib/ipc/events.ts`, `src/lib/ipc/types.ts`.
 
 - [ ] **IPC type drift — evaluate `tauri-specta` for codegen** `[Score: 8 | R:1, S:2, U:1, E:1]`
   All Rust IPC types (`events/types.rs`, command signatures, preference structs) are manually mirrored in `src/lib/ipc/types.ts` (~1020 lines, 35-40 types, 36 commands, 16 events). Early drift signals are already present: `SnapshotCell.width` documentation diverges between Rust ("phantom/continuation slot") and TS ("combining"); 3 commands in `commands.ts` (`providePassphrase`, `duplicateConnection`, `storeConnectionPassword`) have no corresponding type-alias in `types.ts` — their parameter shapes are implicit knowledge of the Rust signature.
@@ -263,7 +294,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ### Performance — Renderer Rewrite
 
-*Context: 0.1.0 decision — ~23 ms SCROLL stress test is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms. WebKitGTK repaint (78%) is the structural ceiling of the DOM renderer. All CSS/JS optimisations (P-OPT-1 through P-OPT-4) are exhausted. P12b is the only remaining lever to reach 12 ms on SCROLL.*
+*Context: 0.1.0 decision — ~23 ms SCROLL stress test is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms. WebKitGTK repaint (78%) is the structural ceiling of the DOM renderer. CSS/JS frame-time optimisations (P-OPT-1 through P-OPT-4) are exhausted; pipeline-level optimisations (P-HT-1 through P-HT-6) address throughput survival but not per-frame repaint cost. P12b is the only remaining lever to reach 12 ms on SCROLL.*
 
 - [ ] **P12b — WebGL2** *(only if SCROLL < 15 ms becomes a hard requirement in a future release)*
   **All prerequisites met:**

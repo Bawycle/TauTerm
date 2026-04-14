@@ -292,6 +292,195 @@ describe('TerminalPane.svelte handleInput (textarea input event)', () => {
     // PTY must NOT receive bytes from keydown — character comes via input event instead
     expect(sendInputSpy).not.toHaveBeenCalled();
   });
+
+  // TEST-TP-INPUT-005: input during composition (isComposing=true) is ignored.
+  // Dead key ^ → input fires with pre-edit "^" and isComposing=true.
+  // This must NOT be sent to the PTY — the composed character will arrive later.
+  it('TEST-TP-INPUT-005: input event with isComposing=true is ignored (dead key pre-edit)', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Simulate dead key pre-edit: IM writes "^" to textarea, fires input with isComposing=true
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Pre-edit text must NOT be sent to PTY
+    expect(sendInputSpy).not.toHaveBeenCalled();
+    // Textarea value must NOT be cleared (IM needs it for composition)
+    expect(inputEl!.value).toBe('^');
+  });
+
+  // TEST-TP-INPUT-006: compositionend delivers the final composed character.
+  // After dead ^ + i, compositionend fires with data="î". This must be sent to PTY.
+  it('TEST-TP-INPUT-006: compositionend data="î" sends composed character to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Simulate compositionend: IM commits "î" and textarea holds it
+    inputEl!.value = 'î';
+    inputEl!.dispatchEvent(
+      new CompositionEvent('compositionend', { data: 'î', bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    // î = U+00EE → UTF-8: [0xC3, 0xAE]
+    expect(Array.from(bytes)).toEqual([0xc3, 0xae]);
+    // Textarea must be drained after compositionend
+    expect(inputEl!.value).toBe('');
+  });
+
+  // TEST-TP-INPUT-007: full dead key sequence (^ then i) produces only "î", not "^î".
+  // Simulates the complete sequence: compositionstart → input(isComposing) → compositionend.
+  it('TEST-TP-INPUT-007: dead ^ + i → only "î" sent (no spurious "^")', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Step 1: compositionstart
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+
+    // Step 2: input with isComposing=true (dead key pre-edit)
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Step 3: compositionend with composed character
+    inputEl!.value = 'î';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'î', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    // Only ONE call, with the composed character — no spurious "^"
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0xc3, 0xae]);
+  });
+
+  // TEST-TP-INPUT-008: compositionend followed by input(isComposing=false) → no double-send.
+  // WebKitGTK/IBus may emit a post-composition input event with isComposing=false and
+  // event.data set to the composed character. The compositionJustEnded flag must prevent
+  // handleInput from re-sending the character that compositionend already delivered.
+  it('TEST-TP-INPUT-008: post-composition input(isComposing=false) does not double-send', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Step 1: compositionend sends "î" and drains textarea
+    inputEl!.value = 'î';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'î', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    // Step 2: post-composition input with isComposing=false and event.data="î"
+    // textarea is already drained, but event.data still carries the character
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: 'î', isComposing: false, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // compositionend sent once; subsequent input must be suppressed
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0xc3, 0xae]);
+  });
+
+  // TEST-TP-INPUT-009: cancelled composition (Escape) with empty data → nothing sent.
+  // When the user cancels a dead key composition, compositionend fires with data="".
+  it('TEST-TP-INPUT-009: cancelled composition (compositionend data="") sends nothing', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionstart + pre-edit
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Escape cancels → compositionend with empty data, IM clears textarea
+    inputEl!.value = '';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    // Nothing should be sent — neither the pre-edit "^" nor the empty string
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+
+  // TEST-TP-INPUT-010: double dead key (^ + ^ → ^) sends the literal character.
+  // On Belgian/French keyboards, pressing the dead key twice produces the accent as a
+  // literal character. The IM commits "^" via compositionend.
+  it('TEST-TP-INPUT-010: double dead key (^ + ^) sends literal "^" (0x5E)', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionstart + pre-edit for first ^
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Second ^ commits the literal "^"
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: '^', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0x5e]);
+  });
+
+  // TEST-TP-INPUT-011: dead key + incompatible char (^ + z → "^z") sends two characters.
+  // When the base character is not composable with the dead key, the IM commits both
+  // the accent and the character as separate codepoints in a single compositionend.
+  it('TEST-TP-INPUT-011: dead ^ + z (incompatible) sends "^z" [0x5E, 0x7A]', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionstart + pre-edit
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // z is incompatible → IM commits "^z" (two chars)
+    inputEl!.value = '^z';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: '^z', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    // sendBytes is called once per character by sendPrintableText
+    expect(sendInputSpy).toHaveBeenCalledTimes(2);
+    const bytes0: Uint8Array = sendInputSpy.mock.calls[0][1];
+    const bytes1: Uint8Array = sendInputSpy.mock.calls[1][1];
+    expect(Array.from(bytes0)).toEqual([0x5e]); // ^
+    expect(Array.from(bytes1)).toEqual([0x7a]); // z
+  });
 });
 
 // ---------------------------------------------------------------------------

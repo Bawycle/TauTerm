@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Dead key composition now works correctly on Belgian, French, and other keyboards using accented characters — typing `^` + `i` produces `î` instead of `^î`
+
 ## [0.1.0-beta.2] - 2026-04-14
 
 ### Added

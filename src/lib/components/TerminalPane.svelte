@@ -314,12 +314,54 @@
    * Note: some IMs (Fcitx5) write directly to textarea.value rather than
    * setting event.data. Reading target.value first covers both cases.
    */
+  // Guard against double-send when WebKitGTK/IBus emits an input event
+  // (isComposing=false) immediately after compositionend. Without this flag,
+  // handleInput's `target.value || inputEvent.data` fallback would re-send
+  // the composed character via event.data even though the textarea was already
+  // drained by handleCompositionEnd. Pattern used by xterm.js and CodeMirror.
+  let compositionJustEnded = false;
+
   function handleInput(event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) {
-    const target = event.target as HTMLTextAreaElement;
     const inputEvent = event as unknown as InputEvent;
+    // During composition (dead key pre-edit, IME candidate selection),
+    // the IM is managing the textarea content. Do not drain or send —
+    // the final composed character will arrive via compositionend.
+    if (inputEvent.isComposing) return;
+    // compositionend already sent the composed text and drained the textarea.
+    // Skip the post-composition input event to prevent double-send.
+    if (compositionJustEnded) {
+      compositionJustEnded = false;
+      const target = event.target as HTMLTextAreaElement;
+      target.value = '';
+      return;
+    }
+    const target = event.target as HTMLTextAreaElement;
     const text = target.value || inputEvent.data || '';
     target.value = '';
     if (!text) return;
+    sendPrintableText(text);
+  }
+
+  /**
+   * Handle compositionend — sends the final composed text (e.g. "î" from
+   * dead ^ + i) and drains the textarea. Sets compositionJustEnded to
+   * prevent the subsequent input event (if any) from double-sending.
+   */
+  function handleCompositionEnd(event: CompositionEvent) {
+    compositionJustEnded = true;
+    const target = event.target as HTMLTextAreaElement;
+    // Prefer textarea value (some IMs like Fcitx5 write directly to it) over event.data.
+    const text = target.value || event.data || '';
+    target.value = '';
+    if (!text) return;
+    sendPrintableText(text);
+  }
+
+  /**
+   * Send printable characters from an IM commit or direct input to the PTY.
+   * Filters out control characters (must come through handleKeydown).
+   */
+  function sendPrintableText(text: string) {
     const encoder = new TextEncoder();
     for (const char of text) {
       const cp = char.codePointAt(0);
@@ -379,6 +421,7 @@
         {lineHeight}
         {cursorHidden}
         oninput={handleInput}
+        oncompositionend={handleCompositionEnd}
         onmousemove={handleViewportMouseMove}
       />
       <TerminalPaneScrollbar {tp} />

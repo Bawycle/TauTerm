@@ -33,10 +33,20 @@
     cursorHidden?: boolean;
     /** Handles GTK IM / IME composition commits (dead keys, AltGr via IBus, etc.). */
     oninput: (event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) => void;
+    /** Handles compositionend — delivers the final composed character (dead keys, IME). */
+    oncompositionend: (event: CompositionEvent) => void;
     onmousemove?: (event: MouseEvent) => void;
   }
 
-  let { tp, active, lineHeight, cursorHidden = false, oninput, onmousemove }: Props = $props();
+  let {
+    tp,
+    active,
+    lineHeight,
+    cursorHidden = false,
+    oninput,
+    oncompositionend,
+    onmousemove,
+  }: Props = $props();
 </script>
 
 <!--
@@ -65,6 +75,7 @@
   spellcheck={false}
   rows={1}
   {oninput}
+  {oncompositionend}
   onfocus={tp.handleFocus}
   onblur={tp.handleBlur}
 ></textarea>

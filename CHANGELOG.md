@@ -7,6 +7,17 @@ All notable changes to TauTerm are documented in this file.
 The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Terminal now responds to capability queries from tmux, Claude Code, and other tools — faster tmux attach, better feature detection by TUI frameworks
+
+### Fixed
+
+- Reverse-video text (SGR 7) with default colors now displays correctly — fixes invisible cursor in Claude Code and other Ink-based CLI tools
+- Release downloads now include individual SHA-256 checksum files for integrity verification
+
 ## [0.1.0-beta] - 2026-04-13
 
 ### Added

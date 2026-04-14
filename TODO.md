@@ -43,12 +43,10 @@ Items in the **Future Roadmap** section are out of scope for the current release
   2. Release the registry lock.
   3. Write to the PTY fd outside any registry lock.
   This requires `write_input` to take `&self` instead of `&mut self` on `PaneSession`, with the writer behind its own lock (or made `Send + Sync` via `Arc`). The `scroll_offset` reset can be done in the first (short) lock section.
-  **Progressive migration:** yes — isolated change in `pane_ops.rs` + `pane.rs`. No API changes visible to commands or frontend. Can be done independently of any other refactoring.
 
 - [ ] **Linear pane lookup O(T) on hot path — add `PaneId → TabId` index** `[Score: 10 | R:1, S:1, U:2, E:3]`
   `send_input`, `update_pane_cwd`, `update_pane_title`, `mark_pane_terminated`, `is_active_pane`, `get_tab_state_for_pane` all iterate `inner.tabs.values()` to find which tab contains a given pane. With T tabs, each lookup is O(T). On the hot path (`update_pane_cwd`/`update_pane_title` called from the PTY emitter task at up to 83×/s per pane), this compounds: 40 active panes × 83 Hz × O(T) per call.
   **Fix:** add `pane_to_tab: HashMap<PaneId, TabId>` to `RegistryInner`. Maintain it on `insert` (create_tab, split_pane) and `remove` (close_pane, close_tab). All pane lookups become O(1).
-  **Progressive migration:** yes — purely additive. Add the index, then migrate callers one by one. Each migration is a self-contained change. No API or IPC changes.
 
 ---
 

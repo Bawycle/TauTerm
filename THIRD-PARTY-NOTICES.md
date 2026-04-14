@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 This file lists the third-party dependencies used by TauTerm and their licenses.
-Generated on 2026-04-13.
+Generated on 2026-04-14.
 
 ## Rust Crates (736)
 

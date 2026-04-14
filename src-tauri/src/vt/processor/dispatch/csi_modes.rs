@@ -41,6 +41,7 @@ pub(super) fn decset(p: &mut VtProcessor, params: &vte::Params) {
             p.mode_changed = true;
         }
         if p.modes.cursor_visible != prev_cursor_visible {
+            tracing::debug!("DECTCEM: cursor_visible = true (was false)");
             p.pending_dirty.mark_cursor_moved();
         }
     }
@@ -85,6 +86,7 @@ pub(super) fn decrst(p: &mut VtProcessor, params: &vte::Params) {
             p.mode_changed = true;
         }
         if p.modes.cursor_visible != prev_cursor_visible {
+            tracing::debug!("DECTCEM: cursor_visible = false (was true)");
             p.pending_dirty.mark_cursor_moved();
         }
     }

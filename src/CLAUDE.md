@@ -44,6 +44,17 @@ Svelte 5 frontend for TauTerm. Terminal rendering, tabs, panes, preferences, the
 
 Svelte 5 runes (`$state`, `$derived`, `$effect`). Prefer component-local state; use a shared store only when state is genuinely cross-component.
 
+## Scaling watchpoint — composable state bag
+
+`useTerminalView.core.svelte.ts` exposes a `ViewState` interface with 21 getters + 17 setters (38 members). This is the upper bound of what remains readable as a flat interface. Several property clusters are already visible (search ×3, dimensions ×3, connections ×3, close-confirm ×4, context-menu ×2).
+
+**Trigger for refactoring into sub-objects:** when **any** of these conditions is met:
+- `ViewState` exceeds **30 properties** (getters, counting read-only and read-write — currently 21)
+- A new feature adds **≥3 related properties** that form a cohesive group (same condition as the existing clusters)
+- A sub-composable needs to pass **≥4 properties** from the bag to a child — this signals the bag is acting as an untyped conduit
+
+When triggered: group related properties into typed sub-objects on `ViewState` (e.g. `search: { open, matches, currentIdx }`, `closeConfirm: { pendingClose, cancelBtn, pendingWindowClose, windowCancelBtn }`). Each sub-object gets its own interface. The composable internals can stay flat — only the public interface changes. Migrate one cluster at a time.
+
 ## Focus management — overlay close pattern
 
 When closing any Bits UI overlay (Dialog, Popover, panel), follow this pattern to restore focus to the terminal viewport:

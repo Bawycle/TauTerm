@@ -8,7 +8,7 @@ Each item is scored on four axes (1–3), combined into a weighted composite:
 
 | Axis | 1 | 2 | 3 |
 |---|---|---|---|
-| **R** Release blocker | not blocking | desirable for v1 | hard blocker — no release without it |
+| **R** Release blocker | not blocking | desirable for next release | hard blocker — no release without it |
 | **S** Security / Correctness | cosmetic / improvement | real bug / architectural debt | security flaw / data corruption |
 | **U** User impact | marginal / edge case | common workflow affected | every user / app unusable |
 | **E** Effort (inverted) | weeks / major refactor | days | hours / quick win |
@@ -18,12 +18,11 @@ Each item is scored on four axes (1–3), combined into a weighted composite:
 | Band | Score | Label |
 |---|---|---|
 | 17–21 | Critical — block the release |
-| 13–16 | High — must land in v1 |
-| 9–12 | Medium — v1 quality target |
-| ≤ 8 | Low — post-v1 or nice-to-have |
+| 13–16 | High — must land in next release |
+| 9–12 | Medium — next release quality target |
+| ≤ 8 | Low — nice-to-have |
 
-Items marked **[v1.1]** are scoped to the next minor release.
-Items in the **Post-v1 / Roadmap** section are out of scope for v1.
+Items in the **Future Roadmap** section are out of scope for the current release cycle.
 
 ---
 
@@ -31,23 +30,46 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ---
 
-## High Priority — Must Land in v1 (score 13–16)
+## High Priority — Must Land in Next Release (score 13–16)
 
 ---
 
-## Medium Priority — v1 Quality Target (score 9–12)
+## Medium Priority — Next Release Quality Target (score 9–12)
+
+- [ ] **`send_input` holds registry write lock during PTY write syscall** `[Score: 12 | R:2, S:2, U:2, E:2]`
+  `pane_ops.rs:send_input` acquires `self.inner.write()` and holds it while calling `pane.write_input(data)`, which performs a blocking `write()` syscall on the PTY master fd. If the PTY buffer is full (child process in `SIGSTOP`, or `yes | slow_consumer`), the syscall blocks — and since the write lock is held, **all operations on all tabs** are frozen until it returns. This is a deterministic global freeze, not a probabilistic contention issue.
+  **Fix:** extract the PTY writer (`Arc<Mutex<Box<dyn Write>>>`, already an `Arc` inside `PtySession`) so that `send_input` can:
+  1. Acquire the registry write lock briefly to locate the pane, read `scroll_offset`, and clone the writer `Arc`.
+  2. Release the registry lock.
+  3. Write to the PTY fd outside any registry lock.
+  This requires `write_input` to take `&self` instead of `&mut self` on `PaneSession`, with the writer behind its own lock (or made `Send + Sync` via `Arc`). The `scroll_offset` reset can be done in the first (short) lock section.
+  **Progressive migration:** yes — isolated change in `pane_ops.rs` + `pane.rs`. No API changes visible to commands or frontend. Can be done independently of any other refactoring.
+
+- [ ] **Linear pane lookup O(T) on hot path — add `PaneId → TabId` index** `[Score: 10 | R:1, S:1, U:2, E:3]`
+  `send_input`, `update_pane_cwd`, `update_pane_title`, `mark_pane_terminated`, `is_active_pane`, `get_tab_state_for_pane` all iterate `inner.tabs.values()` to find which tab contains a given pane. With T tabs, each lookup is O(T). On the hot path (`update_pane_cwd`/`update_pane_title` called from the PTY emitter task at up to 83×/s per pane), this compounds: 40 active panes × 83 Hz × O(T) per call.
+  **Fix:** add `pane_to_tab: HashMap<PaneId, TabId>` to `RegistryInner`. Maintain it on `insert` (create_tab, split_pane) and `remove` (close_pane, close_tab). All pane lookups become O(1).
+  **Progressive migration:** yes — purely additive. Add the index, then migrate callers one by one. Each migration is a self-contained change. No API or IPC changes.
 
 ---
 
-## Low Priority — Post-v1 Nice-to-Have (score ≤ 8)
+## Low Priority — Nice-to-Have (score ≤ 8)
+
+- [ ] **IPC type drift — evaluate `tauri-specta` for codegen** `[Score: 8 | R:1, S:2, U:1, E:1]`
+  All Rust IPC types (`events/types.rs`, command signatures, preference structs) are manually mirrored in `src/lib/ipc/types.ts` (~1020 lines, 35-40 types, 36 commands, 16 events). Early drift signals are already present: `SnapshotCell.width` documentation diverges between Rust ("phantom/continuation slot") and TS ("combining"); 3 commands in `commands.ts` (`providePassphrase`, `duplicateConnection`, `storeConnectionPassword`) have no corresponding type-alias in `types.ts` — their parameter shapes are implicit knowledge of the Rust signature.
+  **Action:** write an ADR evaluating `tauri-specta` (recommended by Tauri team, generates both types and `invoke()` wrappers) vs `ts-rs` (lighter, types only) vs conformity tests (cheapest — JSON shape assertions in CI). Define a trigger threshold (e.g. >60 types, or first runtime bug caused by drift).
+  **Progressive migration (for codegen adoption):** yes — `tauri-specta` can be adopted incrementally:
+  1. Annotate event types first (`#[derive(specta::Type)]`) — highest drift risk, most types.
+  2. Migrate command signatures — requires switching from `generate_handler![]` to `tauri-specta`'s builder, but can be done module by module (e.g. `preferences_cmds` first).
+  3. Keep the handwritten `types.ts` as reference during transition; delete once all types are generated.
+  Each step is independently shippable. The generated and handwritten types can coexist during migration.
 
 ---
 
-## v1.1 — Roadmap Minor Release
+## Next Minor Release — Roadmap
 
 *Features absent from current specs, validated by comparative analysis of Tabby, Alacritty, and Hyper. Must be specified in `docs/UR.md` and `docs/fs/` before implementation.*
 
-- [ ] **[v1.1] Clickable hints + OSC 8 (hyperlinks in the terminal)** `[Score: 9 | R:1, S:1, U:3, E:1]`
+- [ ] **Clickable hints + OSC 8 (hyperlinks in the terminal)** `[Score: 9 | R:1, S:1, U:3, E:1]`
   The killer feature from Alacritty absent from TauTerm. Two levels:
   - **Passive OSC 8**: recognize OSC 8 sequences (`ESC ] 8 ; params ; uri ST`) emitted by tools like `ls --hyperlink`, `git log`, `delta`, and make the URI clickable (Ctrl+click → open in configured browser/editor). IETF standard, WCAG-compatible, aligned with AD.md §1.3.
   - **Active hints**: on a configurable shortcut, display an overlay of short labels on all URLs/paths detected by regex in the current view — pressing a label triggers the action (open, copy). vim-hints / Alacritty hints style.
@@ -58,7 +80,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   2. **Phase 2 (active hints)**: DOM overlay generated on demand by regex scan of visible buffer → short labels → configurable action.
   Actions required: specify in FS + UXD, implement in two phases.
 
-- [ ] **[v1.1] OSC 1337 — inline images (iTerm2 Inline Images Protocol)** `[Score: 9 | R:1, S:1, U:2, E:2]`
+- [ ] **OSC 1337 — inline images (iTerm2 Inline Images Protocol)** `[Score: 9 | R:1, S:1, U:2, E:2]`
   Absent from `docs/UR.md` and `docs/fs/`. Enables image display in the terminal: used by file managers (`yazi`, `ranger`), Python/Julia plotting tools, and `chafa`. Unlike sixel or TGP, OSC 1337 is well-suited to TauTerm's WebView architecture — the rendering side is trivial (the browser handles PNG/JPEG/GIF natively), the complexity lies in the parser and cell positioning.
   **Protocol**: `ESC ] 1337 ; File=[params]:[base64data] BEL/ST`. Key params: `inline=1` (display vs. download), `width`/`height` (chars, pixels, or percent), `preserveAspectRatio`, `doNotMoveCursor`. Supported formats: PNG, JPEG, GIF, WebP.
   **WezTerm reference** (MIT — compatible with MPL-2.0):
@@ -73,7 +95,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   - Large images sent via IPC as raw `Vec<u8>` may be costly — consider storing in backend and exposing via Tauri asset protocol with a key.
   Actions required: specify in `docs/UR.md` + `docs/fs/`, implement parser in `osc.rs`, add `inline-image` Tauri event, implement frontend overlay renderer.
 
-- [ ] **[v1.1] Session persistence — restore tabs on relaunch** `[Score: 9 | R:1, S:1, U:3, E:1]`
+- [ ] **Session persistence — restore tabs on relaunch** `[Score: 9 | R:1, S:1, U:3, E:1]`
   Absent from `docs/UR.md`. Daily pain point for Alex (4 tabs: frontend, backend, logs, git) and Jordan (10+ SSH sessions). Highly upvoted on Hyper (#311) and expected behavior in Tabby ("Tabby remembers your tabs").
   Target behavior: on close, serialize the tab list (type local/SSH, title, associated connection profile). On relaunch, offer "Restore previous session?" — opt-in, not imposed (Sam won't always want this).
   Note: local PTYs are not restorable (process dead) — only metadata is restored. Saved SSH connections can be relaunched automatically. **Never serialize the VT buffer** — potentially sensitive data + memory cost.
@@ -89,7 +111,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   Stored in `~/.config/tauterm/session.json`. On startup: deserialize → show restore dialog → recreate tabs from snapshots. `working_dir` comes from OSC 7 CWD tracking (dependency: OSC 7 item above).
   Actions required: specify in `docs/UR.md §4.1` + `docs/fs/`, implement `SessionSnapshot` in Rust with `#[serde(tag = "type")]`, add restore dialog on startup.
 
-- [ ] **[v1.1] Pane maximized — enlarge a pane without destroying the split** `[Score: 9 | R:1, S:1, U:2, E:2]`
+- [ ] **Pane maximized — enlarge a pane without destroying the split** `[Score: 9 | R:1, S:1, U:2, E:2]`
   Absent from `docs/uxd/03-components.md §7.2`. Alex's workflow: 3 panes open, need temporary focus on one without losing context of the others. Close and recreate destroys VT history.
   Target behavior: shortcut `Ctrl+Shift+Enter` (configurable) toggles the active pane to "maximized" state — it occupies the full split area, others are hidden but not destroyed. A `--color-accent` border + discrete badge signals the state. Same shortcut or `Escape` restores the layout.
   Aligned with AD.md §1.3 "Durability Over Novelty": no state lost, no PTY killed.
@@ -100,7 +122,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   - Shortcut: add `pane-maximize` in `handleGlobalKeydown()` of `useTerminalView.io-handlers.svelte.ts`.
   Actions required: specify in `docs/uxd/03-components.md §7.2` + `docs/uxd/04-interaction.md`, implement layout state in `SplitPane.svelte`.
 
-- [ ] **[v1.1] Jump hosts / ProxyJump SSH in the connection manager** `[Score: 8 | R:1, S:1, U:2, E:1]`
+- [ ] **Jump hosts / ProxyJump SSH in the connection manager** `[Score: 8 | R:1, S:1, U:2, E:1]`
   Absent from `docs/UR.md §9`. Jordan's standard use case: accessing servers on a private network via a bastion. Without ProxyJump in the UI, Jordan configures `~/.ssh/config` manually and TauTerm connections don't match his actual infrastructure.
   Tabby handles jump hosts natively: each saved connection can reference a "jump host" profile, with targeted error messages per chain link.
   `russh` supports ProxyJump — it's a data model problem (add a "via jump host" field in `SshConnectionConfig`) + UI form, not a transport problem.
@@ -108,10 +130,10 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
   1. Authenticate the SSH session on the bastion normally (host key + auth).
   2. Open a `direct-tcpip` channel via `session.channel_open_direct_tcpip(target_host, target_port, originator, originator_port)`.
   3. Use this channel as TCP transport for a second `russh::client::connect_stream` session toward the final target.
-  4. Data model: `jump_host_id: Option<String>` in `SshConnectionConfig` (references another saved connection profile). Limit to 1 hop for v1.
+  4. Data model: `jump_host_id: Option<String>` in `SshConnectionConfig` (references another saved connection profile). Limit to 1 hop initially.
   Actions required: specify in `docs/UR.md §9` + `docs/fs/03-remote-ssh.md`, extend `SshConnectionConfig`, implement the `direct-tcpip` sequence in `src-tauri/src/ssh/manager/connect.rs`, add the "Via jump host" field in the connection form.
 
-- [ ] **[v1.1] Run-merging — group adjacent same-style cells into a single `<span>`** `[Score: 8 | R:1, S:1, U:2, E:1]`
+- [ ] **Run-merging — group adjacent same-style cells into a single `<span>`** `[Score: 8 | R:1, S:1, U:2, E:1]`
   **Prerequisite for ligature support.** The current span-per-cell model renders one `<span>` per character, which fragments the CSS shaping context and prevents ligature formation. Run-merging groups consecutive cells with identical style (fg, bg, bold, italic, dim, underline, inverse) into a single `<span>` containing multiple characters, restoring the shaping context.
   Secondary benefit: fewer DOM nodes → smaller layout tree → marginal repaint reduction (not a frame-budget lever, but a structural improvement).
   **Boundary constraints** — spans must not cross:
@@ -128,9 +150,9 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ---
 
-## Post-v1 / Roadmap v2+
+## Future Roadmap
 
-*Out of scope for v1. Do not start implementation without first updating `docs/UR.md` and `docs/fs/`.*
+*Out of scope for the current release cycle. Do not start implementation without first updating `docs/UR.md` and `docs/fs/`.*
 
 ### Platform Support
 
@@ -255,9 +277,9 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 ### Performance — Renderer Rewrite
 
-*Context: v1 decision — ~23 ms SCROLL stress test is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms. WebKitGTK repaint (78%) is the structural ceiling of the DOM renderer. All CSS/JS optimisations (P-OPT-1 through P-OPT-4) are exhausted. P12b is the only remaining lever to reach 12 ms on SCROLL.*
+*Context: 0.1.0 decision — ~23 ms SCROLL stress test is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms. WebKitGTK repaint (78%) is the structural ceiling of the DOM renderer. All CSS/JS optimisations (P-OPT-1 through P-OPT-4) are exhausted. P12b is the only remaining lever to reach 12 ms on SCROLL.*
 
-- [ ] **P12b — WebGL2** *(only if SCROLL < 15 ms becomes a hard requirement post-v1)*
+- [ ] **P12b — WebGL2** *(only if SCROLL < 15 ms becomes a hard requirement in a future release)*
   **All prerequisites met:**
   1. ✓ P-DIAG-1: repaintTime = 78% SCROLL. WebKitGTK repaint confirmed as dominant bottleneck.
   2. ✓ P-OPT-1 (rAF batching): −40% repaints on RAPID-FIRE. SCROLL avg 27.54 ms — budget still exceeded.
@@ -290,7 +312,7 @@ Items in the **Post-v1 / Roadmap** section are out of scope for v1.
 
 - [ ] **Integrated SFTP — contextual panel in the SSH session**
   Tabby's biggest differentiator for ops. CWD-aware side panel in the same tab as the active SSH session, with filter bar, folder download, drag-and-drop upload. Eliminates the need for FileZilla or manual `scp`.
-  Backend cost: full SFTP client implementation on the Rust side. Substantial — realistic for v2.
+  Backend cost: full SFTP client implementation on the Rust side. Substantial — not before several releases.
 
 - [ ] **Mosh support**
   Highly upvoted request in Tabby (#593). Solves Jordan's pain point: SSH sessions that die on network reconnection (laptop sleep, unstable wifi). Mosh maintains the session via UDP even after a disconnection.

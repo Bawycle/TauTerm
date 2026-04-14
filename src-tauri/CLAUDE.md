@@ -37,6 +37,17 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 - Every `unsafe` block must carry a `// SAFETY:` comment explaining the invariant that makes it sound. `unsafe` is only acceptable in platform-specific modules (`platform/pty_*.rs`, `platform/clipboard_*.rs`); it must not appear in business-logic modules.
 - No `unwrap()` on user-facing data — use `?` or explicit error handling.
 
+## Scaling watchpoint — command registration
+
+`lib.rs::run()` currently registers 31 commands in `generate_handler![]` across 7 domain groups, with 6 `manage()` calls. This flat registration is acceptable at this scale.
+
+**Trigger for migration to Tauri plugin modules:** revisit when **any** of these conditions is met:
+- `generate_handler![]` exceeds **50 commands** (production, excluding e2e)
+- A **new functional domain** is added that brings its own managed state + ≥5 commands (e.g. file transfer, session recording, serial port) — this domain should be a self-contained Tauri plugin from the start
+- The `setup()` closure exceeds **~100 lines** due to inter-service wiring, making dependency resolution hard to follow
+
+When triggered: convert the new domain into a `tauri::plugin::Builder::new("domain-name").invoke_handler(generate_handler![...]).setup(|app, _| { ... }).build()` plugin. Existing domains can be migrated incrementally — each plugin registers its own commands and state, reducing `lib.rs` to plugin composition.
+
 ## Constraints
 
 - Rust edition: **2024** — prefer its idioms (precise capturing, `impl Trait` in closures, etc.)

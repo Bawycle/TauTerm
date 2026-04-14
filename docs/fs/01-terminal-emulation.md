@@ -86,6 +86,7 @@
 - FS-VT-036: `printf "\033[8mSecret\033[0m"` renders as invisible text. Selecting and copying that text yields "Secret" in the clipboard.
 - FS-VT-037: `printf "\033[9mStrike\033[0m"` renders a horizontal line through the middle of the text.
 - FS-VT-038: `printf "\033[38;2;255;0;0m\033[7mInverse\033[0m"` renders with a red background and the terminal default foreground as text color.
+- FS-VT-038 (default colors): `printf "\033[7m \033[0m"` (a space with default colors, SGR 7 active) renders with the terminal foreground color as background — producing a visible colored block, not a blank space.
 
 ### 3.1.4 Cursor
 

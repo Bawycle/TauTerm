@@ -83,8 +83,8 @@ export function computeCellStyle(cell: {
 }): string {
   // P-OPT-2: direct string accumulation — avoids allocating a temporary string[]
   // and the join() call. JS engines optimise short string concatenation efficiently.
-  const fg = cell.inverse ? cell.bg : cell.fg;
-  const bg = cell.inverse ? cell.fg : cell.bg;
+  const fg = cell.inverse ? (cell.bg ?? 'var(--term-bg)') : cell.fg;
+  const bg = cell.inverse ? (cell.fg ?? 'var(--term-fg)') : cell.bg;
   let s = '';
   if (fg) s = `color:${fg}`;
   if (bg) s += (s ? ';' : '') + `background-color:${bg}`;
@@ -189,9 +189,9 @@ export function cellStyleFromUpdate(
 export function cellToCssVars(cell: CellStyle): Record<string, string> {
   const style: Record<string, string> = {};
 
-  // Apply inverse: swap fg and bg
-  const fg = cell.inverse ? cell.bg : cell.fg;
-  const bg = cell.inverse ? cell.fg : cell.bg;
+  // Apply inverse: swap fg and bg, falling back to terminal tokens for defaults.
+  const fg = cell.inverse ? (cell.bg ?? 'var(--term-bg)') : cell.fg;
+  const bg = cell.inverse ? (cell.fg ?? 'var(--term-fg)') : cell.bg;
 
   if (fg) style['color'] = fg;
   if (bg) style['background-color'] = bg;

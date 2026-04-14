@@ -494,6 +494,90 @@ describe('P11-001: computeCellStyle inverse swaps fg and bg', () => {
     expect(style).toContain('color:#0000ff');
     expect(style).toContain('background-color:#ff0000');
   });
+
+  it('inverse=true, both default → falls back to terminal tokens', () => {
+    const style = computeCellStyle({
+      fg: undefined,
+      bg: undefined,
+      bold: false,
+      italic: false,
+      dim: false,
+      hidden: false,
+      underline: 0,
+      underlineColor: undefined,
+      inverse: true,
+    });
+    expect(style).toBe('color:var(--term-bg);background-color:var(--term-fg)');
+  });
+
+  it('inverse=true, fg explicit, bg default → bg becomes fg, fg becomes token', () => {
+    const style = computeCellStyle({
+      fg: '#ff0000',
+      bg: undefined,
+      bold: false,
+      italic: false,
+      dim: false,
+      hidden: false,
+      underline: 0,
+      underlineColor: undefined,
+      inverse: true,
+    });
+    expect(style).toBe('color:var(--term-bg);background-color:#ff0000');
+  });
+
+  it('inverse=true, fg default, bg explicit → fg becomes bg, bg becomes token', () => {
+    const style = computeCellStyle({
+      fg: undefined,
+      bg: '#0000ff',
+      bold: false,
+      italic: false,
+      dim: false,
+      hidden: false,
+      underline: 0,
+      underlineColor: undefined,
+      inverse: true,
+    });
+    expect(style).toBe('color:#0000ff;background-color:var(--term-fg)');
+  });
+
+  it('inverse=false, both default → no style emitted (regression check)', () => {
+    const style = computeCellStyle({
+      fg: undefined,
+      bg: undefined,
+      bold: false,
+      italic: false,
+      dim: false,
+      hidden: false,
+      underline: 0,
+      underlineColor: undefined,
+      inverse: false,
+    });
+    expect(style).toBe('');
+  });
+});
+
+describe('P11-001b: cellToCssVars inverse with default colors', () => {
+  it('inverse=true, both default → falls back to terminal tokens', () => {
+    const style = cellToCssVars({
+      fg: undefined,
+      bg: undefined,
+      bold: false,
+      italic: false,
+      dim: false,
+      hidden: false,
+      underline: 0,
+      underlineColor: undefined,
+      inverse: true,
+      blink: false,
+      strikethrough: false,
+      content: ' ',
+      style: '',
+      width: 1,
+      hyperlink: undefined,
+    });
+    expect(style['color']).toBe('var(--term-bg)');
+    expect(style['background-color']).toBe('var(--term-fg)');
+  });
 });
 
 describe('P11-002: cellStyleFromSnapshot has pre-computed style field', () => {

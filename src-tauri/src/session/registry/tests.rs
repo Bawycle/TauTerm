@@ -431,6 +431,7 @@ fn make_registry_with_one_pane() -> (
     panes.insert(pane_id.clone(), pane_session);
 
     let mut inner = RegistryInner::new();
+    inner.pane_to_tab.insert(pane_id.clone(), tab_id.clone());
     inner.tabs.insert(
         tab_id.clone(),
         TabEntry {
@@ -881,4 +882,143 @@ fn create_tab_config_source_pane_id_round_trips() {
         restored.source_pane_id, config.source_pane_id,
         "source_pane_id must survive serde round-trip"
     );
+}
+
+// -----------------------------------------------------------------------
+// pane_to_tab index invariant tests
+//
+// These tests verify that the `pane_to_tab: HashMap<PaneId, TabId>` reverse
+// index in `RegistryInner` stays consistent with `tabs` after insert/remove
+// operations. Since we cannot instantiate `SessionRegistry` in unit tests
+// (requires `AppHandle`), we test the invariant at the `RegistryInner` level
+// by manually maintaining the index as the real methods do.
+// -----------------------------------------------------------------------
+
+/// Helper: insert a tab with its panes into `RegistryInner`, maintaining the
+/// `pane_to_tab` index exactly as `create_tab` and `split_pane` do.
+fn insert_tab_with_panes(
+    inner: &mut RegistryInner,
+    tab_id: &crate::session::ids::TabId,
+    pane_ids: &[crate::session::ids::PaneId],
+    tab_state: TabState,
+) {
+    let mut panes = HashMap::new();
+    for pid in pane_ids {
+        panes.insert(pid.clone(), make_pane_session(pid));
+        inner.pane_to_tab.insert(pid.clone(), tab_id.clone());
+    }
+    inner.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            state: tab_state,
+            panes,
+        },
+    );
+}
+
+#[test]
+fn pane_to_tab_invariant_after_insert_and_remove() {
+    let mut inner = RegistryInner::new();
+
+    let tab1 = crate::session::ids::TabId::new();
+    let tab2 = crate::session::ids::TabId::new();
+    let p1 = crate::session::ids::PaneId::new();
+    let p2 = crate::session::ids::PaneId::new();
+    let p3 = crate::session::ids::PaneId::new();
+
+    insert_tab_with_panes(
+        &mut inner,
+        &tab1,
+        &[p1.clone(), p2.clone()],
+        make_leaf_tab_state(&tab1, &p1),
+    );
+    insert_tab_with_panes(
+        &mut inner,
+        &tab2,
+        &[p3.clone()],
+        make_leaf_tab_state(&tab2, &p3),
+    );
+
+    // Verify forward lookups.
+    assert_eq!(inner.pane_to_tab.len(), 3);
+    assert_eq!(inner.tab_id_for_pane(&p1).unwrap(), tab1);
+    assert_eq!(inner.tab_id_for_pane(&p2).unwrap(), tab1);
+    assert_eq!(inner.tab_id_for_pane(&p3).unwrap(), tab2);
+
+    // Remove one pane (mirrors close_pane logic).
+    inner.pane_to_tab.remove(&p2);
+    inner.tabs.get_mut(&tab1).unwrap().panes.remove(&p2);
+
+    assert_eq!(inner.pane_to_tab.len(), 2);
+    assert!(inner.tab_id_for_pane(&p2).is_err());
+    assert_eq!(inner.tab_id_for_pane(&p1).unwrap(), tab1);
+    assert_eq!(inner.tab_id_for_pane(&p3).unwrap(), tab2);
+}
+
+#[test]
+fn pane_to_tab_invariant_after_close_tab() {
+    let mut inner = RegistryInner::new();
+
+    let tab1 = crate::session::ids::TabId::new();
+    let p1 = crate::session::ids::PaneId::new();
+    let p2 = crate::session::ids::PaneId::new();
+
+    let state_a = make_pane_session(&p1).to_state();
+    let state_b = make_pane_session(&p2).to_state();
+
+    let tab_state = TabState {
+        id: tab1.clone(),
+        label: None,
+        active_pane_id: p1.clone(),
+        order: 0,
+        layout: PaneNode::Split {
+            direction: crate::session::tab::SplitDirection::Horizontal,
+            ratio: 0.5,
+            first: Box::new(PaneNode::Leaf {
+                pane_id: p1.clone(),
+                state: state_a,
+            }),
+            second: Box::new(PaneNode::Leaf {
+                pane_id: p2.clone(),
+                state: state_b,
+            }),
+        },
+    };
+
+    insert_tab_with_panes(&mut inner, &tab1, &[p1.clone(), p2.clone()], tab_state);
+
+    assert_eq!(inner.pane_to_tab.len(), 2);
+
+    // Close tab: remove all pane entries first, then the tab (mirrors close_tab).
+    let pane_ids: Vec<_> = inner
+        .tabs
+        .get(&tab1)
+        .unwrap()
+        .panes
+        .keys()
+        .cloned()
+        .collect();
+    for pid in &pane_ids {
+        inner.pane_to_tab.remove(pid);
+    }
+    inner.tabs.remove(&tab1);
+
+    assert!(inner.pane_to_tab.is_empty());
+    assert!(inner.tab_id_for_pane(&p1).is_err());
+    assert!(inner.tab_id_for_pane(&p2).is_err());
+}
+
+#[test]
+fn tab_id_for_pane_unknown_returns_error() {
+    let inner = RegistryInner::new();
+    let unknown = crate::session::ids::PaneId::new();
+
+    let result = inner.tab_id_for_pane(&unknown);
+    assert!(result.is_err());
+    match result {
+        Err(crate::error::SessionError::PaneNotFound(id)) => {
+            assert_eq!(id, unknown.to_string());
+        }
+        other => panic!("expected PaneNotFound, got {other:?}"),
+    }
 }

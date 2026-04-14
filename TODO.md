@@ -36,18 +36,6 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ## Medium Priority — Next Release Quality Target (score 9–12)
 
-- [ ] **`send_input` holds registry write lock during PTY write syscall** `[Score: 12 | R:2, S:2, U:2, E:2]`
-  `pane_ops.rs:send_input` acquires `self.inner.write()` and holds it while calling `pane.write_input(data)`, which performs a blocking `write()` syscall on the PTY master fd. If the PTY buffer is full (child process in `SIGSTOP`, or `yes | slow_consumer`), the syscall blocks — and since the write lock is held, **all operations on all tabs** are frozen until it returns. This is a deterministic global freeze, not a probabilistic contention issue.
-  **Fix:** extract the PTY writer (`Arc<Mutex<Box<dyn Write>>>`, already an `Arc` inside `PtySession`) so that `send_input` can:
-  1. Acquire the registry write lock briefly to locate the pane, read `scroll_offset`, and clone the writer `Arc`.
-  2. Release the registry lock.
-  3. Write to the PTY fd outside any registry lock.
-  This requires `write_input` to take `&self` instead of `&mut self` on `PaneSession`, with the writer behind its own lock (or made `Send + Sync` via `Arc`). The `scroll_offset` reset can be done in the first (short) lock section.
-
-- [ ] **Linear pane lookup O(T) on hot path — add `PaneId → TabId` index** `[Score: 10 | R:1, S:1, U:2, E:3]`
-  `send_input`, `update_pane_cwd`, `update_pane_title`, `mark_pane_terminated`, `is_active_pane`, `get_tab_state_for_pane` all iterate `inner.tabs.values()` to find which tab contains a given pane. With T tabs, each lookup is O(T). On the hot path (`update_pane_cwd`/`update_pane_title` called from the PTY emitter task at up to 83×/s per pane), this compounds: 40 active panes × 83 Hz × O(T) per call.
-  **Fix:** add `pane_to_tab: HashMap<PaneId, TabId>` to `RegistryInner`. Maintain it on `insert` (create_tab, split_pane) and `remove` (close_pane, close_tab). All pane lookups become O(1).
-
 ---
 
 ## Low Priority — Nice-to-Have (score ≤ 8)

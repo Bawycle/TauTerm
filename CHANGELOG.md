@@ -15,6 +15,7 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Typing in one tab no longer freezes all other tabs when a shell is slow to read (e.g. under PTY backpressure)
 - Reverse-video text (SGR 7) with default colors now displays correctly — fixes invisible cursor in Claude Code and other Ink-based CLI tools
 - Release downloads now include individual SHA-256 checksum files for integrity verification
 

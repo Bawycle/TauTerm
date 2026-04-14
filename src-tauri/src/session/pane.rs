@@ -129,25 +129,6 @@ impl PaneSession {
         }
     }
 
-    /// Write bytes to the PTY master (keyboard input → shell).
-    ///
-    /// Returns `Err` if the pane is not in `Running` state or has no PTY session.
-    pub fn write_input(&mut self, data: &[u8]) -> Result<(), crate::error::SessionError> {
-        if !self.lifecycle.is_active() {
-            return Err(crate::error::SessionError::PaneNotRunning(
-                self.id.to_string(),
-            ));
-        }
-        match self.pty_session.as_mut() {
-            Some(pty) => pty
-                .write(data)
-                .map_err(|e| crate::error::SessionError::PtyIo(e.to_string())),
-            None => Err(crate::error::SessionError::PaneNotRunning(
-                self.id.to_string(),
-            )),
-        }
-    }
-
     /// Resize the PTY (TIOCSWINSZ + SIGWINCH) and the VtProcessor grid.
     pub fn resize(
         &mut self,

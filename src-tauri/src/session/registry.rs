@@ -23,6 +23,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tauri::AppHandle;
 
+use crate::error::SessionError;
 use crate::platform::PtyBackend;
 use crate::preferences::PreferencesStore;
 use crate::session::{
@@ -144,6 +145,8 @@ pub struct SessionRegistry {
 
 struct RegistryInner {
     tabs: HashMap<TabId, TabEntry>,
+    /// Reverse index: PaneId → TabId for O(1) pane-to-tab lookups.
+    pane_to_tab: HashMap<PaneId, TabId>,
     active_tab_id: Option<TabId>,
     next_order: u32,
 }
@@ -152,9 +155,18 @@ impl RegistryInner {
     fn new() -> Self {
         Self {
             tabs: HashMap::new(),
+            pane_to_tab: HashMap::new(),
             active_tab_id: None,
             next_order: 0,
         }
+    }
+
+    /// O(1) lookup: find which tab contains a pane.
+    fn tab_id_for_pane(&self, pane_id: &PaneId) -> Result<TabId, SessionError> {
+        self.pane_to_tab
+            .get(pane_id)
+            .cloned()
+            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))
     }
 }
 

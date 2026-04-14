@@ -33,12 +33,7 @@ impl SessionRegistry {
         let mut inner = self.inner.write();
 
         // Find which tab contains this pane.
-        let tab_id = inner
-            .tabs
-            .iter()
-            .find(|(_, e)| e.panes.contains_key(&pane_id))
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        let tab_id = inner.tab_id_for_pane(&pane_id)?;
 
         let entry = inner
             .tabs
@@ -161,10 +156,8 @@ impl SessionRegistry {
             self.injectable_registry.register(new_pane_id.clone(), tx);
         }
 
-        let new_pane_state = new_pane.to_state();
-        entry.panes.insert(new_pane_id.clone(), new_pane);
-
-        // Rebuild the layout tree, replacing the target leaf with a split node.
+        // Capture existing pane state BEFORE inserting the new pane, so that
+        // a concurrent close of `pane_id` is detected before any mutation.
         let existing_state = {
             let pane = entry
                 .panes
@@ -173,6 +166,10 @@ impl SessionRegistry {
             pane.to_state()
         };
 
+        let new_pane_state = new_pane.to_state();
+        entry.panes.insert(new_pane_id.clone(), new_pane);
+
+        // Rebuild the layout tree, replacing the target leaf with a split node.
         let new_layout = replace_leaf_with_split(
             entry.state.layout.clone(),
             &pane_id,
@@ -183,9 +180,13 @@ impl SessionRegistry {
         );
 
         entry.state.layout = new_layout;
-        entry.state.active_pane_id = new_pane_id;
+        entry.state.active_pane_id = new_pane_id.clone();
 
-        Ok(entry.state.clone())
+        let result = entry.state.clone();
+        // Update the pane→tab index after all entry borrows are done.
+        inner.pane_to_tab.insert(new_pane_id, tab_id);
+
+        Ok(result)
     }
 
     /// Close a pane. Returns the updated `TabState` if the tab still exists,
@@ -193,12 +194,9 @@ impl SessionRegistry {
     pub fn close_pane(&self, pane_id: PaneId) -> Result<Option<TabState>, SessionError> {
         let mut inner = self.inner.write();
 
-        let tab_id = inner
-            .tabs
-            .iter()
-            .find(|(_, e)| e.panes.contains_key(&pane_id))
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        let tab_id = inner.tab_id_for_pane(&pane_id)?;
+        // Remove from pane→tab index first (before entry borrow).
+        inner.pane_to_tab.remove(&pane_id);
 
         let entry = inner
             .tabs
@@ -244,25 +242,58 @@ impl SessionRegistry {
     /// The command handler is responsible for emitting `scroll-position-changed`
     /// in that case, because `SessionRegistry` does not hold an `AppHandle`.
     pub fn send_input(&self, pane_id: PaneId, data: Vec<u8>) -> Result<bool, SessionError> {
-        let mut inner = self.inner.write();
-        let tab = inner
-            .tabs
-            .values_mut()
-            .find(|e| e.panes.contains_key(&pane_id))
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-        let pane = tab
-            .panes
-            .get_mut(&pane_id)
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        // Phase 1: read-lock — validate lifecycle, extract writer handle, check scroll.
+        let (writer_arc, was_scrolled) = {
+            let inner = self.inner.read();
+            let tab_id = inner.tab_id_for_pane(&pane_id)?;
+            let entry = inner
+                .tabs
+                .get(&tab_id)
+                .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+            let pane = entry
+                .panes
+                .get(&pane_id)
+                .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
 
-        pane.write_input(&data)?;
+            if !pane.lifecycle.is_active() {
+                return Err(SessionError::PaneNotRunning(pane_id.to_string()));
+            }
+            let pty = pane
+                .pty_session
+                .as_ref()
+                .ok_or_else(|| SessionError::PaneNotRunning(pane_id.to_string()))?;
+            let writer = pty
+                .writer_handle()
+                .ok_or_else(|| SessionError::PaneNotRunning(pane_id.to_string()))?;
 
-        // Snap back to live view on any PTY input (scroll-freeze policy).
-        let did_reset_scroll = pane.scroll_offset > 0;
-        if did_reset_scroll {
-            pane.scroll_offset = 0;
+            (writer, pane.scroll_offset > 0)
+        }; // registry read-lock released
+
+        // Phase 2: PTY write — no registry lock held.
+        {
+            let mut writer = writer_arc
+                .lock()
+                .map_err(|e| SessionError::PtyIo(e.to_string()))?;
+            writer
+                .write_all(&data)
+                .map_err(|e| SessionError::PtyIo(e.to_string()))?;
         }
-        Ok(did_reset_scroll)
+
+        // Phase 3: write-lock — reset scroll offset if pane was scrolled.
+        // Return true only if the reset was actually applied.
+        if was_scrolled {
+            let mut inner = self.inner.write();
+            // Pane may have been closed between phases — return false if gone.
+            if let Ok(tab_id) = inner.tab_id_for_pane(&pane_id)
+                && let Some(entry) = inner.tabs.get_mut(&tab_id)
+                && let Some(pane) = entry.panes.get_mut(&pane_id)
+            {
+                pane.scroll_offset = 0;
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
     /// Set the pane's scrollback viewport to `new_offset` lines from the bottom.
@@ -282,12 +313,12 @@ impl SessionRegistry {
         // Phase 1: read-lock — extract the VT Arc and current scroll_offset.
         let vt_arc = {
             let inner = self.inner.read();
-            let tab = inner
+            let tab_id = inner.tab_id_for_pane(&pane_id)?;
+            let entry = inner
                 .tabs
-                .values()
-                .find(|e| e.panes.contains_key(&pane_id))
-                .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-            let pane = tab
+                .get(&tab_id)
+                .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+            let pane = entry
                 .panes
                 .get(&pane_id)
                 .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
@@ -310,12 +341,12 @@ impl SessionRegistry {
         // Phase 4: write-lock — persist the new scroll offset.
         {
             let mut inner = self.inner.write();
-            let tab = inner
+            let tab_id = inner.tab_id_for_pane(&pane_id)?;
+            let entry = inner
                 .tabs
-                .values_mut()
-                .find(|e| e.panes.contains_key(&pane_id))
-                .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-            let pane = tab
+                .get_mut(&tab_id)
+                .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+            let pane = entry
                 .panes
                 .get_mut(&pane_id)
                 .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
@@ -338,12 +369,12 @@ impl SessionRegistry {
         pixel_height: u16,
     ) -> Result<(), SessionError> {
         let mut inner = self.inner.write();
-        let tab = inner
+        let tab_id = inner.tab_id_for_pane(&pane_id)?;
+        let entry = inner
             .tabs
-            .values_mut()
-            .find(|e| e.panes.contains_key(&pane_id))
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-        let pane = tab
+            .get_mut(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+        let pane = entry
             .panes
             .get_mut(&pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
@@ -359,14 +390,7 @@ impl SessionRegistry {
         label: Option<String>,
     ) -> Result<TabState, SessionError> {
         let mut inner = self.inner.write();
-
-        let tab_id = inner
-            .tabs
-            .iter()
-            .find(|(_, e)| e.panes.contains_key(&pane_id))
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
-
+        let tab_id = inner.tab_id_for_pane(&pane_id)?;
         let entry = inner
             .tabs
             .get_mut(&tab_id)
@@ -389,14 +413,7 @@ impl SessionRegistry {
     /// `session-state-changed` with `ActivePaneChanged` (ARCHITECTURE.md §4.2).
     pub fn set_active_pane(&self, pane_id: PaneId) -> Result<TabState, SessionError> {
         let mut inner = self.inner.write();
-
-        // Find the tab that contains this pane.
-        let tab_id = inner
-            .tabs
-            .iter()
-            .find(|(_, e)| e.panes.contains_key(&pane_id))
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
+        let tab_id = inner.tab_id_for_pane(&pane_id)?;
 
         // Update the registry's active_tab_id.
         inner.active_tab_id = Some(tab_id.clone());

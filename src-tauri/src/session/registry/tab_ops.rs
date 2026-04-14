@@ -67,10 +67,10 @@ impl SessionRegistry {
         let working_dir = if let Some(ref source_id) = config.source_pane_id {
             let inner = self.inner.read();
             let cwd = inner
-                .tabs
-                .values()
-                .flat_map(|e| e.panes.get(source_id))
-                .next()
+                .pane_to_tab
+                .get(source_id)
+                .and_then(|tab_id| inner.tabs.get(tab_id))
+                .and_then(|entry| entry.panes.get(source_id))
                 .and_then(|pane| {
                     pane.cwd.clone().or_else(|| {
                         pane.pty_session
@@ -182,8 +182,9 @@ impl SessionRegistry {
         };
 
         let mut panes = HashMap::new();
-        panes.insert(pane_id, pane);
+        panes.insert(pane_id.clone(), pane);
 
+        inner.pane_to_tab.insert(pane_id, tab_id.clone());
         inner.tabs.insert(
             tab_id.clone(),
             TabEntry {
@@ -219,6 +220,15 @@ impl SessionRegistry {
     /// `session-state-changed` with `TabClosed` using this value.
     pub fn close_tab(&self, id: TabId) -> Result<Option<TabId>, SessionError> {
         let mut inner = self.inner.write();
+        // Remove pane→tab index entries before removing the tab itself.
+        let pane_ids: Vec<PaneId> = inner
+            .tabs
+            .get(&id)
+            .map(|e| e.panes.keys().cloned().collect())
+            .unwrap_or_default();
+        for pid in &pane_ids {
+            inner.pane_to_tab.remove(pid);
+        }
         if inner.tabs.remove(&id).is_none() {
             return Err(SessionError::TabNotFound(id.to_string()));
         }
@@ -311,11 +321,8 @@ impl SessionRegistry {
     /// events on every shell prompt.
     pub fn update_pane_cwd(&self, pane_id: &PaneId, cwd: String) -> Option<TabState> {
         let mut inner = self.inner.write();
-        let (_tab_id, entry) = inner
-            .tabs
-            .iter_mut()
-            .find(|(_, e)| e.panes.contains_key(pane_id))
-            .map(|(id, e)| (id.clone(), e))?;
+        let tab_id = inner.pane_to_tab.get(pane_id)?.clone();
+        let entry = inner.tabs.get_mut(&tab_id)?;
         if let Some(pane) = entry.panes.get_mut(pane_id) {
             let old_title = Self::resolve_effective_title(pane);
             pane.cwd = Some(cwd.clone());
@@ -346,11 +353,8 @@ impl SessionRegistry {
     /// frontend events when the shell resends the same OSC title on every prompt).
     pub fn update_pane_title(&self, pane_id: &PaneId, title: String) -> Option<TabState> {
         let mut inner = self.inner.write();
-        let (_tab_id, entry) = inner
-            .tabs
-            .iter_mut()
-            .find(|(_, e)| e.panes.contains_key(pane_id))
-            .map(|(id, e)| (id.clone(), e))?;
+        let tab_id = inner.pane_to_tab.get(pane_id)?.clone();
+        let entry = inner.tabs.get_mut(&tab_id)?;
 
         // Capture the effective title before updating.
         let old_title = entry

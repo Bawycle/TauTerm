@@ -23,10 +23,14 @@ impl SessionRegistry {
         pane_id: &PaneId,
     ) -> Result<Arc<parking_lot::RwLock<crate::vt::VtProcessor>>, SessionError> {
         let inner = self.inner.read();
-        let pane = inner
+        let tab_id = inner.tab_id_for_pane(pane_id)?;
+        let entry = inner
             .tabs
-            .values()
-            .find_map(|e| e.panes.get(pane_id))
+            .get(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+        let pane = entry
+            .panes
+            .get(pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         Ok(pane.vt.clone())
     }
@@ -34,10 +38,14 @@ impl SessionRegistry {
     /// Get the current dimensions (cols, rows) of a pane.
     pub fn get_pane_dims(&self, pane_id: &PaneId) -> Result<(u16, u16), SessionError> {
         let inner = self.inner.read();
-        let pane = inner
+        let tab_id = inner.tab_id_for_pane(pane_id)?;
+        let entry = inner
             .tabs
-            .values()
-            .find_map(|e| e.panes.get(pane_id))
+            .get(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+        let pane = entry
+            .panes
+            .get(pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         let vt = pane.vt.read();
         let meta = vt.get_screen_meta();
@@ -47,10 +55,14 @@ impl SessionRegistry {
     /// Get a full screen snapshot for `get_pane_screen_snapshot`.
     pub fn get_pane_snapshot(&self, pane_id: &PaneId) -> Result<ScreenSnapshot, SessionError> {
         let inner = self.inner.read();
-        let pane = inner
+        let tab_id = inner.tab_id_for_pane(pane_id)?;
+        let entry = inner
             .tabs
-            .values()
-            .find_map(|e| e.panes.get(pane_id))
+            .get(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+        let pane = entry
+            .panes
+            .get(pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         let vt = pane.vt.read();
         Ok(vt.get_snapshot())
@@ -63,10 +75,14 @@ impl SessionRegistry {
         query: &crate::vt::SearchQuery,
     ) -> Result<Vec<crate::vt::SearchMatch>, SessionError> {
         let inner = self.inner.read();
-        let pane = inner
+        let tab_id = inner.tab_id_for_pane(pane_id)?;
+        let entry = inner
             .tabs
-            .values()
-            .find_map(|e| e.panes.get(pane_id))
+            .get(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+        let pane = entry
+            .panes
+            .get(pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         let vt = pane.vt.read();
         Ok(vt.search(query))
@@ -79,26 +95,22 @@ impl SessionRegistry {
     /// is considered "in the foreground" for notification purposes (FS-NOTIF-001).
     pub fn is_active_pane(&self, pane_id: &PaneId) -> bool {
         let inner = self.inner.read();
-        // Find the tab containing this pane.
-        let Some((tab_id, entry)) = inner
-            .tabs
-            .iter()
-            .find(|(_, e)| e.panes.contains_key(pane_id))
-        else {
+        let Ok(tab_id) = inner.tab_id_for_pane(pane_id) else {
+            return false;
+        };
+        let Some(entry) = inner.tabs.get(&tab_id) else {
             return false;
         };
         // The pane must be the active pane of its tab AND the tab must be the active tab.
-        entry.state.active_pane_id == *pane_id && inner.active_tab_id.as_ref() == Some(tab_id)
+        entry.state.active_pane_id == *pane_id && inner.active_tab_id.as_ref() == Some(&tab_id)
     }
 
     /// Returns the `TabId` and `TabState` for the tab containing `pane_id`, if found.
     pub fn get_tab_state_for_pane(&self, pane_id: &PaneId) -> Option<(TabId, TabState)> {
         let inner = self.inner.read();
-        inner
-            .tabs
-            .iter()
-            .find(|(_, e)| e.panes.contains_key(pane_id))
-            .map(|(tab_id, e)| (tab_id.clone(), e.state.clone()))
+        let tab_id = inner.pane_to_tab.get(pane_id)?.clone();
+        let entry = inner.tabs.get(&tab_id)?;
+        Some((tab_id, entry.state.clone()))
     }
 
     /// Transition a pane to `Terminated` state and return its `(exit_code, signal_name)`.
@@ -113,11 +125,13 @@ impl SessionRegistry {
     /// Returns `(None, None)` if the pane is not found.
     pub fn mark_pane_terminated(&self, pane_id: &PaneId) -> (Option<i32>, Option<String>) {
         let mut inner = self.inner.write();
-        let Some(pane) = inner
-            .tabs
-            .values_mut()
-            .find_map(|e| e.panes.get_mut(pane_id))
-        else {
+        let Some(tab_id) = inner.pane_to_tab.get(pane_id).cloned() else {
+            return (None, None);
+        };
+        let Some(entry) = inner.tabs.get_mut(&tab_id) else {
+            return (None, None);
+        };
+        let Some(pane) = entry.panes.get_mut(pane_id) else {
             return (None, None);
         };
         let exit_code = pane
@@ -148,23 +162,16 @@ impl SessionRegistry {
         pane_id: &PaneId,
     ) -> Option<(Option<i32>, Option<String>)> {
         let inner = self.inner.read();
-        inner
-            .tabs
-            .values()
-            .find_map(|e| e.panes.get(pane_id))
-            .and_then(|pane| {
-                if let crate::session::lifecycle::PaneLifecycleState::Terminated {
-                    exit_code, ..
-                } = &pane.lifecycle
-                {
-                    // `exit_code` is `None` when the child was killed by a signal.
-                    // We cannot recover the signal name from `PaneLifecycleState`
-                    // without extending it — signal_name is left None for now.
-                    Some((*exit_code, None))
-                } else {
-                    None
-                }
-            })
+        let tab_id = inner.pane_to_tab.get(pane_id)?;
+        let entry = inner.tabs.get(tab_id)?;
+        let pane = entry.panes.get(pane_id)?;
+        if let crate::session::lifecycle::PaneLifecycleState::Terminated { exit_code, .. } =
+            &pane.lifecycle
+        {
+            Some((*exit_code, None))
+        } else {
+            None
+        }
     }
 
     /// Returns whether a non-shell foreground process is active on a pane's PTY.
@@ -191,7 +198,11 @@ impl SessionRegistry {
             return Ok(true);
         }
         let inner = self.inner.read();
-        let pane = inner.tabs.values().find_map(|e| e.panes.get(pane_id));
+        let pane = inner
+            .pane_to_tab
+            .get(pane_id)
+            .and_then(|tab_id| inner.tabs.get(tab_id))
+            .and_then(|entry| entry.panes.get(pane_id));
 
         let pane = match pane {
             Some(p) => p,
@@ -236,10 +247,14 @@ impl SessionRegistry {
         exit_code: i32,
     ) -> Result<(), SessionError> {
         let mut inner = self.inner.write();
-        let pane = inner
+        let tab_id = inner.tab_id_for_pane(pane_id)?;
+        let entry = inner
             .tabs
-            .values_mut()
-            .find_map(|e| e.panes.get_mut(pane_id))
+            .get_mut(&tab_id)
+            .ok_or_else(|| SessionError::TabNotFound(tab_id.to_string()))?;
+        let pane = entry
+            .panes
+            .get_mut(pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         pane.lifecycle = crate::session::lifecycle::PaneLifecycleState::Terminated {
             exit_code: Some(exit_code),
@@ -253,9 +268,10 @@ impl SessionRegistry {
     pub fn is_local_pane(&self, pane_id: &PaneId) -> bool {
         let inner = self.inner.read();
         inner
-            .tabs
-            .values()
-            .find_map(|e| e.panes.get(pane_id))
+            .pane_to_tab
+            .get(pane_id)
+            .and_then(|tab_id| inner.tabs.get(tab_id))
+            .and_then(|entry| entry.panes.get(pane_id))
             .map(|p| p.ssh_channel.is_none())
             .unwrap_or(false)
     }

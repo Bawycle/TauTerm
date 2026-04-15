@@ -77,6 +77,13 @@ Items in the **Future Roadmap** section are out of scope for the current release
   The adaptive debounce loop in `reader.rs` (P-HT-2) has unit tests for the `next_debounce` formula but no integration test for the full `select!` loop timing behavior (decay, re-arm, `needs_immediate_flush` interaction). Requires refactoring to inject a mock emitter or extracting the loop into a testable function. S:2 because untested code paths are latent debt. V:1 because the code is stable and not actively changing.
   **Files:** `src-tauri/src/session/pty_task/reader.rs`, `src-tauri/src/session/pty_task.rs`.
 
+- [ ] **Active Glow — highlight active pane with subtle background brightness** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
+  In split layouts, the active pane should be visually distinguished by a slightly warmer/brighter background rather than relying solely on border color. Proposal: new token `--term-bg-active: #1a1812` (vs current `--term-bg: #16140f`). Delta L* CIE ~0.5–0.7 — subtle but perceptible in side-by-side juxtaposition. Invisible in single-pane usage (no visual noise).
+  WCAG constraint: ANSI green (`#5c9e5c`) is the tightest color at 4.6:1 on current bg. With `#1a1812`, ratio drops to ~4.52:1 — still AA compliant. `#1e1b14` and above would breach 4.5:1. The value must be validated with exact contrast calculations before finalizing.
+  Trade-offs: (1) apps that paint their own background (vim, htop) mask the glow in their zones — visible but not a bug; (2) ANSI palette gets two reference backgrounds instead of one — slight doc complexity increase. Border remains for activity pulses (output, bell, exit) on inactive panes; border color distinction (active blue vs inactive) may be unified once glow carries the focus signal.
+  Requires an ADR. New tokens: `--term-bg-active` (semantic), `--color-neutral-875` (primitive).
+  **Files:** `docs/uxd/02-tokens.md`, `docs/AD.md` (neutral scale), `src/lib/components/terminal/` (pane background binding), `docs/adr/` (new ADR).
+
 - [ ] **P-HT-5 — Binary encoding for full-redraw payloads** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
   Full-redraw JSON at 220×50 = 11,000 `CellUpdate` structs with per-cell `row`/`col` fields. For full redraws, coordinates are implicit from flat index + stride. Switch to MessagePack (`rmp-serde`) or a flat binary buffer for `screen-update` events. Could reduce payload size by 60–80% and eliminate JSON serialization cost (667 µs post-P-IPC1).
   **Prerequisite:** Measure actual payload sizes under vtebench first. Evaluate `rmp-serde` vs custom binary format.

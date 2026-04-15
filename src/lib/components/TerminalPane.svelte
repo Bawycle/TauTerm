@@ -314,12 +314,13 @@
    * Note: some IMs (Fcitx5) write directly to textarea.value rather than
    * setting event.data. Reading target.value first covers both cases.
    */
-  // Guard against double-send when WebKitGTK/IBus emits an input event
-  // (isComposing=false) immediately after compositionend. Without this flag,
-  // handleInput's `target.value || inputEvent.data` fallback would re-send
-  // the composed character via event.data even though the textarea was already
-  // drained by handleCompositionEnd. Pattern used by xterm.js and CodeMirror.
-  let compositionJustEnded = false;
+  // Stores the NFC-normalized text from the most recent compositionend, used
+  // to identify and suppress the duplicate input event that some GTK IM
+  // backends emit immediately after compositionend. Cleared via queueMicrotask
+  // to prevent swallowing the next real keystroke when the IM does NOT emit a
+  // trailing input event (observed on Belgian/French keyboards with both the
+  // GTK built-in dead-key compositor and certain IBus configurations).
+  let compositionEndData: string | null = null;
 
   function handleInput(event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) {
     const inputEvent = event as unknown as InputEvent;
@@ -327,32 +328,49 @@
     // the IM is managing the textarea content. Do not drain or send —
     // the final composed character will arrive via compositionend.
     if (inputEvent.isComposing) return;
-    // compositionend already sent the composed text and drained the textarea.
-    // Skip the post-composition input event to prevent double-send.
-    if (compositionJustEnded) {
-      compositionJustEnded = false;
-      const target = event.target as HTMLTextAreaElement;
-      target.value = '';
-      return;
-    }
+
     const target = event.target as HTMLTextAreaElement;
     const text = target.value || inputEvent.data || '';
     target.value = '';
+
+    // compositionend just fired in this same browser task.
+    // Check if this input is the trailing duplicate some GTK IM backends emit.
+    if (compositionEndData !== null) {
+      const composed = compositionEndData;
+      compositionEndData = null; // consume the guard regardless
+      // Skip only if text is empty or NFC-matches the already-sent composed text.
+      // NFC normalization guards against GTK IM backends that deliver event.data
+      // in NFD while textarea.value was NFC (or vice versa).
+      // Different text means the user typed something new — send it.
+      if (!text || text.normalize('NFC') === composed) return;
+      sendPrintableText(text);
+      return;
+    }
+
     if (!text) return;
     sendPrintableText(text);
   }
 
   /**
    * Handle compositionend — sends the final composed text (e.g. "î" from
-   * dead ^ + i) and drains the textarea. Sets compositionJustEnded to
-   * prevent the subsequent input event (if any) from double-sending.
+   * dead ^ + i) and drains the textarea. Sets compositionEndData so that
+   * handleInput can identify and skip any trailing duplicate input event.
+   *
+   * queueMicrotask clears the guard after the current browser task. Trailing
+   * input events (if any) fire synchronously within the same task, so the
+   * microtask runs after them. If NO trailing input fires (some GTK IM
+   * backends on Belgian/French keyboards), the guard is cleared before the
+   * next user keystroke.
    */
   function handleCompositionEnd(event: CompositionEvent) {
-    compositionJustEnded = true;
     const target = event.target as HTMLTextAreaElement;
     // Prefer textarea value (some IMs like Fcitx5 write directly to it) over event.data.
     const text = target.value || event.data || '';
     target.value = '';
+    compositionEndData = text ? text.normalize('NFC') : null;
+    queueMicrotask(() => {
+      compositionEndData = null;
+    });
     if (!text) return;
     sendPrintableText(text);
   }

@@ -13,6 +13,7 @@ use crate::session::{SessionRegistry, ids::PaneId};
 /// `file://` scheme is allowed only if that pane is a local PTY session. When
 /// absent (e.g. called without a pane context), `file://` is always rejected.
 #[tauri::command]
+#[specta::specta]
 pub async fn open_url(
     url: String,
     pane_id: Option<String>,

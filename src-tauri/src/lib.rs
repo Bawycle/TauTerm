@@ -9,6 +9,7 @@ pub mod commands;
 pub mod credentials;
 pub mod error;
 pub mod events;
+pub mod ipc;
 pub mod platform;
 pub mod preferences;
 pub mod security_load;
@@ -71,12 +72,16 @@ pub fn run() {
     let ssh_manager = SshManager::new();
     let credential_manager = Arc::new(CredentialManager::new());
 
+    let specta_builder = ipc::make_builder();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(ssh_manager)
         .manage(prefs)
         .manage(credential_manager)
-        .setup(|app| {
+        .invoke_handler(specta_builder.invoke_handler())
+        .setup(move |app| {
+            specta_builder.mount_events(app);
             // Create the main window manually (tauri.conf.json has "create": false).
             // On Linux, inject an instance-unique data directory to prevent WebKitGTK
             // cache conflicts between concurrent instances (ADR-0025).
@@ -198,74 +203,6 @@ pub fn run() {
 
             Ok(())
         })
-        // E2E testing commands — only compiled and registered when e2e-testing feature is active.
-        // `generate_handler![]` supports `#[cfg]` on individual entries in Tauri 2.
-        // If that ever stops working, use the duplicate-handler approach from
-        // ADR-0015-implementation-notes.md §7.2.
-        .invoke_handler(tauri::generate_handler![
-            // Session commands
-            commands::session_cmds::create_tab,
-            commands::session_cmds::close_tab,
-            commands::session_cmds::rename_tab,
-            commands::session_cmds::set_pane_label,
-            commands::session_cmds::reorder_tab,
-            commands::session_cmds::split_pane,
-            commands::session_cmds::close_pane,
-            commands::session_cmds::set_active_tab,
-            commands::session_cmds::set_active_pane,
-            commands::session_cmds::has_foreground_process,
-            // Input / screen commands
-            commands::input_cmds::send_input,
-            commands::input_cmds::scroll_pane,
-            commands::input_cmds::scroll_to_bottom,
-            commands::input_cmds::search_pane,
-            commands::input_cmds::get_pane_screen_snapshot,
-            commands::input_cmds::resize_pane,
-            // SSH session commands
-            commands::ssh_cmds::open_ssh_connection,
-            commands::ssh_cmds::close_ssh_connection,
-            commands::ssh_cmds::reconnect_ssh,
-            // SSH prompt commands
-            commands::ssh_prompt_cmds::provide_credentials,
-            commands::ssh_prompt_cmds::provide_passphrase,
-            commands::ssh_prompt_cmds::accept_host_key,
-            commands::ssh_prompt_cmds::reject_host_key,
-            commands::ssh_prompt_cmds::dismiss_ssh_algorithm_warning,
-            // Connection config commands
-            commands::connection_cmds::get_connections,
-            commands::connection_cmds::save_connection,
-            commands::connection_cmds::delete_connection,
-            commands::connection_cmds::duplicate_connection,
-            commands::connection_cmds::store_connection_password,
-            // Preferences commands
-            commands::preferences_cmds::get_preferences,
-            commands::preferences_cmds::update_preferences,
-            commands::preferences_cmds::get_themes,
-            commands::preferences_cmds::save_theme,
-            commands::preferences_cmds::delete_theme,
-            // System commands
-            commands::system_cmds::get_session_state,
-            commands::system_cmds::copy_to_clipboard,
-            commands::system_cmds::get_clipboard,
-            commands::system_cmds::open_url,
-            commands::system_cmds::mark_context_menu_used,
-            commands::system_cmds::toggle_fullscreen,
-            // E2E testing commands (compiled only with --features e2e-testing)
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_pty_output,
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_ssh_failure,
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_ssh_delay,
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_ssh_disconnect,
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_credential_prompt,
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_pane_exit,
-            #[cfg(feature = "e2e-testing")]
-            commands::testing::inject_foreground_process,
-        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

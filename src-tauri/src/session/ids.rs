@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Identifies a tab in the session registry.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub struct TabId(pub String);
 
 impl TabId {
@@ -35,7 +35,7 @@ impl std::fmt::Display for TabId {
 }
 
 /// Identifies a pane within a tab.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub struct PaneId(pub String);
 
 impl PaneId {
@@ -61,7 +61,7 @@ impl std::fmt::Display for PaneId {
 }
 
 /// Identifies a saved SSH connection configuration.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub struct ConnectionId(pub String);
 
 impl ConnectionId {

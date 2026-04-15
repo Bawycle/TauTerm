@@ -11,7 +11,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { TabState } from '$lib/ipc/types';
+import type { TabState } from '$lib/ipc';
 import { applySessionDelta } from '$lib/state/session.svelte';
 
 export interface TabBarRenameOptions {

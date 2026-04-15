@@ -22,7 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { cellToCssVars, cellStyleFromSnapshot } from './screen.js';
-import type { SnapshotCell } from '$lib/ipc/types';
+import type { SnapshotCell } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -40,6 +40,10 @@ function makeCell(overrides: Partial<SnapshotCell> = {}): ReturnType<typeof cell
     inverse: false,
     hidden: false,
     strikethrough: false,
+    fg: null,
+    bg: null,
+    underlineColor: null,
+    hyperlink: null,
     ...overrides,
   });
 }

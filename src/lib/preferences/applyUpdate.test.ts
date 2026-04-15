@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { applyPreferencesUpdate } from './applyUpdate';
-import type { Preferences, PreferencesPatch } from '$lib/ipc/types';
+import type { Preferences, PreferencesPatch } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -106,8 +106,8 @@ describe('applyPreferencesUpdate', () => {
     const result = await applyPreferencesUpdate({}, invoker, applyLocale);
 
     expect(result).toBe(backendResult);
-    expect(result.appearance.fontSize).toBe(18);
-    expect(result.appearance.language).toBe('fr');
+    expect(result.appearance?.fontSize).toBe(18);
+    expect(result.appearance?.language).toBe('fr');
   });
 
   it('TV-PREF-005 — works with an empty patch without crashing, applyLocale is still called', async () => {

@@ -10,10 +10,11 @@ pub(super) fn default_confirm_multiline_paste() -> bool {
 }
 
 /// Terminal behavior preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TerminalPrefs {
     /// Maximum scrollback lines per pane.
+    #[specta(type = f64)]
     pub scrollback_lines: usize,
     /// Allow OSC 52 clipboard write for local sessions.
     pub allow_osc52_write: bool,

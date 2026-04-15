@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { computeLayouts, findPane, leafPanes } from './split-tree.js';
-import type { PaneNode } from '$lib/ipc/types.js';
+import type { PaneNode } from '$lib/ipc';
 
 const ROOT_BOUNDS = { x: 0, y: 0, width: 1200, height: 800 };
 
@@ -14,13 +14,12 @@ function leaf(id: string): PaneNode {
     type: 'leaf',
     paneId: id,
     state: {
-      id,
-      sessionType: 'local',
+      paneId: id,
+      lifecycle: { type: 'running' },
       processTitle: 'bash',
-      cwd: '/',
-      sshConnectionId: null,
       sshState: null,
-      notification: null,
+      scrollOffset: 0,
+      cwd: '/',
     },
   };
 }

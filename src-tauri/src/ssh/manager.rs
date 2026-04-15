@@ -105,13 +105,11 @@ pub struct SshManager {
 /// Never use `#[derive(Debug)]` on this struct — it would expose passwords in logs.
 /// `ZeroizeOnDrop` ensures all secret fields are overwritten in memory when the struct is dropped
 /// (FS-CRED-003).
-#[derive(Clone, Zeroize, ZeroizeOnDrop, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Credentials {
     pub username: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub private_key_path: Option<String>,
     /// Whether the user wants the password saved to the OS keychain (FS-CRED-007).
     #[serde(default)]

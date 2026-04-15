@@ -645,10 +645,10 @@ fn inner_update_pane_cwd(
         pane.cwd = Some(cwd.clone());
         let new_title = resolve_effective_title_for_test(pane);
         layout::update_pane_cwd_in_tree(&mut entry.state.layout, pane_id, &cwd);
-        if new_title != old_title {
-            if let Some(ref t) = new_title {
-                layout::update_pane_title_in_tree(&mut entry.state.layout, pane_id, t);
-            }
+        if new_title != old_title
+            && let Some(ref t) = new_title
+        {
+            layout::update_pane_title_in_tree(&mut entry.state.layout, pane_id, t);
         }
         return Some(entry.state.clone());
     }
@@ -935,7 +935,7 @@ fn pane_to_tab_invariant_after_insert_and_remove() {
     insert_tab_with_panes(
         &mut inner,
         &tab2,
-        &[p3.clone()],
+        std::slice::from_ref(&p3),
         make_leaf_tab_state(&tab2, &p3),
     );
 

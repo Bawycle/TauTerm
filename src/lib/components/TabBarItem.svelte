@@ -13,7 +13,7 @@
 -->
 <script lang="ts">
   import { X, Bell, CheckCircle, XCircle, Network, LayoutPanelLeft } from 'lucide-svelte';
-  import type { TabState, PaneNotification } from '$lib/ipc/types';
+  import type { TabState, PaneNotification } from '$lib/ipc';
   import * as m from '$lib/paraglide/messages';
 
   // Local ref for the rename input — focus managed here (no parent bind:this needed).

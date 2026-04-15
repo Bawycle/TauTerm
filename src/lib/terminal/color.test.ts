@@ -9,7 +9,7 @@ import {
   cursorShape,
   cursorBlinks,
 } from './color.js';
-import type { ColorDto, Color } from '$lib/ipc/types';
+import type { ColorDto, Color } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // ANSI_16_VARS: export and correct token names

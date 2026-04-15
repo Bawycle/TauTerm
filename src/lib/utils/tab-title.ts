@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-import type { PaneId, PaneNode, PaneState, TabState } from '$lib/ipc/types';
+import type { PaneId, PaneNode, PaneState, TabState } from '$lib/ipc';
 
 /**
  * Returns the root (first leaf) pane state from a tab's layout tree.

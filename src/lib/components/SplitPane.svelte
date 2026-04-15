@@ -23,7 +23,7 @@
     onsplitv       — called when user requests vertical split from context menu
 -->
 <script lang="ts">
-  import type { PaneNode, PaneId, TabId, SearchMatch, BellType } from '$lib/ipc/types';
+  import type { PaneNode, PaneId, TabId, SearchMatch, BellType } from '$lib/ipc';
   import { terminatedPanes } from '$lib/state/notifications.svelte';
   import TerminalPane from './TerminalPane.svelte';
   import SplitPane from './SplitPane.svelte';

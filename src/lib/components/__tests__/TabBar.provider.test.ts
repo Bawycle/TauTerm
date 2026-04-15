@@ -21,7 +21,7 @@ import { mount, unmount, flushSync } from 'svelte';
 import { Tooltip } from 'bits-ui';
 import TabBar from '../TabBar.svelte';
 import TabBarWithProvider from './TabBarWithProvider.svelte';
-import type { TabState, PaneState } from '$lib/ipc/types';
+import type { TabState, PaneState } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -29,13 +29,12 @@ import type { TabState, PaneState } from '$lib/ipc/types';
 
 function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }

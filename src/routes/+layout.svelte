@@ -8,13 +8,16 @@
   const { children } = $props();
 
   $effect(() => {
-    applyTheme(preferences.value?.appearance.themeName ?? 'umbra', preferences.value?.themes ?? []);
+    applyTheme(
+      preferences.value?.appearance?.themeName ?? 'umbra',
+      preferences.value?.themes ?? [],
+    );
   });
 
   $effect(() => {
-    const fontFamily = preferences.value?.appearance.fontFamily ?? '';
-    const fontSize = preferences.value?.appearance.fontSize ?? 14;
-    const opacity = preferences.value?.appearance.opacity ?? 1.0;
+    const fontFamily = preferences.value?.appearance?.fontFamily ?? '';
+    const fontSize = preferences.value?.appearance?.fontSize ?? 14;
+    const opacity = preferences.value?.appearance?.opacity ?? 1.0;
     // Override CSS token only when a non-empty value is set; otherwise the
     // @theme fallback ('JetBrains Mono', …) from app.css remains in effect.
     if (fontFamily) {

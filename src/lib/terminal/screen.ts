@@ -14,13 +14,7 @@
  * All content is treated as opaque text (set via textContent).
  */
 
-import type {
-  SnapshotCell,
-  CellUpdate,
-  CellAttrsDto,
-  Color,
-  ScreenUpdateEvent,
-} from '$lib/ipc/types';
+import type { SnapshotCell, CellUpdate, CellAttrsDto, Color, ScreenUpdateEvent } from '$lib/ipc';
 import { resolveColorDto, resolveColor, resolveAnsiColor } from './color.js';
 
 export interface CellStyle {
@@ -136,7 +130,7 @@ export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
     hidden: cell.hidden,
     strikethrough: cell.strikethrough,
     underlineColor,
-    hyperlink: cell.hyperlink,
+    hyperlink: cell.hyperlink ?? undefined,
     style: '',
   };
   result.style = computeCellStyle(result);
@@ -154,7 +148,7 @@ export function cellStyleFromUpdate(
   content: string,
   attrs: CellAttrsDto,
   width: number,
-  hyperlink?: string,
+  hyperlink?: string | null,
 ): CellStyle {
   // Apply bold color promotion: ColorDto 'default' variant is not a Color,
   // so we only promote when the fg is a non-default ANSI color.
@@ -180,7 +174,7 @@ export function cellStyleFromUpdate(
     hidden: attrs.hidden ?? false,
     strikethrough: attrs.strikethrough ?? false,
     underlineColor,
-    hyperlink,
+    hyperlink: hyperlink ?? undefined,
     style: '',
   };
   result.style = computeCellStyle(result);

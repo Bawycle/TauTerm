@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::vt::cell::Cell;
 
 /// A snapshot of the visible screen content, used for `get_pane_screen_snapshot`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScreenSnapshot {
     pub cols: u16,
@@ -16,7 +16,9 @@ pub struct ScreenSnapshot {
     pub cursor_col: u16,
     pub cursor_visible: bool,
     pub cursor_shape: u8,
+    #[specta(type = f64)]
     pub scrollback_lines: usize,
+    #[specta(type = f64)]
     pub scroll_offset: i64,
 }
 
@@ -42,7 +44,7 @@ pub struct ScreenSnapshot {
 /// background colors. The swap operates on the **resolved** values — i.e. after
 /// bold color promotion has been applied to `fg`, and after substituting terminal
 /// defaults for any `None` color.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SnapshotCell {
     pub content: String,
@@ -56,14 +58,10 @@ pub struct SnapshotCell {
     pub inverse: bool,
     pub hidden: bool,
     pub strikethrough: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub fg: Option<crate::vt::cell::Color>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bg: Option<crate::vt::cell::Color>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub underline_color: Option<crate::vt::cell::Color>,
     /// OSC 8 hyperlink URI for this cell, if any.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub hyperlink: Option<String>,
 }
 

@@ -11,7 +11,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { TabState } from '$lib/ipc/types';
+import type { TabState } from '$lib/ipc';
 
 export interface TabBarDndOptions {
   tabs: () => TabState[];

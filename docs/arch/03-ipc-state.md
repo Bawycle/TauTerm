@@ -59,6 +59,7 @@
 | `open_url` | `{ url: String }` | `()` | Open validated URL in system browser |
 | `mark_context_menu_used` | — | `()` | Clear first-launch context menu hint |
 | `resize_pane` | `{ pane_id: PaneId, cols: u16, rows: u16, pixel_width: u16, pixel_height: u16 }` | `()` | Notify backend of pane resize; triggers `TIOCSWINSZ` + `SIGWINCH`. `pixel_width`/`pixel_height` are required for complete `TIOCSWINSZ` (image protocols, multiplexers). Resize events are debounced — see [§6.5](04-runtime-platform.md#65-back-pressure). |
+| `frame_ack` | `{ pane_id: PaneId }` | `()` | Acknowledge that the frontend has painted the latest `screen-update` for this pane. Called after each `flushRafQueue()` cycle. Writes a timestamp to the pane's `Arc<AtomicU64>`; Task 2 reads it to drive back-pressure escalation (ADR-0027). Fire-and-forget — errors (e.g., stale pane ID) are silently ignored. Not applicable to SSH panes (known limitation). |
 | `get_pane_screen_snapshot` | `{ pane_id: PaneId }` | `ScreenSnapshot` | Full screen state for initial render |
 | `inject_pty_output` | `{ pane_id: PaneId, data: Vec<u8> }` | `()` | *E2E testing only — see §4.2.1* |
 | `inject_ssh_failure` | `{ count: u32 }` | `()` | *E2E testing only — see §4.2.1* |

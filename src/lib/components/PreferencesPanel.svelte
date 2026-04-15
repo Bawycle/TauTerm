@@ -17,7 +17,7 @@
 <script lang="ts">
   import { Dialog } from 'bits-ui';
   import { X } from 'lucide-svelte';
-  import { getThemes } from '$lib/ipc/commands';
+  import { getThemes } from '$lib/ipc';
   import { DEFAULT_SHORTCUTS } from '$lib/preferences/shortcuts';
   import PreferencesSectionNav from './PreferencesSectionNav.svelte';
   import PreferencesKeyboardSection from './PreferencesKeyboardSection.svelte';
@@ -26,7 +26,7 @@
   import PreferencesThemesSection from './PreferencesThemesSection.svelte';
   import PreferencesConnectionsSection from './PreferencesConnectionsSection.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { Preferences, PreferencesPatch, UserTheme } from '$lib/ipc/types';
+  import type { Preferences, PreferencesPatch, UserTheme } from '$lib/ipc';
 
   // ---------------------------------------------------------------------------
   // Props

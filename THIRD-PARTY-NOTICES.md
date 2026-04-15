@@ -2,7 +2,7 @@
 
 This file lists the third-party dependencies used by TauTerm and their licenses.
 
-## Rust Crates (736)
+## Rust Crates (745)
 
 | Crate | Version | License |
 |---|---|---|
@@ -272,6 +272,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | indexmap | 1.9.3 | Apache-2.0 OR MIT |
 | indexmap | 2.14.0 | Apache-2.0 OR MIT |
 | infer | 0.19.0 | MIT |
+| Inflector | 0.11.4 | BSD-2-Clause |
 | inotify | 0.11.1 | ISC |
 | inotify-sys | 0.1.5 | ISC |
 | inout | 0.1.4 | MIT OR Apache-2.0 |
@@ -380,6 +381,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | password-hash | 0.5.0 | MIT OR Apache-2.0 |
+| paste | 1.0.15 | MIT OR Apache-2.0 |
 | pathdiff | 0.2.3 | MIT/Apache-2.0 |
 | pbkdf2 | 0.12.2 | MIT OR Apache-2.0 |
 | pbkdf2 | 0.13.0-rc.10 | MIT OR Apache-2.0 |
@@ -529,6 +531,11 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | softbuffer | 0.4.8 | MIT OR Apache-2.0 |
 | soup3 | 0.5.0 | MIT |
 | soup3-sys | 0.5.0 | MIT |
+| specta | 2.0.0-rc.24 | MIT |
+| specta-macros | 2.0.0-rc.24 | MIT |
+| specta-serde | 0.0.11 | MIT |
+| specta-tags | 0.0.0 | MIT |
+| specta-typescript | 0.0.11 | MIT |
 | spin | 0.9.8 | MIT |
 | spki | 0.8.0 | Apache-2.0 OR MIT |
 | ssh-cipher | 0.2.0 | Apache-2.0 OR MIT |
@@ -558,6 +565,8 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | tauri-plugin-opener | 2.5.3 | Apache-2.0 OR MIT |
 | tauri-runtime | 2.10.1 | Apache-2.0 OR MIT |
 | tauri-runtime-wry | 2.10.1 | Apache-2.0 OR MIT |
+| tauri-specta | 2.0.0-rc.24 | MIT |
+| tauri-specta-macros | 2.0.0-rc.24 | MIT |
 | tauri-utils | 2.8.3 | Apache-2.0 OR MIT |
 | tauri-winres | 0.3.5 | MIT |
 | tauri-winrt-notification | 0.7.2 | MIT OR Apache-2.0 |

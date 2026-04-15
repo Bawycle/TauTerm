@@ -8,6 +8,7 @@ use crate::error::TauTermError;
 use crate::session::{SessionRegistry, SessionState};
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_session_state(
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<SessionState, TauTermError> {

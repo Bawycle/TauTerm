@@ -49,31 +49,34 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ## High Priority (score 28–36)
 
-*No high-priority items.*
+- [ ] **REGRESSION — E2E `ls-al` and `perf-p12a-frame-render` fail after tauri-specta migration** `[Score: 30 | R:3, S:3, U:3, V:3]` `E: days` `B: —`
+  Two E2E tests regressed after the tauri-specta migration (Part A) + frame-ack (Part B). The 24 other E2E specs pass; fmt, lint, unit tests, Podman integration, and audit all pass.
+  **Symptom:** In `ls-al.spec.ts`, Phase 1–2 (prompt + "ls -al" echo) render correctly, but Phase 3 (4-line output injection) never appears in the DOM grid — `waitForTextInGrid("total ", 10_000)` times out. In `perf-p12a-frame-render.spec.ts`, RAPID-FIRE scenario (5 events 3ms apart) produces 0 `frameRender` performance entries instead of ≥1.
+  **Root cause not yet identified.** Eliminated hypotheses: (a) `event.emit(app)` vs `app.emit(name, event)` — both fail equally; (b) `frameAck` IPC call — disabling it doesn't fix the tests; (c) emit helper migration — not the cause. Remaining hypotheses: (1) the `index.ts` adapter layer (`unwrap`/`unwrapVoid` envelope, event re-export) introduces a subtle timing or execution-order difference; (2) a type mismatch between the specta-generated `_Serialize | _Deserialize` union types and the actual JSON causes a silent failure in `applyScreenUpdate`; (3) a change in the `get_pane_screen_snapshot` response shape (removed `skip_serializing_if` on `SnapshotCell` fields) confuses the initial grid build; (4) module initialization ordering difference between the old direct imports and the new barrel `index.ts`.
+  R:3 because this is a regression from a previously green test suite — degrades release quality. S:3 because terminal output rendering is broken in specific scenarios (confirmed by E2E). U:3 because multi-line output rendering is a common workflow. V:3 because this is already broken and blocking the E2E gate.
+  **Files:** `src/lib/ipc/index.ts` (adapter layer), `src/lib/ipc/bindings.ts` (generated types), `src/lib/composables/useTerminalPane.svelte.ts` (event processing), `tests/e2e/ls-al.spec.ts`, `tests/e2e/perf-p12a-frame-render.spec.ts`.
 
 ---
 
 ## Medium Priority — Next Release Quality Target (score 17–27)
 
-- [ ] **IPC type codegen — migrate to `tauri-specta`** `[Score: 22 | R:1, S:3, U:2, V:3]` `E: weeks` `B: —`
-  ADR-0026 decided to adopt `tauri-specta` for IPC type codegen (`docs/adr/ADR-0026-ipc-type-codegen-strategy.md`). The confirmed `duplicateConnection` runtime bug (wrong parameter name) triggered the decision. S:3 because this is a confirmed bug, not latent debt. V:3 because every new IPC command or event widens the drift surface — the cost of deferral grows with each commit touching IPC.
-  Four independently shippable PRs:
-  1. Annotate event types with `specta::Type` — highest drift risk, most types.
-  2. Switch to generated types (delete handwritten `types.ts`).
-  3. Migrate command signatures to `tauri_specta::Builder` + event structs to `tauri_specta::Event` with `collect_events![]` (module by module).
-  4. Delete handwritten `types.ts`, `commands.ts`, and `events.ts`.
-  **Prerequisite:** Verify `tauri-specta` 2.x compatibility with current Tauri 2 version before starting.
-  **Files:** `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `src-tauri/src/events/types.rs`, `src/lib/ipc/types.ts`, `src/lib/ipc/commands.ts`, `src/lib/ipc/events.ts`.
-
-- [ ] **P-HT-6 — Frontend→backend flow control (frame-ack)** `[Score: 19 | R:1, S:2, U:3, V:2]` `E: weeks` `B: —`
-  The backend has no knowledge of whether the frontend is consuming events. Add a `frame-ack` Tauri command: the frontend calls it after each `flushRafQueue()`. The backend tracks the last ack timestamp; if no ack for >100 ms, it increases debounce further or drops events until an ack arrives. This is the real backpressure solution (P-HT-2 is a one-sided approximation).
-  S:2 because the absence of backpressure is latent architectural debt — no confirmed bug yet but the failure mode (terminal freeze under heavy output) affects common workflows (U:3). V:2 because adding more event types gradually increases the risk.
-  **Tradeoff:** Adds an IPC round-trip per frame. More invasive than P-HT-2 — consider after P-HT-1/2/3 are validated.
-  **Files:** new Tauri command + `src-tauri/src/session/pty_task/reader.rs` + `src/lib/composables/useTerminalPane.svelte.ts`.
+- [ ] **SSH backpressure — extract shared `EmitCoalescer`** `[Score: 17 | R:1, S:2, U:2, V:2]` `E: weeks` `B: —`
+  `ssh_task.rs` emits `screen-update` events directly from its read loop — no debounce, no coalescence, no frame-ack reading. A `cat large_file` over a fast SSH connection can flood the frontend (same OOM class as commit `298d373` fixed for local PTY). Additionally, `ssh_task.rs` does not extract bell, osc52, cursor_shape, or cwd from the VT processor, and its `Data`/`ExtendedData` handling is duplicated.
+  S:2 because the failure mode is confirmed for PTY (same mechanism) but not yet observed for SSH. U:2 because SSH heavy output requires fast connection + large payload — common for power users, not typical interactive sessions. V:2 because each new event type added to the emit pipeline widens the unprotected SSH surface.
+  **Recommended approach (architect review 2026-04-15):** Extract the Task 2 coalescer logic from `reader.rs` into a shared `EmitCoalescer` struct in `pty_task/coalescer.rs`. Both PTY and SSH pipelines feed `ProcessOutput` into the same coalescer via a bounded channel. Termination logic (PTY: `mark_pane_terminated`; SSH: `SshStateChanged::Closed`) stays in each caller. Requires an ADR before implementation.
+  **Files:** `src-tauri/src/session/pty_task/reader.rs` (extract Task 2), `src-tauri/src/session/ssh_task.rs` (wire through coalescer, complete ProcessOutput, merge Data/ExtendedData), new `src-tauri/src/session/pty_task/coalescer.rs`.
 
 ---
 
 ## Low Priority — Nice-to-Have (score ≤ 16)
+
+- [ ] **`TauTermError` type alignment — eliminate hand-written error interface** `[Score: 15 | R:1, S:2, U:1, V:2]` `E: days` `B: —`
+  Two `TauTermError` definitions coexist on the frontend: the specta-generated type (`code: string`, `detail: string | null`) and the hand-written interface in `errors.ts` (`code: TauTermErrorCode` union literal, `detail?: string`). Existing drift: `PREF_LOCK_TIMEOUT` is emitted by Rust but absent from `TauTermErrorCode`. Structural incompatibility: `null` vs `undefined` on `detail`.
+  S:2 because the drift is confirmed (missing error code) and the `null`/`undefined` mismatch is a latent type-safety hole. U:1 because error handling is edge-case code. V:2 because each new Rust error code widens the drift silently.
+  **Two-step fix (architect review 2026-04-15):**
+  1. *Immediate:* Delete the duplicated `TauTermError` interface from `errors.ts`. Keep `TauTermErrorCode` union + `isTauTermError()` guard, but narrow to the generated type. Add missing codes (`PREF_LOCK_TIMEOUT`).
+  2. *Follow-up (requires ADR):* Create `enum ErrorCode` in Rust with `#[derive(Serialize, specta::Type)]` + `#[serde(rename_all = "SCREAMING_SNAKE_CASE")]`. Replace `code: String` → `code: ErrorCode` in `TauTermError`. specta then generates the union literal automatically → delete `TauTermErrorCode` from `errors.ts`.
+  **Files:** `src/lib/ipc/errors.ts`, `src-tauri/src/error.rs` (step 2), `src-tauri/src/commands/` (step 2 — adapt `From` impls).
 
 - [ ] **Adaptive debounce integration test — `#[tokio::test(start_paused = true)]`** `[Score: 13 | R:1, S:2, U:1, V:1]` `E: days` `B: —`
   The adaptive debounce loop in `reader.rs` (P-HT-2) has unit tests for the `next_debounce` formula but no integration test for the full `select!` loop timing behavior (decay, re-arm, `needs_immediate_flush` interaction). Requires refactoring to inject a mock emitter or extracting the loop into a testable function. S:2 because untested code paths are latent debt. V:1 because the code is stable and not actively changing.

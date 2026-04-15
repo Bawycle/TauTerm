@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import * as tauriEvent from '@tauri-apps/api/event';
 import * as tauriCore from '@tauri-apps/api/core';
-import type { NotificationChangedEvent } from '$lib/ipc/types';
+import type { NotificationChangedEvent } from '$lib/ipc';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
 
 // ---------------------------------------------------------------------------

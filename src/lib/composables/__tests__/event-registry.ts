@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Shared event registry infrastructure for composable tests
 
-import type { ScreenUpdateEvent, CursorState } from '$lib/ipc/types';
+import type { ScreenUpdateEvent, CursorState } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Types

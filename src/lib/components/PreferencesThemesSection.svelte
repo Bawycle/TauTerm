@@ -10,9 +10,9 @@
 <script lang="ts">
   import ThemeListView from './ThemeListView.svelte';
   import ThemeEditorDialog from './ThemeEditorDialog.svelte';
-  import { getThemes, saveTheme, deleteTheme } from '$lib/ipc/commands';
+  import { getThemes, saveTheme, deleteTheme } from '$lib/ipc';
   import * as m from '$lib/paraglide/messages';
-  import type { Preferences, PreferencesPatch, UserTheme } from '$lib/ipc/types';
+  import type { Preferences, PreferencesPatch, UserTheme } from '$lib/ipc';
   import { isBuiltInTheme, getBuiltInThemeTokens } from '$lib/theming/built-in-themes';
   import { buildMinimalValidTheme } from '$lib/theming/validate';
 

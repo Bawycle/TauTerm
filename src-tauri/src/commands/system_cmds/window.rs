@@ -19,6 +19,7 @@ use crate::preferences::PreferencesStore;
 /// SIGWINCH is intentionally NOT broadcast here — the frontend ResizeObserver
 /// will observe the geometry change and call `resize_pane` → `ResizeDebouncer`.
 #[tauri::command]
+#[specta::specta]
 pub async fn toggle_fullscreen(
     window: tauri::Window,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,

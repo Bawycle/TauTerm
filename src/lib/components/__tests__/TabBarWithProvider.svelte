@@ -10,7 +10,7 @@
 <script lang="ts">
   import { Tooltip } from 'bits-ui';
   import TabBar from '../TabBar.svelte';
-  import type { TabState } from '$lib/ipc/types';
+  import type { TabState } from '$lib/ipc';
 
   interface Props {
     tabs?: TabState[];

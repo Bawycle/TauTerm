@@ -22,7 +22,7 @@ import * as tauriEvent from '@tauri-apps/api/event';
 import { resetMockWindow } from '../../../__mocks__/tauri-window';
 import TerminalViewWithProvider from './TerminalViewWithProvider.svelte';
 import { makeTab, basePrefs } from './fixtures';
-import type { SshStateChangedEvent } from '$lib/ipc/types';
+import type { SshStateChangedEvent } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // jsdom polyfills
@@ -85,13 +85,11 @@ describe('SSH-CLOSE-002: ssh-state-changed closed triggers doClosePane', () => {
         type: 'leaf',
         paneId,
         state: {
-          id: paneId,
-          sessionType: 'ssh',
+          paneId,
+          lifecycle: { type: 'running' },
           processTitle: 'ssh',
-          cwd: '',
-          sshConnectionId: 'conn-1',
           sshState: { type: 'connected' },
-          notification: null,
+          scrollOffset: 0,
         },
       },
     });
@@ -220,7 +218,10 @@ describe('SSH-CLOSE-002: ssh-state-changed closed triggers doClosePane', () => {
     expect(capturedSshHandler).not.toBeNull();
 
     // Fire a 'disconnected' state — must NOT trigger close_pane.
-    const disconnectedEvent: SshStateChangedEvent = { paneId, state: { type: 'disconnected' } };
+    const disconnectedEvent: SshStateChangedEvent = {
+      paneId,
+      state: { type: 'disconnected', reason: null },
+    };
     capturedSshHandler!({ payload: disconnectedEvent });
     await settle();
 

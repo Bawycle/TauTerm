@@ -13,7 +13,7 @@
  *  - The `ratio` field allocates `ratio * totalSpace` to `first`, the rest to `second`.
  */
 
-import type { PaneNode, PaneId } from '$lib/ipc/types.js';
+import type { PaneNode, PaneId } from '$lib/ipc';
 
 export interface Rect {
   x: number;

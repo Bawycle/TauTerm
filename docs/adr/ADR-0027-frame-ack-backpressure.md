@@ -1,0 +1,184 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
+# ADR-0027 — Frame-ack backpressure for PTY output
+
+**Date:** 2026-04-15
+**Status:** Accepted
+
+## Context
+
+The render coalescing pipeline (ADR-0020) provides one-sided back-pressure:
+the bounded MPSC channel between Task 1 (PTY reader) and Task 2 (async
+coalescer) stalls the read loop when the channel fills up. However, the
+backend has no visibility into whether the frontend has actually rendered the
+most recent `screen-update` event. The adaptive debounce in Task 2 uses emit
+wall-clock duration as a proxy for frontend load — but this is an
+approximation. If the WebView event queue grows faster than the frontend can
+paint (e.g., sustained `cat /dev/urandom`, WebKitGTK compositor stalls during
+tab switch, or garbage collection pauses), the terminal freezes while the
+backend continues emitting events the frontend cannot process.
+
+P-HT-2 (adaptive debounce) adjusts the timer interval between 12 ms and
+100 ms based on how long `emit()` takes, but it cannot distinguish "emit was
+fast because the WebView queue accepted the event" from "the frontend actually
+rendered it." The missing signal is an explicit acknowledgement from the
+frontend after each paint.
+
+## Decision
+
+Adopt a per-pane `Arc<AtomicU64>` frame-ack mechanism with two-stage
+escalation.
+
+The frontend calls a new `frame_ack` IPC command after each
+`flushRafQueue()` paint cycle. The backend's Task 2 reads the stored
+timestamp on each timer tick to determine how stale the last ack is, and
+escalates its coalescing strategy accordingly.
+
+## Options evaluated
+
+### Option A — `Arc<AtomicU64>` advisory timestamp — SELECTED
+
+Each `PaneSession` holds an `Arc<AtomicU64>` storing the last ack timestamp
+(milliseconds since epoch). The `frame_ack` command handler writes the
+current timestamp with `Relaxed` ordering. Task 2 reads the timestamp with
+`Relaxed` ordering in the timer arm, computes the ack age, and applies the
+escalation policy.
+
+**Pros:**
+
+- No additional wakeup mechanism — Task 2 already wakes on the timer tick
+  and the channel receive. The ack timestamp is an advisory read, not a new
+  `select!` branch.
+- Matches the existing `write_epoch` pattern used in `PreferencesStore`
+  (§7.6.1 of the architecture): an `AtomicU64` counter read on a periodic
+  check, with no cross-task synchronization beyond the atomic.
+- Minimal structural change to the coalescer: the timer arm gains a
+  conditional branch, not a new select arm.
+- `Relaxed` ordering is sufficient: the timestamp is advisory. A stale read
+  (one tick behind) causes at most one extra debounce cycle at the higher
+  interval — no correctness issue.
+
+**Cons:**
+
+- Per-pane `Arc<AtomicU64>` adds one 8-byte allocation per pane session. Negligible.
+- `SystemTime` is not monotonic — backward NTP jumps could cause a spurious
+  stale-ack detection. Mitigated by using `saturating_sub` on the duration
+  computation (see Design Details).
+
+### Option B — `tokio::sync::watch` channel — REJECTED
+
+A `watch` channel per pane, where the frontend ack sends a unit value and
+Task 2 subscribes.
+
+Rejected because it adds a third `select!` branch to Task 2 (alongside the
+MPSC channel and the interval timer), changing the coalescer structure. The
+watch receiver's `changed()` method requires `&mut self`, which complicates
+borrow patterns in the existing `select!` macro. The advisory atomic read is
+simpler and achieves the same goal — Task 2 does not need to wake on ack
+arrival; it checks ack staleness on the timer tick it was already going to
+take.
+
+### Option C — New MPSC channel (frontend → backend ack stream) — REJECTED
+
+A dedicated bounded MPSC channel per pane for ack messages, with Task 2
+receiving on it as a third `select!` branch.
+
+Rejected for the same structural reason as Option B (third `select!` branch).
+Additionally, an MPSC channel allocates a fixed-capacity buffer (even if
+only one value is ever in-flight), which is wasteful for a single-timestamp
+signal. The atomic is the right primitive for "latest value wins" semantics.
+
+## Design details
+
+### Constants
+
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `ACK_STALE` | 200 ms | 2x margin over observed WebKitGTK compositor stalls (~100 ms). Below this threshold, the frontend is keeping up — no intervention needed. |
+| `ACK_STALE_DEBOUNCE` | 250 ms | Debounce interval applied when ack age exceeds `ACK_STALE`. Significantly slower than the normal adaptive range (12–100 ms), giving the frontend time to catch up without dropping data. |
+| `ACK_DROP` | 1000 ms | Threshold for entering drop mode. Above observed WebKitGTK tab-switch rAF blocking (200–500 ms). If the frontend has not painted for 1 second, it is likely invisible or severely stalled — continuing to emit cell diffs wastes IPC bandwidth and WebView queue capacity. |
+
+### Two-stage escalation
+
+**Stage 1 (ack age > ACK_STALE, ≤ ACK_DROP):** the debounce interval is
+escalated from its current adaptive value (12–100 ms) to `ACK_STALE_DEBOUNCE`
+(250 ms). All events are still emitted — no data is lost. The effect is a
+4–20x reduction in event rate, giving the frontend breathing room.
+
+**Stage 2 (ack age > ACK_DROP):** dirty cell updates are dropped entirely.
+Non-visual events are preserved: mode changes, cursor shape, bell, OSC 52,
+title, and CWD updates. These are low-frequency and semantically important
+(e.g., a mode change affects keyboard encoding; a bell triggers a
+notification). `cursor_moved` is also dropped in Stage 2 — acceptable because
+the full-redraw on exit from drop mode will resync the cursor position.
+
+**Drop → normal transition:** when the ack age drops below `ACK_STALE`
+(frontend resumed painting), a full-redraw flag is set on the next emission.
+This forces the frontend to re-render the entire grid, resyncing any cells
+that were dropped during Stage 2.
+
+### Clock handling
+
+`SystemTime::now()` is used for both the frontend ack timestamp and the
+backend staleness check. `SystemTime` is not monotonic — backward NTP
+adjustments could produce a negative duration. The backend computes ack age
+as:
+
+```rust
+let age = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis() as u64
+    .saturating_sub(last_ack_ms);
+```
+
+`saturating_sub` ensures a backward jump produces age 0 (treated as
+"just acked"), which is the safe default — the backend does not escalate on a
+clock anomaly.
+
+### CPR/DSR path
+
+The immediate-flush path for CPR (Cursor Position Report) and DSR (Device
+Status Report) responses is completely unaffected by the frame-ack mechanism.
+These responses are written directly to the PTY master fd from within the VT
+processor, bypassing the coalescer entirely. Frame-ack staleness has no
+bearing on terminal query responses.
+
+### SSH panes — known limitation
+
+`ssh_task.rs` has its own emit loop that is structurally different from the
+local PTY pipeline (no Task 1/Task 2 split, no MPSC channel). The frame-ack
+mechanism is not wired into the SSH emit path. This is a known limitation —
+SSH panes under heavy output will continue to exhibit the pre-ADR-0027
+behavior (adaptive debounce only, no frontend-driven back-pressure).
+Extending frame-ack to SSH panes is deferred to a follow-up change.
+
+## Consequences
+
+**Positive:**
+
+- Closes the back-pressure loop: the backend now has a direct signal of
+  frontend rendering capacity, rather than inferring it from emit duration.
+- Prevents terminal freeze under sustained heavy output: Stage 1 slows the
+  event rate; Stage 2 drops visual-only updates, preventing unbounded WebView
+  queue growth.
+- Full-redraw on drop exit guarantees visual consistency — the frontend grid
+  is never permanently stale after a drop period.
+- Minimal structural impact on the coalescer: one `AtomicU64` read and a
+  conditional branch in the timer arm. No new `select!` branches, no new
+  channels.
+
+**Negative / risks:**
+
+- ~60 IPC round-trips/s per active pane (one `frame_ack` call per rAF cycle
+  at 60 Hz). This is comparable to `send_input` frequency during active
+  typing and well within Tauri's IPC throughput budget.
+- `SystemTime` non-monotonicity: mitigated by `saturating_sub` (see Clock
+  handling above), but a large forward NTP jump could cause a false
+  escalation. In practice, NTP adjustments are small (< 100 ms) and
+  infrequent.
+- SSH panes are not covered. Users with SSH sessions under heavy output will
+  not benefit from frame-ack until the follow-up change.
+- The `frame_ack` command is a fire-and-forget call with no return value. If
+  the command fails (e.g., invalid pane ID after close), the failure is
+  silently ignored — this is acceptable because the ack is advisory.

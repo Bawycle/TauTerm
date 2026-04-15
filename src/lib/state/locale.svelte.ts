@@ -14,8 +14,7 @@ import {
   getLocale as paraglideGetLocale,
   overwriteGetLocale,
 } from '$lib/paraglide/runtime';
-import { getPreferences, updatePreferences } from '$lib/ipc/commands';
-import { isTauTermError } from '$lib/ipc/errors';
+import { getPreferences, updatePreferences, isTauTermError } from '$lib/ipc';
 
 /** Supported locale codes (FS-I18N-002). */
 export type SupportedLocale = 'en' | 'fr';
@@ -97,7 +96,7 @@ export function applyLocaleChange(language: unknown): void {
 export async function initLocale(): Promise<void> {
   try {
     const prefs = await getPreferences();
-    const safe = toSupportedLocale(prefs.appearance.language);
+    const safe = toSupportedLocale(prefs.appearance?.language);
     paraglideSetLocale(safe, { reload: false });
     currentLocale = safe;
   } catch {

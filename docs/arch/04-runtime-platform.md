@@ -67,6 +67,18 @@ The backend emits `screen-update` events at the rate that PTY output arrives. At
 
 Back-pressure between the PTY read and the Tauri event system is a known performance risk (noted in ADR-0001). It requires profiling during development.
 
+**Frame-ack backpressure (ADR-0027):** the frontend calls `frame_ack(paneId)` after each `flushRafQueue()` paint cycle. Each `PaneSession` holds a per-pane `Arc<AtomicU64>` storing the last ack timestamp (ms since epoch, `Relaxed` ordering). Task 2 reads this timestamp on each timer tick and applies a two-stage escalation:
+
+| Condition | Behavior |
+|-----------|----------|
+| Ack age ≤ 200 ms | Normal adaptive debounce (12–100 ms) |
+| Ack age > 200 ms (`ACK_STALE`) | Debounce escalated to 250 ms; all events still emitted |
+| Ack age > 1000 ms (`ACK_DROP`) | Dirty cell updates and `cursor_moved` dropped; non-visual events preserved (mode, cursor shape, bell, OSC 52, title, CWD) |
+
+On transition from drop mode back to normal (ack age drops below 200 ms), a full-redraw flag is set to resync the frontend grid. `SystemTime` is used with `saturating_sub` to handle backward NTP jumps safely (age saturates to 0 = "just acked"). The CPR/DSR immediate-flush path is unaffected — terminal query responses bypass the coalescer entirely.
+
+**Known limitation:** `ssh_task.rs` has its own emit loop and is not covered by frame-ack. SSH panes under heavy output continue to use adaptive debounce only (no frontend-driven back-pressure).
+
 **Resize debounce:** `resize_pane` IPC calls from `TerminalPane`'s `ResizeObserver` are debounced by the backend (`session/resize.rs`): a 16–33ms Tokio timer is reset on each incoming call; `TIOCSWINSZ` + SIGWINCH are only issued after the timer fires (FS-PTY-010). The final size is always applied.
 
 **Scroll follow semantics (`scroll.svelte.ts`):** when new output arrives on the normal screen and the user has scrolled back (viewport is not at bottom), the viewport stays at its current scroll position — it does not follow new output. A visual indicator ("new output below") is shown. The viewport follows output automatically only when already at the bottom. The user returns to the bottom via scroll action or keyboard shortcut. When on the alternate screen buffer, scroll navigation is disabled entirely (FS-SB-005).

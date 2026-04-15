@@ -3,7 +3,7 @@
 # ADR-0026 — IPC type codegen strategy
 
 **Date:** 2026-04-15
-**Status:** Accepted
+**Status:** Implemented
 
 ## Context
 
@@ -171,3 +171,26 @@ types coexist with generated types; the generated types are authoritative.
   and `collect_events![]`, generating typed TypeScript listeners alongside
   command wrappers. Both `events.ts` and `commands.ts` can be fully generated.
   The migration plan (steps 1–4) covers both.
+
+## Implementation notes (2026-04-15)
+
+All four migration PRs (A1–A4) have been completed. Deviations from the
+original plan:
+
+- **`skip_serializing_if` removal:** specta does not reflect
+  `#[serde(skip_serializing_if)]` into TypeScript optional fields. Fields
+  using this attribute were changed to always-present (non-optional) on the
+  wire, with sensible defaults. This is a minor wire-format change but avoids
+  runtime divergence between Rust serialization and TypeScript types.
+- **`#[specta(type = f64)]` for bigint-prone fields:** `usize` fields
+  (e.g. scrollback line counts, buffer sizes) are annotated with
+  `#[specta(type = f64)]` to emit `number` in TypeScript instead of `bigint`,
+  which would break existing frontend arithmetic.
+- **`#[tauri_specta(event_name = "...")]` for custom event names:** event
+  structs use this attribute to preserve the existing kebab-case event names
+  (e.g. `"session-state-changed"`) instead of the default name specta would
+  derive from the Rust type name.
+- **Emit helpers migrated to `tauri_specta::Event::emit()`:** the `emit_*`
+  wrapper functions in `events.rs` now call `event.emit(app)` instead of
+  `app.emit(EVENT_STRING, payload)`. The 16 `EVENT_*` string constants have
+  been removed — event names are now embedded in the `Event` derive.

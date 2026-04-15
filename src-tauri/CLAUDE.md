@@ -6,7 +6,7 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 
 ## Module structure
 
-- `lib.rs` — app setup: plugin registration, `generate_handler![]`, `run()` entrypoint
+- `lib.rs` — app setup: plugin registration, `ipc::make_builder().invoke_handler()`, `run()` entrypoint
 - `main.rs` — thin entrypoint delegating to `tau_term_lib::run()`
 - Module pattern: use `module_name.rs` + `module_name/` subdirectory for submodules — no `mod.rs`
 
@@ -39,10 +39,10 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 
 ## Scaling watchpoint — command registration
 
-`lib.rs::run()` currently registers 31 commands in `generate_handler![]` across 7 domain groups, with 6 `manage()` calls. This flat registration is acceptable at this scale.
+`lib.rs::run()` registers commands via `ipc::make_builder().invoke_handler()` (tauri-specta) instead of the former `generate_handler![]` macro. This builder collects all commands and events, generates TypeScript bindings, and returns a Tauri invoke handler. Currently 31 commands across 7 domain groups, with 6 `manage()` calls. This flat registration is acceptable at this scale.
 
 **Trigger for migration to Tauri plugin modules:** revisit when **any** of these conditions is met:
-- `generate_handler![]` exceeds **50 commands** (production, excluding e2e)
+- The builder exceeds **50 commands** (production, excluding e2e)
 - A **new functional domain** is added that brings its own managed state + ≥5 commands (e.g. file transfer, session recording, serial port) — this domain should be a self-contained Tauri plugin from the start
 - The `setup()` closure exceeds **~100 lines** due to inter-service wiring, making dependency resolution hard to follow
 

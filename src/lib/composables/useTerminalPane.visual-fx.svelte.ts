@@ -11,7 +11,7 @@
  * Returns state getters and trigger functions.
  */
 
-import type { BellType, NotificationChangedEvent } from '$lib/ipc/types';
+import type { BellType, NotificationChangedEvent } from '$lib/ipc';
 import type { BorderPulse } from './useTerminalPane.bell.js';
 
 export interface VisualFxOptions {

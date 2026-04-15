@@ -19,7 +19,7 @@ import type {
   PaneId,
   PaneNode,
   PaneState,
-} from '$lib/ipc/types';
+} from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Reactive state — module-level singleton
@@ -64,7 +64,7 @@ export function applySessionDelta(change: SessionStateChangedEvent): void {
 
     case 'tabClosed':
       sessionState.tabs = sessionState.tabs.filter((t) => t.id !== change.closedTabId);
-      if (change.activeTabId !== undefined) {
+      if (change.activeTabId != null) {
         sessionState.activeTabId = change.activeTabId;
       } else if (sessionState.tabs.length === 0) {
         sessionState.activeTabId = '';

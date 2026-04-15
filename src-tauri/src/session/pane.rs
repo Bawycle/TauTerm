@@ -10,6 +10,7 @@
 //! and the `PtyTaskHandle` that drives the async read loop.
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -22,7 +23,7 @@ use crate::ssh::connection::SshChannelArc;
 use crate::vt::VtProcessor;
 
 /// Serializable pane state — sent to the frontend via IPC.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PaneState {
     pub pane_id: PaneId,
@@ -34,14 +35,15 @@ pub struct PaneState {
     /// SSH session state. `None` for local PTY panes.
     pub ssh_state: Option<SshLifecycleState>,
     /// Current scroll offset in scrollback lines (0 = bottom/live view).
+    #[specta(type = f64)]
     pub scroll_offset: i64,
     /// Current working directory as reported by OSC 7. `None` until the shell
     /// sends the first CWD notification.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub cwd: Option<String>,
     /// User-defined label. `None` until the user sets one.
     /// Serialized as `label`; overrides the auto-derived title.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub label: Option<String>,
 }
 
@@ -72,6 +74,10 @@ pub struct PaneSession {
     /// `SshConnectionConfig.allow_osc52_write` override and must not be overwritten
     /// by global preference propagation (arch §8.2).
     pub osc52_overridden: bool,
+    /// Last frame-ack timestamp from the frontend (ms since Unix epoch).
+    /// Initialized to pane creation time. Updated by `frame_ack` command.
+    /// Task 2 reads this with Relaxed ordering to detect frontend overload.
+    pub last_frame_ack_ms: Arc<AtomicU64>,
 }
 
 impl PaneSession {
@@ -112,6 +118,12 @@ impl PaneSession {
             ssh_task: None,
             scroll_offset: 0,
             osc52_overridden: false,
+            last_frame_ack_ms: Arc::new(AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            )),
             id,
         }
     }

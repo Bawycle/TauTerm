@@ -9,6 +9,7 @@ use crate::error::TauTermError;
 use crate::preferences::PreferencesStore;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn mark_context_menu_used(
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<(), TauTermError> {

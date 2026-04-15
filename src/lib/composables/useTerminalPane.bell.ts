@@ -12,7 +12,7 @@
  * be exercised in plain unit tests without a Svelte compilation context.
  */
 
-import type { BellType, NotificationChangedEvent } from '$lib/ipc/types';
+import type { BellType, NotificationChangedEvent } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Types for mutable state boxes passed by the composable

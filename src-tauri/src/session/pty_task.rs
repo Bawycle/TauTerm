@@ -156,7 +156,10 @@ mod tests {
 
     use parking_lot::RwLock;
 
-    use super::reader::{DEBOUNCE_MAX, DEBOUNCE_MIN, next_debounce};
+    use super::reader::{
+        ACK_DROP_THRESHOLD_MS, ACK_STALE_DEBOUNCE, ACK_STALE_THRESHOLD_MS, DEBOUNCE_MAX,
+        DEBOUNCE_MIN, next_debounce, now_ms,
+    };
     use super::{ProcessOutput, build_screen_update_event};
     use crate::events::types::{CursorState, ScreenUpdateEvent};
     use crate::session::ids::PaneId;
@@ -589,6 +592,152 @@ mod tests {
         assert!(
             json.contains("\"scrollOffset\":42"),
             "expected \"scrollOffset\":42 in {json}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-001 — now_ms returns a reasonable value
+    // -----------------------------------------------------------------------
+
+    /// `now_ms()` returns a timestamp in the expected range (after 2024-01-01).
+    #[test]
+    fn now_ms_returns_reasonable_value() {
+        let ts = now_ms();
+        // 2024-01-01T00:00:00Z in ms
+        let jan_2024_ms: u64 = 1_704_067_200_000;
+        assert!(
+            ts > jan_2024_ms,
+            "now_ms() = {ts} should be after 2024-01-01 ({jan_2024_ms})"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-002 — ack threshold ordering
+    // -----------------------------------------------------------------------
+
+    /// Stage 1 threshold must be less than Stage 2 threshold.
+    #[test]
+    fn ack_thresholds_ordered_correctly() {
+        assert!(
+            ACK_STALE_THRESHOLD_MS < ACK_DROP_THRESHOLD_MS,
+            "Stale threshold ({ACK_STALE_THRESHOLD_MS}) must be < drop threshold ({ACK_DROP_THRESHOLD_MS})"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-003 — stale debounce exceeds max adaptive debounce
+    // -----------------------------------------------------------------------
+
+    /// The stale-mode debounce must be larger than `DEBOUNCE_MAX`, otherwise
+    /// entering stale mode would not actually slow down emission.
+    #[test]
+    fn ack_stale_debounce_exceeds_adaptive_max() {
+        assert!(
+            ACK_STALE_DEBOUNCE > DEBOUNCE_MAX,
+            "ACK_STALE_DEBOUNCE ({ACK_STALE_DEBOUNCE:?}) must exceed DEBOUNCE_MAX ({DEBOUNCE_MAX:?})"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-004 — drop mode suppresses dirty-only ProcessOutput
+    // -----------------------------------------------------------------------
+
+    /// Simulates Stage 2 behavior: clearing `dirty` and `needs_immediate_flush`
+    /// on a dirty-only `ProcessOutput` makes it empty (no emit).
+    #[test]
+    fn drop_mode_suppresses_dirty_only_output() {
+        use crate::vt::DirtyRegion;
+
+        let mut pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: true,
+                cursor_moved: true,
+            },
+            ..Default::default()
+        };
+        assert!(
+            !pending.is_empty(),
+            "pending should not be empty before drop"
+        );
+
+        // Simulate Stage 2 suppression.
+        pending.dirty = DirtyRegion::default();
+        pending.needs_immediate_flush = false;
+
+        assert!(
+            pending.is_empty(),
+            "dirty-only pending should be empty after Stage 2 suppression"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-005 — drop mode preserves non-visual events
+    // -----------------------------------------------------------------------
+
+    /// Stage 2 clears dirty but preserves non-visual events (title, bell, etc.).
+    #[test]
+    fn drop_mode_preserves_non_visual_events() {
+        use crate::vt::DirtyRegion;
+
+        let mut pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: true,
+                cursor_moved: false,
+            },
+            new_title: Some("test title".to_string()),
+            bell: true,
+            mode_changed: true,
+            ..Default::default()
+        };
+
+        // Simulate Stage 2 suppression.
+        pending.dirty = DirtyRegion::default();
+        pending.needs_immediate_flush = false;
+
+        assert!(
+            !pending.is_empty(),
+            "pending with non-visual events should NOT be empty after Stage 2"
+        );
+        assert!(pending.bell);
+        assert!(pending.mode_changed);
+        assert_eq!(pending.new_title.as_deref(), Some("test title"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-006 — exit from drop mode forces full redraw
+    // -----------------------------------------------------------------------
+
+    /// When `was_in_drop_mode` is true and current ack is fresh,
+    /// `is_full_redraw` must be set.
+    #[test]
+    fn exit_drop_mode_forces_full_redraw() {
+        use crate::vt::DirtyRegion;
+
+        let mut pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: false,
+                cursor_moved: true,
+            },
+            ..Default::default()
+        };
+
+        // Simulate exit from drop mode.
+        let was_in_drop_mode = true;
+        let in_drop_mode = false;
+
+        if in_drop_mode {
+            pending.dirty = DirtyRegion::default();
+            pending.needs_immediate_flush = false;
+        } else if was_in_drop_mode {
+            pending.dirty.is_full_redraw = true;
+        }
+
+        assert!(
+            pending.dirty.is_full_redraw,
+            "exiting drop mode must force is_full_redraw"
         );
     }
 }

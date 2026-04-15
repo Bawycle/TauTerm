@@ -9,7 +9,7 @@ import {
   buildGridFromSnapshot,
   applyUpdates,
 } from './screen.js';
-import type { SnapshotCell, CellUpdate, CellAttrsDto } from '$lib/ipc/types';
+import type { SnapshotCell, CellUpdate, CellAttrsDto } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -27,6 +27,10 @@ function makeSnapshotCell(overrides: Partial<SnapshotCell> = {}): SnapshotCell {
     inverse: false,
     hidden: false,
     strikethrough: false,
+    fg: null,
+    bg: null,
+    underlineColor: null,
+    hyperlink: null,
     ...overrides,
   };
 }

@@ -124,8 +124,11 @@ fn sec_cred_004_ssh_connection_config_identity_file_skipped_when_none() {
     };
 
     let json = serde_json::to_string(&config).expect("serialize failed");
+    // `skip_serializing_if` was removed to enable tauri-specta codegen.
+    // `None` now serializes as `"identityFile":null` — verify it does not
+    // contain a real path value (the security property this test guards).
     assert!(
-        !json.contains("identityFile"),
-        "identityFile field must be omitted when None (skip_serializing_if)"
+        !json.contains("identityFile\":\"/"),
+        "identityFile must not contain a filesystem path when None; got: {json}"
     );
 }

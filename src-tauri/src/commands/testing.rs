@@ -25,6 +25,7 @@ use crate::session::registry::SessionRegistry;
 /// variants. A plain `String` is acceptable here as a deliberate exception to
 /// the IPC error typing rule.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_pty_output(
     pane_id: PaneId,
     data: Vec<u8>,
@@ -83,6 +84,7 @@ impl SshFailureRegistry {
 /// clicking "Open in new tab" once — exactly one failure is injected, which
 /// is enough to exercise the rollback path in `handleConnectionOpen`.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_ssh_failure(
     count: u32,
     failure_registry: State<'_, Arc<SshFailureRegistry>>,
@@ -121,6 +123,7 @@ pub fn consume_ssh_connect_delay() -> Option<u64> {
 /// Single-shot: consumed (zeroed) the first time `connect_task` runs after
 /// this is set.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_ssh_delay(delay_ms: u64) -> Result<(), String> {
     SSH_CONNECT_DELAY_MS.store(delay_ms, std::sync::atomic::Ordering::SeqCst);
     Ok(())
@@ -139,6 +142,7 @@ pub async fn inject_ssh_delay(delay_ms: u64) -> Result<(), String> {
 /// and removes the overlay.  Any subsequent `Disconnected` emitted by the
 /// connect_task when it eventually times out is a no-op (idempotent state).
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_ssh_disconnect(
     pane_id: crate::session::ids::PaneId,
     ssh_manager: tauri::State<'_, std::sync::Arc<crate::ssh::SshManager>>,
@@ -180,6 +184,7 @@ pub async fn inject_ssh_disconnect(
 /// call returns `NoPendingCredentials`, which is silently swallowed by the
 /// `catch {}` in the frontend handler.  The dialog correctly closes.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_credential_prompt(
     pane_id: crate::session::ids::PaneId,
     host: String,
@@ -215,6 +220,7 @@ pub async fn inject_credential_prompt(
 /// Used by E2E tests to exercise the "process exited" UI path (overlay, restart
 /// button, etc.) without requiring a real process to die.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_pane_exit(
     pane_id: PaneId,
     exit_code: i32,
@@ -264,6 +270,7 @@ pub async fn inject_pane_exit(
 /// Call `inject_foreground_process` with an empty `process_name` to clear the
 /// injection and restore the real `tcgetpgrp` behaviour.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_foreground_process(
     pane_id: PaneId,
     process_name: String,

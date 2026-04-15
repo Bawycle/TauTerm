@@ -20,7 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { mergeScreenUpdates } from '$lib/terminal/screen';
-import type { ScreenUpdateEvent, CellUpdate, CursorState } from '$lib/ipc/types';
+import type { ScreenUpdateEvent, CellUpdate, CursorState } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Factory helpers

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
@@ -15,6 +16,8 @@ use crate::events::{
 use crate::session::ids::PaneId;
 use crate::session::registry::SessionRegistry;
 use crate::vt::VtProcessor;
+
+use crate::vt::DirtyRegion;
 
 use super::emitter::emit_all_pending;
 use super::{ProcessOutput, PtyTaskHandle};
@@ -34,6 +37,22 @@ const DEBOUNCE_SCALE: f64 = 1.2;
 /// shrinks the debounce interval back toward `DEBOUNCE_MIN` when the PTY
 /// is quiet, ensuring low latency for interactive use after a burst.
 const DEBOUNCE_DECAY: f64 = 0.5;
+
+/// Ack age above which debounce is escalated (Stage 1).
+pub(crate) const ACK_STALE_THRESHOLD_MS: u64 = 200;
+
+/// Debounce interval during stale-ack mode.
+pub(crate) const ACK_STALE_DEBOUNCE: Duration = Duration::from_millis(250);
+
+/// Ack age above which dirty updates are dropped (Stage 2).
+pub(crate) const ACK_DROP_THRESHOLD_MS: u64 = 1000;
+
+pub(crate) fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 /// Compute the next debounce interval from the measured emit duration.
 ///
@@ -63,6 +82,7 @@ pub fn spawn_pty_read_task(
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
     writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
     registry: Arc<SessionRegistry>,
+    last_frame_ack_ms: Arc<AtomicU64>,
 ) -> PtyTaskHandle {
     // Bounded channel: back-pressure to PTY kernel when Task 2 is slow.
     // INVARIANT: the VtProcessor write-lock is always released before blocking_send,
@@ -194,11 +214,13 @@ pub fn spawn_pty_read_task(
     let vt_e = vt.clone();
     let app_e = app.clone();
     let registry_e = registry.clone();
+    let ack_ms_e = last_frame_ack_ms;
     let mut rx_e = rx;
 
     let emit_task = tauri::async_runtime::spawn(async move {
         let mut pending = ProcessOutput::default();
         let mut current_debounce = DEBOUNCE_MIN;
+        let mut was_in_drop_mode = false;
         let sleep_fut = tokio::time::sleep(current_debounce);
         tokio::pin!(sleep_fut);
 
@@ -262,19 +284,49 @@ pub fn spawn_pty_read_task(
                     while let Ok(output) = rx_e.try_recv() {
                         pending.merge(output);
                     }
+
+                    // P-HT-6: frame-ack backpressure.
+                    let ack_age_ms = now_ms().saturating_sub(ack_ms_e.load(Ordering::Relaxed));
+                    let in_drop_mode = ack_age_ms > ACK_DROP_THRESHOLD_MS;
+                    let in_stale_mode = ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
                     if !pending.is_empty() {
-                        let emit_duration = emit_all_pending(
-                            &app_e,
-                            &pane_id_e,
-                            &vt_e,
-                            &registry_e,
-                            &mut pending,
-                        );
-                        current_debounce = next_debounce(emit_duration);
+                        if in_drop_mode {
+                            // Stage 2: suppress dirty cell updates + cursor_moved.
+                            // Non-visual events preserved: mode_changed, new_cursor_shape,
+                            // bell, osc52, new_title, new_cwd.
+                            pending.dirty = DirtyRegion::default();
+                            pending.needs_immediate_flush = false;
+                        } else if was_in_drop_mode {
+                            // Exiting drop mode: frontend grid is stale. Force full redraw.
+                            pending.dirty.is_full_redraw = true;
+                        }
+
+                        if !pending.is_empty() {
+                            let emit_duration = emit_all_pending(
+                                &app_e,
+                                &pane_id_e,
+                                &vt_e,
+                                &registry_e,
+                                &mut pending,
+                            );
+                            current_debounce = if in_stale_mode {
+                                ACK_STALE_DEBOUNCE
+                            } else {
+                                next_debounce(emit_duration)
+                            };
+                        } else {
+                            // All content was dirty-only and was dropped.
+                            pending = ProcessOutput::default();
+                        }
                     } else {
                         // Idle tick: exponential decay toward minimum.
+                        // No stale escalation on idle ticks.
                         current_debounce = DEBOUNCE_MIN.max(current_debounce.mul_f64(DEBOUNCE_DECAY));
                     }
+
+                    was_in_drop_mode = in_drop_mode;
+
                     // Always re-arm after timer fires.
                     sleep_fut.as_mut().reset(tokio::time::Instant::now() + current_debounce);
                 }

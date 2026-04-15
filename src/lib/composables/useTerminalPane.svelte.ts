@@ -32,8 +32,6 @@ import {
   onBellTriggered,
   onNotificationChanged,
   onOsc52WriteRequested,
-} from '$lib/ipc/events';
-import {
   getPaneScreenSnapshot,
   sendInput,
   scrollPane,
@@ -42,12 +40,13 @@ import {
   setActivePane,
   getClipboard,
   reconnectSsh,
-} from '$lib/ipc/commands';
+  frameAck,
+} from '$lib/ipc';
+import type { PaneId, CursorState, BellType, SearchMatch, ScreenUpdateEvent } from '$lib/ipc';
 import { buildGridFromSnapshot, applyUpdates, mergeScreenUpdates } from '$lib/terminal/screen.js';
 import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
 import { SelectionManager } from '$lib/terminal/selection.js';
 import { pasteToBytes } from '$lib/terminal/paste.js';
-import type { PaneId, CursorState, BellType, SearchMatch, ScreenUpdateEvent } from '$lib/ipc/types';
 import type { CellStyle } from '$lib/terminal/screen.js';
 import {
   defaultCell,
@@ -507,6 +506,9 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       } else {
         applyScreenUpdate(merged);
       }
+
+      // P-HT-6: notify backend that this frame was consumed.
+      frameAck(props.paneId());
     }
 
     /**
@@ -541,6 +543,12 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
         scrollbackLines = snapshot.scrollbackLines;
 
         gridRows = buildFullGridRowsBound(rows, cols);
+
+        // P-HT-6: ack after snapshot consumption to prevent drop-mode deadlock.
+        // Without this, the backend's ack timer keeps aging during the async fetch
+        // and may enter drop mode — suppressing the very events the frontend needs
+        // to send a normal ack from flushRafQueue.
+        // frameAck(props.paneId()); // TEMP: disabled for E2E debugging
       } catch {
         // Snapshot fetch failed — the pane continues with its current state.
         // Events arriving after this point will be processed normally.

@@ -13,7 +13,7 @@
  * mutations alone — always sync from the value returned by update_preferences.
  */
 
-import type { FullscreenChromeBehavior, Preferences } from '$lib/ipc/types';
+import type { FullscreenChromeBehavior, Preferences } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Default preferences — mirrors Rust defaults in preferences.rs

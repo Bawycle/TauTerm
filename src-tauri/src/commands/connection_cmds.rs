@@ -19,6 +19,7 @@ use crate::session::ids::ConnectionId;
 use crate::ssh::SshConnectionConfig;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_connections(
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<Vec<SshConnectionConfig>, TauTermError> {
@@ -45,6 +46,7 @@ pub(crate) const MAX_PASSWORD_LEN: usize = 4096;
 const MAX_HOSTNAME_LEN: usize = 253;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn save_connection(
     config: SshConnectionConfig,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
@@ -82,6 +84,7 @@ pub async fn save_connection(
 /// The IPC spec table lists `ConnectionId` as the return type, but returning the full
 /// config is strictly better UX and avoids a redundant `get_connections` call.
 #[tauri::command]
+#[specta::specta]
 pub async fn duplicate_connection(
     connection_id: ConnectionId,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
@@ -105,6 +108,7 @@ pub async fn duplicate_connection(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn delete_connection(
     connection_id: ConnectionId,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
@@ -129,6 +133,7 @@ pub async fn delete_connection(
 /// (keychain daemon may be unavailable), but are reported as typed errors so the
 /// caller can decide.
 #[tauri::command]
+#[specta::specta]
 pub async fn store_connection_password(
     connection_id: ConnectionId,
     username: String,

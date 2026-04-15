@@ -23,7 +23,7 @@
   import SshConnectingOverlay from './SshConnectingOverlay.svelte';
   import SshDeprecatedAlgorithmBanner from './SshDeprecatedAlgorithmBanner.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { SshLifecycleState } from '$lib/ipc/types';
+  import type { SshLifecycleState } from '$lib/ipc';
 
   interface Props {
     deprecatedAlgorithm: string | null;

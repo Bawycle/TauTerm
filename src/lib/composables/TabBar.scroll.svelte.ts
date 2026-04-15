@@ -10,7 +10,7 @@
  */
 
 import { onMount, onDestroy } from 'svelte';
-import type { TabState, PaneNotification } from '$lib/ipc/types';
+import type { TabState, PaneNotification } from '$lib/ipc';
 
 // Fixed width of each scroll arrow button — must match CSS .tab-bar__scroll-arrow { width: 24px }.
 const SCROLL_ARROW_WIDTH = 24;

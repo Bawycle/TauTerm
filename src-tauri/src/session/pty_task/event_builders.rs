@@ -205,14 +205,14 @@ pub fn build_scrolled_viewport_event(
     let blank_attrs = CellAttrsDto {
         fg: None,
         bg: None,
-        bold: false,
-        dim: false,
-        italic: false,
-        underline: 0,
-        blink: false,
-        inverse: false,
-        hidden: false,
-        strikethrough: false,
+        bold: None,
+        dim: None,
+        italic: None,
+        underline: None,
+        blink: None,
+        inverse: None,
+        hidden: None,
+        strikethrough: None,
         underline_color: None,
     };
 
@@ -327,14 +327,18 @@ fn snapshot_cell_to_attrs_dto(
     CellAttrsDto {
         fg: cell.fg.map(color_to_dto),
         bg: cell.bg.map(color_to_dto),
-        bold: cell.bold,
-        dim: cell.dim,
-        italic: cell.italic,
-        underline: cell.underline,
-        blink: cell.blink,
-        inverse: cell.inverse,
-        hidden: cell.hidden,
-        strikethrough: cell.strikethrough,
+        bold: if cell.bold { Some(true) } else { None },
+        dim: if cell.dim { Some(true) } else { None },
+        italic: if cell.italic { Some(true) } else { None },
+        underline: if cell.underline != 0 {
+            Some(cell.underline)
+        } else {
+            None
+        },
+        blink: if cell.blink { Some(true) } else { None },
+        inverse: if cell.inverse { Some(true) } else { None },
+        hidden: if cell.hidden { Some(true) } else { None },
+        strikethrough: if cell.strikethrough { Some(true) } else { None },
         underline_color: cell.underline_color.map(color_to_dto),
     }
 }
@@ -347,14 +351,22 @@ fn cell_attrs_to_dto(attrs: &crate::vt::cell::CellAttrs) -> crate::events::types
     CellAttrsDto {
         fg: attrs.fg.map(cell_color_to_dto),
         bg: attrs.bg.map(cell_color_to_dto),
-        bold: attrs.bold,
-        dim: attrs.dim,
-        italic: attrs.italic,
-        underline: attrs.underline,
-        blink: attrs.blink,
-        inverse: attrs.inverse,
-        hidden: attrs.hidden,
-        strikethrough: attrs.strikethrough,
+        bold: if attrs.bold { Some(true) } else { None },
+        dim: if attrs.dim { Some(true) } else { None },
+        italic: if attrs.italic { Some(true) } else { None },
+        underline: if attrs.underline != 0 {
+            Some(attrs.underline)
+        } else {
+            None
+        },
+        blink: if attrs.blink { Some(true) } else { None },
+        inverse: if attrs.inverse { Some(true) } else { None },
+        hidden: if attrs.hidden { Some(true) } else { None },
+        strikethrough: if attrs.strikethrough {
+            Some(true)
+        } else {
+            None
+        },
         underline_color: attrs.underline_color.map(cell_color_to_dto),
     }
 }

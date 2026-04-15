@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// Supported UI languages. Extend this enum when adding new locales.
 /// This type is used across IPC — it MUST NOT be replaced with a plain `String`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum Language {
     #[default]

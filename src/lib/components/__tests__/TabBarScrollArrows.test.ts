@@ -35,7 +35,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import TabBarWithProvider from './TabBarWithProvider.svelte';
-import type { TabState, PaneState } from '$lib/ipc/types';
+import type { TabState, PaneState } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Part 1 — Pure logic (mirror of updateScrollState, no DOM)
@@ -350,19 +350,18 @@ describe('TBTC-SCR-008: newTabBtn width reduces available space for tabs', () =>
 
 function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }
 
 function makeTab(id: string, order: number = 0, overrides: Partial<TabState> = {}): TabState {
-  const pane = makePaneState({ id: `pane-${id}` });
+  const pane = makePaneState({ paneId: `pane-${id}` });
   return {
     id,
     label: null,

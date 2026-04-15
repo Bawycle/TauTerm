@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { TabState, PaneState, PaneNode } from '$lib/ipc/types';
+import type { TabState, PaneState, PaneNode } from '$lib/ipc';
 
 // We need to import the module freshly in each test group to reset $state.
 // Svelte 5 module-level $state is shared across tests in the same worker;
@@ -21,19 +21,18 @@ import type { TabState, PaneState, PaneNode } from '$lib/ipc/types';
 
 function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }
 
 function makeLeafNode(paneId = 'pane-1', state?: PaneState): PaneNode {
-  return { type: 'leaf', paneId, state: state ?? makePaneState({ id: paneId }) };
+  return { type: 'leaf', paneId, state: state ?? makePaneState({ paneId }) };
 }
 
 function makeTab(overrides: Partial<TabState> = {}): TabState {
@@ -153,11 +152,11 @@ describe('session.svelte.ts — applySessionDelta', () => {
 
   it('paneMetadataChanged: updates processTitle in layout leaf', async () => {
     const { setInitialSession, applySessionDelta, sessionState } = await import('./session.svelte');
-    const pane = makePaneState({ id: 'pane-1', processTitle: 'initial' });
+    const pane = makePaneState({ paneId: 'pane-1', processTitle: 'initial' });
     const tab = makeTab({ id: 'tab-1', layout: makeLeafNode('pane-1', pane) });
     setInitialSession({ tabs: [tab], activeTabId: 'tab-1' });
 
-    const updatedPane = makePaneState({ id: 'pane-1', processTitle: 'zsh — ~/projects' });
+    const updatedPane = makePaneState({ paneId: 'pane-1', processTitle: 'zsh — ~/projects' });
     const updatedTab = { ...tab, layout: makeLeafNode('pane-1', updatedPane) };
     applySessionDelta({ type: 'paneMetadataChanged', tab: updatedTab });
 

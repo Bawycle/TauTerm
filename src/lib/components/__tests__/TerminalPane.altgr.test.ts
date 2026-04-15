@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
 import * as tauriEvent from '@tauri-apps/api/event';
-import * as ipcCommands from '$lib/ipc/commands';
+import * as ipcCommands from '$lib/ipc';
 
 // Stub ResizeObserver (not available in jsdom)
 if (!globalThis.ResizeObserver) {

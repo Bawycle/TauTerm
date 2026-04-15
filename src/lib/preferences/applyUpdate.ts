@@ -15,7 +15,7 @@
  * Error handling is intentionally left to the caller.
  */
 
-import type { Preferences, PreferencesPatch } from '$lib/ipc/types';
+import type { Preferences, PreferencesPatch } from '$lib/ipc';
 
 /**
  * Apply a preferences patch via IPC and sync the locale from the backend result.
@@ -35,6 +35,6 @@ export async function applyPreferencesUpdate(
   applyLocale: (language: unknown) => void,
 ): Promise<Preferences> {
   const result = await invoker('update_preferences', { patch });
-  applyLocale(result.appearance.language);
+  applyLocale(result.appearance?.language);
   return result;
 }

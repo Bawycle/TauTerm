@@ -13,9 +13,13 @@
   import Dropdown from '$lib/ui/Dropdown.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { FullscreenChromeBehavior, Preferences, PreferencesPatch } from '$lib/ipc/types';
+  import type {
+    FullscreenChromeBehavior,
+    Preferences,
+    PreferencesPatch,
+    UserTheme,
+  } from '$lib/ipc';
   import { BUILT_IN_THEME_NAMES } from '$lib/theming/built-in-themes';
-  import type { UserTheme } from '$lib/ipc/types';
 
   interface Props {
     preferences?: Preferences;

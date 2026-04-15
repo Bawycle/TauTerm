@@ -20,7 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveAnsiColor } from './color.js';
-import type { Color } from '$lib/ipc/types';
+import type { Color } from '$lib/ipc';
 
 describe('BOLD-PROMO-001: bold + ansi 1 → promotes to index 9', () => {
   it('returns ansi index 9 (bright-red)', () => {

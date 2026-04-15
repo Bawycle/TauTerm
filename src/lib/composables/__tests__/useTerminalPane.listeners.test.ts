@@ -23,7 +23,7 @@ import type {
   CursorStyleChangedEvent,
   BellTriggeredEvent,
   CursorState,
-} from '$lib/ipc/types';
+} from '$lib/ipc';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
 
 // ---------------------------------------------------------------------------

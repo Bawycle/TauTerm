@@ -6,7 +6,7 @@ import {
   getThemeSwatch,
   BUILT_IN_THEME_NAMES,
 } from './built-in-themes';
-import type { UserTheme } from '$lib/ipc/types';
+import type { UserTheme } from '$lib/ipc';
 
 describe('isBuiltInTheme', () => {
   it('returns true for all three built-in names', () => {

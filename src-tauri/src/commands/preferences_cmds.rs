@@ -14,6 +14,7 @@ use crate::preferences::{CursorStyle, Preferences, PreferencesPatch, Preferences
 use crate::session::SessionRegistry;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_preferences(
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<Preferences, TauTermError> {
@@ -21,6 +22,7 @@ pub async fn get_preferences(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn update_preferences(
     app: AppHandle,
     patch: PreferencesPatch,
@@ -67,6 +69,7 @@ pub async fn update_preferences(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_themes(
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
 ) -> Result<Vec<UserTheme>, TauTermError> {
@@ -74,6 +77,7 @@ pub async fn get_themes(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn save_theme(
     theme: UserTheme,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,
@@ -82,6 +86,7 @@ pub async fn save_theme(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn delete_theme(
     name: String,
     prefs: State<'_, Arc<RwLock<PreferencesStore>>>,

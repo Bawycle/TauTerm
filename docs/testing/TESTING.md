@@ -60,6 +60,7 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 | `session/lifecycle.rs` | Yes | State machine transitions |
 | `session/ids.rs` | Yes | Newtype construction |
 | `session/pty_task.rs` | Yes | PTY task state machine |
+| `session/pty_task/reader.rs` | Yes | Frame-ack backpressure logic (ACK_STALE, ACK_DROP thresholds, stage transitions) |
 | `session/registry.rs` | Yes | Session registry map; separate `tests.rs` |
 | `ssh/known_hosts.rs` | Yes | File parsing — operates on `&str`; separate `tests.rs` |
 | `ssh/algorithms.rs` | Yes | String classification — pure |
@@ -117,6 +118,19 @@ Parser corpus: single-line entries, hashed hostnames, comment/blank lines, `@rev
 #### `ssh/algorithms.rs`
 
 Deprecated: `ssh-rsa` (SHA-1), `ssh-dss`. Not deprecated: `ssh-ed25519`, `ecdsa-sha2-nistp256`, `rsa-sha2-256`, `rsa-sha2-512`.
+
+#### `session/pty_task/reader.rs` — frame-ack backpressure (ADR-0027)
+
+| Test ID | Scenario |
+|---------|----------|
+| TEST-ACK-001 | Ack age ≤ 200 ms → debounce unchanged (normal adaptive range) |
+| TEST-ACK-002 | Ack age > 200 ms (ACK_STALE) → debounce escalated to 250 ms |
+| TEST-ACK-003 | Ack age > 1000 ms (ACK_DROP) → dirty cells dropped; non-visual events (mode, cursor shape, bell, OSC 52, title, CWD) preserved |
+| TEST-ACK-004 | Transition from drop mode → normal (ack resumes) → full-redraw flag set on next emission |
+| TEST-ACK-005 | Backward clock jump (simulated via direct AtomicU64 write of future timestamp) → `saturating_sub` produces age 0, no escalation |
+| TEST-ACK-006 | `cursor_moved` dropped in Stage 2, resynced by full-redraw on exit |
+
+Tests construct the coalescer state directly with a mock `AtomicU64` timestamp, feed synthetic `ProcessOutput` values, and assert on the emitted events and escalation state. No real PTY or Tauri runtime required.
 
 #### Inline vs. separate file rule
 
@@ -354,6 +368,19 @@ Pure TypeScript, no Svelte components, no DOM.
 | `lib/ipc/osc-title.ts` | OSC title event handling |
 | `lib/ipc/notification-events.ts` | Notification event listeners |
 | `lib/i18n/catalogue-parity` | en/fr catalogue key parity |
+| `lib/terminal/frame-ack.ts` | Frame-ack IPC call timing and rAF integration (ADR-0027) |
+
+#### `lib/terminal/frame-ack.ts` detail (ADR-0027)
+
+| Test ID | Scenario |
+|---------|----------|
+| ACK-FE-001 | `flushRafQueue()` completion triggers exactly one `frame_ack` invoke per pane with correct `paneId` |
+| ACK-FE-002 | No `frame_ack` call when rAF queue is empty (no pending screen-update for the pane) |
+| ACK-FE-003 | Multiple panes active → each pane receives its own `frame_ack` call (no cross-pane ack) |
+| ACK-FE-004 | `frame_ack` invoke rejection (e.g., pane closed) → error is silently ignored, no unhandled rejection |
+| ACK-FE-005 | Pane unmount → no further `frame_ack` calls for that pane ID |
+
+Mock setup: `vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))`. Tests exercise the rAF queue flush callback, asserting that `invoke('frame_ack', { paneId })` is called with correct timing and pane isolation.
 
 #### `lib/terminal/mouse.ts` detail
 

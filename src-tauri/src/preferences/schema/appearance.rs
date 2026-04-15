@@ -9,7 +9,7 @@ use crate::preferences::types::{FontFamily, ThemeName};
 // Cursor style
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum CursorStyle {
     #[default]
@@ -43,7 +43,7 @@ impl CursorStyle {
 // Bell type
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum BellType {
     /// No bell notification.
@@ -61,7 +61,7 @@ pub enum BellType {
 // Fullscreen chrome behavior
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum FullscreenChromeBehavior {
     /// Tab bar and status bar auto-hide when entering fullscreen (default).
@@ -72,7 +72,7 @@ pub enum FullscreenChromeBehavior {
 }
 
 /// Appearance-related preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppearancePrefs {
     pub font_family: FontFamily,

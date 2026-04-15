@@ -30,9 +30,10 @@
 -->
 <script lang="ts">
   import { Plus } from 'lucide-svelte';
-  import type { TabState, PaneNotification } from '$lib/ipc/types';
+  import type { TabState, PaneNotification } from '$lib/ipc';
   import * as m from '$lib/paraglide/messages';
   import { getRootPane, resolveTabTitle } from '$lib/utils/tab-title';
+  import { getPaneNotification } from '$lib/state/notifications.svelte';
   import { useTabBarScroll } from '$lib/composables/TabBar.scroll.svelte';
   import { useTabBarRename } from '$lib/composables/useTabBarRename.svelte';
   import { useTabBarDnd } from '$lib/composables/useTabBarDnd.svelte';
@@ -88,14 +89,14 @@
     return resolveTabTitle(tab) ?? m.tab_untitled();
   }
 
-  /** Active pane notification for this tab. */
+  /** Active pane notification for this tab (sourced from the notifications store). */
   function tabNotification(tab: TabState): PaneNotification | null {
-    return getRootPane(tab)?.notification ?? null;
+    return getPaneNotification(tab.activePaneId);
   }
 
   /** Is the root pane an SSH session? */
   function isSSHTab(tab: TabState): boolean {
-    return getRootPane(tab)?.sessionType === 'ssh';
+    return getRootPane(tab)?.sshState != null;
   }
 
   /** Does the tab have ≥2 panes (split layout)? */

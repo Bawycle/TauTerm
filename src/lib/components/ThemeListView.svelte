@@ -18,7 +18,7 @@
   import Dialog from '$lib/ui/Dialog.svelte';
   import { Check, Copy, Pencil, Trash2 } from 'lucide-svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { UserTheme } from '$lib/ipc/types';
+  import type { UserTheme } from '$lib/ipc';
   import { BUILT_IN_THEME_NAMES, getThemeSwatch } from '$lib/theming/built-in-themes';
 
   interface Props {

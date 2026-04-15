@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 // Shared test fixtures for component tests
 
-import type { TabState, PaneState } from '$lib/ipc/types';
+import type { TabState, PaneState } from '$lib/ipc';
 
 export function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }

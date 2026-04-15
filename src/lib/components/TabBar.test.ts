@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { TabState, PaneState, PaneNotification } from '$lib/ipc/types';
+import type { TabState, PaneState, PaneNotification } from '$lib/ipc';
 import { resolveTabTitle } from '$lib/utils/tab-title';
 
 // ---------------------------------------------------------------------------
@@ -24,13 +24,12 @@ import { resolveTabTitle } from '$lib/utils/tab-title';
 
 function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }
@@ -129,9 +128,9 @@ describe('TUITC-UX-020 to 024: activity notification types', () => {
     expect(notif.type).toBe('bell');
   });
 
-  it('null notification → no indicator', () => {
-    const pane = makePaneState({ notification: null });
-    expect(pane.notification).toBeNull();
+  it('pane with no sshState → local session', () => {
+    const pane = makePaneState();
+    expect(pane.sshState).toBeNull();
   });
 });
 

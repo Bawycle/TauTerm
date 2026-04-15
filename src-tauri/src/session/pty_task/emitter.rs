@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use parking_lot::RwLock;
 use tauri::AppHandle;
@@ -34,7 +35,8 @@ pub(super) fn emit_all_pending(
     vt: &Arc<RwLock<VtProcessor>>,
     registry: &Arc<SessionRegistry>,
     pending: &mut ProcessOutput,
-) {
+) -> Duration {
+    let t0 = Instant::now();
     // FS-NOTIF-001: background-output notification.
     if !pending.dirty.is_empty()
         && !registry.is_active_pane(pane_id)
@@ -108,4 +110,5 @@ pub(super) fn emit_all_pending(
     }
 
     *pending = ProcessOutput::default();
+    t0.elapsed()
 }

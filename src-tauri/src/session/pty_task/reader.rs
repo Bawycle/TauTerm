@@ -19,13 +19,31 @@ use crate::vt::VtProcessor;
 use super::emitter::emit_all_pending;
 use super::{ProcessOutput, PtyTaskHandle};
 
-/// Debounce window for coalescing `screen-update` events.
+/// Minimum debounce window — floor for adaptive scaling and idle decay.
+pub(crate) const DEBOUNCE_MIN: Duration = Duration::from_millis(12);
+
+/// Maximum debounce window — cap to avoid perceptible input latency.
+pub(crate) const DEBOUNCE_MAX: Duration = Duration::from_millis(100);
+
+/// Multiplier applied to the measured emit duration to compute the next
+/// debounce interval. A value slightly above 1.0 gives the frontend a
+/// comfortable margin to process the event before the next one arrives.
+const DEBOUNCE_SCALE: f64 = 1.2;
+
+/// Decay factor applied on idle ticks (no pending output). Exponentially
+/// shrinks the debounce interval back toward `DEBOUNCE_MIN` when the PTY
+/// is quiet, ensuring low latency for interactive use after a burst.
+const DEBOUNCE_DECAY: f64 = 0.5;
+
+/// Compute the next debounce interval from the measured emit duration.
 ///
-/// After processing PTY bytes, Task 2 waits up to this duration before
-/// emitting, coalescing further reads into a single event. This prevents
-/// flooding the frontend when high-volume apps write faster than the frontend
-/// can consume events (§6.5).
-const SCREEN_UPDATE_DEBOUNCE: Duration = Duration::from_millis(12);
+/// The result is `emit_duration * DEBOUNCE_SCALE`, clamped to
+/// `[DEBOUNCE_MIN, DEBOUNCE_MAX]`.
+pub(crate) fn next_debounce(emit_duration: Duration) -> Duration {
+    emit_duration
+        .mul_f64(DEBOUNCE_SCALE)
+        .clamp(DEBOUNCE_MIN, DEBOUNCE_MAX)
+}
 
 // ---------------------------------------------------------------------------
 // spawn_pty_read_task
@@ -179,9 +197,10 @@ pub fn spawn_pty_read_task(
     let mut rx_e = rx;
 
     let emit_task = tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(SCREEN_UPDATE_DEBOUNCE);
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut pending = ProcessOutput::default();
+        let mut current_debounce = DEBOUNCE_MIN;
+        let sleep_fut = tokio::time::sleep(current_debounce);
+        tokio::pin!(sleep_fut);
 
         loop {
             tokio::select! {
@@ -201,28 +220,27 @@ pub fn spawn_pty_read_task(
                                     pending.merge(more);
                                 }
                                 if !pending.is_empty() {
-                                    emit_all_pending(
+                                    let emit_duration = emit_all_pending(
                                         &app_e,
                                         &pane_id_e,
                                         &vt_e,
                                         &registry_e,
                                         &mut pending,
                                     );
-                                    // emit_all_pending resets pending to ProcessOutput::default(),
-                                    // which also clears needs_immediate_flush.
+                                    current_debounce = next_debounce(emit_duration);
                                 } else {
                                     // Nothing to emit, but clear the flag to avoid stale hints.
                                     pending.needs_immediate_flush = false;
                                 }
-                                // Start a fresh debounce window after the forced flush.
-                                interval.reset();
+                                // Re-arm sleep from now with updated period.
+                                sleep_fut.as_mut().reset(tokio::time::Instant::now() + current_debounce);
                             }
                         }
                         None => {
                             // Channel closed — Task 1 finished (EOF or error).
                             // Flush any remaining pending output before exiting.
                             if !pending.is_empty() {
-                                emit_all_pending(
+                                let _ = emit_all_pending(
                                     &app_e,
                                     &pane_id_e,
                                     &vt_e,
@@ -235,8 +253,8 @@ pub fn spawn_pty_read_task(
                     }
                 }
 
-                // Debounce timer — flush accumulated output.
-                _ = interval.tick() => {
+                // Adaptive debounce timer — flush accumulated output.
+                _ = &mut sleep_fut => {
                     // Drain any output buffered during this tick before emitting.
                     // Prevents splitting application redraw bursts (e.g. CSI 2J + redraw)
                     // across two separate screen-update events. try_recv() is non-blocking
@@ -245,14 +263,20 @@ pub fn spawn_pty_read_task(
                         pending.merge(output);
                     }
                     if !pending.is_empty() {
-                        emit_all_pending(
+                        let emit_duration = emit_all_pending(
                             &app_e,
                             &pane_id_e,
                             &vt_e,
                             &registry_e,
                             &mut pending,
                         );
+                        current_debounce = next_debounce(emit_duration);
+                    } else {
+                        // Idle tick: exponential decay toward minimum.
+                        current_debounce = DEBOUNCE_MIN.max(current_debounce.mul_f64(DEBOUNCE_DECAY));
                     }
+                    // Always re-arm after timer fires.
+                    sleep_fut.as_mut().reset(tokio::time::Instant::now() + current_debounce);
                 }
             }
         }

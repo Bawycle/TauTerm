@@ -396,10 +396,10 @@ describe('deleteConnection', () => {
 });
 
 describe('duplicateConnection', () => {
-  it('calls duplicate_connection with id', async () => {
+  it('calls duplicate_connection with connectionId', async () => {
     mockInvoke.mockResolvedValueOnce({});
     await duplicateConnection('conn-1');
-    expectInvoke('duplicate_connection', { id: 'conn-1' });
+    expectInvoke('duplicate_connection', { connectionId: 'conn-1' });
   });
 });
 

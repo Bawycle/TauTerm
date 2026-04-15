@@ -11,6 +11,8 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Sustained high-throughput output (e.g. `yes`, `seq`, large file dumps) no longer freezes the terminal or causes memory exhaustion
+- Remote clipboard write via OSC 52 now works when enabled in connection settings — previously the setting was accepted but writes were silently ignored
 - Dead key composition now works correctly on Belgian, French, and other keyboards using accented characters — typing `^` + `i` produces `î` instead of `^î`
 
 ## [0.1.0-beta.2] - 2026-04-14

@@ -24,6 +24,7 @@ import type {
   ScrollPositionChangedEvent,
   CursorStyleChangedEvent,
   BellTriggeredEvent,
+  Osc52WriteRequestedEvent,
   FullscreenStateChangedEvent,
   PreferencesChangedEvent,
 } from './types';
@@ -116,6 +117,16 @@ export function onCursorStyleChanged(
 
 export function onBellTriggered(handler: (event: BellTriggeredEvent) => void): Promise<() => void> {
   return listen<BellTriggeredEvent>('bell-triggered', (e) => handler(e.payload));
+}
+
+// ---------------------------------------------------------------------------
+// OSC 52 clipboard events
+// ---------------------------------------------------------------------------
+
+export function onOsc52WriteRequested(
+  handler: (event: Osc52WriteRequestedEvent) => void,
+): Promise<() => void> {
+  return listen<Osc52WriteRequestedEvent>('osc52-write-requested', (e) => handler(e.payload));
 }
 
 // ---------------------------------------------------------------------------

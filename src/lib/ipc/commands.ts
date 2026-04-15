@@ -177,8 +177,8 @@ export function deleteConnection(connectionId: string): Promise<void> {
   return invoke('delete_connection', { connectionId });
 }
 
-export function duplicateConnection(id: string): Promise<SshConnectionConfig> {
-  return invoke<SshConnectionConfig>('duplicate_connection', { id });
+export function duplicateConnection(connectionId: string): Promise<SshConnectionConfig> {
+  return invoke<SshConnectionConfig>('duplicate_connection', { connectionId });
 }
 
 export function storeConnectionPassword(

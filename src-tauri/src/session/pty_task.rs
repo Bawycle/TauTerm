@@ -152,9 +152,11 @@ impl Drop for PtyTaskHandle {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use parking_lot::RwLock;
 
+    use super::reader::{DEBOUNCE_MAX, DEBOUNCE_MIN, next_debounce};
     use super::{ProcessOutput, build_screen_update_event};
     use crate::events::types::{CursorState, ScreenUpdateEvent};
     use crate::session::ids::PaneId;
@@ -490,6 +492,69 @@ mod tests {
         // Third merge: flag stays set even when merging a non-flush output.
         acc.merge(ProcessOutput::default());
         assert!(acc.needs_immediate_flush);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-SB-VIEWPORT-005
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // TEST-ADPT-001
+    // -----------------------------------------------------------------------
+
+    /// Zero emit duration clamps to DEBOUNCE_MIN.
+    #[test]
+    fn next_debounce_zero_clamps_to_min() {
+        assert_eq!(next_debounce(Duration::ZERO), DEBOUNCE_MIN);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ADPT-002
+    // -----------------------------------------------------------------------
+
+    /// Emit duration below DEBOUNCE_MIN (after scaling) clamps to DEBOUNCE_MIN.
+    #[test]
+    fn next_debounce_small_clamps_to_min() {
+        assert_eq!(next_debounce(Duration::from_millis(5)), DEBOUNCE_MIN);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ADPT-003
+    // -----------------------------------------------------------------------
+
+    /// Emit duration above DEBOUNCE_MAX (after scaling) clamps to DEBOUNCE_MAX.
+    #[test]
+    fn next_debounce_large_clamps_to_max() {
+        assert_eq!(next_debounce(Duration::from_millis(200)), DEBOUNCE_MAX);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ADPT-004
+    // -----------------------------------------------------------------------
+
+    /// Mid-range emit duration scales correctly: 20ms * 1.2 = 24ms.
+    #[test]
+    fn next_debounce_scales_correctly() {
+        assert_eq!(
+            next_debounce(Duration::from_millis(20)),
+            Duration::from_millis(24)
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ADPT-005
+    // -----------------------------------------------------------------------
+
+    /// Boundary behavior near DEBOUNCE_MAX: 83ms * 1.2 = 99.6ms < 100ms,
+    /// but 84ms * 1.2 = 100.8ms clamps to 100ms.
+    #[test]
+    fn next_debounce_near_max_boundary() {
+        let d83 = next_debounce(Duration::from_millis(83));
+        assert!(d83 < DEBOUNCE_MAX);
+        assert!(d83 > DEBOUNCE_MIN);
+
+        let d84 = next_debounce(Duration::from_millis(84));
+        assert_eq!(d84, DEBOUNCE_MAX);
     }
 
     // -----------------------------------------------------------------------

@@ -419,6 +419,18 @@ export interface BellTriggeredEvent {
   paneId: PaneId;
 }
 
+/**
+ * Emitted when the terminal requests a clipboard write via OSC 52.
+ * Event name: "osc52-write-requested"
+ *
+ * Mirrors Rust Osc52WriteRequestedEvent (events/types.rs).
+ */
+export interface Osc52WriteRequestedEvent {
+  paneId: PaneId;
+  /** Decoded UTF-8 clipboard payload. */
+  data: string;
+}
+
 // ---------------------------------------------------------------------------
 // Tauri command signatures
 // Frontend→Backend commands via `invoke()`.
@@ -605,7 +617,7 @@ export interface ScreenSnapshot {
  */
 export interface SnapshotCell {
   content: string;
-  /** Cell display width: 1 for normal, 2 for wide (CJK), 0 for combining. */
+  /** Cell display width: 1 for normal, 2 for wide (CJK), 0 for phantom continuation slot (follows a wide character — leave blank). */
   width: number;
   bold: boolean;
   dim: boolean;
@@ -693,6 +705,34 @@ export type SaveConnectionCommand = (args: { config: SshConnectionConfig }) => P
  * @command delete_connection
  */
 export type DeleteConnectionCommand = (args: { connectionId: string }) => Promise<void>;
+
+/**
+ * Duplicate a saved SSH connection, returning the new connection config.
+ * @command duplicate_connection
+ */
+export type DuplicateConnectionCommand = (args: {
+  connectionId: string;
+}) => Promise<SshConnectionConfig>;
+
+/**
+ * Store a connection password in the OS keychain (SEC-CRED-004).
+ * @command store_connection_password
+ */
+export type StoreConnectionPasswordCommand = (args: {
+  connectionId: string;
+  username: string;
+  password: string;
+}) => Promise<void>;
+
+/**
+ * Provide an SSH private-key passphrase in response to a `passphrase-prompt` event.
+ * @command provide_passphrase
+ */
+export type ProvidePassphraseCommand = (args: {
+  paneId: PaneId;
+  passphrase: string;
+  saveInKeychain: boolean;
+}) => Promise<void>;
 
 /**
  * Read current preferences.

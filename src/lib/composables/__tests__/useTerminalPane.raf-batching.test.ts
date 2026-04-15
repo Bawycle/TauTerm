@@ -449,3 +449,111 @@ describe('RAF-BATCH-006: onDestroy with pending rAF cancels the animation frame'
     expect(cancelRafSpy).toHaveBeenCalledWith(42);
   });
 });
+
+// ---------------------------------------------------------------------------
+// RAF-BATCH-007: N partial events on distinct cells → single applyScreenUpdate,
+//                all cells present (P-HT-1 coalescing)
+// ---------------------------------------------------------------------------
+
+describe('RAF-BATCH-007: N partials on distinct cells → merged into one apply, all cells present', () => {
+  it('three partial events merged — all three cells visible after one rAF flush', async () => {
+    const { container } = await mountPane();
+    initGrid(4, 3);
+
+    rafSpy.mockClear();
+    rafCallback = null;
+
+    // Fire 3 events targeting distinct cells.
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 3,
+        isFullRedraw: false,
+        cells: [{ row: 0, col: 0, content: 'A', width: 1, attrs: DEFAULT_ATTRS }],
+      }),
+    );
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 3,
+        isFullRedraw: false,
+        cells: [{ row: 1, col: 1, content: 'B', width: 1, attrs: DEFAULT_ATTRS }],
+      }),
+    );
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 3,
+        isFullRedraw: false,
+        cells: [{ row: 2, col: 2, content: 'C', width: 1, attrs: DEFAULT_ATTRS }],
+      }),
+    );
+
+    // Only one rAF should be scheduled.
+    expect(rafSpy).toHaveBeenCalledTimes(1);
+
+    flushRaf();
+    await flushSync();
+
+    // All three cells must be visible.
+    expect(getCellText(container, 0, 0)).toBe('A');
+    expect(getCellText(container, 1, 1)).toBe('B');
+    expect(getCellText(container, 2, 2)).toBe('C');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RAF-BATCH-008: full-redraw followed by partial in same rAF tick →
+//                single call, grid reflects both
+// ---------------------------------------------------------------------------
+
+describe('RAF-BATCH-008: full-redraw + partial in same tick → single merged apply', () => {
+  it('full-redraw grid is established and partial overlay is applied', async () => {
+    const { container } = await mountPane();
+    initGrid(4, 3);
+
+    rafSpy.mockClear();
+    rafCallback = null;
+
+    // Full-redraw: fill entire grid with spaces (implicit from blank cells).
+    const fullCells = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) {
+        fullCells.push({ row: r, col: c, content: '.', width: 1, attrs: DEFAULT_ATTRS });
+      }
+    }
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 3,
+        isFullRedraw: true,
+        cells: fullCells,
+      }),
+    );
+
+    // Partial update on top of the full-redraw (same rAF tick).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 3,
+        isFullRedraw: false,
+        cells: [{ row: 0, col: 0, content: 'Z', width: 1, attrs: DEFAULT_ATTRS }],
+      }),
+    );
+
+    expect(rafSpy).toHaveBeenCalledTimes(1);
+
+    flushRaf();
+    await flushSync();
+
+    // The full-redraw set everything to '.', then the partial overwrote (0,0) with 'Z'.
+    expect(getCellText(container, 0, 0)).toBe('Z');
+    expect(getCellText(container, 0, 1)).toBe('.');
+    expect(getCellText(container, 1, 0)).toBe('.');
+  });
+});

@@ -28,34 +28,17 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ## Critical — Release Blockers (score 17–21)
 
-- [ ] **P-HT-1 — Coalesce rAF queue into single update per frame** `[Score: 18 | R:3, S:2, U:3, E:2]`
-  vtebench (sustained ~100 MB/s) freezes TauTerm and crashes the host. Current P-OPT-1 applies N events sequentially in one rAF callback — N `applyScreenUpdate()` calls cost O(N × cells) in proxy writes. Under vtebench, N full redraws each replace the `gridRows` reference → N complete proxy invalidation cycles. Events accumulate in WebKitGTK's IPC buffer without limit → OOM.
-  **Fix:** In `flushRafQueue()`, merge all queued `ScreenUpdateEvent` into one before calling `applyScreenUpdate()`:
-  - If any event has `isFullRedraw: true`, discard everything before the **last** full redraw (it contains complete state). Merge any partials after it.
-  - If all events are partial, merge `CellUpdate[]` arrays — last write per `(row, col)` wins.
-  - Call `applyScreenUpdate()` exactly once per frame.
-  **Files:** `src/lib/composables/useTerminalPane.svelte.ts` (`flushRafQueue`).
+*No critical items.*
 
 ---
 
 ## High Priority — Must Land in Next Release (score 13–16)
 
-- [ ] **P-HT-3 — rAF queue safety cap with snapshot re-fetch** `[Score: 15 | R:2, S:2, U:2, E:3]`
-  If `rafQueue.length > 20` at flush time, the frontend is irrecoverably behind. Drop the entire queue and re-fetch a fresh snapshot from the backend (`getPaneScreenSnapshot`). Guarantees correctness (no stale cells from dropped partials) and caps memory growth.
-  **Prerequisite:** P-HT-1 (coalescing should prevent this from ever triggering under normal high-throughput).
-  **Files:** `src/lib/composables/useTerminalPane.svelte.ts`.
-
-- [ ] **P-HT-2 — Adaptive debounce in Task 2** `[Score: 14 | R:2, S:2, U:2, E:2]`
-  Measure `emit_all_pending()` wall-clock duration. Replace fixed 12 ms interval with `max(12ms, min(last_emit_duration × 1.2, 100ms))`. Under normal load: 12 ms (83 Hz). Under vtebench: self-regulates to 30–80 ms (12–33 Hz). Must decay back to 12 ms when load decreases.
-  **Files:** `src-tauri/src/session/pty_task/reader.rs` (Task 2 loop), `src-tauri/src/session/pty_task/emitter.rs`.
+*No high-priority items.*
 
 ---
 
 ## Medium Priority — Next Release Quality Target (score 9–12)
-
-- [ ] **P-HT-4 — Skip `isSelected`/`searchMatchSet` evaluations when inactive** `[Score: 10 | R:1, S:1, U:2, E:3]`
-  When no selection is active and no search matches exist, the per-cell `isSelected(rowIdx, colIdx)` and `activeSearchMatchSet.has()` calls in the `{#each}` template are pure waste — evaluated for every cell on every reconcile. Short-circuit with a boolean guard.
-  **Files:** `src/lib/components/TerminalPaneViewport.svelte`.
 
 - [ ] **P-HT-6 — Frontend→backend flow control (frame-ack)** `[Score: 10 | R:1, S:2, U:2, E:1]`
   The backend has no knowledge of whether the frontend is consuming events. Add a `frame-ack` Tauri command: the frontend calls it after each `flushRafQueue()`. The backend tracks the last ack timestamp; if no ack for >100 ms, it increases debounce further or drops events until an ack arrives. This is the real backpressure solution (P-HT-2 is a one-sided approximation).
@@ -71,14 +54,18 @@ Items in the **Future Roadmap** section are out of scope for the current release
   **Prerequisite:** Measure actual payload sizes under vtebench first. Evaluate `rmp-serde` vs custom binary format.
   **Files:** `src-tauri/src/session/pty_task/event_builders.rs`, `src/lib/ipc/events.ts`, `src/lib/ipc/types.ts`.
 
-- [ ] **IPC type drift — evaluate `tauri-specta` for codegen** `[Score: 8 | R:1, S:2, U:1, E:1]`
-  All Rust IPC types (`events/types.rs`, command signatures, preference structs) are manually mirrored in `src/lib/ipc/types.ts` (~1020 lines, 35-40 types, 36 commands, 16 events). Early drift signals are already present: `SnapshotCell.width` documentation diverges between Rust ("phantom/continuation slot") and TS ("combining"); 3 commands in `commands.ts` (`providePassphrase`, `duplicateConnection`, `storeConnectionPassword`) have no corresponding type-alias in `types.ts` — their parameter shapes are implicit knowledge of the Rust signature.
-  **Action:** write an ADR evaluating `tauri-specta` (recommended by Tauri team, generates both types and `invoke()` wrappers) vs `ts-rs` (lighter, types only) vs conformity tests (cheapest — JSON shape assertions in CI). Define a trigger threshold (e.g. >60 types, or first runtime bug caused by drift).
-  **Progressive migration (for codegen adoption):** yes — `tauri-specta` can be adopted incrementally:
-  1. Annotate event types first (`#[derive(specta::Type)]`) — highest drift risk, most types.
-  2. Migrate command signatures — requires switching from `generate_handler![]` to `tauri-specta`'s builder, but can be done module by module (e.g. `preferences_cmds` first).
-  3. Keep the handwritten `types.ts` as reference during transition; delete once all types are generated.
-  Each step is independently shippable. The generated and handwritten types can coexist during migration.
+- [ ] **IPC type codegen — migrate to `tauri-specta`** `[Score: 10 | R:1, S:2, U:2, E:1]`
+  ADR-0026 decided to adopt `tauri-specta` for IPC type codegen (`docs/adr/ADR-0026-ipc-type-codegen-strategy.md`). The confirmed `duplicateConnection` runtime bug (wrong parameter name) triggered the decision. Four independently shippable PRs:
+  1. Annotate event types with `specta::Type` — highest drift risk, most types.
+  2. Switch to generated types (delete handwritten `types.ts`).
+  3. Migrate command signatures to `tauri_specta::Builder` + event structs to `tauri_specta::Event` with `collect_events![]` (module by module).
+  4. Delete handwritten `types.ts`, `commands.ts`, and `events.ts`.
+  **Prerequisite:** Verify `tauri-specta` 2.x compatibility with current Tauri 2 version before starting.
+  **Files:** `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `src-tauri/src/events/types.rs`, `src/lib/ipc/types.ts`, `src/lib/ipc/commands.ts`, `src/lib/ipc/events.ts`.
+
+- [ ] **Adaptive debounce integration test — `#[tokio::test(start_paused = true)]`** `[Score: 6 | R:1, S:1, U:1, E:1]`
+  The adaptive debounce loop in `reader.rs` (P-HT-2) has unit tests for the `next_debounce` formula but no integration test for the full `select!` loop timing behavior (decay, re-arm, `needs_immediate_flush` interaction). Requires refactoring to inject a mock emitter or extracting the loop into a testable function. Known test debt accepted during P-HT-2 implementation.
+  **Files:** `src-tauri/src/session/pty_task/reader.rs`, `src-tauri/src/session/pty_task.rs`.
 
 ---
 

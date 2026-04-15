@@ -67,15 +67,16 @@ The backend emits `screen-update` events at the rate that PTY output arrives. At
 
 Back-pressure between the PTY read and the Tauri event system is a known performance risk (noted in ADR-0001). It requires profiling during development.
 
-**Frame-ack backpressure (ADR-0027):** the frontend calls `frame_ack(paneId)` after each `flushRafQueue()` paint cycle. Each `PaneSession` holds a per-pane `Arc<AtomicU64>` storing the last ack timestamp (ms since epoch, `Relaxed` ordering). Task 2 reads this timestamp on each timer tick and applies a two-stage escalation:
+**Frame-ack backpressure (ADR-0027):** the frontend calls `frame_ack(paneId)` after each `flushRafQueue()` paint cycle. Each `PaneSession` holds a per-pane `Arc<AtomicU64>` storing the last ack timestamp (ms since epoch, `Relaxed` ordering). Task 2 reads this timestamp on each timer tick and applies a two-stage escalation, **gated by `has_unacked_emits`** — escalation only activates when events have been emitted without acknowledgment (idle periods do not trigger escalation):
 
 | Condition | Behavior |
 |-----------|----------|
-| Ack age ≤ 200 ms | Normal adaptive debounce (12–100 ms) |
-| Ack age > 200 ms (`ACK_STALE`) | Debounce escalated to 250 ms; all events still emitted |
-| Ack age > 1000 ms (`ACK_DROP`) | Dirty cell updates and `cursor_moved` dropped; non-visual events preserved (mode, cursor shape, bell, OSC 52, title, CWD) |
+| No unacked emits (idle) | Normal adaptive debounce — no escalation regardless of ack age |
+| Unacked emits, ack age ≤ 200 ms | Normal adaptive debounce (12–100 ms) |
+| Unacked emits, ack age > 200 ms (`ACK_STALE`) | Debounce escalated to 250 ms; all events still emitted |
+| Unacked emits, ack age > 1000 ms (`ACK_DROP`) | Dirty cell updates and `cursor_moved` dropped; non-visual events preserved (mode, cursor shape, bell, OSC 52, title, CWD) |
 
-On transition from drop mode back to normal (ack age drops below 200 ms), a full-redraw flag is set to resync the frontend grid. `SystemTime` is used with `saturating_sub` to handle backward NTP jumps safely (age saturates to 0 = "just acked"). The CPR/DSR immediate-flush path is unaffected — terminal query responses bypass the coalescer entirely.
+`has_unacked_emits` is computed as `last_emit_ms > last_ack_ms`, where `last_emit_ms` is a Task 2-local variable updated after each `emit_all_pending()` call. On transition from drop mode back to normal (frontend acks or ack age drops below threshold), a full-redraw flag is set to resync the frontend grid. `SystemTime` is used with `saturating_sub` to handle backward NTP jumps safely (age saturates to 0 = "just acked"). The CPR/DSR immediate-flush path is unaffected — terminal query responses bypass the coalescer entirely.
 
 **Known limitation:** `ssh_task.rs` has its own emit loop and is not covered by frame-ack. SSH panes under heavy output continue to use adaptive debounce only (no frontend-driven back-pressure).
 

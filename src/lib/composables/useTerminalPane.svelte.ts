@@ -548,7 +548,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
         // Without this, the backend's ack timer keeps aging during the async fetch
         // and may enter drop mode — suppressing the very events the frontend needs
         // to send a normal ack from flushRafQueue.
-        // frameAck(props.paneId()); // TEMP: disabled for E2E debugging
+        frameAck(props.paneId());
       } catch {
         // Snapshot fetch failed — the pane continues with its current state.
         // Events arriving after this point will be processed normally.

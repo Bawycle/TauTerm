@@ -740,4 +740,215 @@ mod tests {
             "exiting drop mode must force is_full_redraw"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-007 — has_unacked_emits is false at startup
+    // -----------------------------------------------------------------------
+
+    /// At startup, `last_emit_ms` is 0 and `last_ack_ms` is initialized to
+    /// `now()` (a large epoch value). The guard must be false.
+    #[test]
+    fn has_unacked_emits_false_at_startup() {
+        let last_emit_ms: u64 = 0;
+        let last_ack_ms: u64 = 1_700_000_000_000; // synthetic "now()" epoch ms
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        assert!(
+            !has_unacked_emits,
+            "no emits have occurred yet — must be false"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-008 — has_unacked_emits is true after emit, before ack
+    // -----------------------------------------------------------------------
+
+    /// When an emit occurs after the last ack, the guard must be true.
+    #[test]
+    fn has_unacked_emits_true_after_emit_before_ack() {
+        let last_ack_ms: u64 = 1_700_000_000_000;
+        let last_emit_ms: u64 = 1_700_000_000_050; // 50ms after ack
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        assert!(
+            has_unacked_emits,
+            "emit happened after last ack — must be true"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-009 — has_unacked_emits is false after ack follows emit
+    // -----------------------------------------------------------------------
+
+    /// When the frontend acks after the last emit, the guard must be false.
+    #[test]
+    fn has_unacked_emits_false_after_ack_follows_emit() {
+        let last_emit_ms: u64 = 1_700_000_000_000;
+        let last_ack_ms: u64 = 1_700_000_000_050; // 50ms after emit
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        assert!(!has_unacked_emits, "ack arrived after emit — must be false");
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-010 — has_unacked_emits is false when timestamps are equal
+    // -----------------------------------------------------------------------
+
+    /// When emit and ack have the same millisecond timestamp, the strict `>`
+    /// comparison makes `has_unacked_emits` false. This is correct: the emit
+    /// was acked in the same ms window.
+    #[test]
+    fn has_unacked_emits_false_when_equal() {
+        let ts: u64 = 1_700_000_000_000;
+        let last_emit_ms: u64 = ts;
+        let last_ack_ms: u64 = ts;
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        assert!(
+            !has_unacked_emits,
+            "equal timestamps — strict > means no unacked emits"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-011 — idle period does not trigger drop or stale mode
+    // -----------------------------------------------------------------------
+
+    /// Simulates a long idle period: no emits ever occurred (`last_emit_ms = 0`),
+    /// ack is 5 seconds stale. Neither drop nor stale mode should activate
+    /// because there are no unacked emits.
+    #[test]
+    fn idle_period_does_not_trigger_drop_mode() {
+        use super::reader::{ACK_DROP_THRESHOLD_MS, ACK_STALE_THRESHOLD_MS};
+
+        let last_emit_ms: u64 = 0;
+        let now: u64 = 1_700_000_005_000;
+        let last_ack_ms: u64 = 1_700_000_000_000; // 5s ago
+        let ack_age_ms = now.saturating_sub(last_ack_ms);
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+        let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
+        assert!(
+            ack_age_ms > ACK_DROP_THRESHOLD_MS,
+            "ack age should exceed drop threshold"
+        );
+        assert!(
+            !has_unacked_emits,
+            "no emits occurred — guard must be false"
+        );
+        assert!(!in_drop_mode, "idle period must not trigger drop mode");
+        assert!(!in_stale_mode, "idle period must not trigger stale mode");
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-012 — stale ack with unacked emits triggers escalation
+    // -----------------------------------------------------------------------
+
+    /// When we have emitted after the last ack and the ack is 2 seconds old,
+    /// both drop and stale mode must activate.
+    #[test]
+    fn stale_ack_with_unacked_emits_triggers_escalation() {
+        use super::reader::{ACK_DROP_THRESHOLD_MS, ACK_STALE_THRESHOLD_MS};
+
+        let now: u64 = 1_700_000_002_000;
+        let last_ack_ms: u64 = 1_700_000_000_000; // 2s ago
+        let last_emit_ms: u64 = 1_700_000_000_500; // 500ms after ack
+        let ack_age_ms = now.saturating_sub(last_ack_ms);
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+        let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
+        assert!(has_unacked_emits, "emit after ack — must be true");
+        assert!(
+            in_drop_mode,
+            "2s ack age with unacked emits — must be in drop mode"
+        );
+        assert!(
+            in_stale_mode,
+            "2s ack age with unacked emits — must be in stale mode"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-013 — drop exit via ack arrival forces full redraw
+    // -----------------------------------------------------------------------
+
+    /// When `was_in_drop_mode` is true and the frontend acks (making
+    /// `has_unacked_emits` false), `in_drop_mode` becomes false and
+    /// the full-redraw flag must be set.
+    #[test]
+    fn drop_exit_via_ack_arrival_forces_full_redraw() {
+        use super::reader::ACK_DROP_THRESHOLD_MS;
+        use crate::vt::DirtyRegion;
+
+        let now: u64 = 1_700_000_002_000;
+        let last_ack_ms: u64 = 1_700_000_001_900; // fresh ack, 100ms ago
+        let last_emit_ms: u64 = 1_700_000_000_500; // emit before ack
+        let ack_age_ms = now.saturating_sub(last_ack_ms);
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+        let was_in_drop_mode = true; // previously in drop mode
+
+        assert!(
+            !has_unacked_emits,
+            "ack arrived after emit — no unacked emits"
+        );
+        assert!(!in_drop_mode, "must not be in drop mode after ack");
+
+        // Simulate the transition logic from reader.rs.
+        let mut pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: false,
+                cursor_moved: true,
+            },
+            ..Default::default()
+        };
+
+        if in_drop_mode {
+            pending.dirty = DirtyRegion::default();
+            pending.needs_immediate_flush = false;
+        } else if was_in_drop_mode {
+            pending.dirty.is_full_redraw = true;
+        }
+
+        assert!(
+            pending.dirty.is_full_redraw,
+            "drop exit via ack arrival must force full redraw"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-014 — rapid emit→ack cycles do not trigger escalation
+    // -----------------------------------------------------------------------
+
+    /// Simulates 3 rapid emit→ack cycles where the frontend acks within
+    /// the stale threshold. No escalation should occur at any point.
+    #[test]
+    fn rapid_emit_ack_cycle_no_escalation() {
+        use super::reader::{ACK_DROP_THRESHOLD_MS, ACK_STALE_THRESHOLD_MS};
+
+        // Cycle 1: emit at t+0, ack at t+15, check at t+20
+        // Cycle 2: emit at t+30, ack at t+45, check at t+50
+        // Cycle 3: emit at t+60, ack at t+75, check at t+80
+        let base: u64 = 1_700_000_000_000;
+        let cycles: [(u64, u64, u64); 3] = [
+            (base, base + 15, base + 20), // (emit, ack, check)
+            (base + 30, base + 45, base + 50),
+            (base + 60, base + 75, base + 80),
+        ];
+
+        for (i, (emit_ms, ack_ms, check_ms)) in cycles.iter().enumerate() {
+            let last_emit_ms = *emit_ms;
+            let last_ack_ms = *ack_ms;
+            let ack_age_ms = check_ms.saturating_sub(last_ack_ms);
+            let has_unacked_emits = last_emit_ms > last_ack_ms;
+            let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+            let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
+            assert!(
+                !has_unacked_emits,
+                "cycle {i}: ack followed emit — no unacked emits"
+            );
+            assert!(!in_drop_mode, "cycle {i}: must not be in drop mode");
+            assert!(!in_stale_mode, "cycle {i}: must not be in stale mode");
+        }
+    }
 }

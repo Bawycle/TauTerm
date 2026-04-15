@@ -49,12 +49,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ## High Priority (score 28–36)
 
-- [ ] **REGRESSION — E2E `ls-al` and `perf-p12a-frame-render` fail after tauri-specta migration** `[Score: 30 | R:3, S:3, U:3, V:3]` `E: days` `B: —`
-  Two E2E tests regressed after the tauri-specta migration (Part A) + frame-ack (Part B). The 24 other E2E specs pass; fmt, lint, unit tests, Podman integration, and audit all pass.
-  **Symptom:** In `ls-al.spec.ts`, Phase 1–2 (prompt + "ls -al" echo) render correctly, but Phase 3 (4-line output injection) never appears in the DOM grid — `waitForTextInGrid("total ", 10_000)` times out. In `perf-p12a-frame-render.spec.ts`, RAPID-FIRE scenario (5 events 3ms apart) produces 0 `frameRender` performance entries instead of ≥1.
-  **Root cause not yet identified.** Eliminated hypotheses: (a) `event.emit(app)` vs `app.emit(name, event)` — both fail equally; (b) `frameAck` IPC call — disabling it doesn't fix the tests; (c) emit helper migration — not the cause. Remaining hypotheses: (1) the `index.ts` adapter layer (`unwrap`/`unwrapVoid` envelope, event re-export) introduces a subtle timing or execution-order difference; (2) a type mismatch between the specta-generated `_Serialize | _Deserialize` union types and the actual JSON causes a silent failure in `applyScreenUpdate`; (3) a change in the `get_pane_screen_snapshot` response shape (removed `skip_serializing_if` on `SnapshotCell` fields) confuses the initial grid build; (4) module initialization ordering difference between the old direct imports and the new barrel `index.ts`.
-  R:3 because this is a regression from a previously green test suite — degrades release quality. S:3 because terminal output rendering is broken in specific scenarios (confirmed by E2E). U:3 because multi-line output rendering is a common workflow. V:3 because this is already broken and blocking the E2E gate.
-  **Files:** `src/lib/ipc/index.ts` (adapter layer), `src/lib/ipc/bindings.ts` (generated types), `src/lib/composables/useTerminalPane.svelte.ts` (event processing), `tests/e2e/ls-al.spec.ts`, `tests/e2e/perf-p12a-frame-render.spec.ts`.
+(No items.)
 
 ---
 

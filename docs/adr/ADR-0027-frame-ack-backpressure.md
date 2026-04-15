@@ -182,3 +182,70 @@ Extending frame-ack to SSH panes is deferred to a follow-up change.
 - The `frame_ack` command is a fire-and-forget call with no return value. If
   the command fails (e.g., invalid pane ID after close), the failure is
   silently ignored — this is acceptable because the ack is advisory.
+
+## Addendum: idle-period false escalation fix (2026-04-15)
+
+### Bug
+
+The original design computed `ack_age = now − last_frame_ack` and escalated
+when `ack_age` exceeded the thresholds. This conflates "frontend is
+overwhelmed" with "there was nothing to ack." During idle periods (no PTY
+output), the ack timer ages indefinitely because no events are emitted and
+therefore no acks arrive. When new output arrives after an idle period longer
+than `ACK_DROP` (1 second), Task 2 enters drop mode on the first tick —
+suppressing dirty cells even though the frontend was healthy and simply idle.
+
+This caused two E2E regressions: `ls-al.spec.ts` (WebDriver roundtrips
+between test phases exceeded 1 second) and `perf-p12a-frame-render.spec.ts`
+(1-second IDLE workload pause aged the ack past the drop threshold).
+
+### Fix
+
+Track `last_emit_ms` — the wall-clock time of the most recent
+`emit_all_pending()` call — as a local variable in Task 2. Gate the
+escalation conditions on `has_unacked_emits`:
+
+```rust
+let last_ack_ms = ack_ms_e.load(Ordering::Relaxed);
+let ack_age_ms = now_ms().saturating_sub(last_ack_ms);
+let has_unacked_emits = last_emit_ms > last_ack_ms;
+let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+```
+
+The atomic is loaded once into `last_ack_ms` to avoid a TOCTOU between the
+`ack_age_ms` and `has_unacked_emits` computations.
+
+**Initialization:** `last_emit_ms = 0`. Since `last_frame_ack_ms` is
+initialized to `now()` (a large epoch-ms value), `0 > now()` is false, so
+`has_unacked_emits` is false at startup — no false escalation.
+
+**After frontend acks:** `last_frame_ack_ms` is updated to current time,
+which is ≥ `last_emit_ms`. `has_unacked_emits` becomes false. No escalation
+during subsequent idle periods.
+
+**After new output:** `last_emit_ms` is set to `now()` after each
+`emit_all_pending()` call (timer arm, CPR/DSR immediate-flush, and
+channel-closed flush paths). It exceeds the old `last_frame_ack_ms`, arming
+the escalation — but it only fires if the frontend fails to ack within the
+threshold windows.
+
+### NTP edge case
+
+A backward NTP jump between an `emit_all_pending()` call (which sets
+`last_emit_ms`) and a subsequent `record_frame_ack()` call (which stores
+`last_ack_ms`) could make `last_ack_ms` lower than `last_emit_ms` even
+though the ack arrived after the emit. This is a false positive — the system
+escalates unnecessarily for one cycle. This is safe (conservative) and
+self-correcting on the next ack.
+
+### Snapshot-refetch ack
+
+The `frameAck()` call in `triggerSnapshotRefetch()` (previously disabled for
+E2E debugging) is re-enabled. This ack signals **data consumption** (the
+snapshot has been applied to Svelte reactive state), not paint completion.
+This is intentional: the snapshot path is a recovery mechanism, not the
+steady-state rendering path. Without this ack, the backend's ack timer would
+keep aging during the async snapshot fetch and could enter drop mode —
+suppressing the very events the frontend needs to send a normal ack from
+`flushRafQueue`.

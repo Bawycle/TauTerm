@@ -221,6 +221,7 @@ pub fn spawn_pty_read_task(
         let mut pending = ProcessOutput::default();
         let mut current_debounce = DEBOUNCE_MIN;
         let mut was_in_drop_mode = false;
+        let mut last_emit_ms: u64 = 0;
         let sleep_fut = tokio::time::sleep(current_debounce);
         tokio::pin!(sleep_fut);
 
@@ -250,6 +251,7 @@ pub fn spawn_pty_read_task(
                                         &mut pending,
                                     );
                                     current_debounce = next_debounce(emit_duration);
+                                    last_emit_ms = now_ms();
                                 } else {
                                     // Nothing to emit, but clear the flag to avoid stale hints.
                                     pending.needs_immediate_flush = false;
@@ -286,9 +288,13 @@ pub fn spawn_pty_read_task(
                     }
 
                     // P-HT-6: frame-ack backpressure.
-                    let ack_age_ms = now_ms().saturating_sub(ack_ms_e.load(Ordering::Relaxed));
-                    let in_drop_mode = ack_age_ms > ACK_DROP_THRESHOLD_MS;
-                    let in_stale_mode = ack_age_ms > ACK_STALE_THRESHOLD_MS;
+                    // Single atomic load to avoid TOCTOU between ack_age and
+                    // has_unacked_emits checks.
+                    let last_ack_ms = ack_ms_e.load(Ordering::Relaxed);
+                    let ack_age_ms = now_ms().saturating_sub(last_ack_ms);
+                    let has_unacked_emits = last_emit_ms > last_ack_ms;
+                    let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+                    let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
 
                     if !pending.is_empty() {
                         if in_drop_mode {
@@ -310,6 +316,7 @@ pub fn spawn_pty_read_task(
                                 &registry_e,
                                 &mut pending,
                             );
+                            last_emit_ms = now_ms();
                             current_debounce = if in_stale_mode {
                                 ACK_STALE_DEBOUNCE
                             } else {

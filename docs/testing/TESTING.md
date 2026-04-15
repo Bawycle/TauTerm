@@ -123,14 +123,22 @@ Deprecated: `ssh-rsa` (SHA-1), `ssh-dss`. Not deprecated: `ssh-ed25519`, `ecdsa-
 
 | Test ID | Scenario |
 |---------|----------|
-| TEST-ACK-001 | Ack age ≤ 200 ms → debounce unchanged (normal adaptive range) |
-| TEST-ACK-002 | Ack age > 200 ms (ACK_STALE) → debounce escalated to 250 ms |
-| TEST-ACK-003 | Ack age > 1000 ms (ACK_DROP) → dirty cells dropped; non-visual events (mode, cursor shape, bell, OSC 52, title, CWD) preserved |
-| TEST-ACK-004 | Transition from drop mode → normal (ack resumes) → full-redraw flag set on next emission |
-| TEST-ACK-005 | Backward clock jump (simulated via direct AtomicU64 write of future timestamp) → `saturating_sub` produces age 0, no escalation |
-| TEST-ACK-006 | `cursor_moved` dropped in Stage 2, resynced by full-redraw on exit |
+| TEST-ACK-001 | `now_ms()` returns a reasonable epoch-ms value (sanity check) |
+| TEST-ACK-002 | `ACK_STALE_THRESHOLD_MS` < `ACK_DROP_THRESHOLD_MS` (threshold ordering invariant) |
+| TEST-ACK-003 | `ACK_STALE_DEBOUNCE` > `DEBOUNCE_MAX` (stale debounce exceeds adaptive ceiling) |
+| TEST-ACK-004 | Stage 2 suppression: clearing `dirty` + `needs_immediate_flush` on dirty-only `ProcessOutput` makes it empty |
+| TEST-ACK-005 | Stage 2 preserves non-visual events (title, bell, mode_changed) after dirty suppression |
+| TEST-ACK-006 | Exit from drop mode (`was_in_drop_mode && !in_drop_mode`) forces `is_full_redraw` |
+| TEST-ACK-007 | `has_unacked_emits` false at startup (`last_emit_ms=0`, `last_ack=now()`) |
+| TEST-ACK-008 | `has_unacked_emits` true when `last_emit > last_ack` |
+| TEST-ACK-009 | `has_unacked_emits` false when `last_ack > last_emit` |
+| TEST-ACK-010 | `has_unacked_emits` false when `last_emit == last_ack` (strict `>`) |
+| TEST-ACK-011 | Idle period (no emits, stale ack) does not trigger drop or stale mode |
+| TEST-ACK-012 | Stale ack with unacked emits triggers both drop and stale escalation |
+| TEST-ACK-013 | Drop exit via ack arrival (`has_unacked_emits` → false) forces full redraw |
+| TEST-ACK-014 | Rapid emit→ack cycles (3 cycles, ack < 200 ms) never trigger escalation |
 
-Tests construct the coalescer state directly with a mock `AtomicU64` timestamp, feed synthetic `ProcessOutput` values, and assert on the emitted events and escalation state. No real PTY or Tauri runtime required.
+Tests use synthetic timestamps (direct assignment, no `thread::sleep`) and simulate the escalation logic from `reader.rs`. No real PTY or Tauri runtime required.
 
 #### Inline vs. separate file rule
 

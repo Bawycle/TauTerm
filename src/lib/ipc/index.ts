@@ -30,6 +30,11 @@ import type { TauTermError } from './bindings';
 export { isTauTermError } from './errors';
 export type { TauTermErrorCode } from './errors';
 
+// Re-export the snapshot helper (ADR-0027 Addendum 3).
+// All callers that consume a pane screen snapshot MUST use this helper;
+// calling `getPaneScreenSnapshot` directly bypasses the frame-ack contract.
+export { fetchAndAckSnapshot } from './snapshot';
+
 // ---------------------------------------------------------------------------
 // Result-envelope unwrapper
 // ---------------------------------------------------------------------------

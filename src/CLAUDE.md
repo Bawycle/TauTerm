@@ -68,3 +68,13 @@ Do **not** rely on the focus guard (`onFocusIn` in `useTerminalView.core`) for o
 ## Bits UI portaled content — `:global()` CSS
 
 Bits UI `Popover.Content`, `Dialog.Content`, and `DropdownMenu.Content` are **portaled to `document.body`** by default. Scoped Svelte `<style>` rules do not apply to portaled content. Use `:global(.class-name)` for all CSS targeting elements inside portaled Bits UI containers.
+
+## IPC patterns
+
+### Snapshot consumption
+
+**All frontend code consuming a pane screen snapshot MUST use `fetchAndAckSnapshot(paneId)` from `$lib/ipc`. Calling `commands.getPaneScreenSnapshot` (or the `getPaneScreenSnapshot` re-export) directly is prohibited.** Bypassing the helper violates the frame-ack contract (ADR-0027 Addendum 3) and causes race-induced freezes under adverse timing — dev mode reliably reproduces the freeze on the initial pane; production reproduces it at low probability under GC pauses or IO stalls that delay listener attachment past the backend's 12 ms `DEBOUNCE_MIN` window.
+
+The `getPaneScreenSnapshot` wrapper re-export in `src/lib/ipc/index.ts` is retained for **test-spy compatibility only** (e.g. `vi.spyOn(ipcCommands, 'getPaneScreenSnapshot')` in `TerminalPane.altgr.test.ts`). It is not a supported production entry point. If a future refactor drops this wrapper, those spies must migrate to mocking at the `invoke` level.
+
+If a future caller genuinely does NOT need to ack (e.g. a debug dump that does not represent "frontend has painted this"), add the exception here explicitly with justification. Defaulting to the helper is non-negotiable.

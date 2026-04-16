@@ -1022,3 +1022,94 @@ fn tab_id_for_pane_unknown_returns_error() {
         other => panic!("expected PaneNotFound, got {other:?}"),
     }
 }
+
+// -----------------------------------------------------------------------
+// TEST-ACK-021 — `record_frame_ack` idempotence (ADR-0027 Addendum 3)
+//
+// The helper `fetchAndAckSnapshot` (frontend) acks on every snapshot
+// consumption. `flushRafQueue` also acks on every paint. These paths
+// may fire within the same millisecond, so `record_frame_ack` must be
+// safely idempotent at wall-clock resolution: two back-to-back calls
+// MUST leave `last_frame_ack_ms` monotone non-decreasing (equal values
+// permitted when `SystemTime::now()` returns the same ms), MUST NOT
+// panic, and a later call MUST eventually advance the timestamp.
+//
+// Unknown pane IDs must be silently ignored (race with pane close),
+// and MUST NOT affect any other pane's timestamp.
+//
+// `SessionRegistry` cannot be constructed in unit tests (requires
+// `AppHandle`), so we replicate the `record_frame_ack` logic on
+// `RegistryInner` directly — same pattern as `inner_propagate_osc52_allow`
+// and other `inner_*` helpers above.
+// -----------------------------------------------------------------------
+
+/// Replicates `SessionRegistry::record_frame_ack` on a `RegistryInner`.
+/// Mirrors the production logic line-for-line so the test exercises the
+/// same control flow (pane-to-tab lookup, atomic store, silent no-op on
+/// missing pane).
+fn inner_record_frame_ack(inner: &RegistryInner, pane_id: &crate::session::ids::PaneId) {
+    if let Some(tab_id) = inner.pane_to_tab.get(pane_id)
+        && let Some(entry) = inner.tabs.get(tab_id)
+        && let Some(pane) = entry.panes.get(pane_id)
+    {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        pane.last_frame_ack_ms
+            .store(ts, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Helper: read `last_frame_ack_ms` from a pane in `RegistryInner`.
+fn read_last_frame_ack_ms(inner: &RegistryInner, pane_id: &crate::session::ids::PaneId) -> u64 {
+    inner
+        .tabs
+        .values()
+        .find_map(|e| e.panes.get(pane_id))
+        .map(|p| {
+            p.last_frame_ack_ms
+                .load(std::sync::atomic::Ordering::Relaxed)
+        })
+        .expect("pane not found in registry")
+}
+
+#[test]
+fn test_ack_021_record_frame_ack_is_idempotent_and_monotonic() {
+    // TEST-ACK-021 — ADR-0027 Addendum 3
+    let (inner, _tab_id, pane_id) = make_registry_with_one_pane();
+
+    // Step 2: capture initial value (set at PaneSession::new() = creation time).
+    let t0 = read_last_frame_ack_ms(&inner, &pane_id);
+
+    // Step 3: two acks back-to-back, no sleep between.
+    inner_record_frame_ack(&inner, &pane_id);
+    let t1 = read_last_frame_ack_ms(&inner, &pane_id);
+
+    inner_record_frame_ack(&inner, &pane_id);
+    let t2 = read_last_frame_ack_ms(&inner, &pane_id);
+
+    // Step 4: monotone non-decreasing (equality permitted within same ms).
+    assert!(t1 >= t0, "first ack must not go backward: t0={t0} t1={t1}");
+    assert!(t2 >= t1, "second ack must not go backward: t1={t1} t2={t2}");
+
+    // Step 5: sleep 10ms, third ack.
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    inner_record_frame_ack(&inner, &pane_id);
+    let t3 = read_last_frame_ack_ms(&inner, &pane_id);
+
+    // Step 6: after a real delay, the timestamp must have strictly advanced.
+    assert!(
+        t3 > t2,
+        "after 10ms sleep the ack timestamp must advance: t2={t2} t3={t3}"
+    );
+
+    // Step 7: unknown pane ID — must be silent, must not affect real pane.
+    let unknown = crate::session::ids::PaneId::new();
+    inner_record_frame_ack(&inner, &unknown);
+    let t4 = read_last_frame_ack_ms(&inner, &pane_id);
+    assert_eq!(
+        t4, t3,
+        "record_frame_ack on unknown pane must not mutate any other pane's timestamp"
+    );
+}

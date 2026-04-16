@@ -32,7 +32,7 @@ import {
   onBellTriggered,
   onNotificationChanged,
   onOsc52WriteRequested,
-  getPaneScreenSnapshot,
+  fetchAndAckSnapshot,
   sendInput,
   scrollPane,
   copyToClipboard,
@@ -527,7 +527,13 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       if (snapshotRefetchPending) return;
       snapshotRefetchPending = true;
       try {
-        const snapshot = await getPaneScreenSnapshot(props.paneId());
+        // ADR-0027 Addendum 3: `fetchAndAckSnapshot` emits `frame_ack` upon
+        // successful snapshot receipt. The ack is mandatory here — without
+        // it, the backend's ack timer keeps aging during the async fetch
+        // and may enter drop mode, suppressing the very events the frontend
+        // needs to send a normal ack from flushRafQueue. See the helper
+        // doc-comment for rationale.
+        const snapshot = await fetchAndAckSnapshot(props.paneId());
 
         // Drain events that accumulated during the async fetch — the snapshot
         // is more authoritative. Without this drain, the accumulated events
@@ -549,12 +555,6 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
         scrollbackLines = snapshot.scrollbackLines;
 
         gridRows = buildFullGridRowsBound(rows, cols);
-
-        // P-HT-6: ack after snapshot consumption to prevent drop-mode deadlock.
-        // Without this, the backend's ack timer keeps aging during the async fetch
-        // and may enter drop mode — suppressing the very events the frontend needs
-        // to send a normal ack from flushRafQueue.
-        frameAck(props.paneId());
       } catch {
         // Snapshot fetch failed — the pane continues with its current state.
         // Events arriving after this point will be processed normally.
@@ -587,8 +587,15 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     );
 
     // Fetch the initial screen snapshot.
+    // ADR-0027 Addendum 3: `fetchAndAckSnapshot` emits `frame_ack` upon
+    // successful snapshot receipt. Required here to close the pre-attach
+    // race: the first backend `screen-update` may be emitted before this
+    // listener was attached (reliably reproducible in dev mode with slow
+    // Vite module loading; theoretically present in prod under GC/IO
+    // stalls). Without the ack, `last_ack_ms` stays at pane-creation time
+    // and the backend falsely enters drop mode after the idle timeout.
     try {
-      const snapshot = await getPaneScreenSnapshot(props.paneId());
+      const snapshot = await fetchAndAckSnapshot(props.paneId());
 
       cols = snapshot.cols;
       rows = snapshot.rows;

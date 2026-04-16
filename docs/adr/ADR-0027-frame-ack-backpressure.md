@@ -357,3 +357,128 @@ The invariant is guarded by:
   (`src/lib/composables/__tests__/useTerminalPane.frame-ack.test.ts`):**
   ACK-FE-006 — asserts that receiving `bell-triggered`, `mode-state-changed`
   or `cursor-style-changed` schedules no rAF and invokes no `frame_ack`.
+
+## Addendum 3: Frontend ack obligation after snapshot consumption (2026-04-16)
+
+> **This Addendum 3 complements Addendum 2 on a disjoint axis. It does NOT
+> supersede any previous addendum.** Addendum 2 gates backend `last_emit_ms`
+> advancement on actual `screen-update` emission. Addendum 3 mandates
+> frontend `frame_ack` invocation after snapshot consumption — an
+> independent invariant on the other side of the IPC boundary. The two
+> invariants hold simultaneously and guard against orthogonal failure modes.
+
+### Bug
+
+In dev mode (`pnpm tauri dev`), the **initial pane** was frozen on startup:
+the user could not type anything until a second tab or pane was created. In
+production builds the problem was not observed. The root cause was a missing
+`frame_ack` call on the mount path of `useTerminalPane.svelte.ts`: `onMount`
+subscribed to `screen-update` in buffering mode, fetched the initial screen
+snapshot, applied it, replayed buffered updates, and returned — without ever
+calling `frameAck(paneId)`.
+
+If the first backend `screen-update` emission reached the WebView queue
+before the frontend listener attachment completed (reliably triggered by
+Vite's slow module loading in dev), the event was silently dropped —
+**yet it still advanced the backend's `last_emit_ms`**. After 1 second of
+user idle, Task 2 observed
+`has_unacked_emits = (last_emit_ms > last_ack_ms) = true`
+and `ack_age > ACK_DROP_THRESHOLD_MS`, and entered drop mode. The next
+keystroke's dirty cells were silently suppressed by the drop-mode gate and
+the pane appeared permanently frozen.
+
+### Two call sites, distinct root causes
+
+Two frontend call sites consumed a pane screen snapshot without acking. The
+same symptom masked two architecturally independent races:
+
+- **`onMount` — pre-attach race.** The frontend event listener is attached
+  inside `onMount`, after the backend pane has already started producing
+  output. The first `screen-update` emission can win the race against
+  listener attachment, especially in dev mode where Vite's module-graph
+  resolution inflates startup latency well past the backend's 12 ms
+  `DEBOUNCE_MIN` window. The lost event advanced `last_emit_ms` server-side
+  with no matching ack.
+
+- **`triggerSnapshotRefetch` — ack starvation during async fetch.** Here
+  the listener is already attached, but the ack timer keeps aging through
+  the entire duration of the `await commands.getPaneScreenSnapshot(...)`
+  round-trip. Any `screen-update` emitted between the refetch request and
+  its resolution is coalesced into the snapshot, so no separate ack fires —
+  the snapshot itself carries the obligation to ack.
+
+Both call sites converge on the same fix pattern ("ack immediately after
+consuming a snapshot"), but they are not the same race, and patching only
+one would leave the other exposed. Addendum 3 addresses both at once by
+relocating the contract into a shared helper.
+
+### Not a dev-only bug
+
+> Dev mode reliably reproduces a race that is theoretically present in
+> production under GC pauses, IO stalls, or any other factor that delays
+> listener attachment past the 12 ms `DEBOUNCE_MIN` window. The fix applies
+> universally — production has simply been lucky, not safe.
+
+The dev-mode timing profile (Vite module loading, HMR bookkeeping) collapses
+the probability of the `onMount` race to effectively 1. In production the
+same race is latent: an unlucky GC pause during startup, an SSD hiccup, or
+heavy system load can reproduce it at arbitrarily low probability. Fixing
+only dev would preserve a silent tail-latency bug in production.
+
+### Fix and enforcement
+
+The fix is a new helper `fetchAndAckSnapshot(paneId)` exported from
+`src/lib/ipc/snapshot.ts` (re-exported by `src/lib/ipc/index.ts`). This
+helper is the **single supported entry point** for consuming a pane screen
+snapshot from the frontend. It performs the `invoke` round-trip, and on
+successful resolution it calls `frameAck(paneId)` before returning the
+snapshot to the caller. On fetch failure, no ack is emitted (no snapshot
+was consumed — the invariant is preserved).
+
+Both historical call sites (`onMount` and `triggerSnapshotRefetch` in
+`useTerminalPane.svelte.ts`) are migrated to the helper. Calling
+`commands.getPaneScreenSnapshot` (or the `getPaneScreenSnapshot` re-export)
+directly is **prohibited** by `src/CLAUDE.md`.
+
+Rationale for the helper-as-SSoT pattern: enforcement by API design strictly
+dominates enforcement by convention. A future caller (search indexer,
+debug dump, test harness) that imports the helper cannot forget the ack —
+the ack is a post-condition of consuming the snapshot, encoded in the type
+signature's contract, not in a reviewer's memory.
+
+### Why not backend-side auto-ack
+
+> A backend-side auto-ack inside `get_pane_screen_snapshot` was considered
+> and rejected. `last_ack_ms` means "the frontend has painted up to this
+> point". A future caller that fetches a snapshot without rendering
+> (search index, debug dump, programmatic export) would incorrectly
+> advance the timestamp, silencing legitimate back-pressure escalation for
+> any subsequent real paint cycle. The invariant must stay frontend-owned:
+> only a caller that actually renders the content has the authority to ack.
+
+This mirrors the decision in Addendum 2 — the ack semantics are
+render-coupled, not fetch-coupled. Moving the ack server-side would
+re-open the conflation that Addendum 2 closed on the emit side.
+
+### Anti-regression tests
+
+The invariant is guarded by:
+
+- **Frontend vitest (helper, `src/lib/ipc/__tests__/snapshot.test.ts`):**
+  ACK-FE-009-A (happy path — `frameAck` called exactly once on fetch
+  success, across multiple pane IDs), ACK-FE-009-B (error path —
+  `frameAck` is NOT called when the binding rejects, because no snapshot
+  was consumed).
+- **Frontend vitest
+  (`src/lib/composables/__tests__/useTerminalPane.frame-ack.test.ts`):**
+  ACK-FE-007 (onMount with non-empty `pendingUpdates`: a deferred snapshot
+  promise allows listener attachment before resolution; buffered events
+  fire during the fetch; exactly one `frame_ack` observed after mount;
+  extended with an idempotence check — subsequent standard events flushed
+  via rAF produce a second, independent ack), ACK-FE-008 (onMount with
+  empty `pendingUpdates`: the race where the listener attaches after the
+  first backend emit and has nothing to buffer; `frame_ack` is called
+  unconditionally, not gated on `pendingUpdates.length > 0`).
+- **Rust unit (`src-tauri/src/session/registry.rs`):** TEST-ACK-021 —
+  `record_frame_ack` idempotence under rapid successive calls; monotonic
+  non-decreasing `last_frame_ack_ms`; no panic on unknown `PaneId`.

@@ -10,6 +10,13 @@
  *   ACK-FE-004 — two rAF flushes → two frame_ack calls
  *   ACK-FE-005 — correct paneId argument
  *   ACK-FE-006 — non-visual events (bell, mode, cursor-style) do NOT schedule rAF or invoke frame_ack
+ *   ACK-FE-007 — onMount with buffered updates emits exactly one ack at snapshot receipt + idempotent second ack on later flush
+ *   ACK-FE-008 — onMount with empty pendingUpdates still emits one ack (unconditional, pre-attach race)
+ *
+ * NOTE: `invokeSpy.mockClear()` placement AFTER `mountPane()` is LOAD-BEARING.
+ * Since ADR-0027 Addendum 3, the helper `fetchAndAckSnapshot` emits a
+ * `frame_ack` IPC during mount — and that would contaminate the assertions
+ * in ACK-FE-001..006 if not cleared. Do not remove or reposition.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -471,5 +478,132 @@ describe('ACK-FE-006: non-visual events do not schedule rAF or invoke frame_ack'
 
     expect(rafSpy).toHaveBeenCalledTimes(0);
     expect(getFrameAckCalls()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ACK-FE-007: onMount with buffered updates emits exactly one ack at snapshot
+// receipt; a subsequent flushRafQueue call emits its own ack (idempotent).
+// ---------------------------------------------------------------------------
+
+/**
+ * Regression guard for ADR-0027 Addendum 3 (onMount pre-attach race).
+ *
+ * Scenario: the listener is attached before the snapshot resolves, a
+ * screen-update is fired and buffered, then the snapshot resolves. The
+ * helper `fetchAndAckSnapshot` must emit exactly one `frame_ack` for the
+ * snapshot itself — independent of whether `pendingUpdates` is empty or
+ * not. The idempotence extension then fires N normal rafQueue events and
+ * asserts a second ack from flushRafQueue (total = 2 acks).
+ */
+describe('ACK-FE-007: onMount with buffered updates sends exactly one ack, then accepts more', () => {
+  it('snapshot resolution emits one ack even when pendingUpdates is non-empty; subsequent flush emits its own', async () => {
+    // Deferred snapshot — lets us attach the listener first, then fire an
+    // update into pendingUpdates before resolving.
+    let resolveSnapshot!: (v: unknown) => void;
+    const snapshotPromise = new Promise((res) => {
+      resolveSnapshot = res;
+    });
+
+    invokeSpy.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_pane_screen_snapshot') {
+        return snapshotPromise as never;
+      }
+      return undefined as never;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const instance = mount(TerminalPane, {
+      target: container,
+      props: { paneId: PANE_ID, tabId: 'tab-ack', active: true },
+    });
+    instances.push(instance);
+
+    // Drain microtasks so the screen-update listener is registered
+    // (listener is registered BEFORE the snapshot fetch — WP3b).
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    // Fire one screen-update while the snapshot is still pending — it must
+    // land in pendingUpdates (buffering = true until after the snapshot).
+    fireEvent<ScreenUpdateEvent>(
+      'screen-update',
+      makeScreenUpdate(PANE_ID, {
+        cols: 4,
+        rows: 3,
+        isFullRedraw: false,
+        cells: [{ row: 0, col: 0, content: 'B', width: 1, attrs: DEFAULT_ATTRS }],
+      }),
+    );
+
+    // Resolve the snapshot. `fetchAndAckSnapshot` must emit its ack now.
+    resolveSnapshot({ ...VALID_SNAPSHOT });
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+
+    // Exactly one ack: from the snapshot receipt.
+    let ackCalls = getFrameAckCalls();
+    expect(ackCalls).toHaveLength(1);
+    expect(ackCalls[0]).toEqual(['frame_ack', { paneId: PANE_ID }]);
+
+    // Idempotence extension: fire N normal events through the rafQueue path
+    // and flush — the ack-on-paint must still fire independently.
+    rafSpy.mockClear();
+    rafCallback = null;
+    fireNEvents(3);
+    flushRaf();
+    flushSync();
+
+    ackCalls = getFrameAckCalls();
+    expect(ackCalls).toHaveLength(2);
+    expect(ackCalls[1]).toEqual(['frame_ack', { paneId: PANE_ID }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ACK-FE-008: onMount with empty pendingUpdates still emits one ack
+// (unconditional — protects against the pre-attach race in prod).
+// ---------------------------------------------------------------------------
+
+/**
+ * Regression guard for ADR-0027 Addendum 3.
+ *
+ * Scenario: the backend's first `screen-update` is emitted BEFORE the
+ * frontend's listener is attached (reliably reproduced in `pnpm tauri dev`
+ * with slow Vite module loading; theoretically present in prod under
+ * GC/IO stalls). The event is lost; `pendingUpdates` stays empty; no
+ * normal `flushRafQueue` ack will ever fire for it. `fetchAndAckSnapshot`
+ * MUST still emit an unconditional ack — otherwise `last_ack_ms` stays at
+ * pane-creation time and the backend falsely enters drop mode after 1s.
+ */
+describe('ACK-FE-008: onMount with empty pendingUpdates still emits one ack', () => {
+  it('frame_ack is invoked exactly once even when no update is buffered during the fetch', async () => {
+    // Snapshot resolves synchronously (returns VALID_SNAPSHOT). Simulates
+    // the case where no screen-update arrives during the async fetch
+    // window — e.g. the pre-attach emit was lost, or none has fired yet.
+    invokeSpy.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_pane_screen_snapshot') {
+        return { ...VALID_SNAPSHOT } as never;
+      }
+      return undefined as never;
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const instance = mount(TerminalPane, {
+      target: container,
+      props: { paneId: PANE_ID, tabId: 'tab-ack', active: true },
+    });
+    instances.push(instance);
+
+    // Drain microtasks so the snapshot resolves, replay runs (empty), and
+    // onMount completes.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+
+    // The ack is UNCONDITIONAL — not gated on pendingUpdates.length > 0.
+    const ackCalls = getFrameAckCalls();
+    expect(ackCalls).toHaveLength(1);
+    expect(ackCalls[0]).toEqual(['frame_ack', { paneId: PANE_ID }]);
   });
 });

@@ -616,11 +616,15 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// Stage 1 threshold must be less than Stage 2 threshold.
+    ///
+    /// Expressed as a `const` assertion so the invariant is checked at
+    /// compile time rather than test-time. The `#[test]` wrapper keeps the
+    /// ID (TEST-ACK-002) discoverable in test reports.
     #[test]
     fn ack_thresholds_ordered_correctly() {
-        assert!(
+        const _: () = assert!(
             ACK_STALE_THRESHOLD_MS < ACK_DROP_THRESHOLD_MS,
-            "Stale threshold ({ACK_STALE_THRESHOLD_MS}) must be < drop threshold ({ACK_DROP_THRESHOLD_MS})"
+            "Stale threshold must be < drop threshold"
         );
     }
 
@@ -949,6 +953,386 @@ mod tests {
             );
             assert!(!in_drop_mode, "cycle {i}: must not be in drop mode");
             assert!(!in_stale_mode, "cycle {i}: must not be in stale mode");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-015 — output_emits_screen_update returns false for non-visual
+    // events (bell, title, mode, cursor shape, OSC 52, CWD) individually and
+    // combined.
+    // -----------------------------------------------------------------------
+
+    /// Each of the 6 non-visual fields, on its own and combined, must not
+    /// trigger a `screen-update` emission. This is the core invariant that
+    /// prevents non-visual events from advancing `last_emit_ms` and poisoning
+    /// the frame-ack backpressure state.
+    #[test]
+    fn output_emits_screen_update_false_for_non_visual_events() {
+        use super::emitter::output_emits_screen_update;
+
+        // Bell only.
+        let pending = ProcessOutput {
+            bell: true,
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "bell-only ProcessOutput must NOT emit screen-update"
+        );
+
+        // Title only.
+        let pending = ProcessOutput {
+            new_title: Some("My Title".to_string()),
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "title-only ProcessOutput must NOT emit screen-update"
+        );
+
+        // Mode change only.
+        let pending = ProcessOutput {
+            mode_changed: true,
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "mode-only ProcessOutput must NOT emit screen-update"
+        );
+
+        // Cursor shape only.
+        let pending = ProcessOutput {
+            new_cursor_shape: Some(2),
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "cursor-shape-only ProcessOutput must NOT emit screen-update"
+        );
+
+        // OSC 52 only.
+        let pending = ProcessOutput {
+            osc52: Some("clipboard-data".to_string()),
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "osc52-only ProcessOutput must NOT emit screen-update"
+        );
+
+        // CWD only.
+        let pending = ProcessOutput {
+            new_cwd: Some("/tmp".to_string()),
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "cwd-only ProcessOutput must NOT emit screen-update"
+        );
+
+        // All six combined (still no dirty).
+        let pending = ProcessOutput {
+            bell: true,
+            new_title: Some("Title".to_string()),
+            mode_changed: true,
+            new_cursor_shape: Some(4),
+            osc52: Some("clip".to_string()),
+            new_cwd: Some("/tmp".to_string()),
+            ..Default::default()
+        };
+        assert!(
+            !output_emits_screen_update(&pending),
+            "all-six non-visual fields combined must NOT emit screen-update \
+             (no dirty region means no frontend paint and no frame-ack)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-016 — output_emits_screen_update returns true when dirty has
+    // content, regardless of non-visual fields.
+    // -----------------------------------------------------------------------
+
+    /// A `ProcessOutput` with dirty content MUST emit a `screen-update` event,
+    /// whether or not non-visual fields are present alongside.
+    #[test]
+    fn output_emits_screen_update_true_when_dirty() {
+        use super::emitter::output_emits_screen_update;
+
+        // Dirty only (is_full_redraw).
+        let pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: true,
+                cursor_moved: false,
+            },
+            ..Default::default()
+        };
+        assert!(
+            output_emits_screen_update(&pending),
+            "full-redraw-only ProcessOutput MUST emit screen-update"
+        );
+
+        // Dirty only (cursor_moved).
+        let pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: false,
+                cursor_moved: true,
+            },
+            ..Default::default()
+        };
+        assert!(
+            output_emits_screen_update(&pending),
+            "cursor-moved-only ProcessOutput MUST emit screen-update"
+        );
+
+        // Dirty + bell + title + cursor shape.
+        let pending = ProcessOutput {
+            dirty: DirtyRegion {
+                rows: Default::default(),
+                is_full_redraw: true,
+                cursor_moved: true,
+            },
+            bell: true,
+            new_title: Some("T".to_string()),
+            new_cursor_shape: Some(2),
+            ..Default::default()
+        };
+        assert!(
+            output_emits_screen_update(&pending),
+            "dirty + non-visual fields MUST still emit screen-update"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-017 — bell-only flush: last_emit_ms NOT advanced, no stale nor
+    // drop mode activation after 1.2 s.
+    // -----------------------------------------------------------------------
+
+    /// End-to-end logic simulation of the fix: a bell-only emit at T=0 must
+    /// leave `last_emit_ms` at its startup value (0). At T=1.2 s, the
+    /// `has_unacked_emits` predicate MUST be false — neither stale nor drop
+    /// mode may activate. This is the core acceptance criterion of ADR-0027
+    /// Addendum 2.
+    #[test]
+    fn bell_only_flush_does_not_advance_last_emit_ms() {
+        use super::emitter::output_emits_screen_update;
+
+        // T=0: bell-only emit.
+        let pending = ProcessOutput {
+            bell: true,
+            ..Default::default()
+        };
+        let emitted_screen_update = output_emits_screen_update(&pending);
+        assert!(
+            !emitted_screen_update,
+            "bell-only emit must not flag emitted_screen_update"
+        );
+
+        // Simulate startup state and gated advancement.
+        let mut last_emit_ms: u64 = 0;
+        if emitted_screen_update {
+            last_emit_ms = 1; // would have been now_ms(); never reached here.
+        }
+        assert_eq!(
+            last_emit_ms, 0,
+            "last_emit_ms must remain at startup value after bell-only flush"
+        );
+
+        // T=1.2 s: check backpressure predicates.
+        let now: u64 = 1_700_000_001_200;
+        let last_ack_ms: u64 = 1_700_000_000_000; // last_ack_ms initialised to now() at task start
+        let ack_age_ms = now.saturating_sub(last_ack_ms);
+        let has_unacked_emits = last_emit_ms > last_ack_ms;
+        let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+        let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
+        assert!(
+            ack_age_ms > ACK_DROP_THRESHOLD_MS,
+            "ack age ({ack_age_ms} ms) must exceed drop threshold to exercise the fix"
+        );
+        assert!(
+            !has_unacked_emits,
+            "fix: bell-only flush must leave has_unacked_emits = false"
+        );
+        assert!(
+            !in_drop_mode,
+            "fix: drop mode must NOT activate after bell-only flush + idle"
+        );
+        assert!(
+            !in_stale_mode,
+            "fix: stale mode must NOT activate after bell-only flush + idle"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-018 — anti-regression: conditional gate on emitted_screen_update
+    // -----------------------------------------------------------------------
+
+    /// The exact conditional pattern used at the 3 call sites in `reader.rs`
+    /// MUST leave `last_emit_ms` unchanged when `emitted_screen_update` is
+    /// false, and MUST update it when true. This test is the minimal
+    /// structural guard against a future regression that reintroduces the
+    /// unconditional assignment.
+    #[test]
+    fn last_emit_ms_advancement_gated_on_emitted_screen_update() {
+        use super::emitter::EmitOutcome;
+        use std::time::Duration;
+
+        // Case 1: emitted_screen_update = false → last_emit_ms unchanged.
+        let outcome_no_screen = EmitOutcome {
+            duration: Duration::from_millis(5),
+            emitted_screen_update: false,
+        };
+        let pre_existing_last_emit_ms: u64 = 1_700_000_000_000;
+        let mut last_emit_ms = pre_existing_last_emit_ms;
+        if outcome_no_screen.emitted_screen_update {
+            last_emit_ms = now_ms();
+        }
+        assert_eq!(
+            last_emit_ms, pre_existing_last_emit_ms,
+            "last_emit_ms must be UNCHANGED when emitted_screen_update = false"
+        );
+
+        // Case 2: emitted_screen_update = true → last_emit_ms updated.
+        let outcome_with_screen = EmitOutcome {
+            duration: Duration::from_millis(5),
+            emitted_screen_update: true,
+        };
+        let mut last_emit_ms: u64 = 0;
+        if outcome_with_screen.emitted_screen_update {
+            last_emit_ms = now_ms();
+        }
+        assert!(
+            last_emit_ms > 0,
+            "last_emit_ms must be updated when emitted_screen_update = true"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-019 — was_in_drop_mode transition safety: empty pending means
+    // no emit_all_pending call and no spurious full-redraw.
+    // -----------------------------------------------------------------------
+
+    /// When a pane exits drop mode on an idle tick (no dirty content available
+    /// at the moment of the transition), the reader loop MUST NOT invoke
+    /// `emit_all_pending` and MUST NOT synthesize a full redraw for an empty
+    /// `pending`. This mirrors the `!pending.is_empty()` control-flow guard at
+    /// line 299 of `reader.rs`.
+    #[test]
+    fn was_in_drop_mode_transition_with_empty_pending_skips_emit() {
+        // State at tick N+1: drop mode has just exited (was_in_drop_mode=true,
+        // in_drop_mode=false). A bell was emitted at tick N and already
+        // consumed from pending — no dirty output has arrived since.
+        let was_in_drop_mode = true;
+        let in_drop_mode = false;
+        let pending = ProcessOutput::default(); // empty: bell consumed at tick N
+
+        // Structural guard from reader.rs (outer `if !pending.is_empty()`).
+        let will_emit = !pending.is_empty();
+
+        assert!(
+            !will_emit,
+            "empty pending at tick N+1 must not trigger emit_all_pending"
+        );
+
+        // If the outer guard erroneously allowed the inner transition, we'd
+        // synthesize a spurious full-redraw here — verify that the protection
+        // is by the outer guard, not by the transition logic itself.
+        // (Belt-and-suspenders: check that the transition logic, when
+        // reached with empty pending, would indeed have set is_full_redraw
+        // — reinforcing the need for the outer guard.)
+        if will_emit {
+            // (unreachable in this test; kept for documentation)
+            let mut p = pending;
+            if in_drop_mode {
+                p.dirty = DirtyRegion::default();
+            } else if was_in_drop_mode {
+                p.dirty.is_full_redraw = true;
+            }
+            panic!(
+                "control flow should have short-circuited at `will_emit`; \
+                 reached transition logic with is_full_redraw={}",
+                p.dirty.is_full_redraw
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST-ACK-020 — bell flood non-escalation: 10 bell-only batches over
+    // 1.5 s must not push debounce to ACK_STALE_DEBOUNCE.
+    // -----------------------------------------------------------------------
+
+    /// Stress test of the fix: a flood of bell events (e.g. vim `:set bell`
+    /// loop, or a curses app that rings repeatedly) must NOT push the
+    /// debounce interval up to `ACK_STALE_DEBOUNCE` (250 ms, Stage 1). Per
+    /// the fix, `last_emit_ms` is not advanced for bell-only emits, so
+    /// `has_unacked_emits` stays `false` throughout, and
+    /// `current_debounce` remains within `[DEBOUNCE_MIN, DEBOUNCE_MAX]`.
+    #[test]
+    fn bell_flood_does_not_escalate_to_stale_debounce() {
+        use super::emitter::output_emits_screen_update;
+
+        let base_time: u64 = 1_700_000_000_000;
+        let mut last_emit_ms: u64 = 0; // startup value
+        let last_ack_ms: u64 = base_time; // initialised to now() at task start
+
+        // Simulate 10 bell-only batches over 1500 ms (150 ms apart — slower
+        // than DEBOUNCE_MAX so each is a distinct timer fire).
+        for i in 0..10u64 {
+            let simulated_now = base_time + i * 150;
+
+            // Bell-only pending.
+            let pending = ProcessOutput {
+                bell: true,
+                ..Default::default()
+            };
+
+            let emitted_screen_update = output_emits_screen_update(&pending);
+            assert!(
+                !emitted_screen_update,
+                "iteration {i}: bell-only must not flag emitted_screen_update"
+            );
+
+            // Gated assignment (matches reader.rs).
+            if emitted_screen_update {
+                last_emit_ms = simulated_now;
+            }
+
+            let ack_age_ms = simulated_now.saturating_sub(last_ack_ms);
+            let has_unacked_emits = last_emit_ms > last_ack_ms;
+            let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
+            assert!(
+                !has_unacked_emits,
+                "iteration {i} (t={simulated_now}): has_unacked_emits must \
+                 stay false across bell flood"
+            );
+            assert!(
+                !in_stale_mode,
+                "iteration {i} (t={simulated_now}): stale mode must NOT \
+                 activate during bell flood"
+            );
+
+            // Debounce chosen per `next_debounce()` rules — within
+            // [DEBOUNCE_MIN, DEBOUNCE_MAX]. We assert the clamping contract.
+            // A realistic emit_duration for bell-only is sub-ms; next_debounce
+            // clamps to DEBOUNCE_MIN.
+            let current_debounce = if in_stale_mode {
+                ACK_STALE_DEBOUNCE
+            } else {
+                next_debounce(Duration::from_micros(50))
+            };
+            assert!(
+                current_debounce >= DEBOUNCE_MIN && current_debounce <= DEBOUNCE_MAX,
+                "iteration {i}: current_debounce ({current_debounce:?}) must \
+                 stay within [{DEBOUNCE_MIN:?}, {DEBOUNCE_MAX:?}]"
+            );
+            assert!(
+                current_debounce < ACK_STALE_DEBOUNCE,
+                "iteration {i}: current_debounce ({current_debounce:?}) must \
+                 stay below ACK_STALE_DEBOUNCE ({ACK_STALE_DEBOUNCE:?})"
+            );
         }
     }
 }

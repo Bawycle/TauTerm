@@ -508,6 +508,12 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       }
 
       // P-HT-6: notify backend that this frame was consumed.
+      // INVARIANT (ADR-0027 Addendum 2): `frameAck` is called ONLY in response
+      // to screen-update events (this flushRafQueue path and the
+      // triggerSnapshotRefetch recovery below). The backend mirror lives in
+      // `src-tauri/src/session/pty_task/emitter.rs::output_emits_screen_update`
+      // — if a new event type ever becomes ack-triggering here, that predicate
+      // must be updated in lockstep, otherwise drop-mode will falsely activate.
       frameAck(props.paneId());
     }
 

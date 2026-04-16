@@ -9,13 +9,19 @@
  *   ACK-FE-003 — flush with >20 events (overflow → snapshot refetch) → frame_ack sent after snapshot
  *   ACK-FE-004 — two rAF flushes → two frame_ack calls
  *   ACK-FE-005 — correct paneId argument
+ *   ACK-FE-006 — non-visual events (bell, mode, cursor-style) do NOT schedule rAF or invoke frame_ack
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import * as tauriEvent from '@tauri-apps/api/event';
 import * as tauriCore from '@tauri-apps/api/core';
-import type { ScreenUpdateEvent } from '$lib/ipc';
+import type {
+  ScreenUpdateEvent,
+  BellTriggeredEvent,
+  ModeStateChangedEvent,
+  CursorStyleChangedEvent,
+} from '$lib/ipc';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
 import {
   createListenerRegistry,
@@ -359,5 +365,111 @@ describe('ACK-FE-005: frame_ack is called with the correct paneId', () => {
     expect(ackCalls).toHaveLength(1);
     // invoke('frame_ack', { paneId: ... })
     expect(ackCalls[0]).toEqual(['frame_ack', { paneId: PANE_ID }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ACK-FE-006: non-visual events do NOT schedule rAF or invoke frame_ack
+// ---------------------------------------------------------------------------
+
+/**
+ * Frontend-side invariant of the ADR-0027 Addendum 2 fix.
+ *
+ * Only `screen-update` events go through `flushRafQueue`, which is the sole
+ * path that invokes `frame_ack`. Non-visual events (bell, mode, cursor style,
+ * notification, session state, OSC 52, title, CWD) dispatch through other
+ * listeners that have their own side-effects (bell audio/visual FX, mode
+ * state mirror, cursor shape update, etc.) — none of which go through the
+ * rAF queue.
+ *
+ * This test is a guard against future drift: if anyone (incorrectly) routes
+ * a non-visual event through `enqueueEvent`/`scheduleRaf` or calls
+ * `frame_ack` from any other code path, this test fails. The backend-side
+ * invariant (last_emit_ms gated on emitted_screen_update) assumes this
+ * frontend contract; violating either side reopens the Del-key freeze.
+ */
+describe('ACK-FE-006: non-visual events do not schedule rAF or invoke frame_ack', () => {
+  it('bell-triggered does not push to rafQueue nor call frame_ack', async () => {
+    await mountPane();
+    initGrid(4, 3);
+
+    invokeSpy.mockClear();
+    rafSpy.mockClear();
+    rafCallback = null;
+
+    fireEvent<BellTriggeredEvent>('bell-triggered', { paneId: PANE_ID });
+    flushSync();
+
+    expect(rafSpy).toHaveBeenCalledTimes(0);
+    expect(getFrameAckCalls()).toHaveLength(0);
+  });
+
+  it('mode-state-changed does not push to rafQueue nor call frame_ack', async () => {
+    await mountPane();
+    initGrid(4, 3);
+
+    invokeSpy.mockClear();
+    rafSpy.mockClear();
+    rafCallback = null;
+
+    fireEvent<ModeStateChangedEvent>('mode-state-changed', {
+      paneId: PANE_ID,
+      decckm: false,
+      deckpam: false,
+      mouseReporting: 'none',
+      mouseEncoding: 'x10',
+      focusEvents: false,
+      bracketedPaste: true,
+    });
+    flushSync();
+
+    expect(rafSpy).toHaveBeenCalledTimes(0);
+    expect(getFrameAckCalls()).toHaveLength(0);
+  });
+
+  it('cursor-style-changed does not push to rafQueue nor call frame_ack', async () => {
+    await mountPane();
+    initGrid(4, 3);
+
+    invokeSpy.mockClear();
+    rafSpy.mockClear();
+    rafCallback = null;
+
+    fireEvent<CursorStyleChangedEvent>('cursor-style-changed', {
+      paneId: PANE_ID,
+      shape: 2,
+    });
+    flushSync();
+
+    expect(rafSpy).toHaveBeenCalledTimes(0);
+    expect(getFrameAckCalls()).toHaveLength(0);
+  });
+
+  it('all three non-visual events combined do not trigger any frame_ack', async () => {
+    await mountPane();
+    initGrid(4, 3);
+
+    invokeSpy.mockClear();
+    rafSpy.mockClear();
+    rafCallback = null;
+
+    fireEvent<BellTriggeredEvent>('bell-triggered', { paneId: PANE_ID });
+    fireEvent<ModeStateChangedEvent>('mode-state-changed', {
+      paneId: PANE_ID,
+      decckm: true,
+      deckpam: false,
+      mouseReporting: 'none',
+      mouseEncoding: 'x10',
+      focusEvents: false,
+      bracketedPaste: false,
+    });
+    fireEvent<CursorStyleChangedEvent>('cursor-style-changed', {
+      paneId: PANE_ID,
+      shape: 4,
+    });
+    flushSync();
+
+    expect(rafSpy).toHaveBeenCalledTimes(0);
+    expect(getFrameAckCalls()).toHaveLength(0);
   });
 });

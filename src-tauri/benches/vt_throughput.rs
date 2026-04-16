@@ -37,7 +37,7 @@ fn bench_write_char_throughput(c: &mut Criterion) {
 ///
 /// Buffer fill is done in the setup phase; only the 1 000 scrolls are timed.
 fn bench_scroll_throughput(c: &mut Criterion) {
-    let row: Vec<u8> = std::iter::repeat(b'X').take(80).collect();
+    let row: Vec<u8> = std::iter::repeat_n(b'X', 80).collect();
 
     let mut group = c.benchmark_group("scroll_throughput");
     group.bench_function("scroll_up_1000x", |b| {
@@ -244,7 +244,7 @@ fn bench_unicode_emoji_hotpath(c: &mut Criterion) {
 /// Setup: VtProcessor filled to exactly 1000 scrollback lines.
 /// Bench: 1000 additional `\r\n` forcing continuous eviction.
 fn bench_scrollback_eviction(c: &mut Criterion) {
-    let row: Vec<u8> = std::iter::repeat(b'X').take(80).collect();
+    let row: Vec<u8> = std::iter::repeat_n(b'X', 80).collect();
     let newline = b"\r\n";
 
     let mut group = c.benchmark_group("scrollback_eviction");

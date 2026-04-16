@@ -230,6 +230,10 @@ channel-closed flush paths). It exceeds the old `last_frame_ack_ms`, arming
 the escalation — but it only fires if the frontend fails to ack within the
 threshold windows.
 
+> **Note (2026-04-16):** the paragraph above ("After new output...") is
+> superseded by Addendum 2 at the end of this document. See Addendum 2 for
+> the corrected timing rule.
+
 ### NTP edge case
 
 A backward NTP jump between an `emit_all_pending()` call (which sets
@@ -249,3 +253,107 @@ steady-state rendering path. Without this ack, the backend's ack timer would
 keep aging during the async snapshot fetch and could enter drop mode —
 suppressing the very events the frontend needs to send a normal ack from
 `flushRafQueue`.
+
+## Addendum 2: non-visual events must not advance `last_emit_ms` (2026-04-16)
+
+> **This Addendum 2 supersedes the paragraph "After new output: `last_emit_ms`
+> is set to `now()` after each `emit_all_pending()` call..." of Addendum 1
+> above; the timing described there is no longer accurate.** `last_emit_ms`
+> is advanced only when the emit call produced a `screen-update` event, not
+> unconditionally.
+
+### Bug
+
+Addendum 1 gated escalation on `has_unacked_emits = last_emit_ms > last_ack_ms`
+and set `last_emit_ms = now()` **unconditionally** after every
+`emit_all_pending()` call. This was incorrect: not every invocation of
+`emit_all_pending()` produces a `screen-update` event. The frontend only
+acknowledges paint cycles via `flushRafQueue()`, which is triggered
+**exclusively** by `screen-update` events. Every other event emitted by the
+coalescer — `bell-triggered`, `mode-state-changed`, `cursor-style-changed`,
+`osc52-write-requested`, `notification-changed`, title and CWD updates — is
+consumed by the frontend without producing an ack.
+
+Consequence: when `emit_all_pending()` flushed a non-visual-only batch (e.g.
+bash responded to Del at end-of-line with a single BEL byte `0x07`),
+`last_emit_ms` was advanced past `last_ack_ms`, so `has_unacked_emits`
+stayed true indefinitely even though no paint was ever owed. After 1 second
+of user idle, Task 2 entered drop mode; the next keystroke's dirty cells
+were silently suppressed by the drop-mode gate, and the pane froze
+permanently from the user's perspective (the cursor kept blinking
+client-side, but no `screen-update` event reached the frontend anymore).
+
+The same mechanism also triggered **Stage 1** (stale mode, `ACK_STALE_DEBOUNCE`
+= 250 ms) on every isolated non-visual event — not only full freezes but
+also a ~250 ms input-to-paint latency regression visible after every bell,
+title change (OSC 2), or CWD change (OSC 7). Real-world triggers include
+Starship / Powerlevel10k prompts that emit OSC 2 or OSC 7 on every command.
+
+### Fix
+
+Return an `EmitOutcome` from `emit_all_pending()` carrying an explicit flag
+`emitted_screen_update`. The debounce timer arm advances `last_emit_ms`
+only when that flag is true:
+
+```rust
+#[derive(Debug, Clone, Copy)]
+pub(super) struct EmitOutcome {
+    pub duration: Duration,
+    pub emitted_screen_update: bool,
+}
+
+// In Task 2 debounce timer arm:
+let outcome = emit_all_pending(...);
+if outcome.emitted_screen_update { last_emit_ms = now_ms(); }
+current_debounce = if in_stale_mode { ACK_STALE_DEBOUNCE } else { next_debounce(outcome.duration) };
+```
+
+The same guard applies at the CPR/DSR immediate-flush call site. The
+channel-closed flush path discards the outcome (the task is exiting).
+
+### Semantic invariant
+
+**Non-visual events never perturb the frame-ack timestamp invariant.**
+`last_emit_ms` is defined as *the wall-clock time of the most recent
+`screen-update` emission* — the only event type the frontend acknowledges.
+Any future non-visual event type added to the coalescer inherits this
+invariant automatically through `EmitOutcome.emitted_screen_update`: the
+type system forbids accidentally advancing the timestamp from a non-visual
+emit path.
+
+### Scope
+
+**This addendum applies to the local PTY pipeline only.** SSH panes
+(`ssh_task.rs`) have no frame-ack mechanism and remain under the known
+limitation documented in the main ADR body. Extending frame-ack (and this
+invariant) to SSH panes is deferred to a follow-up change.
+
+### Trigger example
+
+The user-reported trigger was the **Del** key pressed at end-of-line in
+bash. Bash responds with a single BEL byte (`0x07`) and no visible dirty
+cells; after ~1 second of user idle, the next keystroke's output was
+dropped. The same pattern applies to any non-visual-only backend event —
+most commonly Starship or Powerlevel10k prompts emitting OSC 2 (window
+title) or OSC 7 (working directory) on every command execution.
+
+### Anti-regression tests
+
+The invariant is guarded by:
+
+- **Rust unit (`src-tauri/src/session/pty_task.rs`):** TEST-ACK-015,
+  TEST-ACK-016, TEST-ACK-017, TEST-ACK-018, TEST-ACK-019, TEST-ACK-020 —
+  cover `output_emits_screen_update` for all six non-visual fields, the
+  gated-assignment logic, bell flood (Stage 1 non-activation), and the
+  `was_in_drop_mode` idle-tick transition.
+- **Rust integration (`src-tauri/tests/async_concurrency.rs`):**
+  DEL-ASYNC-PTY-009 — Task 2 gating logic replayed on synthetic
+  `ProcessOutput`, with a latency assertion (< 150 ms) that fails if
+  Stage 1 is incorrectly armed.
+- **E2E (`tests/e2e/del-key-freeze.spec.ts`):** DEL-E2E-006 (BEL + pause
+  ≥ 1.2 s + follow-up text), DEL-E2E-007 (OSC 2 title + pause), DEL-E2E-008
+  (OSC 7 CWD + pause).
+- **Frontend vitest
+  (`src/lib/composables/__tests__/useTerminalPane.frame-ack.test.ts`):**
+  ACK-FE-006 — asserts that receiving `bell-triggered`, `mode-state-changed`
+  or `cursor-style-changed` schedules no rAF and invokes no `frame_ack`.

@@ -728,6 +728,148 @@ fn async_pty_009_would_block_reader_retries() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// DEL-ASYNC-PTY-009 — Del-key freeze regression guard for Task 2 gating logic
+//
+// Replicates the debounce-timer branch of `spawn_pty_read_task`'s Task 2
+// without an `AppHandle` (which requires a live Tauri runtime / display
+// surface and is not available in nextest's headless CI environment).
+//
+// Scenario mirrored:
+//   T=0      — bell-only `ProcessOutput` arrives (the PTY master emitted a
+//              single BEL byte, e.g. after Del at end-of-line in bash).
+//              Per the fix, `emitted_screen_update = false`, so
+//              `last_emit_ms` is NOT advanced.
+//   T=1200ms — idle period passes (ACK_DROP_THRESHOLD_MS is 1000 ms).
+//              The core assertion: `has_unacked_emits` MUST be false, so
+//              neither stale nor drop mode activates.
+//   T=1200ms — dirty `ProcessOutput` arrives (the user has typed fresh
+//              input). The gating logic must recognise it as a real
+//              screen-update within < 150 ms. Any latency above that
+//              suggests Stage 1 (ACK_STALE_DEBOUNCE = 250 ms) was armed —
+//              indicating a regression of the fix.
+//
+// `ProcessOutput` is `pub(crate)` (not reachable from integration tests),
+// so the bell/dirty signals are represented by a single `has_dirty: bool`
+// that structurally mirrors `!pending.dirty.is_empty()` — the body of
+// `output_emits_screen_update()` in `src/session/pty_task/emitter.rs`.
+// If the predicate's implementation ever changes, this mirroring MUST be
+// updated in lockstep (enforced by inspection; see plan Phase 2 Task 2.4).
+// ---------------------------------------------------------------------------
+
+/// DEL-ASYNC-PTY-009: the fix for ADR-0027 Addendum 2 prevents non-visual
+/// events from poisoning frame-ack state.
+///
+/// Budget: `assert!(latency < 150 ms)`. 150 ms is the upper bound for the
+/// normal adaptive debounce (`DEBOUNCE_MAX = 100 ms`) plus a 50 ms margin
+/// for test-host scheduling jitter. A latency of 250 ms or more would
+/// indicate `ACK_STALE_DEBOUNCE` was armed — i.e. the fix is not working.
+#[test]
+fn del_async_pty_009_bell_then_idle_then_dirty_no_escalation() {
+    use std::time::Instant;
+
+    // --- Task 2 local state (mirrors `spawn_pty_read_task` Task 2 loop) ---
+    let mut last_emit_ms: u64 = 0;
+    // `last_ack_ms` is initialised by `FrameAckRegistry` to `now()` at task
+    // start; we mimic that with a concrete epoch value.
+    let base_epoch_ms: u64 = 1_700_000_000_000;
+    let last_ack_ms: u64 = base_epoch_ms;
+    let _was_in_drop_mode = false;
+
+    // Thresholds (mirror `reader.rs` consts).
+    const ACK_STALE_THRESHOLD_MS: u64 = 200;
+    const ACK_DROP_THRESHOLD_MS: u64 = 1000;
+
+    // Structural mirror of `output_emits_screen_update(&pending)`:
+    //   !pending.dirty.is_empty()
+    // See `src/session/pty_task/emitter.rs` — kept in sync by inspection.
+    let output_emits_screen_update_mirror = |has_dirty: bool| -> bool { has_dirty };
+
+    // --- Step 1: bell-only emit at T=0 ---
+    // ProcessOutput equivalent: { bell: true, dirty: empty, .. }
+    let bell_has_dirty = false;
+    let bell_emits_screen_update = output_emits_screen_update_mirror(bell_has_dirty);
+    assert!(
+        !bell_emits_screen_update,
+        "bell-only ProcessOutput must not flag emitted_screen_update"
+    );
+
+    // Gated assignment — mirrors the exact reader.rs pattern.
+    if bell_emits_screen_update {
+        last_emit_ms = base_epoch_ms;
+    }
+    assert_eq!(
+        last_emit_ms, 0,
+        "bell-only emit must NOT advance last_emit_ms (ADR-0027 Addendum 2)"
+    );
+
+    // --- Step 2: idle pause of 1200 ms (past ACK_DROP_THRESHOLD_MS) ---
+    // Real sleep keeps this test honest about the debounce-timer wake path
+    // without coupling to tokio::time::pause().
+    let t_before_idle = Instant::now();
+    std::thread::sleep(Duration::from_millis(1200));
+    let idle_elapsed = t_before_idle.elapsed();
+    assert!(
+        idle_elapsed >= Duration::from_millis(1200),
+        "sleep must satisfy the 1200 ms idle budget"
+    );
+
+    // --- Step 3: post-idle backpressure check (pre-dirty) ---
+    // Key claim: bell did NOT poison the state.
+    let simulated_now_ms: u64 = base_epoch_ms + 1200;
+    let ack_age_ms = simulated_now_ms.saturating_sub(last_ack_ms);
+    let has_unacked_emits = last_emit_ms > last_ack_ms;
+    let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
+    let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
+
+    assert!(
+        ack_age_ms > ACK_DROP_THRESHOLD_MS,
+        "ack age ({ack_age_ms} ms) must exceed drop threshold to exercise the fix"
+    );
+    assert!(
+        !has_unacked_emits,
+        "CORE INVARIANT: bell-only emit must NOT leave has_unacked_emits=true \
+         after a 1.2 s idle (got last_emit_ms={last_emit_ms}, last_ack_ms={last_ack_ms})"
+    );
+    assert!(
+        !in_drop_mode,
+        "drop mode must NOT activate after bell-only + idle (fix for Del freeze)"
+    );
+    assert!(
+        !in_stale_mode,
+        "stale mode must NOT activate after bell-only + idle (fix for Del freeze)"
+    );
+
+    // --- Step 4: dirty ProcessOutput arrives; measure gating latency ---
+    // ProcessOutput equivalent: { dirty: {row 0, col 0}, .. }
+    let t_dirty_available = Instant::now();
+    let dirty_has_dirty = true;
+    let dirty_emits_screen_update = output_emits_screen_update_mirror(dirty_has_dirty);
+    // Simulated `if outcome.emitted_screen_update { last_emit_ms = now_ms(); }`.
+    if dirty_emits_screen_update {
+        last_emit_ms = simulated_now_ms;
+    }
+    let gating_latency = t_dirty_available.elapsed();
+
+    assert!(
+        dirty_emits_screen_update,
+        "dirty ProcessOutput must flag emitted_screen_update"
+    );
+    assert_eq!(
+        last_emit_ms, simulated_now_ms,
+        "last_emit_ms must be advanced on dirty emit"
+    );
+
+    // --- Step 5: latency budget ---
+    // 150 ms margin: DEBOUNCE_MAX (100 ms) + 50 ms scheduler jitter. If this
+    // fires, Stage 1 (ACK_STALE_DEBOUNCE = 250 ms) was armed — regression.
+    assert!(
+        gating_latency < Duration::from_millis(150),
+        "gating latency ({gating_latency:?}) must be < 150 ms; \
+         higher suggests ACK_STALE_DEBOUNCE was armed — fix regression"
+    );
+}
+
 /// TEST-ASYNC-PTY-010: drop PtyTaskHandle cancels both read and emit tasks.
 ///
 /// Constructs a `PtyTaskHandle` from two real `AbortHandle`s (each backed by

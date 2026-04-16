@@ -243,15 +243,17 @@ pub fn spawn_pty_read_task(
                                     pending.merge(more);
                                 }
                                 if !pending.is_empty() {
-                                    let emit_duration = emit_all_pending(
+                                    let outcome = emit_all_pending(
                                         &app_e,
                                         &pane_id_e,
                                         &vt_e,
                                         &registry_e,
                                         &mut pending,
                                     );
-                                    current_debounce = next_debounce(emit_duration);
-                                    last_emit_ms = now_ms();
+                                    current_debounce = next_debounce(outcome.duration);
+                                    if outcome.emitted_screen_update {
+                                        last_emit_ms = now_ms();
+                                    }
                                 } else {
                                     // Nothing to emit, but clear the flag to avoid stale hints.
                                     pending.needs_immediate_flush = false;
@@ -263,6 +265,8 @@ pub fn spawn_pty_read_task(
                         None => {
                             // Channel closed — Task 1 finished (EOF or error).
                             // Flush any remaining pending output before exiting.
+                            // EmitOutcome is discarded: this task is exiting and
+                            // neither adaptive debounce nor last_emit_ms matters.
                             if !pending.is_empty() {
                                 let _ = emit_all_pending(
                                     &app_e,
@@ -309,18 +313,28 @@ pub fn spawn_pty_read_task(
                         }
 
                         if !pending.is_empty() {
-                            let emit_duration = emit_all_pending(
+                            let outcome = emit_all_pending(
                                 &app_e,
                                 &pane_id_e,
                                 &vt_e,
                                 &registry_e,
                                 &mut pending,
                             );
-                            last_emit_ms = now_ms();
+                            // ADR-0027 Addendum 2: only advance `last_emit_ms`
+                            // when a `screen-update` event was actually emitted.
+                            // Non-visual events (bell, mode, cursor shape, OSC 52,
+                            // title, CWD) produce no frontend render and therefore
+                            // no frame-ack — advancing the timestamp for them
+                            // would synthesize a phantom "unacked emit" that
+                            // could push the pane into drop mode on the next
+                            // idle tick past ACK_DROP_THRESHOLD_MS.
+                            if outcome.emitted_screen_update {
+                                last_emit_ms = now_ms();
+                            }
                             current_debounce = if in_stale_mode {
                                 ACK_STALE_DEBOUNCE
                             } else {
-                                next_debounce(emit_duration)
+                                next_debounce(outcome.duration)
                             };
                         } else {
                             // All content was dirty-only and was dropped.

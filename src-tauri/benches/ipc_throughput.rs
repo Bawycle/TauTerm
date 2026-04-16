@@ -113,7 +113,7 @@ fn bench_build_scrolled_viewport(c: &mut Criterion) {
     let vt = Arc::new(RwLock::new(VtProcessor::new(80, 24, 10_000, 0, false)));
     {
         let mut proc = vt.write();
-        let row: Vec<u8> = std::iter::repeat(b'X').take(80).collect();
+        let row: Vec<u8> = std::iter::repeat_n(b'X', 80).collect();
         for _ in 0..1_000 {
             proc.process(&row);
             proc.process(b"\r\n");

@@ -2,7 +2,7 @@
 
 This file lists the third-party dependencies used by TauTerm and their licenses.
 
-## Rust Crates (745)
+## Rust Crates (746)
 
 | Crate | Version | License |
 |---|---|---|
@@ -38,8 +38,8 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | atk-sys | 0.18.2 | MIT |
 | atomic-waker | 1.1.2 | Apache-2.0 OR MIT |
 | autocfg | 1.5.0 | Apache-2.0 OR MIT |
-| aws-lc-rs | 1.16.2 | ISC AND (Apache-2.0 OR ISC) |
-| aws-lc-sys | 0.39.1 | ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) |
+| aws-lc-rs | 1.16.3 | ISC AND (Apache-2.0 OR ISC) |
+| aws-lc-sys | 0.40.0 | ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) |
 | base16ct | 1.0.0 | Apache-2.0 OR MIT |
 | base64 | 0.21.7 | MIT OR Apache-2.0 |
 | base64 | 0.22.1 | MIT OR Apache-2.0 |
@@ -89,7 +89,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | ciborium-ll | 0.2.2 | Apache-2.0 |
 | cipher | 0.4.4 | MIT OR Apache-2.0 |
 | cipher | 0.5.1 | MIT OR Apache-2.0 |
-| clap | 4.6.0 | MIT OR Apache-2.0 |
+| clap | 4.6.1 | MIT OR Apache-2.0 |
 | clap_builder | 4.6.0 | MIT OR Apache-2.0 |
 | clap_lex | 1.1.0 | MIT OR Apache-2.0 |
 | clipboard-win | 5.4.1 | BSL-1.0 |
@@ -157,11 +157,11 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | dtoa-short | 0.3.5 | MPL-2.0 |
 | dunce | 1.0.5 | CC0-1.0 OR MIT-0 OR Apache-2.0 |
 | dyn-clone | 1.0.20 | MIT OR Apache-2.0 |
-| ecdsa | 0.17.0-rc.16 | Apache-2.0 OR MIT |
+| ecdsa | 0.17.0-rc.17 | Apache-2.0 OR MIT |
 | ed25519 | 3.0.0-rc.4 | Apache-2.0 OR MIT |
 | ed25519-dalek | 3.0.0-pre.6 | BSD-3-Clause |
 | either | 1.15.0 | MIT OR Apache-2.0 |
-| elliptic-curve | 0.14.0-rc.30 | Apache-2.0 OR MIT |
+| elliptic-curve | 0.14.0-rc.31 | Apache-2.0 OR MIT |
 | embed-resource | 3.0.8 | MIT |
 | embed_plist | 1.2.2 | MIT OR Apache-2.0 |
 | endi | 1.1.1 | MIT |
@@ -339,7 +339,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | nix | 0.31.2 | MIT |
 | nodrop | 0.1.14 | MIT/Apache-2.0 |
 | notify | 8.2.0 | CC0-1.0 |
-| notify-rust | 4.14.0 | MIT/Apache-2.0 |
+| notify-rust | 4.16.0 | MIT/Apache-2.0 |
 | notify-types | 2.1.0 | MIT OR Apache-2.0 |
 | nu-ansi-term | 0.50.3 | MIT |
 | num | 0.4.3 | MIT OR Apache-2.0 |
@@ -367,12 +367,12 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
 | oorandom | 11.1.5 | MIT |
 | opaque-debug | 0.3.1 | MIT OR Apache-2.0 |
-| open | 5.3.3 | MIT |
+| open | 5.3.4 | MIT |
 | option-ext | 0.2.0 | MPL-2.0 |
 | ordered-stream | 0.2.0 | MIT OR Apache-2.0 |
-| p256 | 0.14.0-rc.8 | Apache-2.0 OR MIT |
-| p384 | 0.14.0-rc.8 | Apache-2.0 OR MIT |
-| p521 | 0.14.0-rc.8 | Apache-2.0 OR MIT |
+| p256 | 0.14.0-rc.9 | Apache-2.0 OR MIT |
+| p384 | 0.14.0-rc.9 | Apache-2.0 OR MIT |
+| p521 | 0.14.0-rc.9 | Apache-2.0 OR MIT |
 | page_size | 0.6.0 | MIT/Apache-2.0 |
 | pageant | 0.2.0 | Apache-2.0 |
 | pango | 0.18.3 | MIT |
@@ -428,8 +428,8 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | precomputed-hash | 0.1.1 | MIT |
 | prettyplease | 0.2.37 | MIT OR Apache-2.0 |
-| primefield | 0.14.0-rc.8 | Apache-2.0 OR MIT |
-| primeorder | 0.14.0-rc.8 | Apache-2.0 OR MIT |
+| primefield | 0.14.0-rc.9 | Apache-2.0 OR MIT |
+| primeorder | 0.14.0-rc.9 | Apache-2.0 OR MIT |
 | proc-macro-crate | 1.3.1 | MIT OR Apache-2.0 |
 | proc-macro-crate | 2.0.2 | MIT OR Apache-2.0 |
 | proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |
@@ -437,7 +437,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | proc-macro-error-attr | 1.0.4 | MIT OR Apache-2.0 |
 | proc-macro-hack | 0.5.20+deprecated | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.106 | MIT OR Apache-2.0 |
-| pxfm | 0.1.28 | BSD-3-Clause OR Apache-2.0 |
+| pxfm | 0.1.29 | BSD-3-Clause OR Apache-2.0 |
 | quick-error | 2.0.1 | MIT/Apache-2.0 |
 | quick-xml | 0.37.5 | MIT |
 | quick-xml | 0.38.4 | MIT |
@@ -445,7 +445,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
 | r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
 | rand | 0.7.3 | MIT OR Apache-2.0 |
-| rand | 0.8.5 | MIT OR Apache-2.0 |
+| rand | 0.8.6 | MIT OR Apache-2.0 |
 | rand | 0.10.1 | MIT OR Apache-2.0 |
 | rand_chacha | 0.2.2 | MIT OR Apache-2.0 |
 | rand_chacha | 0.3.1 | MIT OR Apache-2.0 |
@@ -467,7 +467,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | reqwest | 0.13.2 | MIT OR Apache-2.0 |
 | rfc6979 | 0.5.0-rc.5 | Apache-2.0 OR MIT |
 | rsa | 0.10.0-rc.17 | MIT OR Apache-2.0 |
-| russh | 0.60.0 | Apache-2.0 |
+| russh | 0.60.1 | Apache-2.0 |
 | russh-cryptovec | 0.59.0 | Apache-2.0 |
 | russh-util | 0.52.0 | Apache-2.0 |
 | rustc-hash | 2.1.2 | Apache-2.0 OR MIT |
@@ -584,7 +584,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | time-macros | 0.2.27 | MIT OR Apache-2.0 |
 | tinystr | 0.8.3 | Unicode-3.0 |
 | tinytemplate | 1.2.1 | Apache-2.0 OR MIT |
-| tokio | 1.51.1 | MIT |
+| tokio | 1.52.1 | MIT |
 | tokio-macros | 2.7.0 | MIT |
 | tokio-util | 0.7.18 | MIT |
 | toml | 0.8.2 | MIT OR Apache-2.0 |
@@ -610,7 +610,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | tray-icon | 0.21.3 | MIT OR Apache-2.0 |
 | try-lock | 0.2.5 | MIT |
 | typeid | 1.0.3 | MIT OR Apache-2.0 |
-| typenum | 1.19.0 | MIT OR Apache-2.0 |
+| typenum | 1.20.0 | MIT OR Apache-2.0 |
 | uds_windows | 1.2.1 | MIT |
 | unic-char-property | 0.9.0 | MIT/Apache-2.0 |
 | unic-char-range | 0.9.0 | MIT/Apache-2.0 |
@@ -628,7 +628,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | urlpattern | 0.3.0 | MIT |
 | utf-8 | 0.7.6 | MIT OR Apache-2.0 |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT |
-| uuid | 1.23.0 | Apache-2.0 OR MIT |
+| uuid | 1.23.1 | Apache-2.0 OR MIT |
 | valuable | 0.1.1 | MIT |
 | version-compare | 0.2.1 | MIT |
 | version_check | 0.9.5 | MIT/Apache-2.0 |
@@ -639,7 +639,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | want | 0.3.1 | MIT |
 | wasi | 0.9.0+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
-| wasip2 | 1.0.2+wasi-0.2.9 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| wasip2 | 1.0.3+wasi-0.2.9 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wasip3 | 0.4.0+wasi-0.3.0-rc-2026-01-06 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wasm-bindgen | 0.2.118 | MIT OR Apache-2.0 |
 | wasm-bindgen-futures | 0.4.68 | MIT OR Apache-2.0 |
@@ -651,7 +651,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | wasm-streams | 0.5.0 | MIT OR Apache-2.0 |
 | wasmparser | 0.244.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | web-sys | 0.3.95 | MIT OR Apache-2.0 |
-| web_atoms | 0.2.3 | MIT OR Apache-2.0 |
+| web_atoms | 0.2.4 | MIT OR Apache-2.0 |
 | webkit2gtk | 2.0.2 | MIT |
 | webkit2gtk-sys | 2.0.2 | MIT |
 | webview2-com | 0.38.2 | MIT |
@@ -720,6 +720,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | winreg | 0.10.1 | MIT |
 | winreg | 0.55.0 | MIT |
 | wit-bindgen | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wit-bindgen-core | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wit-bindgen-rust | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wit-bindgen-rust-macro | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
@@ -752,31 +753,29 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | zvariant_derive | 5.10.0 | MIT |
 | zvariant_utils | 3.3.0 | MIT |
 
-## npm Packages (582)
+## npm Packages (576)
 
 | Package | Version | License |
 |---|---|---|
-| @asamuzakjp/css-color | 5.1.10 | MIT |
-| @asamuzakjp/dom-selector | 7.0.9 | MIT |
+| @asamuzakjp/css-color | 5.1.11 | MIT |
+| @asamuzakjp/dom-selector | 7.1.1 | MIT |
+| @asamuzakjp/generational-cache | 1.0.1 | MIT |
 | @asamuzakjp/nwsapi | 2.3.9 | MIT |
 | @babel/code-frame | 7.29.0 | MIT |
 | @babel/helper-validator-identifier | 7.28.5 | MIT |
 | @bramus/specificity | 2.4.2 | MIT |
 | @csstools/color-helpers | 6.0.2 | MIT-0 |
 | @csstools/css-calc | 3.2.0 | MIT |
-| @csstools/css-calc | 3.1.1 | MIT |
 | @csstools/css-color-parser | 4.1.0 | MIT |
-| @csstools/css-color-parser | 4.0.2 | MIT |
 | @csstools/css-parser-algorithms | 4.0.0 | MIT |
 | @csstools/css-syntax-patches-for-csstree | 1.1.3 | MIT-0 |
-| @csstools/css-syntax-patches-for-csstree | 1.1.2 | MIT-0 |
 | @csstools/css-tokenizer | 4.0.0 | MIT |
 | @esbuild/linux-x64 | 0.27.7 | MIT |
 | @exodus/bytes | 1.15.0 | MIT |
 | @floating-ui/core | 1.7.5 | MIT |
 | @floating-ui/dom | 1.7.6 | MIT |
 | @floating-ui/utils | 0.2.11 | MIT |
-| @inlang/paraglide-js | 2.15.3 | MIT |
+| @inlang/paraglide-js | 2.16.0 | MIT |
 | @inlang/recommend-sherlock | 0.2.1 | MIT |
 | @inlang/sdk | 2.9.1 | MIT |
 | @inquirer/ansi | 1.0.2 | MIT |
@@ -810,13 +809,14 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | @jridgewell/trace-mapping | 0.3.31 | MIT |
 | @lix-js/sdk | 0.4.9 | Apache-2.0 |
 | @lix-js/server-protocol-schema | 0.1.1 | Apache-2.0 |
-| @oxc-project/types | 0.124.0 | MIT |
+| @nodable/entities | 2.1.0 | MIT |
+| @oxc-project/types | 0.126.0 | MIT |
 | @pkgjs/parseargs | 0.11.0 | MIT |
 | @polka/url | 1.0.0-next.29 | MIT |
 | @promptbook/utils | 0.69.5 | CC-BY-4.0 |
 | @puppeteer/browsers | 2.13.0 | Apache-2.0 |
-| @rolldown/binding-linux-x64-gnu | 1.0.0-rc.15 | MIT |
-| @rolldown/pluginutils | 1.0.0-rc.15 | MIT |
+| @rolldown/binding-linux-x64-gnu | 1.0.0-rc.16 | MIT |
+| @rolldown/pluginutils | 1.0.0-rc.16 | MIT |
 | @sec-ant/readable-stream | 0.4.1 | MIT |
 | @sinclair/typebox | 0.31.28 | MIT |
 | @sinclair/typebox | 0.34.49 | MIT |
@@ -828,10 +828,10 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | @sveltejs/kit | 2.57.1 | MIT |
 | @sveltejs/vite-plugin-svelte | 7.0.0 | MIT |
 | @swc/helpers | 0.5.21 | Apache-2.0 |
-| @tailwindcss/node | 4.2.2 | MIT |
-| @tailwindcss/oxide | 4.2.2 | MIT |
-| @tailwindcss/oxide-linux-x64-gnu | 4.2.2 | MIT |
-| @tailwindcss/vite | 4.2.2 | MIT |
+| @tailwindcss/node | 4.2.3 | MIT |
+| @tailwindcss/oxide | 4.2.3 | MIT |
+| @tailwindcss/oxide-linux-x64-gnu | 4.2.3 | MIT |
+| @tailwindcss/vite | 4.2.3 | MIT |
 | @tauri-apps/api | 2.10.1 | Apache-2.0 OR MIT |
 | @tauri-apps/cli | 2.10.1 | Apache-2.0 OR MIT |
 | @tauri-apps/cli-linux-x64-gnu | 2.10.1 | Apache-2.0 OR MIT |
@@ -907,16 +907,16 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | b4a | 1.8.0 | Apache-2.0 |
 | balanced-match | 1.0.2 | MIT |
 | bare-events | 2.8.2 | Apache-2.0 |
-| bare-fs | 4.7.0 | Apache-2.0 |
+| bare-fs | 4.7.1 | Apache-2.0 |
 | bare-os | 3.8.7 | Apache-2.0 |
 | bare-path | 3.0.0 | Apache-2.0 |
 | bare-stream | 2.13.0 | Apache-2.0 |
-| bare-url | 2.4.0 | Apache-2.0 |
+| bare-url | 2.4.1 | Apache-2.0 |
 | base64-js | 1.5.1 | MIT |
-| basic-ftp | 5.2.2 | MIT |
+| basic-ftp | 5.3.0 | MIT |
 | bidi-js | 1.0.3 | MIT |
 | binary-extensions | 2.3.0 | MIT |
-| bits-ui | 2.17.3 | MIT |
+| bits-ui | 2.18.0 | MIT |
 | boolbase | 1.0.0 | ISC |
 | brace-expansion | 2.1.0 | MIT |
 | brace-expansion | 1.1.14 | MIT |
@@ -983,7 +983,6 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | domhandler | 5.0.3 | BSD-2-Clause |
 | domutils | 3.2.2 | BSD-2-Clause |
 | dotenv | 17.4.2 | BSD-2-Clause |
-| dotenv | 17.4.1 | BSD-2-Clause |
 | eastasianwidth | 0.2.0 | MIT |
 | easy-table | 1.2.0 | MIT |
 | edge-paths | 3.0.5 | MIT |
@@ -997,6 +996,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | entities | 6.0.1 | BSD-2-Clause |
 | entities | 4.5.0 | BSD-2-Clause |
 | entities | 7.0.1 | BSD-2-Clause |
+| entities | 8.0.0 | BSD-2-Clause |
 | error-ex | 1.3.4 | MIT |
 | es-module-lexer | 2.0.0 | MIT |
 | esbuild | 0.27.7 | MIT |
@@ -1021,9 +1021,8 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | extract-zip | 2.0.1 | BSD-2-Clause |
 | fast-deep-equal | 2.0.1 | MIT |
 | fast-fifo | 1.3.2 | MIT |
-| fast-xml-builder | 1.1.4 | MIT |
-| fast-xml-parser | 5.5.12 | MIT |
-| fast-xml-parser | 5.5.11 | MIT |
+| fast-xml-builder | 1.1.5 | MIT |
+| fast-xml-parser | 5.7.1 | MIT |
 | fd-slicer | 1.1.0 | MIT |
 | fdir | 6.5.0 | MIT |
 | fflate | 0.8.2 | MIT |
@@ -1041,7 +1040,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | get-port | 7.2.0 | MIT |
 | get-stream | 5.2.0 | MIT |
 | get-stream | 9.0.1 | MIT |
-| get-tsconfig | 4.13.7 | MIT |
+| get-tsconfig | 4.14.0 | MIT |
 | get-uri | 6.0.5 | MIT |
 | glob | 10.5.0 | ISC |
 | glob | 8.1.0 | ISC |
@@ -1123,7 +1122,6 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | loglevel | 1.9.2 | MIT |
 | loglevel-plugin-prefix | 0.8.4 | MIT |
 | lru-cache | 11.3.5 | BlueOak-1.0.0 |
-| lru-cache | 11.3.3 | BlueOak-1.0.0 |
 | lru-cache | 7.18.3 | ISC |
 | lru-cache | 10.4.3 | ISC |
 | lucide-svelte | 1.0.1 | ISC |
@@ -1161,7 +1159,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | pako | 1.0.11 | (MIT AND Zlib) |
 | parse-json | 7.1.1 | MIT |
 | parse-ms | 4.0.0 | MIT |
-| parse5 | 8.0.0 | MIT |
+| parse5 | 8.0.1 | MIT |
 | parse5 | 7.3.0 | MIT |
 | parse5-htmlparser2-tree-adapter | 7.1.0 | MIT |
 | parse5-parser-stream | 7.1.2 | MIT |
@@ -1177,8 +1175,8 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | picocolors | 1.1.1 | ISC |
 | picomatch | 4.0.4 | MIT |
 | picomatch | 2.3.2 | MIT |
-| postcss | 8.5.9 | MIT |
-| prettier | 3.8.2 | MIT |
+| postcss | 8.5.10 | MIT |
+| prettier | 3.8.3 | MIT |
 | prettier-plugin-svelte | 3.5.1 | MIT |
 | pretty-format | 30.3.0 | MIT |
 | pretty-ms | 9.3.0 | MIT |
@@ -1206,7 +1204,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | resq | 1.11.0 | MIT |
 | ret | 0.5.0 | MIT |
 | rgb2hex | 0.2.5 | MIT |
-| rolldown | 1.0.0-rc.15 | MIT |
+| rolldown | 1.0.0-rc.16 | MIT |
 | run-async | 4.0.6 | MIT |
 | runed | 0.35.1 | MIT |
 | rxjs | 7.8.2 | Apache-2.0 |
@@ -1214,7 +1212,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | safaridriver | 1.0.1 | MIT |
 | safe-buffer | 5.1.2 | MIT |
 | safe-buffer | 5.2.1 | MIT |
-| safe-regex2 | 5.1.0 | MIT |
+| safe-regex2 | 5.1.1 | MIT |
 | safer-buffer | 2.1.2 | MIT |
 | saxes | 6.0.0 | ISC |
 | semver | 7.7.4 | ISC |
@@ -1242,7 +1240,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | sqlite-wasm-kysely | 0.3.0 | unknown |
 | stack-utils | 2.0.6 | MIT |
 | stackback | 0.0.2 | MIT |
-| std-env | 4.0.0 | MIT |
+| std-env | 4.1.0 | MIT |
 | stream-buffers | 3.0.3 | Unlicense |
 | streamx | 2.25.0 | MIT |
 | string-width | 4.2.3 | MIT |
@@ -1257,13 +1255,12 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | style-to-object | 1.0.14 | MIT |
 | supports-color | 8.1.1 | MIT |
 | supports-color | 7.2.0 | MIT |
-| svelte | 5.55.3 | MIT |
 | svelte | 5.55.4 | MIT |
 | svelte-check | 4.4.6 | MIT |
 | svelte-toolbelt | 0.10.6 | unknown |
 | symbol-tree | 3.2.4 | MIT |
 | tabbable | 6.4.0 | MIT |
-| tailwindcss | 4.2.2 | MIT |
+| tailwindcss | 4.2.3 | MIT |
 | tapable | 2.3.2 | MIT |
 | tar-fs | 3.1.2 | MIT |
 | tar-stream | 3.1.8 | MIT |
@@ -1285,11 +1282,9 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | type-fest | 4.26.0 | (MIT OR CC0-1.0) |
 | type-fest | 4.41.0 | (MIT OR CC0-1.0) |
 | type-fest | 3.13.1 | (MIT OR CC0-1.0) |
-| typescript | 6.0.2 | Apache-2.0 |
+| typescript | 6.0.3 | Apache-2.0 |
 | undici | 7.25.0 | MIT |
-| undici | 7.24.7 | MIT |
 | undici | 6.25.0 | MIT |
-| undici | 6.24.1 | MIT |
 | undici-types | 7.19.2 | MIT |
 | undici-types | 6.21.0 | MIT |
 | unicorn-magic | 0.3.0 | MIT |
@@ -1300,7 +1295,7 @@ This file lists the third-party dependencies used by TauTerm and their licenses.
 | uuid | 13.0.0 | MIT |
 | uuid | 10.0.0 | MIT |
 | validate-npm-package-license | 3.0.4 | Apache-2.0 |
-| vite | 8.0.8 | MIT |
+| vite | 8.0.9 | MIT |
 | vitefu | 1.1.3 | MIT |
 | vitest | 4.1.4 | MIT |
 | w3c-xmlserializer | 5.0.0 | MIT |

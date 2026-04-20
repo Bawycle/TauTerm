@@ -84,14 +84,14 @@ fn make_cell_attrs() -> CellAttrsDto {
     CellAttrsDto {
         fg: None,
         bg: None,
-        bold: false,
-        dim: false,
-        italic: false,
-        underline: 0,
-        blink: false,
-        inverse: false,
-        hidden: false,
-        strikethrough: false,
+        bold: None,
+        dim: None,
+        italic: None,
+        underline: None,
+        blink: None,
+        inverse: None,
+        hidden: None,
+        strikethrough: None,
         underline_color: None,
     }
 }
@@ -416,21 +416,21 @@ fn ipc_cell_attrs_with_colors_round_trips() {
     let attrs = CellAttrsDto {
         fg: Some(ColorDto::Rgb { r: 255, g: 0, b: 0 }),
         bg: Some(ColorDto::Ansi { index: 0 }),
-        bold: true,
-        dim: false,
-        italic: true,
-        underline: 1,
-        blink: false,
-        inverse: false,
-        hidden: false,
-        strikethrough: false,
+        bold: Some(true),
+        dim: None,
+        italic: Some(true),
+        underline: Some(1),
+        blink: None,
+        inverse: None,
+        hidden: None,
+        strikethrough: None,
         underline_color: None,
     };
     let json = serde_json::to_string(&attrs).expect("serialize CellAttrsDto");
     let restored: CellAttrsDto = serde_json::from_str(&json).expect("deserialize CellAttrsDto");
-    assert!(restored.bold);
-    assert!(restored.italic);
-    assert_eq!(restored.underline, 1);
+    assert_eq!(restored.bold, Some(true));
+    assert_eq!(restored.italic, Some(true));
+    assert_eq!(restored.underline, Some(1));
 }
 
 // ---------------------------------------------------------------------------
@@ -454,12 +454,14 @@ fn ipc_tau_term_error_with_detail_serializes() {
 }
 
 #[test]
-fn ipc_tau_term_error_without_detail_omits_detail_key() {
+fn ipc_tau_term_error_without_detail_serializes_null() {
+    // `skip_serializing_if` was removed to enable tauri-specta codegen.
+    // `None` now serializes as `"detail":null` instead of being omitted.
     let err = TauTermError::new("SOME_ERROR", "Some message.");
     let json = serde_json::to_string(&err).expect("serialize");
     assert!(
-        !json.contains("\"detail\""),
-        "detail must be absent when None: {json}"
+        json.contains("\"detail\":null"),
+        "detail must be null when None: {json}"
     );
 }
 
@@ -677,14 +679,14 @@ fn cell_attrs_dto_default_booleans_absent_from_json() {
     let attrs = CellAttrsDto {
         fg: None,
         bg: None,
-        bold: false,
-        dim: false,
-        italic: false,
-        underline: 0,
-        blink: false,
-        inverse: false,
-        hidden: false,
-        strikethrough: false,
+        bold: None,
+        dim: None,
+        italic: None,
+        underline: None,
+        blink: None,
+        inverse: None,
+        hidden: None,
+        strikethrough: None,
         underline_color: None,
     };
     let json = serde_json::to_string(&attrs).expect("serialize CellAttrsDto");
@@ -711,14 +713,14 @@ fn cell_attrs_dto_nondefault_values_present_in_json() {
     let attrs = CellAttrsDto {
         fg: None,
         bg: None,
-        bold: true,
-        dim: false,
-        italic: true,
-        underline: 2,
-        blink: false,
-        inverse: false,
-        hidden: false,
-        strikethrough: false,
+        bold: Some(true),
+        dim: None,
+        italic: Some(true),
+        underline: Some(2),
+        blink: None,
+        inverse: None,
+        hidden: None,
+        strikethrough: None,
         underline_color: None,
     };
     let json = serde_json::to_string(&attrs).expect("serialize CellAttrsDto");
@@ -741,12 +743,15 @@ fn cell_attrs_dto_nondefault_values_present_in_json() {
 #[test]
 fn cell_attrs_dto_roundtrip_from_minimal_json() {
     let attrs: CellAttrsDto = serde_json::from_str("{}").expect("deserialize minimal CellAttrsDto");
-    assert!(!attrs.bold, "bold must default to false");
-    assert!(!attrs.dim, "dim must default to false");
-    assert!(!attrs.italic, "italic must default to false");
-    assert_eq!(attrs.underline, 0, "underline must default to 0");
-    assert!(!attrs.blink, "blink must default to false");
-    assert!(!attrs.inverse, "inverse must default to false");
-    assert!(!attrs.hidden, "hidden must default to false");
-    assert!(!attrs.strikethrough, "strikethrough must default to false");
+    assert_eq!(attrs.bold, None, "bold must default to None");
+    assert_eq!(attrs.dim, None, "dim must default to None");
+    assert_eq!(attrs.italic, None, "italic must default to None");
+    assert_eq!(attrs.underline, None, "underline must default to None");
+    assert_eq!(attrs.blink, None, "blink must default to None");
+    assert_eq!(attrs.inverse, None, "inverse must default to None");
+    assert_eq!(attrs.hidden, None, "hidden must default to None");
+    assert_eq!(
+        attrs.strikethrough, None,
+        "strikethrough must default to None"
+    );
 }

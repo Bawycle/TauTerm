@@ -25,6 +25,7 @@ use crate::session::registry::SessionRegistry;
 /// variants. A plain `String` is acceptable here as a deliberate exception to
 /// the IPC error typing rule.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_pty_output(
     pane_id: PaneId,
     data: Vec<u8>,
@@ -83,6 +84,7 @@ impl SshFailureRegistry {
 /// clicking "Open in new tab" once — exactly one failure is injected, which
 /// is enough to exercise the rollback path in `handleConnectionOpen`.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_ssh_failure(
     count: u32,
     failure_registry: State<'_, Arc<SshFailureRegistry>>,
@@ -121,6 +123,7 @@ pub fn consume_ssh_connect_delay() -> Option<u64> {
 /// Single-shot: consumed (zeroed) the first time `connect_task` runs after
 /// this is set.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_ssh_delay(delay_ms: u64) -> Result<(), String> {
     SSH_CONNECT_DELAY_MS.store(delay_ms, std::sync::atomic::Ordering::SeqCst);
     Ok(())
@@ -139,6 +142,7 @@ pub async fn inject_ssh_delay(delay_ms: u64) -> Result<(), String> {
 /// and removes the overlay.  Any subsequent `Disconnected` emitted by the
 /// connect_task when it eventually times out is a no-op (idempotent state).
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_ssh_disconnect(
     pane_id: crate::session::ids::PaneId,
     ssh_manager: tauri::State<'_, std::sync::Arc<crate::ssh::SshManager>>,
@@ -180,6 +184,7 @@ pub async fn inject_ssh_disconnect(
 /// call returns `NoPendingCredentials`, which is silently swallowed by the
 /// `catch {}` in the frontend handler.  The dialog correctly closes.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_credential_prompt(
     pane_id: crate::session::ids::PaneId,
     host: String,
@@ -215,6 +220,7 @@ pub async fn inject_credential_prompt(
 /// Used by E2E tests to exercise the "process exited" UI path (overlay, restart
 /// button, etc.) without requiring a real process to die.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_pane_exit(
     pane_id: PaneId,
     exit_code: i32,
@@ -264,6 +270,7 @@ pub async fn inject_pane_exit(
 /// Call `inject_foreground_process` with an empty `process_name` to clear the
 /// injection and restore the real `tcgetpgrp` behaviour.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_foreground_process(
     pane_id: PaneId,
     process_name: String,
@@ -274,5 +281,138 @@ pub async fn inject_foreground_process(
     } else {
         registry.injected_foreground.insert(pane_id, process_name);
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SSH output injection (E2E)
+// ---------------------------------------------------------------------------
+
+/// Push synthetic bytes into the SSH VT pipeline for a pane.
+///
+/// The bytes are processed through the pane's `VtProcessor` (identical to the
+/// real SSH reader in `ssh_task::extract_process_output`) and the resulting
+/// `ProcessOutput` is sent to the coalescer via `SshInjectableRegistry`.
+///
+/// Requires a prior `create_mock_ssh_pane` call to wire up the coalescer
+/// pipeline for the target pane.
+#[tauri::command]
+#[specta::specta]
+pub async fn inject_ssh_output(
+    pane_id: PaneId,
+    data: Vec<u8>,
+    registry: State<'_, Arc<SessionRegistry>>,
+    ssh_registry: State<'_, Arc<crate::session::ssh_injectable::SshInjectableRegistry>>,
+) -> Result<(), String> {
+    let vt = registry.get_pane_vt(&pane_id).map_err(|e| e.to_string())?;
+
+    let (output, _responses) = crate::session::ssh_task::extract_process_output(&vt, &data);
+
+    // VT responses (CPR/DSR/DA) are discarded — no real SSH channel to write
+    // them back to. This is acceptable for E2E test injection.
+    ssh_registry.send(&pane_id, output).await
+}
+
+// ---------------------------------------------------------------------------
+// Mock SSH pane creation (E2E)
+// ---------------------------------------------------------------------------
+
+/// Create a mock SSH pane for E2E testing without a real SSH connection.
+///
+/// Takes the existing PTY pane (already present in the registry from
+/// `create_tab` at startup) and wires it as if it were an SSH-connected pane:
+///
+/// 1. Sets `pane.ssh_state = Some(Connected)`.
+/// 2. Creates a bounded `mpsc::channel::<ProcessOutput>(256)`.
+/// 3. Registers the sender in `SshInjectableRegistry`.
+/// 4. Spawns a coalescer task (Task B) that consumes from the channel and
+///    emits screen-update events — the same pipeline as a real SSH pane, but
+///    without the reader (Task A) and without a russh channel.
+/// 5. Emits an `ssh-state-changed` event with `Connected` so the frontend
+///    sees the pane as SSH-connected.
+///
+/// After this call, `inject_ssh_output` can push bytes into the SSH VT
+/// pipeline for this pane.
+#[tauri::command]
+#[specta::specta]
+pub async fn create_mock_ssh_pane(
+    pane_id: PaneId,
+    registry: State<'_, Arc<SessionRegistry>>,
+    ssh_registry: State<'_, Arc<crate::session::ssh_injectable::SshInjectableRegistry>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::events::{SshStateChangedEvent, emit_ssh_state_changed};
+    use crate::session::output::{Coalescer, CoalescerConfig, CoalescerContext, run};
+    use crate::session::ssh_task::SshTaskHandle;
+    use crate::ssh::SshLifecycleState;
+    use tokio::sync::mpsc;
+
+    // Retrieve VT and frame-ack clock from the existing pane.
+    let vt = registry.get_pane_vt(&pane_id).map_err(|e| e.to_string())?;
+    let last_frame_ack_ms = registry
+        .get_pane_frame_ack_clock(&pane_id)
+        .ok_or_else(|| format!("pane not found: {pane_id}"))?;
+
+    // Set SSH state on the pane.
+    registry.set_ssh_state(&pane_id, SshLifecycleState::Connected);
+
+    // Create the ProcessOutput channel (same capacity as real SSH pipeline).
+    let (tx, rx) = mpsc::channel::<crate::session::output::ProcessOutput>(256);
+
+    // Register sender so inject_ssh_output can reach it.
+    ssh_registry.register(pane_id.clone(), tx);
+
+    // Spawn coalescer task (Task B only — no reader task).
+    let pane_id_e = pane_id.clone();
+    let app_e = app.clone();
+    let registry_arc = Arc::clone(&*registry);
+    let registry_e = Arc::clone(&registry_arc);
+    let ssh_registry_ref = Arc::clone(&*ssh_registry);
+
+    let config = CoalescerConfig::ssh_default();
+    let coalescer = Coalescer::new(&config);
+    let ctx = CoalescerContext {
+        app: app.clone(),
+        pane_id: pane_id.clone(),
+        vt,
+        registry: registry_arc,
+        last_frame_ack_ms,
+        config,
+    };
+
+    let emit_task = tauri::async_runtime::spawn(async move {
+        run(coalescer, ctx, rx).await;
+
+        // Termination block — mirrors ssh_task.rs Task B.
+        registry_e.set_ssh_state(&pane_id_e, SshLifecycleState::Closed);
+        emit_ssh_state_changed(
+            &app_e,
+            SshStateChangedEvent {
+                pane_id: pane_id_e.clone(),
+                state: SshLifecycleState::Closed,
+            },
+        );
+
+        // Clean up the injectable registry entry.
+        ssh_registry_ref.remove(&pane_id_e);
+    });
+
+    // Store the task handle so it gets aborted on pane close.
+    // We use a dummy read_abort (the emit_task itself) since there's no reader.
+    let handle = SshTaskHandle::new(
+        emit_task.inner().abort_handle(),
+        emit_task.inner().abort_handle(),
+    );
+    registry.set_ssh_task(&pane_id, handle);
+
+    // Emit Connected event so the frontend sees the SSH state.
+    emit_ssh_state_changed(
+        &app,
+        SshStateChangedEvent {
+            pane_id,
+            state: SshLifecycleState::Connected,
+        },
+    );
+
     Ok(())
 }

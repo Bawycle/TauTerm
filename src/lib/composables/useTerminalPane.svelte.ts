@@ -31,9 +31,8 @@ import {
   onCursorStyleChanged,
   onBellTriggered,
   onNotificationChanged,
-} from '$lib/ipc/events';
-import {
-  getPaneScreenSnapshot,
+  onOsc52WriteRequested,
+  fetchAndAckSnapshot,
   sendInput,
   scrollPane,
   copyToClipboard,
@@ -41,12 +40,13 @@ import {
   setActivePane,
   getClipboard,
   reconnectSsh,
-} from '$lib/ipc/commands';
-import { buildGridFromSnapshot, applyUpdates } from '$lib/terminal/screen.js';
+  frameAck,
+} from '$lib/ipc';
+import type { PaneId, CursorState, BellType, SearchMatch, ScreenUpdateEvent } from '$lib/ipc';
+import { buildGridFromSnapshot, applyUpdates, mergeScreenUpdates } from '$lib/terminal/screen.js';
 import { cursorShape, cursorBlinks } from '$lib/terminal/color.js';
 import { SelectionManager } from '$lib/terminal/selection.js';
 import { pasteToBytes } from '$lib/terminal/paste.js';
-import type { PaneId, CursorState, BellType, SearchMatch, ScreenUpdateEvent } from '$lib/ipc/types';
 import type { CellStyle } from '$lib/terminal/screen.js';
 import {
   defaultCell,
@@ -137,6 +137,13 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
   const rafQueue: ScreenUpdateEvent[] = [];
   let rafId: number | null = null;
   let rafScheduled = false;
+
+  // P-HT-3: safety cap — if the rAF queue exceeds this threshold at flush time,
+  // discard the batch and re-fetch a fresh snapshot from the backend. The cap is
+  // high enough to never trigger under normal load (P-HT-1 coalescing keeps the
+  // queue at 1–3 events/frame) but low enough to prevent OOM under extreme bursts.
+  const RAF_QUEUE_CAP = 20;
+  let snapshotRefetchPending = false;
 
   // -------------------------------------------------------------------------
   // Terminal mode state
@@ -282,6 +289,12 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     }
     return set;
   });
+
+  // P-HT-4: boolean gates for skipping per-cell isSelected/searchMatchSet
+  // lookups when no selection or search is active. Avoids N*M function calls
+  // per render frame when the common case is "no selection, no search".
+  const hasSelectionRange = $derived(selectionRange !== null);
+  const hasSearchMatches = $derived(searchMatchSet.size > 0);
 
   // FS-SEARCH-006: scroll to center the active search match in the viewport.
   $effect(() => {
@@ -474,13 +487,88 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       rafScheduled = false;
       rafId = null;
       const batch = rafQueue.splice(0);
-      for (const update of batch) {
-        applyScreenUpdate(update);
+      if (batch.length === 0) return;
+
+      // P-HT-3: safety cap — if the queue grew too large, the frontend is falling
+      // behind. Discard the stale batch and re-fetch a fresh snapshot instead.
+      if (batch.length > RAF_QUEUE_CAP) {
+        void triggerSnapshotRefetch();
+        return;
+      }
+
+      const merged = mergeScreenUpdates(batch);
+      // mergeScreenUpdates returns an array for heterogeneous scrollOffset batches
+      // (rare but correct), or a single event for homogeneous batches (common case).
+      if (Array.isArray(merged)) {
+        for (const update of merged) {
+          applyScreenUpdate(update);
+        }
+      } else {
+        applyScreenUpdate(merged);
+      }
+
+      // P-HT-6: notify backend that this frame was consumed.
+      // INVARIANT (ADR-0027 Addendum 2): `frameAck` is called ONLY in response
+      // to screen-update events (this flushRafQueue path and the
+      // triggerSnapshotRefetch recovery below). The backend mirror lives in
+      // `src-tauri/src/session/pty_task/emitter.rs::output_emits_screen_update`
+      // — if a new event type ever becomes ack-triggering here, that predicate
+      // must be updated in lockstep, otherwise drop-mode will falsely activate.
+      frameAck(props.paneId());
+    }
+
+    /**
+     * P-HT-3: re-fetch a fresh snapshot when the rAF queue overflows.
+     * Guarded by snapshotRefetchPending to prevent double-fetch races.
+     * After the snapshot arrives, drain any events that accumulated during
+     * the fetch — they are stale relative to the fresh snapshot.
+     */
+    async function triggerSnapshotRefetch(): Promise<void> {
+      if (snapshotRefetchPending) return;
+      snapshotRefetchPending = true;
+      try {
+        // ADR-0027 Addendum 3: `fetchAndAckSnapshot` emits `frame_ack` upon
+        // successful snapshot receipt. The ack is mandatory here — without
+        // it, the backend's ack timer keeps aging during the async fetch
+        // and may enter drop mode, suppressing the very events the frontend
+        // needs to send a normal ack from flushRafQueue. See the helper
+        // doc-comment for rationale.
+        const snapshot = await fetchAndAckSnapshot(props.paneId());
+
+        // Drain events that accumulated during the async fetch — the snapshot
+        // is more authoritative. Without this drain, the accumulated events
+        // would likely exceed the cap again at the next flush, causing an
+        // infinite refetch loop.
+        rafQueue.splice(0);
+
+        cols = snapshot.cols;
+        rows = snapshot.rows;
+        grid = buildGridFromSnapshot(snapshot.cells, snapshot.rows, snapshot.cols);
+        cursor = {
+          row: snapshot.cursorRow,
+          col: snapshot.cursorCol,
+          visible: snapshot.cursorVisible,
+          shape: snapshot.cursorShape,
+          blink: cursorBlinks(snapshot.cursorShape),
+        };
+        scrollOffset = snapshot.scrollOffset;
+        scrollbackLines = snapshot.scrollbackLines;
+
+        gridRows = buildFullGridRowsBound(rows, cols);
+      } catch {
+        // Snapshot fetch failed — the pane continues with its current state.
+        // Events arriving after this point will be processed normally.
+      } finally {
+        snapshotRefetchPending = false;
       }
     }
 
     function scheduleRaf(): void {
-      if (rafScheduled) return;
+      // Skip scheduling while a snapshot refetch is in flight — events will be
+      // drained after the snapshot resolves. Without this guard, a second
+      // overflow would splice the batch out of rafQueue and silently discard it
+      // because triggerSnapshotRefetch returns early (snapshotRefetchPending).
+      if (rafScheduled || snapshotRefetchPending) return;
       rafScheduled = true;
       rafId = requestAnimationFrame(flushRafQueue);
     }
@@ -499,8 +587,15 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     );
 
     // Fetch the initial screen snapshot.
+    // ADR-0027 Addendum 3: `fetchAndAckSnapshot` emits `frame_ack` upon
+    // successful snapshot receipt. Required here to close the pre-attach
+    // race: the first backend `screen-update` may be emitted before this
+    // listener was attached (reliably reproducible in dev mode with slow
+    // Vite module loading; theoretically present in prod under GC/IO
+    // stalls). Without the ack, `last_ack_ms` stays at pane-creation time
+    // and the backend falsely enters drop mode after the idle timeout.
     try {
-      const snapshot = await getPaneScreenSnapshot(props.paneId());
+      const snapshot = await fetchAndAckSnapshot(props.paneId());
 
       cols = snapshot.cols;
       rows = snapshot.rows;
@@ -574,6 +669,13 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       }),
     );
 
+    unlistens.push(
+      await onOsc52WriteRequested((event) => {
+        if (event.paneId !== props.paneId()) return;
+        void copyToClipboard(event.data);
+      }),
+    );
+
     if (viewportEl) {
       resize.startObserving(viewportEl);
     }
@@ -585,6 +687,7 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
       rafId = null;
       rafScheduled = false;
     }
+    snapshotRefetchPending = false;
     for (const unlisten of unlistens) unlisten();
     unlistens = [];
     visualFx.cleanup();
@@ -1062,6 +1165,12 @@ export function useTerminalPane(props: TerminalPaneComposableProps) {
     },
     get hasSelection() {
       return hasSelection;
+    },
+    get hasSelectionRange() {
+      return hasSelectionRange;
+    },
+    get hasSearchMatches() {
+      return hasSearchMatches;
     },
     get selectionFlashing() {
       return visualFx.selectionFlashing;

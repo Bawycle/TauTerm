@@ -32,7 +32,7 @@ import {
 import { tabNotifications } from '$lib/state/notifications.svelte';
 import { preferences } from '$lib/state/preferences.svelte';
 import { fullscreenState, setFullscreen } from '$lib/state/fullscreen.svelte';
-import { toggleFullscreen as ipcToggleFullscreen } from '$lib/ipc/commands';
+import { toggleFullscreen as ipcToggleFullscreen } from '$lib/ipc';
 import { createViewState } from './useTerminalView.core.svelte';
 import { createSessionHandlers } from './useTerminalView.session-handlers.svelte';
 import { createIoHandlers } from './useTerminalView.io-handlers.svelte';

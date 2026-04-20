@@ -24,7 +24,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { NotificationChangedEvent } from '$lib/ipc/types';
+import type { NotificationChangedEvent } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Mirror of notifications.svelte.ts terminatedPanes logic (FS-PTY-005)

@@ -13,8 +13,9 @@
  */
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { getConnections, hasForegroundProcess } from '$lib/ipc/commands';
 import {
+  getConnections,
+  hasForegroundProcess,
   onSessionStateChanged,
   onSshStateChanged,
   onHostKeyPrompt,
@@ -24,7 +25,7 @@ import {
   onModeStateChanged,
   onFullscreenStateChanged,
   onPreferencesChanged,
-} from '$lib/ipc/events';
+} from '$lib/ipc';
 import {
   sessionState,
   applySessionDelta,
@@ -42,7 +43,7 @@ import { applyNotificationChanged } from '$lib/state/notifications.svelte';
 import { setFullscreen } from '$lib/state/fullscreen.svelte';
 import { setPreferences } from '$lib/state/preferences.svelte';
 import type { ViewState } from './useTerminalView.core.svelte';
-import type { PaneId } from '$lib/ipc/types';
+import type { PaneId } from '$lib/ipc';
 
 /**
  * Register all IPC event listeners that update the ViewState bag.

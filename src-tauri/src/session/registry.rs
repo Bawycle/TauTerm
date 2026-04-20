@@ -69,7 +69,7 @@ pub(crate) fn clamp_pane_dimensions(cols: u16, rows: u16) -> (u16, u16) {
 // ---------------------------------------------------------------------------
 
 /// Configuration for creating a new tab.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateTabConfig {
     /// Optional initial label. `None` = use process title via OSC.
@@ -100,10 +100,12 @@ pub struct CreateTabConfig {
 }
 
 /// Scroll position state returned by `scroll_pane`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScrollPositionState {
+    #[specta(type = f64)]
     pub offset: i64,
+    #[specta(type = f64)]
     pub scrollback_lines: usize,
 }
 
@@ -190,5 +192,24 @@ impl SessionRegistry {
             #[cfg(feature = "e2e-testing")]
             injected_foreground: dashmap::DashMap::new(),
         })
+    }
+
+    /// Record a frame-ack timestamp for a pane (P-HT-6).
+    ///
+    /// Uses a read-lock only — the `AtomicU64::store` is lock-free.
+    /// Silently ignored if the pane no longer exists (race with close).
+    pub fn record_frame_ack(&self, pane_id: &PaneId) {
+        let inner = self.inner.read();
+        if let Some(tab_id) = inner.pane_to_tab.get(pane_id)
+            && let Some(entry) = inner.tabs.get(tab_id)
+            && let Some(pane) = entry.panes.get(pane_id)
+        {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            pane.last_frame_ack_ms
+                .store(ts, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }

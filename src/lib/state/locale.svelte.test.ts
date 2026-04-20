@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as tauriCore from '@tauri-apps/api/core';
 import * as paraglide from '$lib/paraglide/runtime';
 import { getActiveLocale, setLocale, initLocale } from '$lib/state/locale.svelte';
-import type { Preferences } from '$lib/ipc/types';
+import type { Preferences } from '$lib/ipc';
 
 /** Minimal stub Preferences object returned by get_preferences. */
 function makePrefs(language: 'en' | 'fr'): Preferences {

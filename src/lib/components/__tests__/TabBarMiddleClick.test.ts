@@ -15,7 +15,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, unmount } from 'svelte';
-import type { TabState, PaneState } from '$lib/ipc/types';
+import type { TabState, PaneState } from '$lib/ipc';
 import TabBar from '../TabBar.svelte';
 
 // ---------------------------------------------------------------------------
@@ -24,13 +24,12 @@ import TabBar from '../TabBar.svelte';
 
 function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }

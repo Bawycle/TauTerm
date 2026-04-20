@@ -11,7 +11,7 @@ use tauri::{AppHandle, State};
 
 use crate::error::TauTermError;
 use crate::events::{ScrollPositionChangedEvent, emit_screen_update, emit_scroll_position_changed};
-use crate::session::pty_task::build_scrolled_viewport_event;
+use crate::session::output::build_scrolled_viewport_event;
 use crate::session::{SessionRegistry, ids::PaneId, registry::ScrollPositionState};
 use crate::vt::{SearchMatch, SearchQuery, screen_buffer::ScreenSnapshot};
 
@@ -34,6 +34,7 @@ fn validate_input_size(data: &[u8]) -> Result<(), TauTermError> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn send_input(
     app: AppHandle,
     pane_id: PaneId,
@@ -73,6 +74,7 @@ pub async fn send_input(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn scroll_pane(
     app: AppHandle,
     pane_id: PaneId,
@@ -101,6 +103,7 @@ pub async fn scroll_pane(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn scroll_to_bottom(
     app: AppHandle,
     pane_id: PaneId,
@@ -144,6 +147,7 @@ fn validate_search_query_len(text: &str) -> Result<(), TauTermError> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn search_pane(
     pane_id: PaneId,
     query: SearchQuery,
@@ -156,6 +160,7 @@ pub async fn search_pane(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_pane_screen_snapshot(
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -165,8 +170,26 @@ pub async fn get_pane_screen_snapshot(
         .map_err(TauTermError::from)
 }
 
+/// P-HT-6: Frontend frame acknowledgement.
+///
+/// Called by the frontend after each successful `flushRafQueue()` paint.
+/// Updates the pane's last-ack timestamp so the backend can detect frontend overload.
+///
+/// Fire-and-forget from the frontend — always returns `Ok(())`.
+/// If the pane no longer exists (race with close), silently ignored.
+#[tauri::command]
+#[specta::specta]
+pub async fn frame_ack(
+    pane_id: PaneId,
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<(), TauTermError> {
+    registry.record_frame_ack(&pane_id);
+    Ok(())
+}
+
 /// Resize a pane's PTY. Debounced by the backend (§6.5).
 #[tauri::command]
+#[specta::specta]
 pub async fn resize_pane(
     pane_id: PaneId,
     cols: u16,

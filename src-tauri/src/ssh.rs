@@ -21,7 +21,7 @@ use crate::preferences::types::{SshHost, SshIdentityPath, SshLabel, SshUsername}
 use crate::session::ids::ConnectionId;
 
 /// Saved SSH connection configuration (persisted in preferences.json).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SshConnectionConfig {
     pub id: ConnectionId,
@@ -35,24 +35,22 @@ pub struct SshConnectionConfig {
     /// by `SshIdentityPath::try_from` at IPC deserialization time (SEC-PATH-005).
     /// File existence and `~/.ssh/` boundary are checked at connection time in
     /// `lifecycle.rs::open_connection_inner`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub identity_file: Option<SshIdentityPath>,
     /// Per-connection OSC 52 write policy override.
     #[serde(default)]
     pub allow_osc52_write: bool,
     /// Override the keepalive probe interval for this connection (seconds).
     /// Falls back to `SSH_KEEPALIVE_INTERVAL` (30 s) when absent (FS-SSH-020).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<f64>)]
     pub keepalive_interval_secs: Option<u64>,
     /// Override the maximum number of consecutive unanswered keepalive probes
     /// before the connection is declared lost (FS-SSH-020).
     /// Falls back to `SSH_KEEPALIVE_MAX_MISSES` (3) when absent.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub keepalive_max_failures: Option<u32>,
 }
 
 /// SSH session lifecycle state (§5.2 of ARCHITECTURE.md).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum SshLifecycleState {
     /// TCP connection in progress.

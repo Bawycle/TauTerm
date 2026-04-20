@@ -190,6 +190,34 @@ function parseCursorCol(leftStyle: string | null): number {
 }
 
 /**
+ * Wait for the cursor to be visible (blink-on phase) AND have a valid `left`
+ * style, then return the parsed column number.
+ *
+ * This replaces the two-step pattern `waitUntil(cursorExists)` + separate
+ * `getCursorLeftStyle()` which is vulnerable to a blink race: the cursor can
+ * enter blink-off between the two WebDriver roundtrips, causing `style.left`
+ * to be null → NaN.
+ *
+ * Here, `waitUntil` retries until a single `browser.execute` call finds the
+ * cursor AND reads its `left` value atomically within one JS tick.
+ */
+async function waitForCursorCol(timeoutMsg: string): Promise<number> {
+  let col = NaN;
+  await browser.waitUntil(
+    async () => {
+      const left = (await browser.execute((): string | null => {
+        const el = document.querySelector<HTMLElement>('.terminal-pane__cursor');
+        return el ? el.style.left : null;
+      })) as string | null;
+      col = parseCursorCol(left);
+      return !Number.isNaN(col);
+    },
+    { timeout: 5_000, timeoutMsg },
+  );
+  return col;
+}
+
+/**
  * Return the full text content of the terminal grid, row by row.
  * Each entry in the returned array is the concatenated textContent of all
  * cells in that row (a `.terminal-pane__row`).
@@ -318,15 +346,11 @@ describe('ls -al basic flow', () => {
 
     // 1.4 / UX-SC-02: cursor column must equal PROMPT_LEN (immediately after
     // the last prompt character). The style is "{col}ch".
-    // Wait for cursor to be in blink-on phase before reading style.left.
-    // The earlier waitUntil at the top of this phase may have been in-between
-    // blink cycles by the time we reach here. Same race as Phase 4 (see comment there).
-    await browser.waitUntil(cursorExists, {
-      timeout: 5_000,
-      timeoutMsg: 'Cursor did not enter blink-on phase before column read (Phase 1, criterion 1.4)',
-    });
-    const leftStyle = await getCursorLeftStyle();
-    const cursorCol = parseCursorCol(leftStyle);
+    // Wait for cursor to be visible with a valid left style (atomic read to
+    // avoid blink race between waitUntil and getCursorLeftStyle).
+    const cursorCol = await waitForCursorCol(
+      'Cursor did not enter blink-on phase before column read (Phase 1, criterion 1.4)',
+    );
     expect(cursorCol).toBe(PROMPT_LEN); // criterion 1.4: col = length of prompt
 
     // UX-SC-04: terminal must not be obscured by a modal or preferences panel.
@@ -357,12 +381,9 @@ describe('ls -al basic flow', () => {
     expect(gridText).toContain('a'); // criterion 2.1
 
     // 2.2 / UX-SC-06: cursor must have advanced by 6 columns (PROMPT_LEN + 6).
-    await browser.waitUntil(cursorExists, {
-      timeout: 5_000,
-      timeoutMsg: 'Cursor did not enter blink-on phase before column read (Phase 2, criterion 2.2)',
-    });
-    const leftStyle = await getCursorLeftStyle();
-    const cursorCol = parseCursorCol(leftStyle);
+    const cursorCol = await waitForCursorCol(
+      'Cursor did not enter blink-on phase before column read (Phase 2, criterion 2.2)',
+    );
     expect(cursorCol).toBe(PROMPT_LEN + 6); // criterion 2.2: col = 16 + 6 = 22
 
     // 2.3 / UX-SC-05: no duplicate characters — "ls -al" appears exactly once.
@@ -464,18 +485,12 @@ describe('ls -al basic flow', () => {
     expect(promptRowIdx).toBe(lastOccupiedIdx); // criterion 4.2
 
     // 4.3 / UX-SC-19: cursor must be on the return prompt row at col = PROMPT_LEN.
-    // Wait for the cursor element to be in the DOM before querying style.left.
-    // The blink timer may have left the cursor in its "off" phase at the end of
-    // the 50 ms pause, causing the {#if} to hide it and getCursorLeftStyle() to
-    // return null (→ NaN). waitUntil(cursorExists) synchronises with the "on"
-    // phase before we read style.left, eliminating the race condition.
-    await browser.waitUntil(cursorExists, {
-      timeout: 5_000,
-      timeoutMsg:
-        'Cursor (.terminal-pane__cursor) did not appear after return-prompt injection (criterion 4.3)',
-    });
-    const leftStyle = await getCursorLeftStyle();
-    const cursorCol = parseCursorCol(leftStyle);
+    // waitForCursorCol atomically waits for the cursor to be in the DOM AND
+    // reads style.left in a single browser.execute call, eliminating the blink
+    // race where the cursor disappears between waitUntil and getCursorLeftStyle.
+    const cursorCol = await waitForCursorCol(
+      'Cursor (.terminal-pane__cursor) did not appear after return-prompt injection (criterion 4.3)',
+    );
     expect(cursorCol).toBe(PROMPT_LEN); // criterion 4.3
 
     // 4.4: cursor must be visible (not blink-hidden — we just injected, no blink gap).
@@ -523,12 +538,9 @@ describe('ls -al basic flow', () => {
     await waitForTextInGrid(PROMPT + 'e', 5_000); // criterion 5.1 / UX-SC-20
 
     // 5.2: the cursor must have advanced by one column (col = PROMPT_LEN + 1).
-    await browser.waitUntil(cursorExists, {
-      timeout: 5_000,
-      timeoutMsg: 'Cursor did not enter blink-on phase before column read (Phase 5, criterion 5.2)',
-    });
-    const leftStyle = await getCursorLeftStyle();
-    const cursorCol = parseCursorCol(leftStyle);
+    const cursorCol = await waitForCursorCol(
+      'Cursor did not enter blink-on phase before column read (Phase 5, criterion 5.2)',
+    );
     expect(cursorCol).toBe(PROMPT_LEN + 1); // criterion 5.2
 
     // 5.1 / UX-SC-20: verify 'e' is on the return-prompt line, not somewhere

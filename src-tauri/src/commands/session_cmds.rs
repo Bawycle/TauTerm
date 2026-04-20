@@ -20,6 +20,7 @@ use crate::session::{
 use crate::ssh::SshManager;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn create_tab(
     config: CreateTabConfig,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -28,6 +29,7 @@ pub async fn create_tab(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn close_tab(
     tab_id: TabId,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -60,6 +62,7 @@ pub async fn close_tab(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn rename_tab(
     tab_id: TabId,
     label: Option<String>,
@@ -71,6 +74,7 @@ pub async fn rename_tab(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn set_pane_label(
     pane_id: PaneId,
     label: Option<String>,
@@ -82,6 +86,7 @@ pub async fn set_pane_label(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn reorder_tab(
     tab_id: TabId,
     new_order: u32,
@@ -93,6 +98,7 @@ pub async fn reorder_tab(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn split_pane(
     pane_id: PaneId,
     direction: SplitDirection,
@@ -104,6 +110,7 @@ pub async fn split_pane(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn close_pane(
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -119,6 +126,7 @@ pub async fn close_pane(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn set_active_tab(
     tab_id: TabId,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -140,6 +148,7 @@ pub async fn set_active_tab(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn set_active_pane(
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,
@@ -172,6 +181,7 @@ pub async fn set_active_pane(
 /// The `tcgetpgrp` syscall is performed inside the registry, delegated through
 /// `PtySession::foreground_pgid()` in the platform layer — no `unsafe` here.
 #[tauri::command]
+#[specta::specta]
 pub async fn has_foreground_process(
     pane_id: PaneId,
     registry: State<'_, Arc<SessionRegistry>>,

@@ -145,6 +145,7 @@ impl SessionRegistry {
                 reader,
                 writer_handle,
                 registry,
+                new_pane.last_frame_ack_ms.clone(),
             );
             new_pane.pty_task = Some(task);
         }

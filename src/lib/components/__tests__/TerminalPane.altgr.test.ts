@@ -2,13 +2,21 @@
 /**
  * TerminalPane.altgr.test.ts
  *
- * Tests for AltGr guard fixes in TerminalPane.svelte handleKeydown.
+ * Tests for input handling in TerminalPane.svelte: AltGr guards, GTK IM
+ * composition (dead keys), and Tab key regression.
  *
  * Covered:
- *   TEST-TP-ALTGR-001 — AltGr+Shift: guard does NOT block, PTY receives bytes
- *   TEST-TP-ALTGR-002 — Ctrl+Shift (no AltGraph): guard blocks, PTY receives nothing
- *   TEST-TP-ALTGR-003 — AltGr+, (AltGraph): guard does NOT block
- *   TEST-TP-ALTGR-004 — Ctrl+, (no AltGraph): guard blocks
+ *   TEST-TP-ALTGR-001–004 — AltGr / Ctrl+Shift guards in handleKeydown
+ *   TEST-TP-INPUT-001–003  — GTK IM commit via textarea input event
+ *   TEST-TP-INPUT-NBSP     — WebKitGTK NBSP normalization
+ *   TEST-TP-INPUT-004      — bare printable keydown bypassed to handleInput
+ *   TEST-TP-INPUT-005–011  — dead key composition lifecycle (isComposing,
+ *                            compositionend, double-send guard, cancelled
+ *                            composition, double dead key, incompatible char)
+ *   TEST-TP-INPUT-012      — REGRESSION: space after composition (no trailing input)
+ *   TEST-TP-INPUT-013      — trailing input matching composed text suppressed
+ *   TEST-TP-INPUT-014      — trailing input with different text is sent
+ *   TEST-TP-TAB-001–003    — Tab/Shift+Tab key regression
  *
  * Implementation note:
  *   The IPC path is: handleKeydown → tp.sendBytes → sendInput (from $lib/ipc/commands).
@@ -21,7 +29,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import TerminalPane from '$lib/components/TerminalPane.svelte';
 import * as tauriEvent from '@tauri-apps/api/event';
-import * as ipcCommands from '$lib/ipc/commands';
+import * as ipcCommands from '$lib/ipc';
 
 // Stub ResizeObserver (not available in jsdom)
 if (!globalThis.ResizeObserver) {
@@ -291,6 +299,274 @@ describe('TerminalPane.svelte handleInput (textarea input event)', () => {
 
     // PTY must NOT receive bytes from keydown — character comes via input event instead
     expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+
+  // TEST-TP-INPUT-005: input during composition (isComposing=true) is ignored.
+  // Dead key ^ → input fires with pre-edit "^" and isComposing=true.
+  // This must NOT be sent to the PTY — the composed character will arrive later.
+  it('TEST-TP-INPUT-005: input event with isComposing=true is ignored (dead key pre-edit)', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Simulate dead key pre-edit: IM writes "^" to textarea, fires input with isComposing=true
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Pre-edit text must NOT be sent to PTY
+    expect(sendInputSpy).not.toHaveBeenCalled();
+    // Textarea value must NOT be cleared (IM needs it for composition)
+    expect(inputEl!.value).toBe('^');
+  });
+
+  // TEST-TP-INPUT-006: compositionend delivers the final composed character.
+  // After dead ^ + i, compositionend fires with data="î". This must be sent to PTY.
+  it('TEST-TP-INPUT-006: compositionend data="î" sends composed character to PTY', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Simulate compositionend: IM commits "î" and textarea holds it
+    inputEl!.value = 'î';
+    inputEl!.dispatchEvent(
+      new CompositionEvent('compositionend', { data: 'î', bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalled();
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    // î = U+00EE → UTF-8: [0xC3, 0xAE]
+    expect(Array.from(bytes)).toEqual([0xc3, 0xae]);
+    // Textarea must be drained after compositionend
+    expect(inputEl!.value).toBe('');
+  });
+
+  // TEST-TP-INPUT-007: full dead key sequence (^ then i) produces only "î", not "^î".
+  // Simulates the complete sequence: compositionstart → input(isComposing) → compositionend.
+  // Also verifies that a space typed after the composition is NOT swallowed (regression guard).
+  it('TEST-TP-INPUT-007: dead ^ + i → only "î" sent (no spurious "^"), then space goes through', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Step 1: compositionstart
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+
+    // Step 2: input with isComposing=true (dead key pre-edit)
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Step 3: compositionend with composed character
+    inputEl!.value = 'î';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'î', bubbles: true }));
+    // Flush microtask (clears compositionEndData if no trailing input)
+    await Promise.resolve();
+    flushSync();
+
+    // Step 4: space after composition — must NOT be swallowed (REGRESSION GUARD)
+    dispatchInput(inputEl!, '\u00a0'); // WebKitGTK NBSP
+    await Promise.resolve();
+    flushSync();
+
+    // 2 calls: "î" from compositionend + space (NBSP normalized to 0x20)
+    expect(sendInputSpy).toHaveBeenCalledTimes(2);
+    expect(Array.from(sendInputSpy.mock.calls[0][1] as Uint8Array)).toEqual([0xc3, 0xae]); // î
+    expect(Array.from(sendInputSpy.mock.calls[1][1] as Uint8Array)).toEqual([0x20]); // space
+  });
+
+  // TEST-TP-INPUT-008: compositionend followed by input(isComposing=false) → no double-send.
+  // Some GTK IM backends emit a post-composition input event with isComposing=false and
+  // event.data set to the composed character. compositionEndData (set by compositionend)
+  // must prevent handleInput from re-sending the character. Both events are dispatched
+  // synchronously (same browser task) — no await between them.
+  it('TEST-TP-INPUT-008: post-composition input(isComposing=false) does not double-send', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionend + trailing input fire synchronously in the same browser task
+    inputEl!.value = 'î';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'î', bubbles: true }));
+    // Trailing input — dispatched synchronously (same task, no await between)
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: 'î', isComposing: false, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // compositionend sent once; trailing input suppressed by NFC content match
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0xc3, 0xae]);
+  });
+
+  // TEST-TP-INPUT-009: cancelled composition (Escape) with empty data → nothing sent.
+  // When the user cancels a dead key composition, compositionend fires with data="".
+  it('TEST-TP-INPUT-009: cancelled composition (compositionend data="") sends nothing', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionstart + pre-edit
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Escape cancels → compositionend with empty data, IM clears textarea
+    inputEl!.value = '';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    // Nothing should be sent — neither the pre-edit "^" nor the empty string
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
+
+  // TEST-TP-INPUT-010: double dead key (^ + ^ → ^) sends the literal character.
+  // On Belgian/French keyboards, pressing the dead key twice produces the accent as a
+  // literal character. The IM commits "^" via compositionend.
+  it('TEST-TP-INPUT-010: double dead key (^ + ^) sends literal "^" (0x5E)', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionstart + pre-edit for first ^
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Second ^ commits the literal "^"
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: '^', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
+    const bytes: Uint8Array = sendInputSpy.mock.calls[0][1];
+    expect(Array.from(bytes)).toEqual([0x5e]);
+  });
+
+  // TEST-TP-INPUT-011: dead key + incompatible char (^ + z → "^z") sends two characters.
+  // When the base character is not composable with the dead key, the IM commits both
+  // the accent and the character as separate codepoints in a single compositionend.
+  it('TEST-TP-INPUT-011: dead ^ + z (incompatible) sends "^z" [0x5E, 0x7A]', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // compositionstart + pre-edit
+    inputEl!.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    inputEl!.value = '^';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: '^', isComposing: true, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // z is incompatible → IM commits "^z" (two chars)
+    inputEl!.value = '^z';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: '^z', bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+
+    // sendBytes is called once per character by sendPrintableText
+    expect(sendInputSpy).toHaveBeenCalledTimes(2);
+    const bytes0: Uint8Array = sendInputSpy.mock.calls[0][1];
+    const bytes1: Uint8Array = sendInputSpy.mock.calls[1][1];
+    expect(Array.from(bytes0)).toEqual([0x5e]); // ^
+    expect(Array.from(bytes1)).toEqual([0x7a]); // z
+  });
+
+  // TEST-TP-INPUT-012: REGRESSION — dead key composition followed by NO trailing
+  // input, then space keystroke. The space must NOT be swallowed.
+  // Root cause (fixed): compositionJustEnded (boolean) was never cleared when the
+  // GTK IM backend omitted the trailing input event. The fix uses compositionEndData
+  // (string) + queueMicrotask auto-clearing.
+  it('TEST-TP-INPUT-012: space after compositionend (no trailing input) is NOT swallowed', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Step 1: compositionend for "à" — no trailing input (GTK dead-key compositor path)
+    inputEl!.value = 'à';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'à', bubbles: true }));
+    // NO trailing input dispatched — simulates the missing event
+
+    // Step 2: flush microtask → compositionEndData cleared by queueMicrotask
+    await Promise.resolve();
+    flushSync();
+
+    // Step 3: space in a new browser task (after microtask cleared the guard)
+    dispatchInput(inputEl!, '\u00a0'); // WebKitGTK NBSP
+    await Promise.resolve();
+    flushSync();
+
+    // 2 calls: à from compositionend + space (NBSP normalized)
+    expect(sendInputSpy).toHaveBeenCalledTimes(2);
+    expect(Array.from(sendInputSpy.mock.calls[0][1] as Uint8Array)).toEqual([0xc3, 0xa0]); // à
+    expect(Array.from(sendInputSpy.mock.calls[1][1] as Uint8Array)).toEqual([0x20]); // space
+  });
+
+  // TEST-TP-INPUT-013: compositionend("à") followed immediately by trailing
+  // input("à") — the trailing input must be suppressed (duplicate prevention).
+  // Both events dispatched synchronously (same browser task).
+  it('TEST-TP-INPUT-013: trailing input matching composed text is suppressed', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Both dispatched synchronously (same browser task — no await between)
+    inputEl!.value = 'à';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'à', bubbles: true }));
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: 'à', isComposing: false, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // Only 1 call — compositionend sent à; trailing input suppressed
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
+    expect(Array.from(sendInputSpy.mock.calls[0][1] as Uint8Array)).toEqual([0xc3, 0xa0]); // à
+  });
+
+  // TEST-TP-INPUT-014: compositionend("à") followed by trailing input with
+  // DIFFERENT text — the different text must be sent (not suppressed).
+  it('TEST-TP-INPUT-014: trailing input with different text from composed is sent', async () => {
+    const inputEl = await mountPaneAndGetInput();
+    expect(inputEl).not.toBeNull();
+    sendInputSpy.mockClear();
+
+    // Both dispatched synchronously
+    inputEl!.value = 'à';
+    inputEl!.dispatchEvent(new CompositionEvent('compositionend', { data: 'à', bubbles: true }));
+    inputEl!.value = 'b';
+    inputEl!.dispatchEvent(
+      new InputEvent('input', { data: 'b', isComposing: false, bubbles: true }),
+    );
+    await Promise.resolve();
+    flushSync();
+
+    // 2 calls: à from compositionend + b from trailing input (text mismatch → sent)
+    expect(sendInputSpy).toHaveBeenCalledTimes(2);
+    expect(Array.from(sendInputSpy.mock.calls[0][1] as Uint8Array)).toEqual([0xc3, 0xa0]); // à
+    expect(Array.from(sendInputSpy.mock.calls[1][1] as Uint8Array)).toEqual([0x62]); // b
   });
 });
 

@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
+//! Pure DTO constructors for the events emitted by the coalescer.
+//!
+//! These functions take a `VtProcessor` (read-locked internally) plus the
+//! relevant inputs (dirty region, scroll offset) and produce the
+//! `serde`-serializable event payloads forwarded to the frontend.
+//!
+//! Shared between PTY and SSH pipelines (via the coalescer) and exposed to
+//! Criterion benchmarks behind `#[doc(hidden)] pub`.
+
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -60,7 +69,8 @@ pub(crate) fn cell_color_to_dto(c: crate::vt::cell::Color) -> crate::events::typ
 /// INVARIANT: the read-lock on `vt` is released before this function returns.
 /// Callers must not hold the write-lock when calling this function.
 ///
-/// `pub(crate)` so `session::ssh_task` can reuse it without duplication.
+/// Re-exported at the crate level from `session::output` so both `pty_task`
+/// and `ssh_task` can reuse it without duplication.
 /// `#[doc(hidden)]` exposes this function to benchmarks without making it part
 /// of the public API.
 #[doc(hidden)]
@@ -205,14 +215,14 @@ pub fn build_scrolled_viewport_event(
     let blank_attrs = CellAttrsDto {
         fg: None,
         bg: None,
-        bold: false,
-        dim: false,
-        italic: false,
-        underline: 0,
-        blink: false,
-        inverse: false,
-        hidden: false,
-        strikethrough: false,
+        bold: None,
+        dim: None,
+        italic: None,
+        underline: None,
+        blink: None,
+        inverse: None,
+        hidden: None,
+        strikethrough: None,
         underline_color: None,
     };
 
@@ -327,14 +337,18 @@ fn snapshot_cell_to_attrs_dto(
     CellAttrsDto {
         fg: cell.fg.map(color_to_dto),
         bg: cell.bg.map(color_to_dto),
-        bold: cell.bold,
-        dim: cell.dim,
-        italic: cell.italic,
-        underline: cell.underline,
-        blink: cell.blink,
-        inverse: cell.inverse,
-        hidden: cell.hidden,
-        strikethrough: cell.strikethrough,
+        bold: if cell.bold { Some(true) } else { None },
+        dim: if cell.dim { Some(true) } else { None },
+        italic: if cell.italic { Some(true) } else { None },
+        underline: if cell.underline != 0 {
+            Some(cell.underline)
+        } else {
+            None
+        },
+        blink: if cell.blink { Some(true) } else { None },
+        inverse: if cell.inverse { Some(true) } else { None },
+        hidden: if cell.hidden { Some(true) } else { None },
+        strikethrough: if cell.strikethrough { Some(true) } else { None },
         underline_color: cell.underline_color.map(color_to_dto),
     }
 }
@@ -347,14 +361,22 @@ fn cell_attrs_to_dto(attrs: &crate::vt::cell::CellAttrs) -> crate::events::types
     CellAttrsDto {
         fg: attrs.fg.map(cell_color_to_dto),
         bg: attrs.bg.map(cell_color_to_dto),
-        bold: attrs.bold,
-        dim: attrs.dim,
-        italic: attrs.italic,
-        underline: attrs.underline,
-        blink: attrs.blink,
-        inverse: attrs.inverse,
-        hidden: attrs.hidden,
-        strikethrough: attrs.strikethrough,
+        bold: if attrs.bold { Some(true) } else { None },
+        dim: if attrs.dim { Some(true) } else { None },
+        italic: if attrs.italic { Some(true) } else { None },
+        underline: if attrs.underline != 0 {
+            Some(attrs.underline)
+        } else {
+            None
+        },
+        blink: if attrs.blink { Some(true) } else { None },
+        inverse: if attrs.inverse { Some(true) } else { None },
+        hidden: if attrs.hidden { Some(true) } else { None },
+        strikethrough: if attrs.strikethrough {
+            Some(true)
+        } else {
+            None
+        },
         underline_color: attrs.underline_color.map(cell_color_to_dto),
     }
 }

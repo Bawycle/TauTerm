@@ -10,7 +10,7 @@
  * scrollbar and scroll-to-bottom indicator.
  */
 
-import type { PaneId, ScrollPositionChangedEvent } from '$lib/ipc/types';
+import type { PaneId, ScrollPositionChangedEvent } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Types

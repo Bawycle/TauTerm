@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { NotificationChangedEvent, PaneNotification } from '$lib/ipc/types';
+import type { NotificationChangedEvent, PaneNotification } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Helpers

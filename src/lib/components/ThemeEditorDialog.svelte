@@ -20,7 +20,7 @@
   import ThemeContrastAdvisory from './ThemeContrastAdvisory.svelte';
   import { Copy } from 'lucide-svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { UserTheme } from '$lib/ipc/types';
+  import type { UserTheme } from '$lib/ipc';
   import { contrastRatio, WCAG_AA_THRESHOLD } from '$lib/utils/contrast';
   import { isBuiltInTheme } from '$lib/theming/built-in-themes';
 

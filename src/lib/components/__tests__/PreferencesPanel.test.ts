@@ -23,7 +23,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import PreferencesPanel from '../PreferencesPanel.svelte';
 import PreferencesTerminalSection from '../PreferencesTerminalSection.svelte';
-import type { Preferences, PreferencesPatch } from '$lib/ipc/types';
+import type { Preferences, PreferencesPatch } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Helpers

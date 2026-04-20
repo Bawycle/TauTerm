@@ -18,7 +18,7 @@ import {
   setActiveTab,
   hasForegroundProcess,
   setPaneLabel,
-} from '$lib/ipc/commands';
+} from '$lib/ipc';
 import {
   sessionState,
   removeTab,
@@ -30,7 +30,7 @@ import {
   findNeighbourPaneId,
 } from '$lib/state/session.svelte';
 import { clearTabNotification } from '$lib/state/notifications.svelte';
-import type { TabState, PaneId, TabId } from '$lib/ipc/types';
+import type { TabState, PaneId, TabId } from '$lib/ipc';
 import type { ViewState } from './useTerminalView.core.svelte';
 
 export function createSessionHandlers(s: ViewState) {
@@ -112,7 +112,13 @@ export function createSessionHandlers(s: ViewState) {
       const login = sessionState.tabs.length === 0;
       const activeTab = getActiveTab();
       const sourcePaneId = activeTab?.activePaneId;
-      const newTab: TabState = await createTab({ cols: 80, rows: 24, login, sourcePaneId });
+      const newTab: TabState = await createTab({
+        label: null,
+        cols: 80,
+        rows: 24,
+        login,
+        sourcePaneId,
+      });
       addTab(newTab);
     } catch {
       // Non-fatal

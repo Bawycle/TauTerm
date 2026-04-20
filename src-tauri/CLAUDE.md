@@ -6,7 +6,7 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 
 ## Module structure
 
-- `lib.rs` — app setup: plugin registration, `generate_handler![]`, `run()` entrypoint
+- `lib.rs` — app setup: plugin registration, `ipc::make_builder().invoke_handler()`, `run()` entrypoint
 - `main.rs` — thin entrypoint delegating to `tau_term_lib::run()`
 - Module pattern: use `module_name.rs` + `module_name/` subdirectory for submodules — no `mod.rs`
 
@@ -15,6 +15,8 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 | Module | Responsibility |
 |---|---|
 | `session.rs` | PTY session lifecycle (spawn, resize, close) |
+| `session/output.rs` + `session/output/` | Source-agnostic emit pipeline: `ProcessOutput`, `Coalescer`, `CoalescerConfig`, emitter, event builders (ADR-0028) |
+| `session/ssh_injectable.rs` | `(e2e-testing)` `SshInjectableRegistry` for E2E SSH test injection |
 | `vt.rs` | VT parser — ANSI/xterm escape sequence processing |
 | `commands.rs` + `commands/` | Tauri `#[command]` handlers: `session_cmds`, `input_cmds`, `preferences_cmds`, `connection_cmds`, `ssh_cmds`, `ssh_prompt_cmds`, `system_cmds`, `testing` |
 | `events.rs` + `events/types.rs` | Backend→frontend event definitions and emission |
@@ -39,10 +41,10 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 
 ## Scaling watchpoint — command registration
 
-`lib.rs::run()` currently registers 31 commands in `generate_handler![]` across 7 domain groups, with 6 `manage()` calls. This flat registration is acceptable at this scale.
+`lib.rs::run()` registers commands via `ipc::make_builder().invoke_handler()` (tauri-specta) instead of the former `generate_handler![]` macro. This builder collects all commands and events, generates TypeScript bindings, and returns a Tauri invoke handler. Currently 31 commands across 7 domain groups, with 6 `manage()` calls. This flat registration is acceptable at this scale.
 
 **Trigger for migration to Tauri plugin modules:** revisit when **any** of these conditions is met:
-- `generate_handler![]` exceeds **50 commands** (production, excluding e2e)
+- The builder exceeds **50 commands** (production, excluding e2e)
 - A **new functional domain** is added that brings its own managed state + ≥5 commands (e.g. file transfer, session recording, serial port) — this domain should be a self-contained Tauri plugin from the start
 - The `setup()` closure exceeds **~100 lines** due to inter-service wiring, making dependency resolution hard to follow
 
@@ -56,3 +58,4 @@ When triggered: convert the new domain into a `tauri::plugin::Builder::new("doma
 - Lint: `cargo clippy -- -D warnings` must pass clean
 - Keep IPC commands serializable with `serde` — no raw pointers or OS handles across the boundary
 - Never log filesystem paths that include usernames or home directories. Log the filename or a generic label only (e.g. `"preferences.json"`, not `path.display()`).
+- Never log SSH chunk bytes via `tracing::trace!` or any log level — they may contain user passwords typed into prompts.

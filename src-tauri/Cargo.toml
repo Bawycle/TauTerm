@@ -1,6 +1,6 @@
 [package]
 name = "tau-term"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 description = "Terminal emulator for Linux"
 license = "MPL-2.0"
 edition = "2024"
@@ -89,6 +89,8 @@ fs4 = "0.13"
 
 # Cross-platform filesystem watching (inotify on Linux) — preferences live-reload
 notify = { version = "8", default-features = true }
+specta = { version = "2.0.0-rc.24", features = ["derive"] }
+tauri-specta = { version = "2.0.0-rc.24", features = ["derive", "typescript"] }
 
 [features]
 e2e-testing = []
@@ -98,6 +100,10 @@ e2e-testing = []
 fuzz-testing = []
 
 [dev-dependencies]
+# Enable tokio test-util for start_paused / advance() in deterministic timing tests
+tokio = { version = "1", features = ["test-util"] }
+# TypeScript binding generation (used by export_bindings test)
+specta-typescript = "0.0.11"
 # Temporary files and directories for tests
 tempfile = "3"
 # Serialize fd-sensitive tests to prevent /proc/self/fd count noise in parallel nextest runs
@@ -113,5 +119,9 @@ harness = false
 
 [[bench]]
 name = "ipc_throughput"
+harness = false
+
+[[bench]]
+name = "coalescer_bench"
 harness = false
 

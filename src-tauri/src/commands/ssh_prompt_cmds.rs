@@ -23,6 +23,7 @@ use crate::ssh::manager::{Credentials, PassphraseInput};
 use crate::ssh::{SshLifecycleState, SshManager};
 
 #[tauri::command]
+#[specta::specta]
 pub async fn provide_credentials(
     pane_id: PaneId,
     credentials: Credentials,
@@ -58,6 +59,7 @@ pub async fn provide_credentials(
 /// After persisting the key to `known_hosts`, returns `Ok(())`. The frontend
 /// must then call `open_ssh_connection` again to reconnect (two-phase TOFU).
 #[tauri::command]
+#[specta::specta]
 pub async fn accept_host_key(
     pane_id: PaneId,
     ssh_manager: State<'_, Arc<SshManager>>,
@@ -122,6 +124,7 @@ pub async fn accept_host_key(
 
 /// Reject the host key for a pane — abort the pending connection.
 #[tauri::command]
+#[specta::specta]
 pub async fn reject_host_key(
     pane_id: PaneId,
     ssh_manager: State<'_, Arc<SshManager>>,
@@ -148,6 +151,7 @@ pub async fn reject_host_key(
 /// The passphrase is forwarded to the connect task via the oneshot channel
 /// stored in `SshManager::pending_passphrases`.
 #[tauri::command]
+#[specta::specta]
 pub async fn provide_passphrase(
     pane_id: PaneId,
     passphrase: String,
@@ -184,6 +188,7 @@ pub async fn provide_passphrase(
 /// requires no server-side action. It exists so the frontend can call it and
 /// receive an Ok without causing an IPC error.
 #[tauri::command]
+#[specta::specta]
 pub async fn dismiss_ssh_algorithm_warning(pane_id: PaneId) -> Result<(), TauTermError> {
     // No persistent state to clear — the warning is UI-only.
     let _ = pane_id;

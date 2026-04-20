@@ -153,6 +153,7 @@ impl SessionRegistry {
                 reader,
                 writer_handle,
                 registry,
+                pane.last_frame_ack_ms.clone(),
             );
             pane.pty_task = Some(task);
         }

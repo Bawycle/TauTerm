@@ -95,7 +95,7 @@ impl ModeState {
 ///
 /// Serializes to camelCase strings for IPC: `"none"`, `"x10"`, `"normal"`,
 /// `"buttonEvent"`, `"anyEvent"`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum MouseReportingMode {
     /// No mouse reporting.
@@ -114,7 +114,7 @@ pub enum MouseReportingMode {
 /// Mouse event encoding format.
 ///
 /// Serializes to camelCase strings for IPC: `"x10"`, `"sgr"`, `"urxvt"`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum MouseEncoding {
     /// Classic X10 encoding (limited to col/row ≤ 223).

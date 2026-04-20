@@ -25,7 +25,7 @@
 <script lang="ts">
   import { ChevronUp, ChevronDown, X } from 'lucide-svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { SearchQuery } from '$lib/ipc/types';
+  import type { SearchQuery } from '$lib/ipc';
 
   // ---------------------------------------------------------------------------
   // Props

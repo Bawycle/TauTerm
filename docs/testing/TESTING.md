@@ -60,6 +60,7 @@ E2E tests are restricted to scenarios requiring end-to-end system behavior: visu
 | `session/lifecycle.rs` | Yes | State machine transitions |
 | `session/ids.rs` | Yes | Newtype construction |
 | `session/pty_task.rs` | Yes | PTY task state machine |
+| `session/pty_task/reader.rs` | Yes | Frame-ack backpressure logic (ACK_STALE, ACK_DROP thresholds, stage transitions) |
 | `session/registry.rs` | Yes | Session registry map; separate `tests.rs` |
 | `ssh/known_hosts.rs` | Yes | File parsing — operates on `&str`; separate `tests.rs` |
 | `ssh/algorithms.rs` | Yes | String classification — pure |
@@ -117,6 +118,27 @@ Parser corpus: single-line entries, hashed hostnames, comment/blank lines, `@rev
 #### `ssh/algorithms.rs`
 
 Deprecated: `ssh-rsa` (SHA-1), `ssh-dss`. Not deprecated: `ssh-ed25519`, `ecdsa-sha2-nistp256`, `rsa-sha2-256`, `rsa-sha2-512`.
+
+#### `session/pty_task/reader.rs` — frame-ack backpressure (ADR-0027)
+
+| Test ID | Scenario |
+|---------|----------|
+| TEST-ACK-001 | `now_ms()` returns a reasonable epoch-ms value (sanity check) |
+| TEST-ACK-002 | `ACK_STALE_THRESHOLD_MS` < `ACK_DROP_THRESHOLD_MS` (threshold ordering invariant) |
+| TEST-ACK-003 | `ACK_STALE_DEBOUNCE` > `DEBOUNCE_MAX` (stale debounce exceeds adaptive ceiling) |
+| TEST-ACK-004 | Stage 2 suppression: clearing `dirty` + `needs_immediate_flush` on dirty-only `ProcessOutput` makes it empty |
+| TEST-ACK-005 | Stage 2 preserves non-visual events (title, bell, mode_changed) after dirty suppression |
+| TEST-ACK-006 | Exit from drop mode (`was_in_drop_mode && !in_drop_mode`) forces `is_full_redraw` |
+| TEST-ACK-007 | `has_unacked_emits` false at startup (`last_emit_ms=0`, `last_ack=now()`) |
+| TEST-ACK-008 | `has_unacked_emits` true when `last_emit > last_ack` |
+| TEST-ACK-009 | `has_unacked_emits` false when `last_ack > last_emit` |
+| TEST-ACK-010 | `has_unacked_emits` false when `last_emit == last_ack` (strict `>`) |
+| TEST-ACK-011 | Idle period (no emits, stale ack) does not trigger drop or stale mode |
+| TEST-ACK-012 | Stale ack with unacked emits triggers both drop and stale escalation |
+| TEST-ACK-013 | Drop exit via ack arrival (`has_unacked_emits` → false) forces full redraw |
+| TEST-ACK-014 | Rapid emit→ack cycles (3 cycles, ack < 200 ms) never trigger escalation |
+
+Tests use synthetic timestamps (direct assignment, no `thread::sleep`) and simulate the escalation logic from `reader.rs`. No real PTY or Tauri runtime required.
 
 #### Inline vs. separate file rule
 
@@ -259,6 +281,50 @@ These tests are **not** part of the default `cargo nextest run` gate. They are a
 
 These tests are **not** part of the default `cargo nextest run` gate. They are an optional step, run on-demand or in a dedicated CI job.
 
+#### SSH coalescer integration tests
+
+`src-tauri/tests/ssh_coalescer_integration.rs` — exercises the shared `EmitCoalescer` wired through the SSH pipeline (ADR-0028). Uses `#[tokio::test(start_paused = true)]` for timing-deterministic assertions. Mock SSH channel via lightweight inline observer (`mpsc::Sender<MockChannelOp>`).
+
+| Test ID | Trace | Description |
+|---|---|---|
+| SSH-COALESCE-001 | ADR-0028 | Burst coalescing: multiple `ProcessOutput` values merged before emit |
+| SSH-COALESCE-002 | ADR-0028 | Stage 1 escalation: debounce increased when frame-ack stale > 200 ms |
+| SSH-COALESCE-003 | ADR-0028 | Stage 2 escalation: dirty cells dropped when frame-ack stale > 1000 ms |
+| SSH-COALESCE-004 | ADR-0028 | Full-redraw flag set on exit from drop mode |
+| SSH-COALESCE-005 | ADR-0028 | EOF flush ordering: last screen-update before Closed event |
+| SSH-COALESCE-006 | ADR-0028 | Bell flood does not escalate backpressure (non-visual) |
+| SSH-COALESCE-007 | ADR-0028 | `needs_immediate_flush` bypasses debounce timer |
+| SSH-COALESCE-008 | ADR-0028 | Channel close exits coalescer run loop promptly |
+| SSH-EXTRACT-001 | ADR-0028 | `extract_process_output` extracts bell |
+| SSH-EXTRACT-002 | ADR-0028 | `extract_process_output` extracts OSC 52 |
+| SSH-EXTRACT-003 | ADR-0028 | `extract_process_output` extracts cursor shape |
+| SSH-EXTRACT-004 | ADR-0028 | `extract_process_output` extracts CWD (OSC 7) |
+| SSH-EXTRACT-005 | ADR-0028 | `extract_process_output` extracts mode_changed |
+
+These tests run under the default `cargo nextest run` gate (no Podman required).
+
+#### VT input cap tests
+
+| Test ID | Trace | Description |
+|---|---|---|
+| VT-CAP-TITLE-001 | ADR-0028 | 8000 chars input truncated to 4096 chars + warn emitted |
+| VT-CAP-TITLE-002 | ADR-0028 | C0/C1 strip applied before truncation |
+| VT-CAP-CWD-001 | ADR-0028 | 5 KB OSC 7 dropped + warn emitted |
+| VT-CAP-RESPONSES-001 | ADR-0028 | 1000 DSR queries capped at 256 entries + warn emitted |
+| VT-CAP-RESPONSES-002 | ADR-0028 | Oldest dropped, newest preserved (VecDeque pop_front) |
+| SEC-VT-CAP-OSC52-OVERSIZE-001 | ADR-0028 | 10 KB OSC 52 dropped at `OSC_PAYLOAD_MAX = 4096` upstream |
+
+#### Performance baselines
+
+Criterion benchmarks (`src-tauri/benches/coalescer_bench.rs`) measure:
+- `bench_coalescer_throughput` — synthetic burst of N `ProcessOutput` over channel, end-to-end emit latency
+- `bench_process_output_merge` — merge cost as function of accumulated dirty rows
+- `bench_dsr_response_coalescing` — 10 vs 100 vs 1000 responses, merge + write cost
+
+**Current procedure (manual):** run `cargo bench --bench coalescer_bench` and record results in the commit message. No automated regression detection.
+
+**Future improvement:** adopt `criterion --save-baseline` with checked-in baselines for CI regression gating.
+
 #### Isolation rules
 
 - Temp directories via `tempfile::TempDir` for all filesystem-touching tests
@@ -354,6 +420,19 @@ Pure TypeScript, no Svelte components, no DOM.
 | `lib/ipc/osc-title.ts` | OSC title event handling |
 | `lib/ipc/notification-events.ts` | Notification event listeners |
 | `lib/i18n/catalogue-parity` | en/fr catalogue key parity |
+| `lib/terminal/frame-ack.ts` | Frame-ack IPC call timing and rAF integration (ADR-0027) |
+
+#### `lib/terminal/frame-ack.ts` detail (ADR-0027)
+
+| Test ID | Scenario |
+|---------|----------|
+| ACK-FE-001 | `flushRafQueue()` completion triggers exactly one `frame_ack` invoke per pane with correct `paneId` |
+| ACK-FE-002 | No `frame_ack` call when rAF queue is empty (no pending screen-update for the pane) |
+| ACK-FE-003 | Multiple panes active → each pane receives its own `frame_ack` call (no cross-pane ack) |
+| ACK-FE-004 | `frame_ack` invoke rejection (e.g., pane closed) → error is silently ignored, no unhandled rejection |
+| ACK-FE-005 | Pane unmount → no further `frame_ack` calls for that pane ID |
+
+Mock setup: `vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))`. Tests exercise the rAF queue flush callback, asserting that `invoke('frame_ack', { paneId })` is called with correct timing and pane isolation.
 
 #### `lib/terminal/mouse.ts` detail
 

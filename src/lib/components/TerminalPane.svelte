@@ -25,7 +25,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { onSshWarning, onSshReconnected } from '$lib/ipc/events';
+  import { onSshWarning, onSshReconnected } from '$lib/ipc';
   import { keyEventToVtSequence } from '$lib/terminal/keyboard.js';
   import { useTerminalPane } from '$lib/composables/useTerminalPane.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -38,7 +38,7 @@
   import PaneTitleBar from './PaneTitleBar.svelte';
   import * as m from '$lib/paraglide/messages';
   import { sshStates } from '$lib/state/ssh.svelte';
-  import type { PaneId, TabId, SshLifecycleState, SearchMatch, BellType } from '$lib/ipc/types';
+  import type { PaneId, TabId, SshLifecycleState, SearchMatch, BellType } from '$lib/ipc';
 
   interface Props {
     paneId: PaneId;
@@ -314,12 +314,72 @@
    * Note: some IMs (Fcitx5) write directly to textarea.value rather than
    * setting event.data. Reading target.value first covers both cases.
    */
+  // Stores the NFC-normalized text from the most recent compositionend, used
+  // to identify and suppress the duplicate input event that some GTK IM
+  // backends emit immediately after compositionend. Cleared via queueMicrotask
+  // to prevent swallowing the next real keystroke when the IM does NOT emit a
+  // trailing input event (observed on Belgian/French keyboards with both the
+  // GTK built-in dead-key compositor and certain IBus configurations).
+  let compositionEndData: string | null = null;
+
   function handleInput(event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) {
-    const target = event.target as HTMLTextAreaElement;
     const inputEvent = event as unknown as InputEvent;
+    // During composition (dead key pre-edit, IME candidate selection),
+    // the IM is managing the textarea content. Do not drain or send —
+    // the final composed character will arrive via compositionend.
+    if (inputEvent.isComposing) return;
+
+    const target = event.target as HTMLTextAreaElement;
     const text = target.value || inputEvent.data || '';
     target.value = '';
+
+    // compositionend just fired in this same browser task.
+    // Check if this input is the trailing duplicate some GTK IM backends emit.
+    if (compositionEndData !== null) {
+      const composed = compositionEndData;
+      compositionEndData = null; // consume the guard regardless
+      // Skip only if text is empty or NFC-matches the already-sent composed text.
+      // NFC normalization guards against GTK IM backends that deliver event.data
+      // in NFD while textarea.value was NFC (or vice versa).
+      // Different text means the user typed something new — send it.
+      if (!text || text.normalize('NFC') === composed) return;
+      sendPrintableText(text);
+      return;
+    }
+
     if (!text) return;
+    sendPrintableText(text);
+  }
+
+  /**
+   * Handle compositionend — sends the final composed text (e.g. "î" from
+   * dead ^ + i) and drains the textarea. Sets compositionEndData so that
+   * handleInput can identify and skip any trailing duplicate input event.
+   *
+   * queueMicrotask clears the guard after the current browser task. Trailing
+   * input events (if any) fire synchronously within the same task, so the
+   * microtask runs after them. If NO trailing input fires (some GTK IM
+   * backends on Belgian/French keyboards), the guard is cleared before the
+   * next user keystroke.
+   */
+  function handleCompositionEnd(event: CompositionEvent) {
+    const target = event.target as HTMLTextAreaElement;
+    // Prefer textarea value (some IMs like Fcitx5 write directly to it) over event.data.
+    const text = target.value || event.data || '';
+    target.value = '';
+    compositionEndData = text ? text.normalize('NFC') : null;
+    queueMicrotask(() => {
+      compositionEndData = null;
+    });
+    if (!text) return;
+    sendPrintableText(text);
+  }
+
+  /**
+   * Send printable characters from an IM commit or direct input to the PTY.
+   * Filters out control characters (must come through handleKeydown).
+   */
+  function sendPrintableText(text: string) {
     const encoder = new TextEncoder();
     for (const char of text) {
       const cp = char.codePointAt(0);
@@ -379,6 +439,7 @@
         {lineHeight}
         {cursorHidden}
         oninput={handleInput}
+        oncompositionend={handleCompositionEnd}
         onmousemove={handleViewportMouseMove}
       />
       <TerminalPaneScrollbar {tp} />

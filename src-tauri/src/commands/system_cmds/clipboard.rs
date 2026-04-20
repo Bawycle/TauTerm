@@ -9,6 +9,7 @@ use crate::error::TauTermError;
 pub(super) const MAX_CLIPBOARD_LEN: usize = 16 * 1024 * 1024;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn copy_to_clipboard(text: String) -> Result<(), TauTermError> {
     if text.len() > MAX_CLIPBOARD_LEN {
         return Err(TauTermError::new(
@@ -59,6 +60,7 @@ pub async fn copy_to_clipboard(text: String) -> Result<(), TauTermError> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_clipboard() -> Result<String, TauTermError> {
     tokio::task::spawn_blocking(|| {
         let mut cb = arboard::Clipboard::new().map_err(|e| {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-import type { UserTheme } from '$lib/ipc/types';
+import type { UserTheme } from '$lib/ipc';
 
 export const BUILT_IN_THEME_NAMES = ['umbra', 'solstice', 'archipel'] as const;
 export type BuiltInThemeName = (typeof BUILT_IN_THEME_NAMES)[number];

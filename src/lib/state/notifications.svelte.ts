@@ -11,7 +11,7 @@
  * Cleared when the user switches to a tab.
  */
 
-import type { TabId, PaneId, NotificationChangedEvent } from '$lib/ipc/types';
+import type { TabId, PaneId, PaneNotification, NotificationChangedEvent } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Reactive state — module-level singleton
@@ -22,6 +22,21 @@ import type { TabId, PaneId, NotificationChangedEvent } from '$lib/ipc/types';
  * A tab appears in this map when it has at least one unread notification.
  */
 export const tabNotifications = $state<Map<TabId, boolean>>(new Map());
+
+/**
+ * Per-pane notification state.
+ * Stores the most recent PaneNotification per pane, sourced from
+ * NotificationChangedEvent. Used by TabBar to render activity indicators
+ * (bell, background output, process exit) on tab items.
+ */
+export const paneNotifications = $state<Map<PaneId, PaneNotification>>(new Map());
+
+/**
+ * Get the current notification for a pane, or null if none.
+ */
+export function getPaneNotification(paneId: PaneId): PaneNotification | null {
+  return paneNotifications.get(paneId) ?? null;
+}
 
 /**
  * Set of PaneIds whose PTY process has exited with a non-zero code or signal.
@@ -91,8 +106,10 @@ export type NotificationAction = { type: 'autoClose'; paneId: PaneId } | null;
 export function applyNotificationChanged(ev: NotificationChangedEvent): NotificationAction {
   if (ev.notification !== null) {
     tabNotifications.set(ev.tabId, true);
+    paneNotifications.set(ev.paneId, ev.notification);
   } else {
     tabNotifications.delete(ev.tabId);
+    paneNotifications.delete(ev.paneId);
   }
 
   // FS-PTY-005: clean exit → auto-close, no banner.
@@ -117,6 +134,13 @@ export function applyNotificationChanged(ev: NotificationChangedEvent): Notifica
  */
 export function clearTabNotification(tabId: TabId): void {
   tabNotifications.delete(tabId);
+}
+
+/**
+ * Clear the per-pane notification (called when a pane is closed or restarted).
+ */
+export function clearPaneNotification(paneId: PaneId): void {
+  paneNotifications.delete(paneId);
 }
 
 // ---------------------------------------------------------------------------

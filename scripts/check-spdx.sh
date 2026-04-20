@@ -27,6 +27,11 @@ while IFS= read -r file; do
         *) continue ;;
     esac
 
+    # Skip generated files (committed but auto-generated — no manual SPDX header).
+    case "$file" in
+        src/lib/ipc/bindings.ts) continue ;;
+    esac
+
     if ! head -1 "$file" | grep -q 'SPDX-License-Identifier: MPL-2.0'; then
         echo "Missing SPDX header: $file"
         missing=$((missing + 1))

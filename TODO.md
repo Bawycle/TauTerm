@@ -4,50 +4,82 @@
 
 ## Scoring System
 
-Each item is scored on four axes (1–3), combined into a weighted composite:
+Each item is scored on four **priority axes** (1–4), combined into a weighted composite. Effort and dependencies are recorded separately — they inform scheduling, not priority.
 
-| Axis | 1 | 2 | 3 |
-|---|---|---|---|
-| **R** Release blocker | not blocking | desirable for next release | hard blocker — no release without it |
-| **S** Security / Correctness | cosmetic / improvement | real bug / architectural debt | security flaw / data corruption |
-| **U** User impact | marginal / edge case | common workflow affected | every user / app unusable |
-| **E** Effort (inverted) | weeks / major refactor | days | hours / quick win |
+### Priority axes
 
-**Composite score = R×3 + S×2 + U×1 + E×1** (max 21)
+| Axis | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| **R** Release gate | no relation to release | desirable but shippable without it | degrades release quality significantly | hard blocker — no release without it |
+| **S** Severity | cosmetic / minor improvement | latent architectural debt (no user impact yet) | confirmed bug affecting correctness or UX | security flaw, data loss, or crash |
+| **U** User impact | edge case / power user only | minority of users or rare workflow | common workflow, most users affected | every user affected or app unusable |
+| **V** Velocity of degradation | stable — cost of inaction does not grow | slow growth (new additions worsen it over time) | accelerating — each release increases exposure or coupling | acute — already degrading; delay has immediate cost |
 
-| Band | Score | Label |
+**Composite score = R×3 + S×3 + U×2 + V×2** (max 48)
+
+### Scheduling fields (not part of priority score)
+
+| Field | Values | Purpose |
 |---|---|---|
-| 17–21 | Critical — block the release |
-| 13–16 | High — must land in next release |
-| 9–12 | Medium — next release quality target |
-| ≤ 8 | Low — nice-to-have |
+| **E** Effort | `hours` / `days` / `weeks` | Sprint planning — sequence items within a band, not re-rank across bands |
+| **B** Blocks | comma-separated item IDs, or `—` | Dependency graph — see override rule below |
+
+### Override rule — dependency floor
+
+If item X is listed in the **B** field of item Y, then X's effective band is `max(X.band, Y.band)`. The raw score of X does not change, but it cannot be scheduled after the item it blocks.
+
+### Band thresholds
+
+| Band | Score | Label | Release policy |
+|---|---|---|---|
+| 37–48 | **Critical** | Stops the release | Must be resolved before any release candidate |
+| 28–36 | **High** | Must land in next release | Included in release scope; not deferrable |
+| 17–27 | **Medium** | Next release quality target | Included if capacity allows; deferral requires explicit decision |
+| ≤ 16 | **Low** | Nice-to-have | Deferred to backlog; revisit at next planning cycle |
 
 Items in the **Future Roadmap** section are out of scope for the current release cycle.
 
 ---
 
-## Critical — Release Blockers (score 17–21)
+## Critical (score 37–48)
+
+*No critical items.*
 
 ---
 
-## High Priority — Must Land in Next Release (score 13–16)
+## High Priority (score 28–36)
+
+(No items.)
 
 ---
 
-## Medium Priority — Next Release Quality Target (score 9–12)
+## Medium Priority — Next Release Quality Target (score 17–27)
+
+(No items.)
 
 ---
 
-## Low Priority — Nice-to-Have (score ≤ 8)
+## Low Priority — Nice-to-Have (score ≤ 16)
 
-- [ ] **IPC type drift — evaluate `tauri-specta` for codegen** `[Score: 8 | R:1, S:2, U:1, E:1]`
-  All Rust IPC types (`events/types.rs`, command signatures, preference structs) are manually mirrored in `src/lib/ipc/types.ts` (~1020 lines, 35-40 types, 36 commands, 16 events). Early drift signals are already present: `SnapshotCell.width` documentation diverges between Rust ("phantom/continuation slot") and TS ("combining"); 3 commands in `commands.ts` (`providePassphrase`, `duplicateConnection`, `storeConnectionPassword`) have no corresponding type-alias in `types.ts` — their parameter shapes are implicit knowledge of the Rust signature.
-  **Action:** write an ADR evaluating `tauri-specta` (recommended by Tauri team, generates both types and `invoke()` wrappers) vs `ts-rs` (lighter, types only) vs conformity tests (cheapest — JSON shape assertions in CI). Define a trigger threshold (e.g. >60 types, or first runtime bug caused by drift).
-  **Progressive migration (for codegen adoption):** yes — `tauri-specta` can be adopted incrementally:
-  1. Annotate event types first (`#[derive(specta::Type)]`) — highest drift risk, most types.
-  2. Migrate command signatures — requires switching from `generate_handler![]` to `tauri-specta`'s builder, but can be done module by module (e.g. `preferences_cmds` first).
-  3. Keep the handwritten `types.ts` as reference during transition; delete once all types are generated.
-  Each step is independently shippable. The generated and handwritten types can coexist during migration.
+- [ ] **`TauTermError` type alignment — eliminate hand-written error interface** `[Score: 15 | R:1, S:2, U:1, V:2]` `E: days` `B: —`
+  Two `TauTermError` definitions coexist on the frontend: the specta-generated type (`code: string`, `detail: string | null`) and the hand-written interface in `errors.ts` (`code: TauTermErrorCode` union literal, `detail?: string`). Existing drift: `PREF_LOCK_TIMEOUT` is emitted by Rust but absent from `TauTermErrorCode`. Structural incompatibility: `null` vs `undefined` on `detail`.
+  S:2 because the drift is confirmed (missing error code) and the `null`/`undefined` mismatch is a latent type-safety hole. U:1 because error handling is edge-case code. V:2 because each new Rust error code widens the drift silently.
+  **Two-step fix (architect review 2026-04-15):**
+  1. *Immediate:* Delete the duplicated `TauTermError` interface from `errors.ts`. Keep `TauTermErrorCode` union + `isTauTermError()` guard, but narrow to the generated type. Add missing codes (`PREF_LOCK_TIMEOUT`).
+  2. *Follow-up (requires ADR):* Create `enum ErrorCode` in Rust with `#[derive(Serialize, specta::Type)]` + `#[serde(rename_all = "SCREAMING_SNAKE_CASE")]`. Replace `code: String` → `code: ErrorCode` in `TauTermError`. specta then generates the union literal automatically → delete `TauTermErrorCode` from `errors.ts`.
+  **Files:** `src/lib/ipc/errors.ts`, `src-tauri/src/error.rs` (step 2), `src-tauri/src/commands/` (step 2 — adapt `From` impls).
+
+- [ ] **Active Glow — highlight active pane with subtle background brightness** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
+  In split layouts, the active pane should be visually distinguished by a slightly warmer/brighter background rather than relying solely on border color. Proposal: new token `--term-bg-active: #1a1812` (vs current `--term-bg: #16140f`). Delta L* CIE ~0.5–0.7 — subtle but perceptible in side-by-side juxtaposition. Invisible in single-pane usage (no visual noise).
+  WCAG constraint: ANSI green (`#5c9e5c`) is the tightest color at 4.6:1 on current bg. With `#1a1812`, ratio drops to ~4.52:1 — still AA compliant. `#1e1b14` and above would breach 4.5:1. The value must be validated with exact contrast calculations before finalizing.
+  Trade-offs: (1) apps that paint their own background (vim, htop) mask the glow in their zones — visible but not a bug; (2) ANSI palette gets two reference backgrounds instead of one — slight doc complexity increase. Border remains for activity pulses (output, bell, exit) on inactive panes; border color distinction (active blue vs inactive) may be unified once glow carries the focus signal.
+  Requires an ADR. New tokens: `--term-bg-active` (semantic), `--color-neutral-875` (primitive).
+  **Files:** `docs/uxd/02-tokens.md`, `docs/AD.md` (neutral scale), `src/lib/components/terminal/` (pane background binding), `docs/adr/` (new ADR).
+
+- [ ] **P-HT-5 — Binary encoding for full-redraw payloads** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
+  Full-redraw JSON at 220×50 = 11,000 `CellUpdate` structs with per-cell `row`/`col` fields. For full redraws, coordinates are implicit from flat index + stride. Switch to MessagePack (`rmp-serde`) or a flat binary buffer for `screen-update` events. Could reduce payload size by 60–80% and eliminate JSON serialization cost (667 µs post-P-IPC1).
+  **Prerequisite:** Measure actual payload sizes under vtebench first. Evaluate `rmp-serde` vs custom binary format.
+  **Files:** `src-tauri/src/session/pty_task/event_builders.rs`, `src/lib/ipc/events.ts`, `src/lib/ipc/types.ts`.
 
 ---
 
@@ -55,34 +87,19 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 *Features absent from current specs, validated by comparative analysis of Tabby, Alacritty, and Hyper. Must be specified in `docs/UR.md` and `docs/fs/` before implementation.*
 
-- [ ] **Clickable hints + OSC 8 (hyperlinks in the terminal)** `[Score: 9 | R:1, S:1, U:3, E:1]`
+- [ ] **Clickable hints + OSC 8 (hyperlinks in the terminal)** `[Score: 16 | R:1, S:1, U:3, V:2]` `E: weeks` `B: run-merging (hyperlink boundaries)`
   The killer feature from Alacritty absent from TauTerm. Two levels:
   - **Passive OSC 8**: recognize OSC 8 sequences (`ESC ] 8 ; params ; uri ST`) emitted by tools like `ls --hyperlink`, `git log`, `delta`, and make the URI clickable (Ctrl+click → open in configured browser/editor). IETF standard, WCAG-compatible, aligned with AD.md §1.3.
   - **Active hints**: on a configurable shortcut, display an overlay of short labels on all URLs/paths detected by regex in the current view — pressing a label triggers the action (open, copy). vim-hints / Alacritty hints style.
-  Concerned personas: Alex (stack traces, file paths), Jordan (URLs in logs).
+  Concerned personas: Alex (stack traces, file paths), Jordan (URLs in logs). V:2 because ecosystem adoption of OSC 8 is growing (more tools emit it).
   **Alacritty architecture** (`alacritty_terminal/src/term/cell.rs` for storage, `alacritty/src/display/hint.rs` for the hints overlay) — `CellExtra` with `Option<Arc<HyperlinkInner>>`: URI is lazily stored in cells — `Cell` has `extra: Option<Box<CellExtra>>` allocated only if the cell has non-standard attributes. Ordinary cells have zero memory cost for this field. To adopt: add `hyperlink: Option<Arc<HyperlinkUri>>` (lazy) in TauTerm's `Cell`, without performance impact on normal content.
   **Recommended sequencing:**
   1. **Phase 1 (passive OSC 8)**: parse OSC 8 in `osc.rs` → store URI in `Cell` → expose via IPC → display decorated underline on frontend with Ctrl+click.
   2. **Phase 2 (active hints)**: DOM overlay generated on demand by regex scan of visible buffer → short labels → configurable action.
   Actions required: specify in FS + UXD, implement in two phases.
 
-- [ ] **OSC 1337 — inline images (iTerm2 Inline Images Protocol)** `[Score: 9 | R:1, S:1, U:2, E:2]`
-  Absent from `docs/UR.md` and `docs/fs/`. Enables image display in the terminal: used by file managers (`yazi`, `ranger`), Python/Julia plotting tools, and `chafa`. Unlike sixel or TGP, OSC 1337 is well-suited to TauTerm's WebView architecture — the rendering side is trivial (the browser handles PNG/JPEG/GIF natively), the complexity lies in the parser and cell positioning.
-  **Protocol**: `ESC ] 1337 ; File=[params]:[base64data] BEL/ST`. Key params: `inline=1` (display vs. download), `width`/`height` (chars, pixels, or percent), `preserveAspectRatio`, `doNotMoveCursor`. Supported formats: PNG, JPEG, GIF, WebP.
-  **WezTerm reference** (MIT — compatible with MPL-2.0):
-  - Parser: `wezterm-escape-parser/src/osc.rs` — `ITermFileData::parse()`, `ITermProprietary` enum, `ITermDimension`. Clean, well-tested API. The crate is published separately (`wezterm-escape-parser 0.1.0`) — TauTerm can depend on it directly or adapt the parsing logic.
-  - Cell assignment: `term/src/terminalstate/iterm.rs` (`set_image()`) + `term/src/terminalstate/image.rs` (`assign_image_to_cells()`) — not reusable as-is (coupled to WezTerm's GPU renderer and `ImageCell` model), but the UV-coordinate-per-cell approach is the right reference for TauTerm's overlay model.
-  **TauTerm implementation** (simpler than native terminals):
-  1. Parse OSC 1337 in `src-tauri/src/vt/osc.rs` → decode base64 → emit a `inline-image` Tauri event with decoded bytes, MIME type, cell dimensions, cursor position, and `do_not_move_cursor` flag. Validate size before decoding (cap at 100 MB, following WezTerm).
-  2. Frontend: position an `<img>` element as an overlay over the terminal grid at the anchor cell. The image scrolls with the terminal content (`position: absolute` relative to the scrollback container). Cells occupied by the image are marked as reserved.
-  **Implementation caveats**:
-  - OSC 1337 can arrive as multi-chunk `put()` calls — accumulate in `Vec<u8>` before decoding (do not decode prematurely).
-  - `inline=0` means download, not display — define TauTerm behavior upfront.
-  - Large images sent via IPC as raw `Vec<u8>` may be costly — consider storing in backend and exposing via Tauri asset protocol with a key.
-  Actions required: specify in `docs/UR.md` + `docs/fs/`, implement parser in `osc.rs`, add `inline-image` Tauri event, implement frontend overlay renderer.
-
-- [ ] **Session persistence — restore tabs on relaunch** `[Score: 9 | R:1, S:1, U:3, E:1]`
-  Absent from `docs/UR.md`. Daily pain point for Alex (4 tabs: frontend, backend, logs, git) and Jordan (10+ SSH sessions). Highly upvoted on Hyper (#311) and expected behavior in Tabby ("Tabby remembers your tabs").
+- [ ] **Session persistence — restore tabs on relaunch** `[Score: 14 | R:1, S:1, U:3, V:1]` `E: weeks` `B: —`
+  Absent from `docs/UR.md`. Daily pain point for Alex (4 tabs: frontend, backend, logs, git) and Jordan (10+ SSH sessions). Highly upvoted on Hyper (#311) and expected behavior in Tabby ("Tabby remembers your tabs"). U:3 because it affects both primary personas daily. V:1 because the absence is stable — it doesn't worsen over time.
   Target behavior: on close, serialize the tab list (type local/SSH, title, associated connection profile). On relaunch, offer "Restore previous session?" — opt-in, not imposed (Sam won't always want this).
   Note: local PTYs are not restorable (process dead) — only metadata is restored. Saved SSH connections can be relaunched automatically. **Never serialize the VT buffer** — potentially sensitive data + memory cost.
   **Tabby architecture** (`tabby-core/src/services/tabRecovery.service.ts`, `tabby-core/src/api/tabRecovery.ts`, `tabby-core/src/services/app.service.ts`, `tabby-ssh/src/recoveryProvider.ts`) — `TabRecoveryProvider` pattern — discriminated Rust enum:
@@ -97,7 +114,22 @@ Items in the **Future Roadmap** section are out of scope for the current release
   Stored in `~/.config/tauterm/session.json`. On startup: deserialize → show restore dialog → recreate tabs from snapshots. `working_dir` comes from OSC 7 CWD tracking (dependency: OSC 7 item above).
   Actions required: specify in `docs/UR.md §4.1` + `docs/fs/`, implement `SessionSnapshot` in Rust with `#[serde(tag = "type")]`, add restore dialog on startup.
 
-- [ ] **Pane maximized — enlarge a pane without destroying the split** `[Score: 9 | R:1, S:1, U:2, E:2]`
+- [ ] **OSC 1337 — inline images (iTerm2 Inline Images Protocol)** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
+  Absent from `docs/UR.md` and `docs/fs/`. Enables image display in the terminal: used by file managers (`yazi`, `ranger`), Python/Julia plotting tools, and `chafa`. Unlike sixel or TGP, OSC 1337 is well-suited to TauTerm's WebView architecture — the rendering side is trivial (the browser handles PNG/JPEG/GIF natively), the complexity lies in the parser and cell positioning.
+  **Protocol**: `ESC ] 1337 ; File=[params]:[base64data] BEL/ST`. Key params: `inline=1` (display vs. download), `width`/`height` (chars, pixels, or percent), `preserveAspectRatio`, `doNotMoveCursor`. Supported formats: PNG, JPEG, GIF, WebP.
+  **WezTerm reference** (MIT — compatible with MPL-2.0):
+  - Parser: `wezterm-escape-parser/src/osc.rs` — `ITermFileData::parse()`, `ITermProprietary` enum, `ITermDimension`. Clean, well-tested API. The crate is published separately (`wezterm-escape-parser 0.1.0`) — TauTerm can depend on it directly or adapt the parsing logic.
+  - Cell assignment: `term/src/terminalstate/iterm.rs` (`set_image()`) + `term/src/terminalstate/image.rs` (`assign_image_to_cells()`) — not reusable as-is (coupled to WezTerm's GPU renderer and `ImageCell` model), but the UV-coordinate-per-cell approach is the right reference for TauTerm's overlay model.
+  **TauTerm implementation** (simpler than native terminals):
+  1. Parse OSC 1337 in `src-tauri/src/vt/osc.rs` → decode base64 → emit a `inline-image` Tauri event with decoded bytes, MIME type, cell dimensions, cursor position, and `do_not_move_cursor` flag. Validate size before decoding (cap at 100 MB, following WezTerm).
+  2. Frontend: position an `<img>` element as an overlay over the terminal grid at the anchor cell. The image scrolls with the terminal content (`position: absolute` relative to the scrollback container). Cells occupied by the image are marked as reserved.
+  **Implementation caveats**:
+  - OSC 1337 can arrive as multi-chunk `put()` calls — accumulate in `Vec<u8>` before decoding (do not decode prematurely).
+  - `inline=0` means download, not display — define TauTerm behavior upfront.
+  - Large images sent via IPC as raw `Vec<u8>` may be costly — consider storing in backend and exposing via Tauri asset protocol with a key.
+  Actions required: specify in `docs/UR.md` + `docs/fs/`, implement parser in `osc.rs`, add `inline-image` Tauri event, implement frontend overlay renderer.
+
+- [ ] **Pane maximized — enlarge a pane without destroying the split** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
   Absent from `docs/uxd/03-components.md §7.2`. Alex's workflow: 3 panes open, need temporary focus on one without losing context of the others. Close and recreate destroys VT history.
   Target behavior: shortcut `Ctrl+Shift+Enter` (configurable) toggles the active pane to "maximized" state — it occupies the full split area, others are hidden but not destroyed. A `--color-accent` border + discrete badge signals the state. Same shortcut or `Escape` restores the layout.
   Aligned with AD.md §1.3 "Durability Over Novelty": no state lost, no PTY killed.
@@ -108,7 +140,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
   - Shortcut: add `pane-maximize` in `handleGlobalKeydown()` of `useTerminalView.io-handlers.svelte.ts`.
   Actions required: specify in `docs/uxd/03-components.md §7.2` + `docs/uxd/04-interaction.md`, implement layout state in `SplitPane.svelte`.
 
-- [ ] **Jump hosts / ProxyJump SSH in the connection manager** `[Score: 8 | R:1, S:1, U:2, E:1]`
+- [ ] **Jump hosts / ProxyJump SSH in the connection manager** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
   Absent from `docs/UR.md §9`. Jordan's standard use case: accessing servers on a private network via a bastion. Without ProxyJump in the UI, Jordan configures `~/.ssh/config` manually and TauTerm connections don't match his actual infrastructure.
   Tabby handles jump hosts natively: each saved connection can reference a "jump host" profile, with targeted error messages per chain link.
   `russh` supports ProxyJump — it's a data model problem (add a "via jump host" field in `SshConnectionConfig`) + UI form, not a transport problem.
@@ -119,7 +151,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
   4. Data model: `jump_host_id: Option<String>` in `SshConnectionConfig` (references another saved connection profile). Limit to 1 hop initially.
   Actions required: specify in `docs/UR.md §9` + `docs/fs/03-remote-ssh.md`, extend `SshConnectionConfig`, implement the `direct-tcpip` sequence in `src-tauri/src/ssh/manager/connect.rs`, add the "Via jump host" field in the connection form.
 
-- [ ] **Run-merging — group adjacent same-style cells into a single `<span>`** `[Score: 8 | R:1, S:1, U:2, E:1]`
+- [ ] **Run-merging — group adjacent same-style cells into a single `<span>`** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: OSC 8 (clickable hints)`
   **Prerequisite for ligature support.** The current span-per-cell model renders one `<span>` per character, which fragments the CSS shaping context and prevents ligature formation. Run-merging groups consecutive cells with identical style (fg, bg, bold, italic, dim, underline, inverse) into a single `<span>` containing multiple characters, restoring the shaping context.
   Secondary benefit: fewer DOM nodes → smaller layout tree → marginal repaint reduction (not a frame-budget lever, but a structural improvement).
   **Boundary constraints** — spans must not cross:
@@ -142,10 +174,11 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ### Platform Support
 
-- [ ] **Windows 11 support** `[Score: 10 | R:1, S:2, U:2, E:1]`
+- [ ] **Windows 11 support** `[Score: 19 | R:1, S:2, U:3, V:2]` `E: weeks` `B: —`
 
   **Current state — architecture is ready, implementation is not.**
   ADR-0005 (PAL) is in place: `PtyBackend`, `CredentialStore`, `ClipboardBackend`, `NotificationBackend` traits are defined, factory functions have `#[cfg(target_os = "windows")]` dispatch, and Windows stubs exist in `platform/pty_windows.rs`, `credentials_windows.rs`, `clipboard_windows.rs`, `notifications_windows.rs`. `portable-pty` (already in Cargo.toml) supports ConPTY. `russh` is pure Rust and cross-platform. `arboard` supports Win32 clipboard natively.
+  S:2 because the stubs currently `unimplemented!()` (panic at runtime) — latent debt in shipped code. U:3 because Windows represents the majority of potential users. V:2 because platform-specific code accumulates with each feature, widening the porting gap.
 
   **Prerequisite — an ADR for the Windows porting strategy is required before starting.** No ADR currently governs the porting approach, maintenance model (single cross-platform binary vs platform-specific builds), or test policy per platform.
 
@@ -263,9 +296,10 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ### Performance — Renderer Rewrite
 
-*Context: 0.1.0 decision — ~23 ms SCROLL stress test is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms. WebKitGTK repaint (78%) is the structural ceiling of the DOM renderer. All CSS/JS optimisations (P-OPT-1 through P-OPT-4) are exhausted. P12b is the only remaining lever to reach 12 ms on SCROLL.*
+*Context: 0.1.0 decision — ~23 ms SCROLL stress test is acceptable. Interactive latency (keystrokes, ncurses) is 1.2 ms. WebKitGTK repaint (78%) is the structural ceiling of the DOM renderer. CSS/JS frame-time optimisations (P-OPT-1 through P-OPT-4) are exhausted; pipeline-level optimisations (P-HT-1 through P-HT-6) address throughput survival but not per-frame repaint cost. P12b is the only remaining lever to reach 12 ms on SCROLL.*
 
-- [ ] **P12b — WebGL2** *(only if SCROLL < 15 ms becomes a hard requirement in a future release)*
+- [ ] **P12b — WebGL2** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
+  *(Only if SCROLL < 15 ms becomes a hard requirement in a future release)*
   **All prerequisites met:**
   1. ✓ P-DIAG-1: repaintTime = 78% SCROLL. WebKitGTK repaint confirmed as dominant bottleneck.
   2. ✓ P-OPT-1 (rAF batching): −40% repaints on RAPID-FIRE. SCROLL avg 27.54 ms — budget still exceeded.
@@ -279,34 +313,36 @@ Items in the **Future Roadmap** section are out of scope for the current release
   - Parallel DOM layer for AT-SPI2 accessibility mandatory (`role="list"` + `aria-live="assertive"`, fed from buffer, `aria-hidden="true"` on canvas) — ~17 KB of code at xterm.js for this component alone
   - Text selection to re-implement entirely (logical model `[col, row]`, mouse tracking, extraction from Rust buffer, clipboard via Tauri)
 
-- [ ] **P5 — Flat buffer for `ScreenBuffer`**
+- [ ] **P5 — Flat buffer for `ScreenBuffer`** `[Score: 10 | R:1, S:1, U:1, V:1]` `E: days` `B: P12b`
   Replace `Vec<Vec<Cell>>` with a single `Vec<Cell>` of size `rows × cols` with access via `row * cols + col`. **Prerequisite**: after P12b, once the WebGL renderer no longer dominates the frame budget, `build_screen_update_event` (698 µs) may re-emerge as a bottleneck — re-evaluate then. **Risk**: breaking change on all APIs that expose `&[Cell]` by row (`get_row`, `scroll_up`, etc.).
 
 ### Terminal Features
 
-- [ ] **Kitty keyboard protocol** (explicitly deferred — ADR-0003, FS-05-scope-constraints.md)
-  Enabled by default in Alacritty; required for Neovim 0.10+ (Shift+Enter, Ctrl+I vs Tab, Ctrl+M vs Enter). Natural extension: flag in `ModeState`, dispatch `CSI > 4 ; flags m` (enable) / `CSI < u` (disable) in `Perform::csi_dispatch`, frontend encoding per active mode.
+- [ ] **Kitty keyboard protocol** `[Score: 16 | R:1, S:1, U:3, V:2]` `E: weeks` `B: —`
+  (Explicitly deferred — ADR-0003, FS-05-scope-constraints.md)
+  Enabled by default in Alacritty; required for Neovim 0.10+ (Shift+Enter, Ctrl+I vs Tab, Ctrl+M vs Enter). U:3 because Neovim is the primary editor for the Alex persona. V:2 because adoption is accelerating — more terminal applications require it.
+  Natural extension: flag in `ModeState`, dispatch `CSI > 4 ; flags m` (enable) / `CSI < u` (disable) in `Perform::csi_dispatch`, frontend encoding per active mode.
   Note: non-trivial implementation — Alacritty had 6 bug fixes between v0.13 and v0.16 (Shift+number, C0/C1 in associated text).
 
-- [ ] **Vi mode — keyboard navigation in scrollback**
+- [ ] **Vi mode — keyboard navigation in scrollback** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
   Alacritty killer feature. Integrated modal mode in the terminal: vi movements (`w`, `b`, `{`, `}`), search (`/`), block selection, yank to clipboard. Not a tmux wrapper — a state managed by the terminal with an independent vi cursor. Power user (Alex who lives in neovim).
   Cost: additional VT state machine + frontend. Substantial — do not underestimate.
 
-- [ ] **Real-time keyword highlighting in terminal output**
+- [ ] **Real-time keyword highlighting in terminal output** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
   Highlight patterns (errors, IPs, filenames) in real-time output via configurable regexes. Tabby has a highly upvoted request (#632). Strong differentiator for Jordan scanning logs.
   Distinction with existing search: search is punctual and retroactive; highlighting is continuous and prospective.
 
-- [ ] **Integrated SFTP — contextual panel in the SSH session**
+- [ ] **Integrated SFTP — contextual panel in the SSH session** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
   Tabby's biggest differentiator for ops. CWD-aware side panel in the same tab as the active SSH session, with filter bar, folder download, drag-and-drop upload. Eliminates the need for FileZilla or manual `scp`.
   Backend cost: full SFTP client implementation on the Rust side. Substantial — not before several releases.
 
-- [ ] **Mosh support**
+- [ ] **Mosh support** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
   Highly upvoted request in Tabby (#593). Solves Jordan's pain point: SSH sessions that die on network reconnection (laptop sleep, unstable wifi). Mosh maintains the session via UDP even after a disconnection.
   Cost: integration of the mosh lib or spawn of an external `mosh-client` process. Complex — to investigate.
 
 ### Tab / Pane Management
 
-- [ ] **Tab detachment and inter-window movement**
+- [ ] **Tab detachment and inter-window movement** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
   Detach a tab from its window to create a new one (like Firefox), and move a tab between windows by drag-and-drop.
 
   **Tab detachment → new window**
@@ -336,7 +372,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ### Claude Code Integration
 
-- [ ] **Claude Code Agent Teams — multi-pane support via `CustomPaneBackend`**
+- [ ] **Claude Code Agent Teams — multi-pane support via `CustomPaneBackend`** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: anthropics/claude-code#26572`
   **Prerequisite: [anthropics/claude-code#26572](https://github.com/anthropics/claude-code/issues/26572)**
 
   Claude Code currently exposes multi-pane to agents only via tmux and iTerm2. A `CustomPaneBackend` extension proposal defines a JSON-RPC 2.0 protocol allowing any terminal to register as a pane backend. This ticket is not yet merged.
@@ -349,7 +385,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
   **Benefit:** TauTerm becomes a first-class terminal for Claude Code Agent Teams, without depending on tmux or iTerm2.
 
-- [ ] **Claude Code Agent Teams — tmux control mode (interim alternative)**
+- [ ] **Claude Code Agent Teams — tmux control mode (interim alternative)** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: weeks` `B: —`
   **Context:** While `CustomPaneBackend` is not implemented and merged (see above), Claude Code uses tmux on Linux. Without integration, tmux runs *inside* TauTerm like any other emulator — double multiplexing layer, visible tmux status bar, conflicting keybindings.
 
   **Solution:** Implement **tmux control mode** (`tmux -CC`). In this mode, tmux no longer draws its own UI — it sends structured messages (DCS protocol) to the emulator, which creates its own native panes in response. This is the mechanism iTerm2 uses on macOS.

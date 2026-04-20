@@ -26,7 +26,7 @@ use tau_term_lib::{
     events::types::{CellAttrsDto, CellUpdate, CursorState, ScreenUpdateEvent},
     session::{
         ids::PaneId,
-        pty_task::{build_screen_update_event, build_scrolled_viewport_event},
+        output::{build_screen_update_event, build_scrolled_viewport_event},
     },
     vt::{VtProcessor, screen_buffer::DirtyRegion},
 };
@@ -113,7 +113,7 @@ fn bench_build_scrolled_viewport(c: &mut Criterion) {
     let vt = Arc::new(RwLock::new(VtProcessor::new(80, 24, 10_000, 0, false)));
     {
         let mut proc = vt.write();
-        let row: Vec<u8> = std::iter::repeat(b'X').take(80).collect();
+        let row: Vec<u8> = std::iter::repeat_n(b'X', 80).collect();
         for _ in 0..1_000 {
             proc.process(&row);
             proc.process(b"\r\n");
@@ -155,14 +155,14 @@ fn bench_serde_json_full_redraw(c: &mut Criterion) {
                 attrs: CellAttrsDto {
                     fg: None,
                     bg: None,
-                    bold: false,
-                    dim: false,
-                    italic: false,
-                    underline: 0,
-                    blink: false,
-                    inverse: false,
-                    hidden: false,
-                    strikethrough: false,
+                    bold: None,
+                    dim: None,
+                    italic: None,
+                    underline: None,
+                    blink: None,
+                    inverse: None,
+                    hidden: None,
+                    strikethrough: None,
                     underline_color: None,
                 },
                 hyperlink: None,
@@ -308,14 +308,14 @@ fn bench_serde_json_full_redraw_default_attrs(c: &mut Criterion) {
                 attrs: CellAttrsDto {
                     fg: None,
                     bg: None,
-                    bold: false,
-                    dim: false,
-                    italic: false,
-                    underline: 0,
-                    blink: false,
-                    inverse: false,
-                    hidden: false,
-                    strikethrough: false,
+                    bold: None,
+                    dim: None,
+                    italic: None,
+                    underline: None,
+                    blink: None,
+                    inverse: None,
+                    hidden: None,
+                    strikethrough: None,
                     underline_color: None,
                 },
                 hyperlink: None,

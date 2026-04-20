@@ -23,9 +23,9 @@ use std::time::{Duration, Instant};
 
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::RwLock;
-use tauri::Emitter;
+use tauri_specta::Event;
 
-use crate::events::{EVENT_PREFERENCES_CHANGED, PreferencesChangedEvent};
+use crate::events::PreferencesChangedEvent;
 use crate::preferences::store::PreferencesStore;
 
 /// Debounce window — filesystem events within this window after the first are
@@ -175,7 +175,7 @@ pub fn start(
                     Ok(prefs) => {
                         tracing::info!("Preferences reloaded from external change");
                         let event = PreferencesChangedEvent { preferences: prefs };
-                        if let Err(e) = app.emit(EVENT_PREFERENCES_CHANGED, event) {
+                        if let Err(e) = event.emit(&app) {
                             tracing::error!("Failed to emit preferences-changed: {e}");
                         }
                     }

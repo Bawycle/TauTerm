@@ -28,7 +28,7 @@ import {
   toggleFullscreen as ipcToggleFullscreen,
   createTab,
   closeTab,
-} from '$lib/ipc/commands';
+} from '$lib/ipc';
 import {
   clearHostKeyPrompt,
   clearCredentialPrompt,
@@ -48,12 +48,7 @@ import {
   addTab,
   removeTab,
 } from '$lib/state/session.svelte';
-import type {
-  SshConnectionConfig,
-  SearchQuery,
-  SearchMatch,
-  PreferencesPatch,
-} from '$lib/ipc/types';
+import type { SshConnectionConfig, SearchQuery, SearchMatch, PreferencesPatch } from '$lib/ipc';
 import type { ViewState } from './useTerminalView.core.svelte';
 
 export function createIoHandlers(
@@ -108,9 +103,9 @@ export function createIoHandlers(
     target: 'tab' | 'pane';
   }) {
     if (target === 'tab') {
-      let newTab: import('$lib/ipc/types').TabState;
+      let newTab: import('$lib/ipc').TabState;
       try {
-        newTab = await createTab({ cols: 80, rows: 24 });
+        newTab = await createTab({ label: null, cols: 80, rows: 24 });
       } catch {
         s.connectionOpenError = true;
         return;
@@ -181,6 +176,7 @@ export function createIoHandlers(
       await provideCredentials(prompt.paneId, {
         username: prompt.username,
         password,
+        privateKeyPath: null,
         saveInKeychain,
       });
     } catch {

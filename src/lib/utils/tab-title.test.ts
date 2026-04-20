@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PaneNode, PaneState, TabState } from '$lib/ipc/types';
+import type { PaneNode, PaneState, TabState } from '$lib/ipc';
 import { getPaneById, resolveTabTitle } from '$lib/utils/tab-title';
 
 // ---------------------------------------------------------------------------
@@ -19,14 +19,13 @@ import { getPaneById, resolveTabTitle } from '$lib/utils/tab-title';
 
 function makePane(id: string, processTitle: string, label?: string | null): PaneState {
   return {
-    id,
-    sessionType: 'local',
+    paneId: id,
+    lifecycle: { type: 'running' },
     processTitle,
     label: label ?? undefined,
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
   };
 }
 
@@ -61,7 +60,7 @@ describe('getPaneById', () => {
     const leaf = makeLeaf('pane-a', 'bash');
     const result = getPaneById(leaf, 'pane-a');
     expect(result).not.toBeNull();
-    expect(result!.id).toBe('pane-a');
+    expect(result!.paneId).toBe('pane-a');
     expect(result!.processTitle).toBe('bash');
   });
 
@@ -77,7 +76,7 @@ describe('getPaneById', () => {
     const split = makeSplit(first, second);
     const result = getPaneById(split, 'pane-first');
     expect(result).not.toBeNull();
-    expect(result!.id).toBe('pane-first');
+    expect(result!.paneId).toBe('pane-first');
   });
 
   it('finds the second child in a split', () => {
@@ -86,7 +85,7 @@ describe('getPaneById', () => {
     const split = makeSplit(first, second);
     const result = getPaneById(split, 'pane-second');
     expect(result).not.toBeNull();
-    expect(result!.id).toBe('pane-second');
+    expect(result!.paneId).toBe('pane-second');
     expect(result!.processTitle).toBe('zsh');
   });
 
@@ -97,9 +96,9 @@ describe('getPaneById', () => {
     const paneC = makeLeaf('pane-C', 'title-C');
     const inner = makeSplit(paneA, paneB);
     const root = makeSplit(inner, paneC);
-    expect(getPaneById(root, 'pane-A')?.id).toBe('pane-A');
-    expect(getPaneById(root, 'pane-B')?.id).toBe('pane-B');
-    expect(getPaneById(root, 'pane-C')?.id).toBe('pane-C');
+    expect(getPaneById(root, 'pane-A')?.paneId).toBe('pane-A');
+    expect(getPaneById(root, 'pane-B')?.paneId).toBe('pane-B');
+    expect(getPaneById(root, 'pane-C')?.paneId).toBe('pane-C');
   });
 
   it('returns null when paneId is absent from the entire tree', () => {

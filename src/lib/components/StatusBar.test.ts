@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { SshLifecycleState, PaneState } from '$lib/ipc/types';
+import type { SshLifecycleState, PaneState } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,13 +16,12 @@ import type { SshLifecycleState, PaneState } from '$lib/ipc/types';
 
 function makePaneState(overrides: Partial<PaneState> = {}): PaneState {
   return {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: 'bash',
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
     ...overrides,
   };
 }
@@ -40,7 +39,7 @@ function sshStatusText(
   connectionHost?: string,
   connectionUser?: string,
 ): string | null {
-  if (pane.sessionType !== 'ssh' || !pane.sshState) return null;
+  if (!pane.sshState) return null;
   const state = pane.sshState;
   switch (state.type) {
     case 'connecting':
@@ -57,7 +56,7 @@ function sshStatusText(
 }
 
 function sshStatusIcon(pane: PaneState): string | null {
-  if (pane.sessionType !== 'ssh' || !pane.sshState) return null;
+  if (!pane.sshState) return null;
   switch (pane.sshState.type) {
     case 'connecting':
     case 'authenticating':
@@ -74,9 +73,7 @@ function sshStatusIcon(pane: PaneState): string | null {
 describe('TUITC-UX-090: SSH connected state display', () => {
   it('connected pane → "{user}@{host}" text', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
       sshState: { type: 'connected' },
-      sshConnectionId: 'conn-1',
     });
     const text = sshStatusText(pane, 'example.com', 'alice');
     expect(text).toBe('alice@example.com');
@@ -84,7 +81,6 @@ describe('TUITC-UX-090: SSH connected state display', () => {
 
   it('connected pane → Network icon', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
       sshState: { type: 'connected' },
     });
     expect(sshStatusIcon(pane)).toBe('Network');
@@ -94,16 +90,14 @@ describe('TUITC-UX-090: SSH connected state display', () => {
 describe('TUITC-UX-091: SSH disconnected state display', () => {
   it('disconnected pane → "Disconnected" text', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
-      sshState: { type: 'disconnected' },
+      sshState: { type: 'disconnected', reason: null },
     });
     expect(sshStatusText(pane)).toBe('Disconnected');
   });
 
   it('disconnected pane → WifiOff icon', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
-      sshState: { type: 'disconnected' },
+      sshState: { type: 'disconnected', reason: null },
     });
     expect(sshStatusIcon(pane)).toBe('WifiOff');
   });
@@ -111,12 +105,12 @@ describe('TUITC-UX-091: SSH disconnected state display', () => {
 
 describe('TUITC-UX-092: local session → no SSH indicator', () => {
   it('local pane → sshStatusText returns null', () => {
-    const pane = makePaneState({ sessionType: 'local' });
+    const pane = makePaneState();
     expect(sshStatusText(pane)).toBeNull();
   });
 
   it('local pane → sshStatusIcon returns null', () => {
-    const pane = makePaneState({ sessionType: 'local' });
+    const pane = makePaneState();
     expect(sshStatusIcon(pane)).toBeNull();
   });
 });
@@ -124,7 +118,6 @@ describe('TUITC-UX-092: local session → no SSH indicator', () => {
 describe('SSH connecting/authenticating states', () => {
   it('connecting → "Connecting to {host}..." text', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
       sshState: { type: 'connecting' },
     });
     expect(sshStatusText(pane, 'myserver.local')).toBe('Connecting to myserver.local...');
@@ -132,7 +125,6 @@ describe('SSH connecting/authenticating states', () => {
 
   it('authenticating → "Authenticating..." text', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
       sshState: { type: 'authenticating' },
     });
     expect(sshStatusText(pane)).toBe('Authenticating...');
@@ -140,7 +132,6 @@ describe('SSH connecting/authenticating states', () => {
 
   it('closed → "Closed" text', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
       sshState: { type: 'closed' },
     });
     expect(sshStatusText(pane)).toBe('Closed');
@@ -148,7 +139,6 @@ describe('SSH connecting/authenticating states', () => {
 
   it('closed → XCircle icon', () => {
     const pane = makePaneState({
-      sessionType: 'ssh',
       sshState: { type: 'closed' },
     });
     expect(sshStatusIcon(pane)).toBe('XCircle');
@@ -164,13 +154,13 @@ describe('all SSH lifecycle states are handled', () => {
     { type: 'connecting' },
     { type: 'authenticating' },
     { type: 'connected' },
-    { type: 'disconnected' },
+    { type: 'disconnected', reason: null },
     { type: 'closed' },
   ];
 
   for (const state of states) {
     it(`state "${state.type}" has non-null text and icon`, () => {
-      const pane = makePaneState({ sessionType: 'ssh', sshState: state });
+      const pane = makePaneState({ sshState: state });
       expect(sshStatusText(pane)).not.toBeNull();
       expect(sshStatusIcon(pane)).not.toBeNull();
     });

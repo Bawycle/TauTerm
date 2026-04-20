@@ -20,7 +20,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import ConnectionManager from '../ConnectionManager.svelte';
-import type { SshConnectionConfig } from '$lib/ipc/types';
+import type { SshConnectionConfig } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,7 +33,10 @@ function makeConn(overrides: Partial<SshConnectionConfig> = {}): SshConnectionCo
     host: 'example.com',
     port: 22,
     username: 'admin',
+    identityFile: null,
     allowOsc52Write: false,
+    keepaliveIntervalSecs: null,
+    keepaliveMaxFailures: null,
     ...overrides,
   };
 }

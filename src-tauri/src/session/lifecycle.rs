@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The lifecycle state of a local PTY pane.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum PaneLifecycleState {
     /// PTY is being allocated and the child process is being forked.

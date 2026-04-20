@@ -14,7 +14,7 @@
  *  - FS-VT-023: ANSI 0–15 must be remappable via active theme
  */
 
-import type { ColorDto, Color } from '$lib/ipc/types';
+import type { ColorDto, Color } from '$lib/ipc';
 
 /**
  * CSS custom property names for ANSI 0–15.
@@ -83,7 +83,7 @@ export function resolve256Color(index: number): string {
  * Resolve a `ColorDto` (from screen-update events) to a CSS color string.
  * Returns undefined when the color is 'default' (caller uses CSS inheritance).
  */
-export function resolveColorDto(color: ColorDto | undefined): string | undefined {
+export function resolveColorDto(color: ColorDto | null | undefined): string | undefined {
   if (!color) return undefined;
   switch (color.type) {
     case 'default':
@@ -101,7 +101,7 @@ export function resolveColorDto(color: ColorDto | undefined): string | undefined
  * Resolve a `Color` (from ScreenSnapshot cells — no 'default' variant) to a CSS color string.
  * Returns undefined when color is absent (caller uses CSS inheritance).
  */
-export function resolveColor(color: Color | undefined): string | undefined {
+export function resolveColor(color: Color | null | undefined): string | undefined {
   if (!color) return undefined;
   switch (color.type) {
     case 'ansi':

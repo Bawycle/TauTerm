@@ -14,7 +14,7 @@
  * All content is treated as opaque text (set via textContent).
  */
 
-import type { SnapshotCell, CellUpdate, CellAttrsDto, Color } from '$lib/ipc/types';
+import type { SnapshotCell, CellUpdate, CellAttrsDto, Color, ScreenUpdateEvent } from '$lib/ipc';
 import { resolveColorDto, resolveColor, resolveAnsiColor } from './color.js';
 
 export interface CellStyle {
@@ -130,7 +130,7 @@ export function cellStyleFromSnapshot(cell: SnapshotCell): CellStyle {
     hidden: cell.hidden,
     strikethrough: cell.strikethrough,
     underlineColor,
-    hyperlink: cell.hyperlink,
+    hyperlink: cell.hyperlink ?? undefined,
     style: '',
   };
   result.style = computeCellStyle(result);
@@ -148,7 +148,7 @@ export function cellStyleFromUpdate(
   content: string,
   attrs: CellAttrsDto,
   width: number,
-  hyperlink?: string,
+  hyperlink?: string | null,
 ): CellStyle {
   // Apply bold color promotion: ColorDto 'default' variant is not a Color,
   // so we only promote when the fg is a non-default ANSI color.
@@ -174,7 +174,7 @@ export function cellStyleFromUpdate(
     hidden: attrs.hidden ?? false,
     strikethrough: attrs.strikethrough ?? false,
     underlineColor,
-    hyperlink,
+    hyperlink: hyperlink ?? undefined,
     style: '',
   };
   result.style = computeCellStyle(result);
@@ -276,4 +276,122 @@ export function buildGridFromSnapshot(
   // Pad with default cells if the snapshot is smaller than the viewport.
   while (grid.length < total) grid.push(defaultCell());
   return grid;
+}
+
+// ---------------------------------------------------------------------------
+// P-HT-1: Merge multiple ScreenUpdateEvents into one (rAF coalescing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Merge a non-empty batch of ScreenUpdateEvent into a single event.
+ *
+ * Algorithm:
+ * 1. Empty batch → throw (caller must guarantee non-empty).
+ * 2. Single event → return as-is (fast-path, zero allocation).
+ * 3. Group by scrollOffset. Heterogeneous scrollOffsets are merged per-group
+ *    and the results returned as an array (caller applies sequentially).
+ *    In practice, a single rAF tick almost never mixes scrollOffsets.
+ * 4. Within a homogeneous group: discard all events before the last
+ *    isFullRedraw (a full-redraw carries the entire screen state).
+ * 5. Merge CellUpdate[] into a Map keyed by `row * cols + col` (last-write wins).
+ *    The `cols` value comes from the LAST event in the working slice.
+ *    Invariant: a resize always produces isFullRedraw=true, so pre-resize events
+ *    are discarded at step 4 — cols are always consistent within the working slice.
+ * 6. Scalars (cursor, scrollbackLines, scrollOffset, cols, rows) from the LAST event.
+ * 7. isFullRedraw = true if any event in the working slice has isFullRedraw=true.
+ *
+ * For heterogeneous scrollOffset batches, returns an array of merged groups.
+ * For homogeneous batches (the common case), returns a single ScreenUpdateEvent.
+ */
+export function mergeScreenUpdates(
+  batch: ScreenUpdateEvent[],
+): ScreenUpdateEvent | ScreenUpdateEvent[] {
+  if (batch.length === 0) {
+    throw new Error('mergeScreenUpdates: batch must be non-empty');
+  }
+  if (batch.length === 1) {
+    return batch[0];
+  }
+
+  // Check for heterogeneous scrollOffsets.
+  const firstOffset = batch[0].scrollOffset;
+  let heterogeneous = false;
+  for (let i = 1; i < batch.length; i++) {
+    if (batch[i].scrollOffset !== firstOffset) {
+      heterogeneous = true;
+      break;
+    }
+  }
+
+  if (heterogeneous) {
+    // Group by scrollOffset preserving order, merge each group independently.
+    const groups: ScreenUpdateEvent[][] = [];
+    let currentGroup: ScreenUpdateEvent[] = [batch[0]];
+    let currentOffset = batch[0].scrollOffset;
+    for (let i = 1; i < batch.length; i++) {
+      if (batch[i].scrollOffset === currentOffset) {
+        currentGroup.push(batch[i]);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [batch[i]];
+        currentOffset = batch[i].scrollOffset;
+      }
+    }
+    groups.push(currentGroup);
+
+    // Merge each group and return as array for sequential application.
+    return groups.map((g) => mergeHomogeneous(g));
+  }
+
+  return mergeHomogeneous(batch);
+}
+
+/**
+ * Merge a homogeneous batch (all events share the same scrollOffset).
+ * Always returns a single ScreenUpdateEvent.
+ */
+function mergeHomogeneous(batch: ScreenUpdateEvent[]): ScreenUpdateEvent {
+  if (batch.length === 1) return batch[0];
+
+  // Find the last full-redraw index.
+  let lastFullIdx = -1;
+  for (let i = batch.length - 1; i >= 0; i--) {
+    if (batch[i].isFullRedraw) {
+      lastFullIdx = i;
+      break;
+    }
+  }
+
+  // Working slice: from lastFullIdx (or 0 if no full-redraw) to end.
+  const startIdx = lastFullIdx >= 0 ? lastFullIdx : 0;
+  const last = batch[batch.length - 1];
+  const mergedCols = last.cols;
+
+  // Merge cells: last-write wins via Map keyed by row * mergedCols + col.
+  const cellMap = new Map<number, CellUpdate>();
+  for (let i = startIdx; i < batch.length; i++) {
+    for (const cell of batch[i].cells) {
+      cellMap.set(cell.row * mergedCols + cell.col, cell);
+    }
+  }
+
+  // Determine isFullRedraw: true if any event in working slice is full-redraw.
+  let isFullRedraw = false;
+  for (let i = startIdx; i < batch.length; i++) {
+    if (batch[i].isFullRedraw) {
+      isFullRedraw = true;
+      break;
+    }
+  }
+
+  return {
+    paneId: last.paneId,
+    cells: Array.from(cellMap.values()),
+    cursor: last.cursor,
+    scrollbackLines: last.scrollbackLines,
+    isFullRedraw,
+    scrollOffset: last.scrollOffset,
+    cols: last.cols,
+    rows: last.rows,
+  };
 }

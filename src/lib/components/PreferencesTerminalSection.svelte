@@ -14,7 +14,7 @@
   import TextInput from '$lib/ui/TextInput.svelte';
   import Dropdown from '$lib/ui/Dropdown.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { Preferences, PreferencesPatch, CursorStyle, BellType } from '$lib/ipc/types';
+  import type { Preferences, PreferencesPatch, CursorStyle, BellType } from '$lib/ipc';
 
   interface Props {
     preferences?: Preferences;

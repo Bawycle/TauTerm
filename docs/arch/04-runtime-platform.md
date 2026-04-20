@@ -55,7 +55,12 @@ The write lock is held only for the duration of `process()` + `take_dirty_cells(
 
 ### 6.4 SSH I/O
 
-SSH sessions have their own async task structure managed by the SSH library (`russh` / `ssh2-rs`). The SSH channel output is piped to a `VtProcessor` in the same way as local PTY output. The `SshConnection` state machine runs in a separate Tokio task per connection.
+SSH sessions use a 2-task structure mirroring the local PTY pipeline (ADR-0028):
+
+- **Task 1 (async reader):** a `tokio::spawn` task reads `russh::ChannelMsg::Data` and `ExtendedData` from the SSH channel, processes bytes through the shared `VtProcessor` via `extract_process_output`, and sends `ProcessOutput` values over a bounded MPSC channel (capacity 256). CPR/DSR responses are coalesced into a single `ch.data()` write per drain, after releasing the VT write-lock (lock-ordering invariant).
+- **Task 2 (shared coalescer):** the same `session::output::run()` function used by PTY panes — adaptive debounce, frame-ack escalation, and event emission are source-agnostic.
+
+The `SshConnection` state machine runs in a separate Tokio task per connection. Termination: the coalescer exits when its receiver closes; the caller awaits the `JoinHandle`, then mutates `pane.ssh_state = Closed`, emits `SshLifecycleState::Closed`, and emits `ProcessExited` (in that order).
 
 ### 6.5 Back-pressure
 
@@ -66,6 +71,19 @@ The backend emits `screen-update` events at the rate that PTY output arrives. At
 3. **Frontend rendering:** The frontend does not re-render on every individual event; it uses `requestAnimationFrame` batching to render at most once per frame.
 
 Back-pressure between the PTY read and the Tauri event system is a known performance risk (noted in ADR-0001). It requires profiling during development.
+
+**Frame-ack backpressure (ADR-0027):** the frontend calls `frame_ack(paneId)` after each `flushRafQueue()` paint cycle. Each `PaneSession` holds a per-pane `Arc<AtomicU64>` storing the last ack timestamp (ms since epoch, `Relaxed` ordering). Task 2 reads this timestamp on each timer tick and applies a two-stage escalation. Escalation only activates when a `screen-update` event has been emitted without acknowledgment — non-visual events (bell, mode change, OSC 52, cursor style, title, CWD, notification) do not advance `last_emit_ms`, and idle periods do not advance it either, so neither arms escalation.
+
+| Condition | Behavior |
+|-----------|----------|
+| No unacked emits (idle) | Normal adaptive debounce — no escalation regardless of ack age |
+| Unacked emits, ack age ≤ 200 ms | Normal adaptive debounce (12–100 ms) |
+| Unacked emits, ack age > 200 ms (`ACK_STALE`) | Debounce escalated to 250 ms; all events still emitted |
+| Unacked emits, ack age > 1000 ms (`ACK_DROP`) | Dirty cell updates and `cursor_moved` dropped; non-visual events preserved (mode, cursor shape, bell, OSC 52, title, CWD) |
+
+`has_unacked_emits` is computed as `last_emit_ms > last_ack_ms`, where `last_emit_ms` is a Task 2-local variable updated only when `emit_all_pending()` actually emitted a `screen-update` event (the sole event type the frontend acknowledges via `flushRafQueue`). On transition from drop mode back to normal (frontend acks or ack age drops below threshold), a full-redraw flag is set to resync the frontend grid. `SystemTime` is used with `saturating_sub` to handle backward NTP jumps safely (age saturates to 0 = "just acked"). The CPR/DSR immediate-flush path is unaffected — terminal query responses bypass the coalescer entirely.
+
+**SSH panes** are covered by the same frame-ack mechanism since ADR-0028. The per-pane `Arc<AtomicU64> last_frame_ack_ms` is wired to both PTY and SSH coalescer tasks via `CoalescerContext` — no source-specific branch in the `frame_ack` command or the frontend.
 
 **Resize debounce:** `resize_pane` IPC calls from `TerminalPane`'s `ResizeObserver` are debounced by the backend (`session/resize.rs`): a 16–33ms Tokio timer is reset on each incoming call; `TIOCSWINSZ` + SIGWINCH are only issued after the timer fires (FS-PTY-010). The final size is always applied.
 

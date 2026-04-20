@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Keyboard shortcut preferences.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct KeyboardPrefs {
     // Keybinding overrides — populated in the full keyboard integration pass.

@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PaneState, TabState } from '$lib/ipc/types';
+import type { PaneState, TabState } from '$lib/ipc';
 import { resolveTabTitle } from '$lib/utils/tab-title';
 
 // ---------------------------------------------------------------------------
@@ -28,13 +28,12 @@ import { resolveTabTitle } from '$lib/utils/tab-title';
 
 function makeTabState(paneTitle: string, userLabel: string | null = null): TabState {
   const pane: PaneState = {
-    id: 'pane-1',
-    sessionType: 'local',
+    paneId: 'pane-1',
+    lifecycle: { type: 'running' },
     processTitle: paneTitle,
-    cwd: '/home/user',
-    sshConnectionId: null,
     sshState: null,
-    notification: null,
+    scrollOffset: 0,
+    cwd: '/home/user',
   };
   return {
     id: 'tab-1',
@@ -119,7 +118,7 @@ describe('OSC-TITLE-003: title length boundary', () => {
     const tab = makeTabState(longTitle);
     const layout = tab.layout;
     if (layout.type !== 'leaf') throw new Error('expected leaf');
-    expect(layout.state.processTitle.length).toBe(256);
+    expect(layout.state.processTitle!.length).toBe(256);
   });
 
   it('processTitle is a string type', () => {
@@ -172,22 +171,20 @@ describe('OSC-TITLE-005: title read-back does not inject bytes into PTY', () => 
 describe('FS-PANE-007: tab title follows active pane in multi-pane layout', () => {
   it('returns processTitle of the active (non-root) pane, not the root pane', () => {
     const rootPane: PaneState = {
-      id: 'pane-root',
-      sessionType: 'local',
+      paneId: 'pane-root',
+      lifecycle: { type: 'running' },
       processTitle: 'bash',
-      cwd: '/home/user',
-      sshConnectionId: null,
       sshState: null,
-      notification: null,
+      scrollOffset: 0,
+      cwd: '/home/user',
     };
     const activePane: PaneState = {
-      id: 'pane-active',
-      sessionType: 'local',
+      paneId: 'pane-active',
+      lifecycle: { type: 'running' },
       processTitle: 'htop',
-      cwd: '/home/user',
-      sshConnectionId: null,
       sshState: null,
-      notification: null,
+      scrollOffset: 0,
+      cwd: '/home/user',
     };
     const tab: TabState = {
       id: 'tab-1',
@@ -208,22 +205,20 @@ describe('FS-PANE-007: tab title follows active pane in multi-pane layout', () =
 
   it('user label still wins over active pane processTitle in multi-pane', () => {
     const rootPane: PaneState = {
-      id: 'pane-root',
-      sessionType: 'local',
+      paneId: 'pane-root',
+      lifecycle: { type: 'running' },
       processTitle: 'bash',
-      cwd: '/home/user',
-      sshConnectionId: null,
       sshState: null,
-      notification: null,
+      scrollOffset: 0,
+      cwd: '/home/user',
     };
     const activePane: PaneState = {
-      id: 'pane-active',
-      sessionType: 'local',
+      paneId: 'pane-active',
+      lifecycle: { type: 'running' },
       processTitle: 'htop',
-      cwd: '/home/user',
-      sshConnectionId: null,
       sshState: null,
-      notification: null,
+      scrollOffset: 0,
+      cwd: '/home/user',
     };
     const tab: TabState = {
       id: 'tab-1',

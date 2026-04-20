@@ -25,7 +25,7 @@
   import { Network, WifiOff, XCircle, Settings } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import { cubicIn } from 'svelte/easing';
-  import type { PaneState, SshLifecycleState } from '$lib/ipc/types';
+  import type { PaneState, SshLifecycleState } from '$lib/ipc';
   import * as m from '$lib/paraglide/messages';
   import AboutPopover from './AboutPopover.svelte';
 
@@ -62,9 +62,7 @@
   // SSH indicator logic (TUITC-UX-090 to 092, UXD §7.5.1)
   // -------------------------------------------------------------------------
 
-  const isSsh = $derived(
-    activePaneState?.sessionType === 'ssh' && activePaneState?.sshState !== null,
-  );
+  const isSsh = $derived(activePaneState?.sshState != null);
 
   const sshState = $derived(activePaneState?.sshState ?? null);
 

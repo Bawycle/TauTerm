@@ -1,43 +1,39 @@
 // SPDX-License-Identifier: MPL-2.0
 
+//! PTY read pipeline: blocking reader (Task 1) + shared async coalescer
+//! (`session/output::run`, formerly Task 2) + PTY-specific termination.
+
 use std::io::{Read, Write};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 use tauri::AppHandle;
 use tokio::sync::mpsc::Sender;
-use tokio::time::Duration;
 
 use crate::events::{
     emit_notification_changed,
     types::{NotificationChangedEvent, PaneNotificationDto},
 };
 use crate::session::ids::PaneId;
+use crate::session::output::{Coalescer, CoalescerConfig, CoalescerContext, ProcessOutput, run};
 use crate::session::registry::SessionRegistry;
 use crate::vt::VtProcessor;
 
-use super::emitter::emit_all_pending;
-use super::{ProcessOutput, PtyTaskHandle};
-
-/// Debounce window for coalescing `screen-update` events.
-///
-/// After processing PTY bytes, Task 2 waits up to this duration before
-/// emitting, coalescing further reads into a single event. This prevents
-/// flooding the frontend when high-volume apps write faster than the frontend
-/// can consume events (§6.5).
-const SCREEN_UPDATE_DEBOUNCE: Duration = Duration::from_millis(12);
+use super::PtyTaskHandle;
 
 // ---------------------------------------------------------------------------
 // spawn_pty_read_task
 // ---------------------------------------------------------------------------
 
-/// Spawn the two-task PTY pipeline for a pane.
+/// Spawn the PTY pipeline for a pane: blocking reader (Task 1) + shared
+/// async coalescer + PTY-specific termination block.
 ///
 /// `writer` is the PTY master writer used to send DSR/DA/CPR responses back to
 /// the shell. It is `None` for sessions that do not support writing back (e.g.
 /// injectable E2E sessions), in which case responses are silently discarded.
 ///
-/// Returns a `PtyTaskHandle` that aborts both tasks on drop.
+/// Returns a [`PtyTaskHandle`] that aborts both tasks on drop.
 pub fn spawn_pty_read_task(
     pane_id: PaneId,
     vt: Arc<RwLock<VtProcessor>>,
@@ -45,8 +41,9 @@ pub fn spawn_pty_read_task(
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
     writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
     registry: Arc<SessionRegistry>,
+    last_frame_ack_ms: Arc<AtomicU64>,
 ) -> PtyTaskHandle {
-    // Bounded channel: back-pressure to PTY kernel when Task 2 is slow.
+    // Bounded channel: back-pressure to PTY kernel when the coalescer is slow.
     // INVARIANT: the VtProcessor write-lock is always released before blocking_send,
     // so no deadlock is possible between Task 1 and the IPC layer.
     let (tx, rx) = tokio::sync::mpsc::channel::<ProcessOutput>(256);
@@ -158,108 +155,52 @@ pub fn spawn_pty_read_task(
                 }
             }
 
-            // Forward to Task 2. If Task 2 has exited (channel closed), stop.
+            // Forward to the coalescer. If the coalescer has exited
+            // (channel closed), stop.
             if tx_r.blocking_send(output).is_err() {
                 tracing::debug!("PTY emit task closed, stopping reader for pane {pane_id_r}");
                 break;
             }
         }
 
-        // Channel sender is dropped here, signalling EOF to Task 2.
+        // Channel sender is dropped here, signalling EOF to the coalescer.
         tracing::debug!("PTY reader task finished for pane {pane_id_r}");
     });
 
     // ------------------------------------------------------------------
-    // Task 2 — async coalescer / emitter
+    // Coalescer — shared async task (formerly Task 2)
     // ------------------------------------------------------------------
+    //
+    // CRITICAL: spawned via `tauri::async_runtime::spawn` (NOT
+    // `tokio::spawn`) to preserve the scheduling/ordering invariants
+    // relied upon by TEST-ACK-018, TEST-ACK-019, all TEST-ADPT-*, and
+    // DEL-ASYNC-PTY-009. See ADR-0028 Decisions §2 and Risk #13.
     let pane_id_e = pane_id.clone();
-    let vt_e = vt.clone();
     let app_e = app.clone();
     let registry_e = registry.clone();
-    let mut rx_e = rx;
+
+    let config = CoalescerConfig::pty_default();
+    let coalescer = Coalescer::new(&config);
+    let ctx = CoalescerContext {
+        app,
+        pane_id,
+        vt,
+        registry,
+        last_frame_ack_ms,
+        config,
+    };
 
     let emit_task = tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(SCREEN_UPDATE_DEBOUNCE);
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        let mut pending = ProcessOutput::default();
+        run(coalescer, ctx, rx).await;
 
-        loop {
-            tokio::select! {
-                // Receive a chunk from Task 1.
-                msg = rx_e.recv() => {
-                    match msg {
-                        Some(output) => {
-                            let flush_now = output.needs_immediate_flush;
-                            pending.merge(output);
-                            if flush_now {
-                                // CPR/DSR response was sent — bypass debounce to update cursor
-                                // state promptly. Tools like vim/neovim/fzf use CPR to sync
-                                // their rendering and will stall until this event arrives.
-                                // Drain any concurrently buffered output to avoid splitting the
-                                // update across two events.
-                                while let Ok(more) = rx_e.try_recv() {
-                                    pending.merge(more);
-                                }
-                                if !pending.is_empty() {
-                                    emit_all_pending(
-                                        &app_e,
-                                        &pane_id_e,
-                                        &vt_e,
-                                        &registry_e,
-                                        &mut pending,
-                                    );
-                                    // emit_all_pending resets pending to ProcessOutput::default(),
-                                    // which also clears needs_immediate_flush.
-                                } else {
-                                    // Nothing to emit, but clear the flag to avoid stale hints.
-                                    pending.needs_immediate_flush = false;
-                                }
-                                // Start a fresh debounce window after the forced flush.
-                                interval.reset();
-                            }
-                        }
-                        None => {
-                            // Channel closed — Task 1 finished (EOF or error).
-                            // Flush any remaining pending output before exiting.
-                            if !pending.is_empty() {
-                                emit_all_pending(
-                                    &app_e,
-                                    &pane_id_e,
-                                    &vt_e,
-                                    &registry_e,
-                                    &mut pending,
-                                );
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // Debounce timer — flush accumulated output.
-                _ = interval.tick() => {
-                    // Drain any output buffered during this tick before emitting.
-                    // Prevents splitting application redraw bursts (e.g. CSI 2J + redraw)
-                    // across two separate screen-update events. try_recv() is non-blocking
-                    // and returns Err immediately when the channel is empty.
-                    while let Ok(output) = rx_e.try_recv() {
-                        pending.merge(output);
-                    }
-                    if !pending.is_empty() {
-                        emit_all_pending(
-                            &app_e,
-                            &pane_id_e,
-                            &vt_e,
-                            &registry_e,
-                            &mut pending,
-                        );
-                    }
-                }
-            }
-        }
-
-        // FS-NOTIF-002: PTY process exited — transition to Terminated and get exit info.
-        // mark_pane_terminated() calls wait() on the child to recover the exit
-        // code and sets pane.lifecycle = Terminated before we emit the notification.
+        // PTY-specific termination — runs AFTER the coalescer has flushed any
+        // remaining pending output and returned. Caller-managed termination
+        // model per ADR-0028 Decisions §3-4.
+        //
+        // FS-NOTIF-002: PTY process exited — transition to Terminated and get
+        // exit info. mark_pane_terminated() calls wait() on the child to
+        // recover the exit code and sets pane.lifecycle = Terminated before we
+        // emit the notification.
         let (exit_code, signal_name) =
             tokio::task::block_in_place(|| registry_e.mark_pane_terminated(&pane_id_e));
         if let Some((_, tab_state)) = registry_e.get_tab_state_for_pane(&pane_id_e) {

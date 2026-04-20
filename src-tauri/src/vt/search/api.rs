@@ -9,7 +9,7 @@ use super::logical_lines::{build_logical_lines, logical_line_to_text};
 use super::matcher::{Matcher, build_matcher};
 
 /// A search query.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchQuery {
     pub text: String,
@@ -18,10 +18,11 @@ pub struct SearchQuery {
 }
 
 /// A single search match position.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchMatch {
     /// Row index in the scrollback (0-based from oldest).
+    #[specta(type = f64)]
     pub scrollback_row: usize,
     /// Column of the match start.
     pub col_start: u16,

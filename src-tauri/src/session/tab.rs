@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::session::{ids::PaneId, ids::TabId, pane::PaneState};
 
 /// Split direction for `split_pane`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum SplitDirection {
     Horizontal,
@@ -19,7 +19,7 @@ pub enum SplitDirection {
 }
 
 /// Arborescent pane layout node (§4.5.1 of ARCHITECTURE.md).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PaneNode {
     /// A leaf node containing a single pane.
@@ -64,7 +64,7 @@ impl PaneNode {
 }
 
 /// Serializable tab state — the canonical type returned by IPC commands.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TabState {
     pub id: TabId,
@@ -78,7 +78,7 @@ pub struct TabState {
 }
 
 /// Full session state snapshot (returned by `get_session_state`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
     pub tabs: Vec<TabState>,

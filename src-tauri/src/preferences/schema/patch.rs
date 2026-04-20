@@ -13,7 +13,7 @@ use crate::preferences::types::{FontFamily, ThemeName, WordDelimiters};
 /// Using a dedicated patch type (instead of `Option<AppearancePrefs>` in `PreferencesPatch`)
 /// allows field-by-field updates without read-before-write: e.g. changing the language
 /// without knowing or sending the current font size.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppearancePatch {
     pub font_family: Option<FontFamily>,
@@ -34,9 +34,10 @@ pub struct AppearancePatch {
 ///
 /// Mirrors `AppearancePatch`: field-level merging avoids overwriting unrelated
 /// settings when, e.g., only `scrollback_lines` is changed from the UI.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TerminalPatch {
+    #[specta(type = Option<f64>)]
     pub scrollback_lines: Option<usize>,
     pub allow_osc52_write: Option<bool>,
     pub word_delimiters: Option<WordDelimiters>,
@@ -45,7 +46,7 @@ pub struct TerminalPatch {
 }
 
 /// Partial update for keyboard preferences — only the fields provided are changed.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct KeyboardPatch {
     pub bindings: Option<HashMap<String, String>>,
@@ -53,7 +54,7 @@ pub struct KeyboardPatch {
 
 /// A partial preferences update (only the fields the user changed).
 /// All fields are optional so the frontend can send minimal payloads.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PreferencesPatch {
     pub appearance: Option<AppearancePatch>,

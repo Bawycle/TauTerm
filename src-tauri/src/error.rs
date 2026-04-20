@@ -15,7 +15,7 @@ use thiserror::Error;
 /// Uniform error envelope returned by all Tauri command handlers.
 ///
 /// Serialized to JSON as `{ "code": "...", "message": "...", "detail": "..." }`.
-#[derive(Debug, Clone, Serialize, Deserialize, Error)]
+#[derive(Debug, Clone, Serialize, Deserialize, Error, specta::Type)]
 #[error("{code}: {message}")]
 pub struct TauTermError {
     /// Machine-readable error code (upper-case, underscore-separated, module-prefixed).
@@ -24,7 +24,6 @@ pub struct TauTermError {
     /// Human-readable summary suitable for display to non-technical users (FS-UX-001).
     pub message: String,
     /// Optional technical detail: raw OS error, exit code, system message.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
 

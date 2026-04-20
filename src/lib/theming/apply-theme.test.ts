@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { applyTheme } from './apply-theme';
-import type { UserTheme } from '$lib/ipc/types';
+import type { UserTheme } from '$lib/ipc';
 
 // jsdom environment is provided globally by vite.config.js test.environment = 'jsdom'
 beforeEach(() => {

@@ -37,7 +37,7 @@ use crate::ssh::SshConnectionConfig;
 pub const PREFS_SCHEMA_VERSION: u32 = 1;
 
 /// Top-level user preferences.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Preferences {
     /// Schema version stamped at save time (FS-PREF-schema, ARCH-3).

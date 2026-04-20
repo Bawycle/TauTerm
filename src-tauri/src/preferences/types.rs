@@ -120,7 +120,7 @@ fn validate_hostname_or_ip(s: &str) -> Result<(), String> {
 /// A validated SSH hostname or IP address.
 ///
 /// Constraints: max 253 bytes, no control characters, valid hostname/IP format.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct SshHost(String);
 
@@ -164,7 +164,7 @@ impl_str_eq!(SshHost);
 /// A validated SSH connection label (non-empty display name).
 ///
 /// Constraints: max 256 bytes, no control characters, non-empty.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct SshLabel(String);
 
@@ -210,7 +210,7 @@ impl_str_eq!(SshLabel);
 /// A validated SSH username (non-empty).
 ///
 /// Constraints: max 255 bytes, no control characters, non-empty.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct SshUsername(String);
 
@@ -256,7 +256,7 @@ impl_str_eq!(SshUsername);
 /// A validated font family name (may be empty).
 ///
 /// Constraints: max 256 bytes, no control characters.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct FontFamily(String);
 
@@ -307,7 +307,7 @@ impl FontFamily {
 /// A validated theme name (non-empty).
 ///
 /// Constraints: max 128 bytes, no control characters, non-empty.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct ThemeName(String);
 
@@ -360,7 +360,7 @@ impl ThemeName {
 /// Validated word delimiter characters (may be empty).
 ///
 /// Constraints: max 128 bytes, no control characters.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct WordDelimiters(String);
 
@@ -408,7 +408,7 @@ impl_str_eq!(WordDelimiters);
 /// Does NOT check file existence or `~/.ssh/` boundary — those are runtime
 /// checks in `lifecycle.rs::open_connection_inner` via
 /// `platform::validation::validate_ssh_identity_path`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, specta::Type)]
 #[serde(transparent)]
 pub struct SshIdentityPath(String);
 

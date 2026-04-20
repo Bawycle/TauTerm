@@ -39,7 +39,7 @@
   import Toggle from '$lib/ui/Toggle.svelte';
   import Button from '$lib/ui/Button.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { SshConnectionConfig } from '$lib/ipc/types';
+  import type { SshConnectionConfig } from '$lib/ipc';
 
   // ---------------------------------------------------------------------------
   // Props
@@ -151,7 +151,7 @@
     formAuthMethod = conn.identityFile ? 'identity' : 'password';
     formIdentityFile = conn.identityFile ?? '';
     formPassword = '';
-    formAllowOsc52 = conn.allowOsc52Write;
+    formAllowOsc52 = conn.allowOsc52Write ?? false;
     showForm = true;
   }
 
@@ -165,8 +165,10 @@
       host: formHost,
       port,
       username: formUsername,
-      identityFile: formAuthMethod === 'identity' ? formIdentityFile : undefined,
+      identityFile: formAuthMethod === 'identity' ? formIdentityFile : null,
       allowOsc52Write: formAllowOsc52,
+      keepaliveIntervalSecs: null,
+      keepaliveMaxFailures: null,
     };
     // Pass password to parent so it can store it via SecretService (SEC-CRED-004)
     // after the backend returns the real ConnectionId. The parent must NOT store

@@ -33,10 +33,20 @@
     cursorHidden?: boolean;
     /** Handles GTK IM / IME composition commits (dead keys, AltGr via IBus, etc.). */
     oninput: (event: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) => void;
+    /** Handles compositionend — delivers the final composed character (dead keys, IME). */
+    oncompositionend: (event: CompositionEvent) => void;
     onmousemove?: (event: MouseEvent) => void;
   }
 
-  let { tp, active, lineHeight, cursorHidden = false, oninput, onmousemove }: Props = $props();
+  let {
+    tp,
+    active,
+    lineHeight,
+    cursorHidden = false,
+    oninput,
+    oncompositionend,
+    onmousemove,
+  }: Props = $props();
 </script>
 
 <!--
@@ -65,6 +75,7 @@
   spellcheck={false}
   rows={1}
   {oninput}
+  {oncompositionend}
   onfocus={tp.handleFocus}
   onblur={tp.handleBlur}
 ></textarea>
@@ -99,7 +110,7 @@
     <div class="terminal-pane__row">
       {#each row as cell, colIdx}
         {#if cell.width !== 0}
-          {@const selected = tp.isSelected(rowIdx, colIdx)}
+          {@const selected = tp.hasSelectionRange && tp.isSelected(rowIdx, colIdx)}
           <span
             class="terminal-pane__cell"
             class:terminal-pane__cell--wide={cell.width === 2}
@@ -109,12 +120,11 @@
             class:terminal-pane__cell--selected={selected && active && !tp.selectionFlashing}
             class:terminal-pane__cell--selected-flash={selected && active && tp.selectionFlashing}
             class:terminal-pane__cell--selected-inactive={selected && !active}
-            class:terminal-pane__cell--search-active={tp.activeSearchMatchSet.has(
-              rowIdx * tp.cols + colIdx,
-            )}
-            class:terminal-pane__cell--search-match={!tp.activeSearchMatchSet.has(
-              rowIdx * tp.cols + colIdx,
-            ) && tp.searchMatchSet.has(rowIdx * tp.cols + colIdx)}
+            class:terminal-pane__cell--search-active={tp.hasSearchMatches &&
+              tp.activeSearchMatchSet.has(rowIdx * tp.cols + colIdx)}
+            class:terminal-pane__cell--search-match={tp.hasSearchMatches &&
+              !tp.activeSearchMatchSet.has(rowIdx * tp.cols + colIdx) &&
+              tp.searchMatchSet.has(rowIdx * tp.cols + colIdx)}
             style={cell.style}>{cell.content === '' ? '\u00a0' : cell.content}</span
           >
         {/if}

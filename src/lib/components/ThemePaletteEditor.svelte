@@ -9,7 +9,7 @@
 <script lang="ts">
   import TextInput from '$lib/ui/TextInput.svelte';
   import * as m from '$lib/paraglide/messages';
-  import type { UserTheme } from '$lib/ipc/types';
+  import type { UserTheme } from '$lib/ipc';
 
   interface Props {
     palette: UserTheme['palette'];

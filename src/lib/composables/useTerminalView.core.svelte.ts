@@ -9,12 +9,12 @@
  */
 
 import { onMount, onDestroy } from 'svelte';
-import { getSessionState, getPreferences } from '$lib/ipc/commands';
+import { getSessionState, getPreferences } from '$lib/ipc';
 import { setInitialSession } from '$lib/state/session.svelte';
 import { setPreferences, setPreferencesFallback, preferences } from '$lib/state/preferences.svelte';
 import { fullscreenState } from '$lib/state/fullscreen.svelte';
 import { setupViewListeners } from './useTerminalView.lifecycle.svelte';
-import type { SshConnectionConfig, PaneId } from '$lib/ipc/types';
+import type { SshConnectionConfig, PaneId } from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // State bag — all reactive variables owned by this module, returned as a
@@ -26,8 +26,8 @@ export interface ViewState {
   // Search
   get searchOpen(): boolean;
   set searchOpen(v: boolean);
-  get searchMatches(): import('$lib/ipc/types').SearchMatch[];
-  set searchMatches(v: import('$lib/ipc/types').SearchMatch[]);
+  get searchMatches(): import('$lib/ipc').SearchMatch[];
+  set searchMatches(v: import('$lib/ipc').SearchMatch[]);
   get searchCurrentIdx(): number;
   set searchCurrentIdx(v: number);
 
@@ -95,7 +95,7 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
   // --- Local reactive variables ---
 
   let searchOpen = $state(false);
-  let searchMatches = $state<import('$lib/ipc/types').SearchMatch[]>([]);
+  let searchMatches = $state<import('$lib/ipc').SearchMatch[]>([]);
   let searchCurrentIdx = $state(0);
 
   let prefsOpen = $state(false);
@@ -126,7 +126,7 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
   // --- Derived ---
 
   const activeThemeLineHeight = $derived(
-    preferences.value?.themes.find((t) => t.name === preferences.value?.appearance.themeName)
+    preferences.value?.themes?.find((t) => t.name === preferences.value?.appearance?.themeName)
       ?.lineHeight,
   );
 
@@ -153,7 +153,7 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
   $effect(() => {
     if (
       preferences.value !== undefined &&
-      !preferences.value.appearance.contextMenuHintShown &&
+      !preferences.value.appearance?.contextMenuHintShown &&
       !contextMenuHintDismissed
     ) {
       contextMenuHintTimer = setTimeout(() => {
@@ -344,7 +344,7 @@ export function createViewState(doClosePane: (paneId: PaneId) => Promise<void>):
     },
 
     get activeThemeLineHeight() {
-      return activeThemeLineHeight;
+      return activeThemeLineHeight ?? undefined;
     },
     get isFullscreen() {
       return fullscreenState.value;

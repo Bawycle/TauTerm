@@ -16,6 +16,7 @@ import type {
   TabState,
   PaneState,
   PaneNode,
+  PaneLifecycleState,
   SshLifecycleState,
   PaneNotification,
   ScreenUpdateEvent,
@@ -25,7 +26,7 @@ import type {
   SessionStateChangedEvent,
   SshStateChangedEvent,
   NotificationChangedEvent,
-} from '$lib/ipc/types';
+} from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // The import above is the primary smoke test: if any type is broken or the
@@ -48,13 +49,12 @@ describe('IPC types — structural smoke tests', () => {
       type: 'leaf',
       paneId: 'pane-1',
       state: {
-        id: 'pane-1',
-        sessionType: 'local',
+        paneId: 'pane-1',
+        lifecycle: { type: 'running' },
         processTitle: 'bash',
-        cwd: '/home/user',
-        sshConnectionId: null,
         sshState: null,
-        notification: null,
+        scrollOffset: 0,
+        cwd: '/home/user',
       },
     };
     expect(node.type).toBe('leaf');
@@ -65,13 +65,12 @@ describe('IPC types — structural smoke tests', () => {
       type: 'leaf',
       paneId: 'p1',
       state: {
-        id: 'p1',
-        sessionType: 'local',
+        paneId: 'p1',
+        lifecycle: { type: 'running' },
         processTitle: 'sh',
-        cwd: '/',
-        sshConnectionId: null,
         sshState: null,
-        notification: null,
+        scrollOffset: 0,
+        cwd: '/',
       },
     };
     const node: PaneNode = {
@@ -221,13 +220,12 @@ describe('IPC types — structural smoke tests', () => {
       type: 'leaf',
       paneId: 'p1',
       state: {
-        id: 'p1',
-        sessionType: 'local',
+        paneId: 'p1',
+        lifecycle: { type: 'running' },
         processTitle: 'bash',
-        cwd: '/',
-        sshConnectionId: null,
         sshState: null,
-        notification: null,
+        scrollOffset: 0,
+        cwd: '/',
       },
     };
     const tab: TabState = {
@@ -254,19 +252,19 @@ describe('IPC types — structural smoke tests', () => {
 describe('TEST-SPRINT-003: Language IPC type uses lowercase values', () => {
   it('Language "en" is a valid value', () => {
     // TEST-SPRINT-003
-    const lang: import('$lib/ipc/types').Language = 'en';
+    const lang: import('$lib/ipc').Language = 'en';
     expect(lang).toBe('en');
   });
 
   it('Language "fr" is a valid value', () => {
     // TEST-SPRINT-003
-    const lang: import('$lib/ipc/types').Language = 'fr';
+    const lang: import('$lib/ipc').Language = 'fr';
     expect(lang).toBe('fr');
   });
 
   it('AppearancePrefs.language field accepts "en"', () => {
     // TEST-SPRINT-003: verify the field type is correct through a full object.
-    const prefs: import('$lib/ipc/types').AppearancePrefs = {
+    const prefs: import('$lib/ipc').AppearancePrefs = {
       fontFamily: 'monospace',
       fontSize: 14,
       cursorStyle: 'block',
@@ -285,7 +283,7 @@ describe('TEST-SPRINT-003: Language IPC type uses lowercase values', () => {
 
   it('AppearancePrefs.language field accepts "fr"', () => {
     // TEST-SPRINT-003
-    const prefs: import('$lib/ipc/types').AppearancePrefs = {
+    const prefs: import('$lib/ipc').AppearancePrefs = {
       fontFamily: 'monospace',
       fontSize: 14,
       cursorStyle: 'block',
@@ -314,31 +312,31 @@ describe('TEST-SPRINT-003: Language IPC type uses lowercase values', () => {
 describe('TEST-SPRINT-004: BellType IPC type uses lowercase camelCase values', () => {
   it('BellType "none" is a valid value', () => {
     // TEST-SPRINT-004
-    const bell: import('$lib/ipc/types').BellType = 'none';
+    const bell: import('$lib/ipc').BellType = 'none';
     expect(bell).toBe('none');
   });
 
   it('BellType "visual" is a valid value', () => {
     // TEST-SPRINT-004
-    const bell: import('$lib/ipc/types').BellType = 'visual';
+    const bell: import('$lib/ipc').BellType = 'visual';
     expect(bell).toBe('visual');
   });
 
   it('BellType "audio" is a valid value', () => {
     // TEST-SPRINT-004
-    const bell: import('$lib/ipc/types').BellType = 'audio';
+    const bell: import('$lib/ipc').BellType = 'audio';
     expect(bell).toBe('audio');
   });
 
   it('BellType "both" is a valid value', () => {
     // TEST-SPRINT-004
-    const bell: import('$lib/ipc/types').BellType = 'both';
+    const bell: import('$lib/ipc').BellType = 'both';
     expect(bell).toBe('both');
   });
 
   it('TerminalPrefs.bellType field accepts "visual"', () => {
     // TEST-SPRINT-004: verify field type via full object.
-    const prefs: import('$lib/ipc/types').TerminalPrefs = {
+    const prefs: import('$lib/ipc').TerminalPrefs = {
       scrollbackLines: 10000,
       allowOsc52Write: false,
       wordDelimiters: ' \t|"\'`&()*,;<=>[]{}~',
@@ -350,7 +348,7 @@ describe('TEST-SPRINT-004: BellType IPC type uses lowercase camelCase values', (
 
   it('all four BellType values are distinct strings', () => {
     // TEST-SPRINT-004: guard against accidental alias collapse.
-    const values: import('$lib/ipc/types').BellType[] = ['none', 'visual', 'audio', 'both'];
+    const values: import('$lib/ipc').BellType[] = ['none', 'visual', 'audio', 'both'];
     const unique = new Set(values);
     expect(unique.size).toBe(4);
   });

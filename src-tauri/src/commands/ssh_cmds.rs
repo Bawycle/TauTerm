@@ -99,6 +99,7 @@ async fn open_ssh_connection_impl(
 #[cfg(not(feature = "e2e-testing"))]
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
+#[specta::specta]
 pub async fn open_ssh_connection(
     pane_id: PaneId,
     connection_id: ConnectionId,
@@ -132,6 +133,7 @@ pub async fn open_ssh_connection(
 #[cfg(feature = "e2e-testing")]
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
+#[specta::specta]
 pub async fn open_ssh_connection(
     pane_id: PaneId,
     connection_id: ConnectionId,
@@ -165,6 +167,7 @@ pub async fn open_ssh_connection(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn close_ssh_connection(
     pane_id: PaneId,
     ssh_manager: State<'_, Arc<SshManager>>,
@@ -176,6 +179,7 @@ pub async fn close_ssh_connection(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn reconnect_ssh(
     pane_id: PaneId,
     ssh_manager: State<'_, Arc<SshManager>>,

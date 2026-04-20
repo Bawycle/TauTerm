@@ -18,7 +18,7 @@ import type {
   HostKeyPromptEvent,
   CredentialPromptEvent,
   PassphrasePromptEvent,
-} from '$lib/ipc/types';
+} from '$lib/ipc';
 
 // ---------------------------------------------------------------------------
 // Reactive state — module-level singleton

@@ -14,8 +14,8 @@
  */
 
 import { measureCellDimensions } from '$lib/terminal/cell-dimensions.js';
-import { resizePane } from '$lib/ipc/commands';
-import type { PaneId } from '$lib/ipc/types';
+import { resizePane } from '$lib/ipc';
+import type { PaneId } from '$lib/ipc';
 
 export interface TerminalResizeOptions {
   paneId: () => PaneId;

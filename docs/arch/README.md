@@ -57,7 +57,7 @@ Testing strategy is in a separate document: [../testing/TESTING.md](../testing/T
 | Tokio runtime, C1 codes, DCS dispatch | [04-runtime-platform.md](04-runtime-platform.md) §6.1 |
 | PTY I/O task (`spawn_blocking`, VtProcessor write lock) | [04-runtime-platform.md](04-runtime-platform.md) §6.2 |
 | Write path / `send_input` | [04-runtime-platform.md](04-runtime-platform.md) §6.3 |
-| Back-pressure, resize debounce, scroll follow semantics | [04-runtime-platform.md](04-runtime-platform.md) §6.5 |
+| Back-pressure, frame-ack (ADR-0027), resize debounce, scroll follow semantics | [04-runtime-platform.md](04-runtime-platform.md) §6.5 |
 | State access patterns (lock table) | [04-runtime-platform.md](04-runtime-platform.md) §6.6 |
 | PTY PAL (`portable-pty`, SIGHUP, login shell) | [04-runtime-platform.md](04-runtime-platform.md) §7.1 |
 | Credential store PAL (Secret Service) | [04-runtime-platform.md](04-runtime-platform.md) §7.2 |

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-import type { UserTheme } from '$lib/ipc/types';
+import type { UserTheme } from '$lib/ipc';
 import { isBuiltInTheme, getBuiltInThemeTokens } from './built-in-themes';
 
 const STYLE_ELEMENT_ID = 'tauterm-active-theme';

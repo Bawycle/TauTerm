@@ -103,7 +103,7 @@ impl CellAttrs {
 }
 
 /// Terminal color value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Color {
     /// One of the 16 standard ANSI colors (palette index 0–15).

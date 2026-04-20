@@ -33,7 +33,7 @@
   import { hostKeyPrompt, credentialPrompt, passphrasePrompt } from '$lib/state/ssh.svelte';
   import { preferences } from '$lib/state/preferences.svelte';
   import { fullscreenState } from '$lib/state/fullscreen.svelte';
-  import { setActivePane } from '$lib/ipc/commands';
+  import { setActivePane } from '$lib/ipc';
   import * as m from '$lib/paraglide/messages';
   import { resolveTabTitle } from '$lib/utils/tab-title';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -249,13 +249,13 @@
             node={activeTab.layout}
             tabId={activeTab.id}
             activePaneId={activeTab.activePaneId}
-            wordDelimiters={preferences.value?.terminal.wordDelimiters}
-            confirmMultilinePaste={preferences.value?.terminal.confirmMultilinePaste ?? true}
-            cursorBlinkMs={preferences.value?.appearance.cursorBlinkMs}
-            bellType={preferences.value?.terminal.bellType}
-            fontFamily={preferences.value?.appearance.fontFamily}
-            fontSize={preferences.value?.appearance.fontSize}
-            hideCursorWhileTyping={preferences.value?.appearance.hideCursorWhileTyping ?? true}
+            wordDelimiters={preferences.value?.terminal?.wordDelimiters}
+            confirmMultilinePaste={preferences.value?.terminal?.confirmMultilinePaste ?? true}
+            cursorBlinkMs={preferences.value?.appearance?.cursorBlinkMs}
+            bellType={preferences.value?.terminal?.bellType}
+            fontFamily={preferences.value?.appearance?.fontFamily}
+            fontSize={preferences.value?.appearance?.fontSize}
+            hideCursorWhileTyping={preferences.value?.appearance?.hideCursorWhileTyping ?? true}
             lineHeight={tv.activeThemeLineHeight}
             searchMatches={tv.searchMatches}
             activeSearchMatchIndex={tv.searchCurrentIdx}
@@ -386,7 +386,7 @@
     open={credentialPrompt.value !== null}
     host={credentialPrompt.value?.host ?? ''}
     username={credentialPrompt.value?.username ?? ''}
-    prompt={credentialPrompt.value?.prompt}
+    prompt={credentialPrompt.value?.prompt ?? undefined}
     failed={credentialPrompt.value?.failed ?? false}
     isKeychainAvailable={credentialPrompt.value?.isKeychainAvailable ?? false}
     onsubmit={tv.handleProvideCredentials}

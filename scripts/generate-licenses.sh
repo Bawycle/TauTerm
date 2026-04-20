@@ -115,7 +115,7 @@ for entry in cargo_entries + npm_entries:
         seen_keys.add(key)
         unique.append(entry)
 
-unique.sort(key=lambda e: e["name"].lower())
+unique.sort(key=lambda e: (e["name"].lower(), e["version"]))
 
 # --- Write Markdown ---
 cargo_deps = [e for e in unique if e["source"] == "cargo"]

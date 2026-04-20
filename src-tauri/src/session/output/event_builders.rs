@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
+//! Pure DTO constructors for the events emitted by the coalescer.
+//!
+//! These functions take a `VtProcessor` (read-locked internally) plus the
+//! relevant inputs (dirty region, scroll offset) and produce the
+//! `serde`-serializable event payloads forwarded to the frontend.
+//!
+//! Shared between PTY and SSH pipelines (via the coalescer) and exposed to
+//! Criterion benchmarks behind `#[doc(hidden)] pub`.
+
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -60,7 +69,8 @@ pub(crate) fn cell_color_to_dto(c: crate::vt::cell::Color) -> crate::events::typ
 /// INVARIANT: the read-lock on `vt` is released before this function returns.
 /// Callers must not hold the write-lock when calling this function.
 ///
-/// `pub(crate)` so `session::ssh_task` can reuse it without duplication.
+/// Re-exported at the crate level from `session::output` so both `pty_task`
+/// and `ssh_task` can reuse it without duplication.
 /// `#[doc(hidden)]` exposes this function to benchmarks without making it part
 /// of the public API.
 #[doc(hidden)]

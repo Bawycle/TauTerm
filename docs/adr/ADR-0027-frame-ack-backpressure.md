@@ -153,6 +153,8 @@ SSH panes under heavy output will continue to exhibit the pre-ADR-0027
 behavior (adaptive debounce only, no frontend-driven back-pressure).
 Extending frame-ack to SSH panes is deferred to a follow-up change.
 
+*Resolved by ADR-0028 — SSH panes now use the same shared `EmitCoalescer` with frame-ack support.*
+
 ## Consequences
 
 **Positive:**
@@ -327,6 +329,8 @@ emit path.
 (`ssh_task.rs`) have no frame-ack mechanism and remain under the known
 limitation documented in the main ADR body. Extending frame-ack (and this
 invariant) to SSH panes is deferred to a follow-up change.
+
+*Resolved by ADR-0028 — SSH panes now use the same shared `EmitCoalescer` with frame-ack support.*
 
 ### Trigger example
 

@@ -1,80 +1,39 @@
 // SPDX-License-Identifier: MPL-2.0
 
+//! PTY read pipeline: blocking reader (Task 1) + shared async coalescer
+//! (`session/output::run`, formerly Task 2) + PTY-specific termination.
+
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 use tauri::AppHandle;
 use tokio::sync::mpsc::Sender;
-use tokio::time::Duration;
 
 use crate::events::{
     emit_notification_changed,
     types::{NotificationChangedEvent, PaneNotificationDto},
 };
 use crate::session::ids::PaneId;
+use crate::session::output::{Coalescer, CoalescerConfig, CoalescerContext, ProcessOutput, run};
 use crate::session::registry::SessionRegistry;
 use crate::vt::VtProcessor;
 
-use crate::vt::DirtyRegion;
-
-use super::emitter::emit_all_pending;
-use super::{ProcessOutput, PtyTaskHandle};
-
-/// Minimum debounce window — floor for adaptive scaling and idle decay.
-pub(crate) const DEBOUNCE_MIN: Duration = Duration::from_millis(12);
-
-/// Maximum debounce window — cap to avoid perceptible input latency.
-pub(crate) const DEBOUNCE_MAX: Duration = Duration::from_millis(100);
-
-/// Multiplier applied to the measured emit duration to compute the next
-/// debounce interval. A value slightly above 1.0 gives the frontend a
-/// comfortable margin to process the event before the next one arrives.
-const DEBOUNCE_SCALE: f64 = 1.2;
-
-/// Decay factor applied on idle ticks (no pending output). Exponentially
-/// shrinks the debounce interval back toward `DEBOUNCE_MIN` when the PTY
-/// is quiet, ensuring low latency for interactive use after a burst.
-const DEBOUNCE_DECAY: f64 = 0.5;
-
-/// Ack age above which debounce is escalated (Stage 1).
-pub(crate) const ACK_STALE_THRESHOLD_MS: u64 = 200;
-
-/// Debounce interval during stale-ack mode.
-pub(crate) const ACK_STALE_DEBOUNCE: Duration = Duration::from_millis(250);
-
-/// Ack age above which dirty updates are dropped (Stage 2).
-pub(crate) const ACK_DROP_THRESHOLD_MS: u64 = 1000;
-
-pub(crate) fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
-/// Compute the next debounce interval from the measured emit duration.
-///
-/// The result is `emit_duration * DEBOUNCE_SCALE`, clamped to
-/// `[DEBOUNCE_MIN, DEBOUNCE_MAX]`.
-pub(crate) fn next_debounce(emit_duration: Duration) -> Duration {
-    emit_duration
-        .mul_f64(DEBOUNCE_SCALE)
-        .clamp(DEBOUNCE_MIN, DEBOUNCE_MAX)
-}
+use super::PtyTaskHandle;
 
 // ---------------------------------------------------------------------------
 // spawn_pty_read_task
 // ---------------------------------------------------------------------------
 
-/// Spawn the two-task PTY pipeline for a pane.
+/// Spawn the PTY pipeline for a pane: blocking reader (Task 1) + shared
+/// async coalescer + PTY-specific termination block.
 ///
 /// `writer` is the PTY master writer used to send DSR/DA/CPR responses back to
 /// the shell. It is `None` for sessions that do not support writing back (e.g.
 /// injectable E2E sessions), in which case responses are silently discarded.
 ///
-/// Returns a `PtyTaskHandle` that aborts both tasks on drop.
+/// Returns a [`PtyTaskHandle`] that aborts both tasks on drop.
 pub fn spawn_pty_read_task(
     pane_id: PaneId,
     vt: Arc<RwLock<VtProcessor>>,
@@ -84,7 +43,7 @@ pub fn spawn_pty_read_task(
     registry: Arc<SessionRegistry>,
     last_frame_ack_ms: Arc<AtomicU64>,
 ) -> PtyTaskHandle {
-    // Bounded channel: back-pressure to PTY kernel when Task 2 is slow.
+    // Bounded channel: back-pressure to PTY kernel when the coalescer is slow.
     // INVARIANT: the VtProcessor write-lock is always released before blocking_send,
     // so no deadlock is possible between Task 1 and the IPC layer.
     let (tx, rx) = tokio::sync::mpsc::channel::<ProcessOutput>(256);
@@ -196,167 +155,52 @@ pub fn spawn_pty_read_task(
                 }
             }
 
-            // Forward to Task 2. If Task 2 has exited (channel closed), stop.
+            // Forward to the coalescer. If the coalescer has exited
+            // (channel closed), stop.
             if tx_r.blocking_send(output).is_err() {
                 tracing::debug!("PTY emit task closed, stopping reader for pane {pane_id_r}");
                 break;
             }
         }
 
-        // Channel sender is dropped here, signalling EOF to Task 2.
+        // Channel sender is dropped here, signalling EOF to the coalescer.
         tracing::debug!("PTY reader task finished for pane {pane_id_r}");
     });
 
     // ------------------------------------------------------------------
-    // Task 2 — async coalescer / emitter
+    // Coalescer — shared async task (formerly Task 2)
     // ------------------------------------------------------------------
+    //
+    // CRITICAL: spawned via `tauri::async_runtime::spawn` (NOT
+    // `tokio::spawn`) to preserve the scheduling/ordering invariants
+    // relied upon by TEST-ACK-018, TEST-ACK-019, all TEST-ADPT-*, and
+    // DEL-ASYNC-PTY-009. See ADR-0028 Decisions §2 and Risk #13.
     let pane_id_e = pane_id.clone();
-    let vt_e = vt.clone();
     let app_e = app.clone();
     let registry_e = registry.clone();
-    let ack_ms_e = last_frame_ack_ms;
-    let mut rx_e = rx;
+
+    let config = CoalescerConfig::pty_default();
+    let coalescer = Coalescer::new(&config);
+    let ctx = CoalescerContext {
+        app,
+        pane_id,
+        vt,
+        registry,
+        last_frame_ack_ms,
+        config,
+    };
 
     let emit_task = tauri::async_runtime::spawn(async move {
-        let mut pending = ProcessOutput::default();
-        let mut current_debounce = DEBOUNCE_MIN;
-        let mut was_in_drop_mode = false;
-        let mut last_emit_ms: u64 = 0;
-        let sleep_fut = tokio::time::sleep(current_debounce);
-        tokio::pin!(sleep_fut);
+        run(coalescer, ctx, rx).await;
 
-        loop {
-            tokio::select! {
-                // Receive a chunk from Task 1.
-                msg = rx_e.recv() => {
-                    match msg {
-                        Some(output) => {
-                            let flush_now = output.needs_immediate_flush;
-                            pending.merge(output);
-                            if flush_now {
-                                // CPR/DSR response was sent — bypass debounce to update cursor
-                                // state promptly. Tools like vim/neovim/fzf use CPR to sync
-                                // their rendering and will stall until this event arrives.
-                                // Drain any concurrently buffered output to avoid splitting the
-                                // update across two events.
-                                while let Ok(more) = rx_e.try_recv() {
-                                    pending.merge(more);
-                                }
-                                if !pending.is_empty() {
-                                    let outcome = emit_all_pending(
-                                        &app_e,
-                                        &pane_id_e,
-                                        &vt_e,
-                                        &registry_e,
-                                        &mut pending,
-                                    );
-                                    current_debounce = next_debounce(outcome.duration);
-                                    if outcome.emitted_screen_update {
-                                        last_emit_ms = now_ms();
-                                    }
-                                } else {
-                                    // Nothing to emit, but clear the flag to avoid stale hints.
-                                    pending.needs_immediate_flush = false;
-                                }
-                                // Re-arm sleep from now with updated period.
-                                sleep_fut.as_mut().reset(tokio::time::Instant::now() + current_debounce);
-                            }
-                        }
-                        None => {
-                            // Channel closed — Task 1 finished (EOF or error).
-                            // Flush any remaining pending output before exiting.
-                            // EmitOutcome is discarded: this task is exiting and
-                            // neither adaptive debounce nor last_emit_ms matters.
-                            if !pending.is_empty() {
-                                let _ = emit_all_pending(
-                                    &app_e,
-                                    &pane_id_e,
-                                    &vt_e,
-                                    &registry_e,
-                                    &mut pending,
-                                );
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // Adaptive debounce timer — flush accumulated output.
-                _ = &mut sleep_fut => {
-                    // Drain any output buffered during this tick before emitting.
-                    // Prevents splitting application redraw bursts (e.g. CSI 2J + redraw)
-                    // across two separate screen-update events. try_recv() is non-blocking
-                    // and returns Err immediately when the channel is empty.
-                    while let Ok(output) = rx_e.try_recv() {
-                        pending.merge(output);
-                    }
-
-                    // P-HT-6: frame-ack backpressure.
-                    // Single atomic load to avoid TOCTOU between ack_age and
-                    // has_unacked_emits checks.
-                    let last_ack_ms = ack_ms_e.load(Ordering::Relaxed);
-                    let ack_age_ms = now_ms().saturating_sub(last_ack_ms);
-                    let has_unacked_emits = last_emit_ms > last_ack_ms;
-                    let in_drop_mode = has_unacked_emits && ack_age_ms > ACK_DROP_THRESHOLD_MS;
-                    let in_stale_mode = has_unacked_emits && ack_age_ms > ACK_STALE_THRESHOLD_MS;
-
-                    if !pending.is_empty() {
-                        if in_drop_mode {
-                            // Stage 2: suppress dirty cell updates + cursor_moved.
-                            // Non-visual events preserved: mode_changed, new_cursor_shape,
-                            // bell, osc52, new_title, new_cwd.
-                            pending.dirty = DirtyRegion::default();
-                            pending.needs_immediate_flush = false;
-                        } else if was_in_drop_mode {
-                            // Exiting drop mode: frontend grid is stale. Force full redraw.
-                            pending.dirty.is_full_redraw = true;
-                        }
-
-                        if !pending.is_empty() {
-                            let outcome = emit_all_pending(
-                                &app_e,
-                                &pane_id_e,
-                                &vt_e,
-                                &registry_e,
-                                &mut pending,
-                            );
-                            // ADR-0027 Addendum 2: only advance `last_emit_ms`
-                            // when a `screen-update` event was actually emitted.
-                            // Non-visual events (bell, mode, cursor shape, OSC 52,
-                            // title, CWD) produce no frontend render and therefore
-                            // no frame-ack — advancing the timestamp for them
-                            // would synthesize a phantom "unacked emit" that
-                            // could push the pane into drop mode on the next
-                            // idle tick past ACK_DROP_THRESHOLD_MS.
-                            if outcome.emitted_screen_update {
-                                last_emit_ms = now_ms();
-                            }
-                            current_debounce = if in_stale_mode {
-                                ACK_STALE_DEBOUNCE
-                            } else {
-                                next_debounce(outcome.duration)
-                            };
-                        } else {
-                            // All content was dirty-only and was dropped.
-                            pending = ProcessOutput::default();
-                        }
-                    } else {
-                        // Idle tick: exponential decay toward minimum.
-                        // No stale escalation on idle ticks.
-                        current_debounce = DEBOUNCE_MIN.max(current_debounce.mul_f64(DEBOUNCE_DECAY));
-                    }
-
-                    was_in_drop_mode = in_drop_mode;
-
-                    // Always re-arm after timer fires.
-                    sleep_fut.as_mut().reset(tokio::time::Instant::now() + current_debounce);
-                }
-            }
-        }
-
-        // FS-NOTIF-002: PTY process exited — transition to Terminated and get exit info.
-        // mark_pane_terminated() calls wait() on the child to recover the exit
-        // code and sets pane.lifecycle = Terminated before we emit the notification.
+        // PTY-specific termination — runs AFTER the coalescer has flushed any
+        // remaining pending output and returned. Caller-managed termination
+        // model per ADR-0028 Decisions §3-4.
+        //
+        // FS-NOTIF-002: PTY process exited — transition to Terminated and get
+        // exit info. mark_pane_terminated() calls wait() on the child to
+        // recover the exit code and sets pane.lifecycle = Terminated before we
+        // emit the notification.
         let (exit_code, signal_name) =
             tokio::task::block_in_place(|| registry_e.mark_pane_terminated(&pane_id_e));
         if let Some((_, tab_state)) = registry_e.get_tab_state_for_pane(&pane_id_e) {

@@ -58,13 +58,12 @@ pub(super) fn decrc(p: &mut VtProcessor) {
 /// DSR — Device Status Report (CSI Ps n)
 pub(super) fn dsr(p: &mut VtProcessor, param: u16) {
     match param {
-        5 => p.pending_responses.push(b"\x1b[0n".to_vec()),
+        5 => p.push_response(b"\x1b[0n".to_vec()),
         6 => {
             let row = p.cursor_row();
             // FS-VT-058: report normalized position (defensive, setters already normalize).
             let col = normalize_phantom_col(p, row, p.cursor_col());
-            p.pending_responses
-                .push(format!("\x1b[{};{}R", row + 1, col + 1).into_bytes());
+            p.push_response(format!("\x1b[{};{}R", row + 1, col + 1).into_bytes());
         }
         _ => {}
     }
@@ -73,7 +72,7 @@ pub(super) fn dsr(p: &mut VtProcessor, param: u16) {
 /// DA — Primary Device Attributes (CSI c / CSI 0c)
 pub(super) fn da(p: &mut VtProcessor, param: u16) {
     if param == 0 {
-        p.pending_responses.push(b"\x1b[?1;2c".to_vec());
+        p.push_response(b"\x1b[?1;2c".to_vec());
     }
 }
 
@@ -85,7 +84,7 @@ pub(super) fn da(p: &mut VtProcessor, param: u16) {
 /// probes DA2 on attach to enable truecolor passthrough and SGR mouse).
 pub(super) fn da2(p: &mut VtProcessor, param: u16) {
     if param == 0 {
-        p.pending_responses.push(b"\x1b[>0;10;0c".to_vec());
+        p.push_response(b"\x1b[>0;10;0c".to_vec());
     }
 }
 

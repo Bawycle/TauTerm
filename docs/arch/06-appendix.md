@@ -137,3 +137,4 @@ See ADR-0005. The PAL stubs are in `platform/pty_macos.rs`, `platform/credential
 | [ADR-0025](adr/ADR-0025-webkitgtk-data-dir-isolation.md) | WebKitGTK data directory isolation | Accepted |
 | [ADR-0026](adr/ADR-0026-ipc-type-codegen-strategy.md) | IPC type codegen: `tauri-specta` for TypeScript type and invoke wrapper generation from Rust types | Implemented |
 | [ADR-0027](adr/ADR-0027-frame-ack-backpressure.md) | Frame-ack backpressure: per-pane `Arc<AtomicU64>` timestamp with two-stage escalation (debounce slowdown at 200 ms, cell drop at 1000 ms) for frontend→backend flow control | Accepted |
+| [ADR-0028](adr/ADR-0028-shared-emit-coalescer.md) | Shared `EmitCoalescer` for PTY and SSH panes: source-agnostic emit pipeline in `session/output/`, SSH 2-task structure, VT input caps, frame-ack extended to SSH | Accepted |

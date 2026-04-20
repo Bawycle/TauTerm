@@ -26,7 +26,7 @@ use tau_term_lib::{
     events::types::{CellAttrsDto, CellUpdate, CursorState, ScreenUpdateEvent},
     session::{
         ids::PaneId,
-        pty_task::{build_screen_update_event, build_scrolled_viewport_event},
+        output::{build_screen_update_event, build_scrolled_viewport_event},
     },
     vt::{VtProcessor, screen_buffer::DirtyRegion},
 };

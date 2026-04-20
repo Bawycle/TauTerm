@@ -100,6 +100,8 @@ e2e-testing = []
 fuzz-testing = []
 
 [dev-dependencies]
+# Enable tokio test-util for start_paused / advance() in deterministic timing tests
+tokio = { version = "1", features = ["test-util"] }
 # TypeScript binding generation (used by export_bindings test)
 specta-typescript = "0.0.11"
 # Temporary files and directories for tests
@@ -117,5 +119,9 @@ harness = false
 
 [[bench]]
 name = "ipc_throughput"
+harness = false
+
+[[bench]]
+name = "coalescer_bench"
 harness = false
 

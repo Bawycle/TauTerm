@@ -281,6 +281,50 @@ These tests are **not** part of the default `cargo nextest run` gate. They are a
 
 These tests are **not** part of the default `cargo nextest run` gate. They are an optional step, run on-demand or in a dedicated CI job.
 
+#### SSH coalescer integration tests
+
+`src-tauri/tests/ssh_coalescer_integration.rs` — exercises the shared `EmitCoalescer` wired through the SSH pipeline (ADR-0028). Uses `#[tokio::test(start_paused = true)]` for timing-deterministic assertions. Mock SSH channel via lightweight inline observer (`mpsc::Sender<MockChannelOp>`).
+
+| Test ID | Trace | Description |
+|---|---|---|
+| SSH-COALESCE-001 | ADR-0028 | Burst coalescing: multiple `ProcessOutput` values merged before emit |
+| SSH-COALESCE-002 | ADR-0028 | Stage 1 escalation: debounce increased when frame-ack stale > 200 ms |
+| SSH-COALESCE-003 | ADR-0028 | Stage 2 escalation: dirty cells dropped when frame-ack stale > 1000 ms |
+| SSH-COALESCE-004 | ADR-0028 | Full-redraw flag set on exit from drop mode |
+| SSH-COALESCE-005 | ADR-0028 | EOF flush ordering: last screen-update before Closed event |
+| SSH-COALESCE-006 | ADR-0028 | Bell flood does not escalate backpressure (non-visual) |
+| SSH-COALESCE-007 | ADR-0028 | `needs_immediate_flush` bypasses debounce timer |
+| SSH-COALESCE-008 | ADR-0028 | Channel close exits coalescer run loop promptly |
+| SSH-EXTRACT-001 | ADR-0028 | `extract_process_output` extracts bell |
+| SSH-EXTRACT-002 | ADR-0028 | `extract_process_output` extracts OSC 52 |
+| SSH-EXTRACT-003 | ADR-0028 | `extract_process_output` extracts cursor shape |
+| SSH-EXTRACT-004 | ADR-0028 | `extract_process_output` extracts CWD (OSC 7) |
+| SSH-EXTRACT-005 | ADR-0028 | `extract_process_output` extracts mode_changed |
+
+These tests run under the default `cargo nextest run` gate (no Podman required).
+
+#### VT input cap tests
+
+| Test ID | Trace | Description |
+|---|---|---|
+| VT-CAP-TITLE-001 | ADR-0028 | 8000 chars input truncated to 4096 chars + warn emitted |
+| VT-CAP-TITLE-002 | ADR-0028 | C0/C1 strip applied before truncation |
+| VT-CAP-CWD-001 | ADR-0028 | 5 KB OSC 7 dropped + warn emitted |
+| VT-CAP-RESPONSES-001 | ADR-0028 | 1000 DSR queries capped at 256 entries + warn emitted |
+| VT-CAP-RESPONSES-002 | ADR-0028 | Oldest dropped, newest preserved (VecDeque pop_front) |
+| SEC-VT-CAP-OSC52-OVERSIZE-001 | ADR-0028 | 10 KB OSC 52 dropped at `OSC_PAYLOAD_MAX = 4096` upstream |
+
+#### Performance baselines
+
+Criterion benchmarks (`src-tauri/benches/coalescer_bench.rs`) measure:
+- `bench_coalescer_throughput` — synthetic burst of N `ProcessOutput` over channel, end-to-end emit latency
+- `bench_process_output_merge` — merge cost as function of accumulated dirty rows
+- `bench_dsr_response_coalescing` — 10 vs 100 vs 1000 responses, merge + write cost
+
+**Current procedure (manual):** run `cargo bench --bench coalescer_bench` and record results in the commit message. No automated regression detection.
+
+**Future improvement:** adopt `criterion --save-baseline` with checked-in baselines for CI regression gating.
+
 #### Isolation rules
 
 - Temp directories via `tempfile::TempDir` for all filesystem-touching tests

@@ -14,6 +14,7 @@
 //! - `get_scrollback_line(index)` — single scrollback row
 //! - `search(query)` — search scrollback
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -54,6 +55,44 @@ struct PendingEmoji {
 
 /// Minimum interval between BEL events per pane (FS-VT-090).
 const BELL_RATE_LIMIT: Duration = Duration::from_millis(100);
+
+// ---------------------------------------------------------------------------
+// VT input caps (ADR-0028 §VT input caps).
+//
+// These caps neutralize DoS amplification vectors when the byte source is
+// untrusted (notably SSH). They are enforced at the *site of accumulation*
+// (when the field is written), not at the `take_*()` drain site, so memory
+// is bounded throughout the lifetime of the `VtProcessor`, not just at the
+// frontend boundary.
+//
+// `OSC_PAYLOAD_MAX` (4 096 bytes) at `vt/processor/dispatch/osc.rs` already
+// bounds the OSC 52 clipboard payload upstream; no additional cap is needed
+// for that path.
+// ---------------------------------------------------------------------------
+
+/// Hard upper bound on the number of Unicode scalar values stored in
+/// `VtProcessor::title`. Defense in depth: `parse_osc` already truncates the
+/// title to 256 chars upstream, but enforcing a separate cap at the assignment
+/// site protects the field if the upstream limit is ever changed without
+/// updating the accumulator. The cap is applied **after** stripping C0/C1
+/// control characters, never before — see invariant comment at the
+/// `OscAction::SetTitle` arm in `dispatch/osc.rs`.
+pub(super) const MAX_TITLE_CHARS: usize = 4096;
+
+/// Hard upper bound (in bytes) on the OSC 7 cwd payload that may be assigned
+/// to `VtProcessor::cwd`. OSC 7 is delivered as a single string, so capping in
+/// bytes is sufficient (a UTF-8-aware char count would only loosen the bound).
+/// Oversize updates are dropped (the previous `cwd` value is preserved) and a
+/// `tracing::warn!` is emitted.
+pub(super) const MAX_CWD_BYTES: usize = 4096;
+
+/// Hard upper bound on the number of queued PTY-bound responses (DSR, CPR,
+/// DA, DA2). Backed by a `VecDeque<Vec<u8>>` so that overflow eviction is
+/// O(1) via `pop_front`. When the queue is full the oldest response is
+/// dropped before pushing the newest, and a `tracing::warn!` is emitted —
+/// keeping the most recent semantics is the right choice for query/response
+/// protocols where a stale answer is worse than a missing one.
+pub(super) const MAX_PENDING_RESPONSES: usize = 256;
 
 /// The central VT processing unit for one pane.
 pub struct VtProcessor {
@@ -136,7 +175,11 @@ pub struct VtProcessor {
     // Drained by `take_responses()` in Task 1 of the PTY read task.
     // The write-lock MUST be released before writing these to the PTY master
     // to avoid deadlocking when the shell echoes back the response.
-    pending_responses: Vec<Vec<u8>>,
+    //
+    // Backed by `VecDeque` so that overflow eviction (drop-oldest) at
+    // `MAX_PENDING_RESPONSES` is O(1). All pushes go through
+    // `push_response` — never push to this field directly.
+    pending_responses: VecDeque<Vec<u8>>,
     // Current working directory as reported by OSC 7 (shell CWD reporting).
     // `None` until the first OSC 7 sequence is received.
     pub cwd: Option<String>,
@@ -246,7 +289,7 @@ impl VtProcessor {
             cwd_changed: false,
             pending_ri: None,
             pending_emoji: None,
-            pending_responses: Vec::new(),
+            pending_responses: VecDeque::new(),
         }
     }
 
@@ -410,8 +453,31 @@ impl VtProcessor {
     /// Covers: DSR ready (`CSI 5n` → `\x1b[0n`), CPR (`CSI 6n` → `\x1b[row;colR`),
     /// Primary DA (`CSI c` / `CSI 0c` → `\x1b[?1;2c`), and Secondary DA
     /// (`CSI > c` / `CSI > 0c` → `\x1b[>0;10;0c`).
+    ///
+    /// The internal storage is a `VecDeque` (capped at `MAX_PENDING_RESPONSES`);
+    /// the queue is drained into a `Vec<Vec<u8>>` for callers, preserving the
+    /// pre-cap external signature.
     pub fn take_responses(&mut self) -> Vec<Vec<u8>> {
-        std::mem::take(&mut self.pending_responses)
+        self.pending_responses.drain(..).collect()
+    }
+
+    /// Append a response sequence to the queue, enforcing the
+    /// `MAX_PENDING_RESPONSES` cap. When the queue is at capacity the oldest
+    /// entry is evicted via `pop_front` (O(1)) and a `tracing::warn!` is
+    /// emitted. All call sites in `dispatch/csi_misc.rs` use this helper —
+    /// never push to `pending_responses` directly.
+    pub(super) fn push_response(&mut self, bytes: Vec<u8>) {
+        if self.pending_responses.len() >= MAX_PENDING_RESPONSES {
+            // Drop the oldest queued response. We retain the most recent one
+            // because for query/response protocols (DSR, CPR, DA) the freshest
+            // answer is the one the shell is waiting for.
+            self.pending_responses.pop_front();
+            tracing::warn!(
+                cap = MAX_PENDING_RESPONSES,
+                "VT pending_responses queue full; dropping oldest response (possible DoS amplification attempt)"
+            );
+        }
+        self.pending_responses.push_back(bytes);
     }
 
     /// Get lightweight screen metadata without cloning any cell data.

@@ -162,6 +162,8 @@ pub fn make_builder() -> tauri_specta::Builder {
             system_cmds::toggle_fullscreen,
             // E2E testing commands
             testing::inject_pty_output,
+            testing::inject_ssh_output,
+            testing::create_mock_ssh_pane,
             testing::inject_ssh_failure,
             testing::inject_ssh_delay,
             testing::inject_ssh_disconnect,

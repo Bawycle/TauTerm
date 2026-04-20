@@ -231,22 +231,32 @@ fn async_ssh_001_drop_ssh_task_handle_aborts_task() {
         .expect("build runtime");
 
     rt.block_on(async {
-        let jh = tokio::spawn(async {
+        let jh_read = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let jh_emit = tokio::spawn(async {
             tokio::time::sleep(Duration::from_secs(60)).await;
         });
 
-        let handle = SshTaskHandle::from_abort_handle(jh.abort_handle());
+        // ADR-0028 Commit 3: SshTaskHandle now owns BOTH the reader and the
+        // coalescer abort handles; drop must abort both.
+        let handle = SshTaskHandle::new(jh_read.abort_handle(), jh_emit.abort_handle());
         drop(handle);
 
-        let result = jh.await;
+        let result_read = jh_read.await;
+        let result_emit = jh_emit.await;
         assert!(
-            result.is_err(),
-            "task must be cancelled (JoinError) after SshTaskHandle drop"
+            result_read.is_err(),
+            "reader task must be cancelled (JoinError) after SshTaskHandle drop"
+        );
+        assert!(
+            result_emit.is_err(),
+            "coalescer task must be cancelled (JoinError) after SshTaskHandle drop"
         );
     });
 }
 
-/// TEST-ASYNC-SSH-002: Calling `SshTaskHandle::abort()` terminates the task.
+/// TEST-ASYNC-SSH-002: Calling `SshTaskHandle::abort()` terminates both tasks.
 #[test]
 fn async_ssh_002_explicit_abort_terminates_task() {
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -255,17 +265,26 @@ fn async_ssh_002_explicit_abort_terminates_task() {
         .expect("build runtime");
 
     rt.block_on(async {
-        let jh = tokio::spawn(async {
+        let jh_read = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let jh_emit = tokio::spawn(async {
             tokio::time::sleep(Duration::from_secs(60)).await;
         });
 
-        let handle = SshTaskHandle::from_abort_handle(jh.abort_handle());
+        // ADR-0028 Commit 3: explicit abort() must propagate to both tasks.
+        let handle = SshTaskHandle::new(jh_read.abort_handle(), jh_emit.abort_handle());
         handle.abort();
 
-        let result = jh.await;
+        let result_read = jh_read.await;
+        let result_emit = jh_emit.await;
         assert!(
-            result.is_err(),
-            "task must be cancelled after explicit SshTaskHandle::abort()"
+            result_read.is_err(),
+            "reader task must be cancelled after explicit SshTaskHandle::abort()"
+        );
+        assert!(
+            result_emit.is_err(),
+            "coalescer task must be cancelled after explicit SshTaskHandle::abort()"
         );
     });
 }

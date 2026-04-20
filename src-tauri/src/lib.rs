@@ -125,6 +125,11 @@ pub fn run() {
             #[cfg(feature = "e2e-testing")]
             app.manage(Arc::new(crate::commands::testing::SshFailureRegistry::new()));
 
+            #[cfg(feature = "e2e-testing")]
+            app.manage(Arc::new(
+                crate::session::ssh_injectable::SshInjectableRegistry::new(),
+            ));
+
             let prefs_for_registry = app
                 .state::<Arc<RwLock<crate::preferences::PreferencesStore>>>()
                 .inner()

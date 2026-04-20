@@ -4,6 +4,7 @@
 //! termination, and foreground process detection.
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use libc;
 
@@ -12,6 +13,7 @@ use crate::session::{
     ids::{PaneId, TabId},
     tab::TabState,
 };
+use crate::ssh::SshLifecycleState;
 use crate::vt::screen_buffer::ScreenSnapshot;
 
 use super::SessionRegistry;
@@ -33,6 +35,50 @@ impl SessionRegistry {
             .get(pane_id)
             .ok_or_else(|| SessionError::PaneNotFound(pane_id.to_string()))?;
         Ok(pane.vt.clone())
+    }
+
+    /// Clone the per-pane `last_frame_ack_ms` atomic clock (ADR-0027 / ADR-0028).
+    ///
+    /// Returns `None` if the pane is not found. Used by `spawn_ssh_read_task`
+    /// (and `spawn_pty_read_task` indirectly) to wire frame-ack backpressure
+    /// into the shared `session::output::run` coalescer without going through
+    /// the registry on every tick.
+    ///
+    /// The returned `Arc<AtomicU64>` is shared with `frame_ack` IPC writers,
+    /// so updates from the frontend become visible to the coalescer task
+    /// without further synchronization.
+    pub fn get_pane_frame_ack_clock(&self, pane_id: &PaneId) -> Option<Arc<AtomicU64>> {
+        let inner = self.inner.read();
+        let tab_id = inner.pane_to_tab.get(pane_id)?.clone();
+        let entry = inner.tabs.get(&tab_id)?;
+        let pane = entry.panes.get(pane_id)?;
+        Some(pane.last_frame_ack_ms.clone())
+    }
+
+    /// Mutate the SSH lifecycle state of a pane in-place.
+    ///
+    /// Returns `true` if the pane exists and was updated, `false` otherwise.
+    /// Used by the SSH coalescer task termination block (ADR-0028 Decisions §4)
+    /// to flip `pane.ssh_state` to `Closed` BEFORE emitting the
+    /// `ssh-state-changed` IPC event, so any subsequent registry inspection
+    /// observes the new state.
+    ///
+    /// The write lock is held only for the duration of a single field
+    /// assignment — short enough that this is safe to call directly from an
+    /// async task (no `block_in_place` wrapper needed).
+    pub fn set_ssh_state(&self, pane_id: &PaneId, state: SshLifecycleState) -> bool {
+        let mut inner = self.inner.write();
+        let Some(tab_id) = inner.pane_to_tab.get(pane_id).cloned() else {
+            return false;
+        };
+        let Some(entry) = inner.tabs.get_mut(&tab_id) else {
+            return false;
+        };
+        let Some(pane) = entry.panes.get_mut(pane_id) else {
+            return false;
+        };
+        pane.ssh_state = Some(state);
+        true
     }
 
     /// Get the current dimensions (cols, rows) of a pane.
@@ -261,6 +307,24 @@ impl SessionRegistry {
             error: None,
         };
         Ok(())
+    }
+
+    /// Store an SSH task handle on a pane (e2e-testing only).
+    ///
+    /// Used by `create_mock_ssh_pane` to attach the coalescer task handle to the
+    /// pane so it gets aborted when the pane is closed.
+    #[cfg(feature = "e2e-testing")]
+    pub fn set_ssh_task(&self, pane_id: &PaneId, handle: crate::session::ssh_task::SshTaskHandle) {
+        let mut inner = self.inner.write();
+        let Some(tab_id) = inner.pane_to_tab.get(pane_id).cloned() else {
+            return;
+        };
+        let Some(entry) = inner.tabs.get_mut(&tab_id) else {
+            return;
+        };
+        if let Some(pane) = entry.panes.get_mut(pane_id) {
+            pane.ssh_task = Some(handle);
+        }
     }
 
     /// Returns `true` if the pane identified by `pane_id` is a local PTY session

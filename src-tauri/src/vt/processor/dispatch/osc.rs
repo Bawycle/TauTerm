@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::vt::osc::{OscAction, parse_osc};
-use crate::vt::processor::VtProcessor;
+use crate::vt::processor::{MAX_CWD_BYTES, MAX_TITLE_CHARS, VtProcessor};
 
 /// Maximum number of entries in the title stack (OSC 22/23).
 /// Matches xterm's default. Excess pushes are silently ignored.
@@ -29,8 +29,29 @@ pub(super) fn handle_osc(p: &mut VtProcessor, params: &[&[u8]]) {
     }
     match parse_osc(params) {
         OscAction::SetTitle(title) => {
-            if p.title != title {
-                p.title = title;
+            // ADR-0028 §VT input caps: defense-in-depth bound on accumulated
+            // title length. `parse_osc` strips C0/C1 control chars **before**
+            // returning here, so by the time the title reaches this site the
+            // strip is already applied — the truncation below cannot consume
+            // budget on stripped-out bytes (defense against C0-bourrage).
+            // Order invariant: STRIP (upstream in `parse_osc`) → TRUNCATE (here).
+            // If a future refactor removes the strip from `parse_osc`, the
+            // truncate below would still bound memory but no longer enforce
+            // the security property — keep the strip upstream.
+            let bounded = if title.chars().count() > MAX_TITLE_CHARS {
+                let orig_len = title.chars().count();
+                let truncated: String = title.chars().take(MAX_TITLE_CHARS).collect();
+                tracing::warn!(
+                    orig_chars = orig_len,
+                    cap = MAX_TITLE_CHARS,
+                    "VT title truncated to cap (possible DoS amplification attempt)"
+                );
+                truncated
+            } else {
+                title
+            };
+            if p.title != bounded {
+                p.title = bounded;
                 p.title_changed = true;
             }
         }
@@ -81,6 +102,17 @@ pub(super) fn handle_osc(p: &mut VtProcessor, params: &[&[u8]]) {
             }
         }
         OscAction::SetCwd(path) => {
+            // ADR-0028 §VT input caps: drop oversized OSC 7 updates outright
+            // rather than truncate them — a truncated cwd would point to a
+            // wrong directory, which is worse than no update at all.
+            if path.len() > MAX_CWD_BYTES {
+                tracing::warn!(
+                    bytes = path.len(),
+                    cap = MAX_CWD_BYTES,
+                    "VT OSC 7 cwd update dropped: payload exceeds cap"
+                );
+                return;
+            }
             if p.cwd.as_deref() != Some(path.as_str()) {
                 p.cwd = Some(path);
                 p.cwd_changed = true;

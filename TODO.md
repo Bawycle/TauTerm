@@ -55,11 +55,7 @@ Items in the **Future Roadmap** section are out of scope for the current release
 
 ## Medium Priority — Next Release Quality Target (score 17–27)
 
-- [ ] **SSH backpressure — extract shared `EmitCoalescer`** `[Score: 17 | R:1, S:2, U:2, V:2]` `E: weeks` `B: —`
-  `ssh_task.rs` emits `screen-update` events directly from its read loop — no debounce, no coalescence, no frame-ack reading. A `cat large_file` over a fast SSH connection can flood the frontend (same OOM class as commit `298d373` fixed for local PTY). Additionally, `ssh_task.rs` does not extract bell, osc52, cursor_shape, or cwd from the VT processor, and its `Data`/`ExtendedData` handling is duplicated.
-  S:2 because the failure mode is confirmed for PTY (same mechanism) but not yet observed for SSH. U:2 because SSH heavy output requires fast connection + large payload — common for power users, not typical interactive sessions. V:2 because each new event type added to the emit pipeline widens the unprotected SSH surface.
-  **Recommended approach (architect review 2026-04-15):** Extract the Task 2 coalescer logic from `reader.rs` into a shared `EmitCoalescer` struct in `pty_task/coalescer.rs`. Both PTY and SSH pipelines feed `ProcessOutput` into the same coalescer via a bounded channel. Termination logic (PTY: `mark_pane_terminated`; SSH: `SshStateChanged::Closed`) stays in each caller. Requires an ADR before implementation.
-  **Files:** `src-tauri/src/session/pty_task/reader.rs` (extract Task 2), `src-tauri/src/session/ssh_task.rs` (wire through coalescer, complete ProcessOutput, merge Data/ExtendedData), new `src-tauri/src/session/pty_task/coalescer.rs`.
+(No items.)
 
 ---
 
@@ -72,10 +68,6 @@ Items in the **Future Roadmap** section are out of scope for the current release
   1. *Immediate:* Delete the duplicated `TauTermError` interface from `errors.ts`. Keep `TauTermErrorCode` union + `isTauTermError()` guard, but narrow to the generated type. Add missing codes (`PREF_LOCK_TIMEOUT`).
   2. *Follow-up (requires ADR):* Create `enum ErrorCode` in Rust with `#[derive(Serialize, specta::Type)]` + `#[serde(rename_all = "SCREAMING_SNAKE_CASE")]`. Replace `code: String` → `code: ErrorCode` in `TauTermError`. specta then generates the union literal automatically → delete `TauTermErrorCode` from `errors.ts`.
   **Files:** `src/lib/ipc/errors.ts`, `src-tauri/src/error.rs` (step 2), `src-tauri/src/commands/` (step 2 — adapt `From` impls).
-
-- [ ] **Adaptive debounce integration test — `#[tokio::test(start_paused = true)]`** `[Score: 13 | R:1, S:2, U:1, V:1]` `E: days` `B: —`
-  The adaptive debounce loop in `reader.rs` (P-HT-2) has unit tests for the `next_debounce` formula but no integration test for the full `select!` loop timing behavior (decay, re-arm, `needs_immediate_flush` interaction). Requires refactoring to inject a mock emitter or extracting the loop into a testable function. S:2 because untested code paths are latent debt. V:1 because the code is stable and not actively changing.
-  **Files:** `src-tauri/src/session/pty_task/reader.rs`, `src-tauri/src/session/pty_task.rs`.
 
 - [ ] **Active Glow — highlight active pane with subtle background brightness** `[Score: 12 | R:1, S:1, U:2, V:1]` `E: days` `B: —`
   In split layouts, the active pane should be visually distinguished by a slightly warmer/brighter background rather than relying solely on border color. Proposal: new token `--term-bg-active: #1a1812` (vs current `--term-bg: #16140f`). Delta L* CIE ~0.5–0.7 — subtle but perceptible in side-by-side juxtaposition. Invisible in single-pane usage (no visual noise).

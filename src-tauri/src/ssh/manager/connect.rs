@@ -380,13 +380,24 @@ impl SshManager {
         // and the write path (send_input / resize).
         let channel_arc: SshChannelArc = Arc::new(tokio::sync::Mutex::new(channel));
 
-        // Spawn the read task.
+        // Fetch the per-pane frame-ack atomic clock (ADR-0027 / ADR-0028).
+        // The pane MUST exist at this point — it was created upstream in
+        // `SessionRegistry` before `connect_task` was spawned. A missing entry
+        // here indicates an internal invariant break.
+        let last_frame_ack_ms = registry.get_pane_frame_ack_clock(&pane_id).ok_or_else(|| {
+            SshError::Connection(format!(
+                "internal error: pane {pane_id} not found when wiring SSH read task"
+            ))
+        })?;
+
+        // Spawn the read task (Task A reader + Task B coalescer; ADR-0028).
         let read_task = spawn_ssh_read_task(
             pane_id.clone(),
             vt,
             app.clone(),
             Arc::clone(&channel_arc),
             registry,
+            last_frame_ack_ms,
         );
 
         // Mutate the connection entry in-place via DashMap::get_mut.

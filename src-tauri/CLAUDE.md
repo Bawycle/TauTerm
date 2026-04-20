@@ -15,6 +15,8 @@ For build/test/lint commands, see the root [`CLAUDE.md`](../CLAUDE.md#commands).
 | Module | Responsibility |
 |---|---|
 | `session.rs` | PTY session lifecycle (spawn, resize, close) |
+| `session/output.rs` + `session/output/` | Source-agnostic emit pipeline: `ProcessOutput`, `Coalescer`, `CoalescerConfig`, emitter, event builders (ADR-0028) |
+| `session/ssh_injectable.rs` | `(e2e-testing)` `SshInjectableRegistry` for E2E SSH test injection |
 | `vt.rs` | VT parser — ANSI/xterm escape sequence processing |
 | `commands.rs` + `commands/` | Tauri `#[command]` handlers: `session_cmds`, `input_cmds`, `preferences_cmds`, `connection_cmds`, `ssh_cmds`, `ssh_prompt_cmds`, `system_cmds`, `testing` |
 | `events.rs` + `events/types.rs` | Backend→frontend event definitions and emission |
@@ -56,3 +58,4 @@ When triggered: convert the new domain into a `tauri::plugin::Builder::new("doma
 - Lint: `cargo clippy -- -D warnings` must pass clean
 - Keep IPC commands serializable with `serde` — no raw pointers or OS handles across the boundary
 - Never log filesystem paths that include usernames or home directories. Log the filename or a generic label only (e.g. `"preferences.json"`, not `path.display()`).
+- Never log SSH chunk bytes via `tracing::trace!` or any log level — they may contain user passwords typed into prompts.

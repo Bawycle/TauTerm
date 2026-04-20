@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- SSH panes now benefit from frame-ack back-pressure and complete VT event extraction (bell, OSC 52, cursor shape, OSC 7 CWD)
+
 ### Fixed
 
 - Sustained high-throughput output (e.g. `yes`, `seq`, large file dumps) no longer freezes the terminal or causes memory exhaustion

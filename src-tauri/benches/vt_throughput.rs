@@ -314,7 +314,7 @@ fn bench_dirty_region_merge_burst(c: &mut Criterion) {
 ///
 /// Represents the hot path in Task 2 of the PTY read loop.
 fn bench_full_process_emit_cycle(c: &mut Criterion) {
-    use tau_term_lib::session::{ids::PaneId, pty_task::build_screen_update_event};
+    use tau_term_lib::session::{ids::PaneId, output::build_screen_update_event};
 
     // Build a 4 KB mixed VT payload.
     let block = {

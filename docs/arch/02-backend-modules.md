@@ -126,16 +126,20 @@ src-tauri/src/
     pane.rs           — PaneSession: owns PtyTaskHandle or SshChannelHandle;
                         Arc<RwLock<VtProcessor>>; PaneLifecycleState
     lifecycle.rs      — PaneLifecycleState enum; transitions; restart logic
-    pty_task.rs       — ProcessOutput, PtyTaskHandle types; re-exports spawn_pty_read_task;
-                        reads AsyncFd, calls VtProcessor::process, coalesces dirty regions,
-                        emits screen-update; back-pressure. Declares sub-modules.
-    pty_task/
-      reader.rs        — Task 1: PTY read loop, spawn_pty_read_task() entry point
-      emitter.rs       — Task 2: coalescer loop, emit_all_pending()
+    output.rs         — Source-agnostic emit pipeline: ProcessOutput, Coalescer,
+                        CoalescerConfig, emitter, event builders (ADR-0028)
+    output/
+      process_output.rs — ProcessOutput type and merge logic
+      coalescer.rs      — Coalescer, CoalescerConfig, CoalescerContext, async fn run()
+      emitter.rs        — EmitOutcome, output_emits_screen_update, emit_all_pending()
       event_builders.rs — build_mode_state_event(), build_screen_update_event(), cell_color_to_dto()
-    ssh_task.rs       — SshReadTask: Tokio task per SSH pane; reads async russh::Channel,
-                        feeds bytes to VtProcessor, emits screen-update events;
-                        mirrors pty_task.rs but operates on async SSH channel
+      tests.rs          — TEST-ACK-*, TEST-ADPT-*, TEST-PIPC2-UNIT-*, COAL-MERGE-*
+    pty_task.rs       — PtyTaskHandle; re-exports spawn_pty_read_task
+    pty_task/
+      reader.rs        — Task 1: PTY blocking read loop + termination
+    ssh_task.rs       — 2-task SSH pipeline: async channel reader + shared coalescer;
+                        extract_process_output helper; DSR/CPR response coalescing (ADR-0028)
+    ssh_injectable.rs — (e2e-testing) SshInjectableRegistry for E2E test injection
     resize.rs         — debounce resize (16–33ms Tokio timer); TIOCSWINSZ;
                         SSH window-change; SIGWINCH
     ids.rs            — TabId, PaneId, ConnectionId newtypes; UUID generation

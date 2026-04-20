@@ -324,7 +324,7 @@ mod tests {
         let registry = Arc::new(InjectableRegistry::new());
         let backend = create_injectable_pty_backend(registry);
         let session = backend
-            .open_session(80, 24, "/bin/sh", &[], &[])
+            .open_session(80, 24, 0, 0, "/bin/sh", &[], &[], None)
             .expect("open_session must succeed");
         assert!(
             session.reader_handle().is_some(),

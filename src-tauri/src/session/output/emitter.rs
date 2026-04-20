@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
+//! `emit_all_pending` — drain a coalesced `ProcessOutput` window into the
+//! frontend event stream. Source-agnostic: called by both PTY and SSH
+//! pipelines via the shared coalescer.
+
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -29,30 +33,42 @@ use super::event_builders::{build_mode_state_event, build_screen_update_event};
 /// Outcome of `emit_all_pending()` — reports whether a `screen-update` event
 /// was actually emitted in this flush.
 ///
-/// Used by Task 2 (the debounce coalescer) to gate `last_emit_ms`: only
-/// `screen-update` events are acknowledged by the frontend (via `flushRafQueue`
-/// in `useTerminalPane.svelte.ts`). Non-visual events (bell, mode-state,
+/// Used by the coalescer to gate `last_emit_ms`: only `screen-update` events
+/// are acknowledged by the frontend (via `flushRafQueue` in
+/// `useTerminalPane.svelte.ts`). Non-visual events (bell, mode-state,
 /// cursor-style, osc52, title, cwd, notification) produce no frontend paint
 /// and therefore no `frame_ack`. Advancing `last_emit_ms` for them would
 /// create a phantom "unacked emit" that permanently pushes the pane into
 /// drop mode after ~1 s of user idle. See ADR-0027 Addendum 2.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct EmitOutcome {
+pub(crate) struct EmitOutcome {
     /// Wall-clock duration of the emit call (feeds adaptive debounce).
     pub duration: Duration,
     /// `true` iff a `screen-update` event was emitted (i.e. `pending.dirty`
     /// was non-empty on entry).
+    ///
+    /// AUDIT (ADR-0028 Commit 1, Risk #10): the `emit_*` helpers in
+    /// `crate::events` return `()` and only log on `tauri_specta::Event::emit`
+    /// failure (see `events.rs` — `emit_screen_update` etc.). This field is
+    /// therefore "screen-update was attempted", not "successfully delivered".
+    /// In current Tauri 2 + tauri-specta usage, `emit` errors are rare
+    /// (serialization-only) and the failure mode (frame loss) is the same
+    /// whichever side detects it. Migrating the contract to `Result`-aware
+    /// gating is tracked by ADR-0028 §Security and is intentionally NOT done
+    /// in this commit (would diverge from the behaviour exercised by
+    /// TEST-ACK-018, which constructs `EmitOutcome { emitted_screen_update:
+    /// true, .. }` independently of any real `emit` call).
     pub emitted_screen_update: bool,
 }
 
 /// Pure predicate: will flushing `pending` produce a `screen-update` event?
 ///
-/// Extracted so Task 2's gating logic can be tested without an `AppHandle`
-/// (which requires a live Tauri runtime / display surface). Accessed by the
-/// in-crate unit tests in `pty_task.rs`. The integration test
-/// `DEL-ASYNC-PTY-009` in `tests/async_concurrency.rs` mirrors this
-/// 1-line predicate inline rather than widening visibility further —
-/// `ProcessOutput` itself is `pub(crate)` and should stay so.
+/// Extracted so the coalescer's gating logic can be tested without an
+/// `AppHandle` (which requires a live Tauri runtime / display surface).
+/// Accessed by the in-crate unit tests in `session/output/tests.rs`.
+/// The integration test `DEL-ASYNC-PTY-009` in `tests/async_concurrency.rs`
+/// mirrors this 1-line predicate inline rather than widening visibility
+/// further — `ProcessOutput` itself is `pub(crate)` and should stay so.
 ///
 /// FRONTEND MIRROR (ADR-0027 Addendum 2): the frontend's `frameAck` IPC is
 /// invoked only at `src/lib/composables/useTerminalPane.svelte.ts::flushRafQueue`
@@ -60,7 +76,7 @@ pub(super) struct EmitOutcome {
 /// path. This predicate must stay in lockstep with that contract: if either
 /// side adds a new ack-triggering event path without updating the other, the
 /// backpressure mechanism silently desyncs and can produce false drop-mode.
-pub(super) fn output_emits_screen_update(pending: &ProcessOutput) -> bool {
+pub(crate) fn output_emits_screen_update(pending: &ProcessOutput) -> bool {
     !pending.dirty.is_empty()
 }
 
@@ -83,7 +99,11 @@ const _OUTPUT_EMITS_SIGNATURE_PIN: fn(&ProcessOutput) -> bool = output_emits_scr
 /// (fed back into adaptive debounce) and whether a `screen-update` event was
 /// actually emitted (used to gate `last_emit_ms` in the frame-ack backpressure
 /// machinery — see ADR-0027 Addendum 2).
-pub(super) fn emit_all_pending(
+///
+/// Visibility is `pub(crate)` because the coalescer in
+/// `session/output/coalescer.rs` calls this directly without any closure
+/// indirection (ADR-0028 Decisions §2).
+pub(crate) fn emit_all_pending(
     app: &AppHandle,
     pane_id: &PaneId,
     vt: &Arc<RwLock<VtProcessor>>,

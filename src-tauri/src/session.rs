@@ -8,12 +8,16 @@
 
 pub mod ids;
 pub mod lifecycle;
+pub mod output;
 pub mod pane;
 pub mod pty_task;
 pub mod registry;
 pub mod resize;
 pub mod ssh_task;
 pub mod tab;
+
+#[cfg(feature = "e2e-testing")]
+pub mod ssh_injectable;
 
 pub use ids::{ConnectionId, PaneId, TabId};
 pub use lifecycle::PaneLifecycleState;

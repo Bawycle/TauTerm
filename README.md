@@ -2,11 +2,11 @@
 
 A terminal emulator for Linux, built with Rust and Tauri 2. Currently Linux-only.
 
-![Version: 0.1.0-beta.2](https://img.shields.io/badge/version-0.1.0--beta.2-yellow)
+![Version: 0.1.0-beta.3](https://img.shields.io/badge/version-0.1.0--beta.3-yellow)
 ![MSRV: 1.94.1](https://img.shields.io/badge/MSRV-1.94.1-orange)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
-**Status: beta (v0.1.0-beta.2)** — Core features are implemented. Under active stabilization — expect rough edges.
+**Status: beta (v0.1.0-beta.3)** — Core features are implemented. Under active stabilization — expect rough edges.
 
 ![TauTerm with Umbra theme showing split panes and tab bar](docs/images/screenshot.png)
 

@@ -7,16 +7,17 @@ All notable changes to TauTerm are documented in this file.
 The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0-beta.3] - 2026-04-21
 
 ### Added
 
-- SSH panes now benefit from frame-ack back-pressure and complete VT event extraction (bell, OSC 52, cursor shape, OSC 7 CWD)
+- Terminal output now degrades gracefully under sustained heavy load (e.g. `cat` of a large file) — instead of freezing, the display slows temporarily then recovers with a clean full-screen refresh once the burst ends
+- SSH sessions now receive bell, cursor shape, clipboard write, and working directory events — previously only text output and title changes were forwarded
 
 ### Fixed
 
-- Sustained high-throughput output (e.g. `yes`, `seq`, large file dumps) no longer freezes the terminal or causes memory exhaustion
-- Remote clipboard write via OSC 52 now works when enabled in connection settings — previously the setting was accepted but writes were silently ignored
+- Running `yes`, `seq`, or dumping large files no longer causes memory exhaustion or UI freeze
+- Remote clipboard write (e.g. from tmux or neovim via OSC 52) now works when enabled in connection settings — previously the setting was accepted but writes were silently ignored
 - Dead key composition now works correctly on Belgian, French, and other keyboards using accented characters — typing `^` + `i` produces `î` instead of `^î`
 
 ## [0.1.0-beta.2] - 2026-04-14

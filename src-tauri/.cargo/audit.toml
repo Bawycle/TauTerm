@@ -13,10 +13,10 @@
 # RUSTSEC-2023-0071 — Marvin Attack: potential key recovery through timing
 # sidechannels in the `rsa` crate.
 #
-# Affected chain: tau-term → russh 0.60 → rsa 0.10.0-rc.17
+# Affected chain: tau-term → russh 0.60.1 → rsa 0.10.0-rc.17
 #
 # Why we cannot fix this:
-#   The `rsa` crate has no patched release as of 2026-04-09. The advisory
+#   The `rsa` crate has no patched release as of 2026-04-20. The advisory
 #   has been open since 2023-11-22 with no upstream fix. russh depends on
 #   `rsa` for RSA private-key operations (sign/decrypt); we cannot substitute
 #   another crate without forking russh.
